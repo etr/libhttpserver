@@ -20,12 +20,11 @@
 
 // http_request_impl_args.cpp -- GET-argument and querystring population.
 //
-// Carved out of src/detail/http_request_impl.cpp in TASK-086 to keep both
+// Carved out of src/detail/http_request_impl.cpp to keep both
 // translation units under the project per-file LOC ceiling (FILE_LOC_MAX in
 // scripts/check-file-size.sh). Holds the build_request_args /
 // build_request_querystring MHD enumeration callbacks, populate_args, and
-// the anonymous-namespace unescape_in_arena helper they share. No
-// behaviour change from the original: the bodies were moved verbatim.
+// the anonymous-namespace unescape_in_arena helper they share.
 //
 // Sibling translation units: the TLS / client-cert section lives in
 // src/detail/http_request_impl_tls.cpp; the public-API forwarders + ctor
@@ -57,7 +56,7 @@ namespace detail {
 
 namespace {
 
-// TASK-072: arena-routed unescape. The caller passes an arena-backed
+// Arena-routed unescape. The caller passes an arena-backed
 // pmr::string already holding the raw bytes; we run the unescape
 // transformation directly on the pmr::string's storage so no
 // global-heap allocation occurs on the warm path. The default (no
@@ -75,7 +74,6 @@ namespace {
 // first call that sees a value longer than any previous one, triggers
 // exactly one global-heap allocation to grow thread_value's buffer;
 // all subsequent calls at or below that length are allocation-free.
-// (performance-reviewer-iter1-2)
 //
 // Arena-waste note: when the user callback grows the value
 // (thread_value.size() > original value.size()), value's original
@@ -83,7 +81,6 @@ namespace {
 // reset_arena(). This is an accepted trade-off of the ABI-locked
 // void(std::string&) signature; the arena is reset per request so
 // the waste is bounded by the request's total value bytes.
-// (performance-reviewer-iter1-3)
 inline void unescape_in_arena(std::pmr::string& value,
                               unescaper_ptr user_fn) {
     if (value.empty()) return;
@@ -113,7 +110,7 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
 
     arguments_accumulator* aa = static_cast<arguments_accumulator*>(cls);
 
-    // Security guard (security-reviewer-iter1-2): reject requests that
+    // Security guard: reject requests that
     // exceed the per-request argument count or total byte budget. Both
     // limits prevent a crafted request with thousands of unique GET
     // arguments from exhausting the per-connection arena and the heap
@@ -124,7 +121,6 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
 
     // Hoist the find so we use the iterator both for the count guard and
     // for the insert branch below -- eliminates the double lookup.
-    // (code-simplifier-iter1-1)
     auto& args = *aa->arguments;
     auto existing_it = args.find(key_sv);
 
@@ -144,7 +140,7 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
     // Arena-routed unescape: see unescape_in_arena() above for path details.
     // The returned pmr::string's data is owned by the arena and lives until
     // connection_state::reset_arena() runs (request completion), matching
-    // the TASK-018 string_view lifetime contract.
+    // the string_view lifetime contract.
     auto pmr_alloc = args.get_allocator();
     auto it = existing_it;
     if (it == args.end()) {
@@ -168,7 +164,7 @@ MHD_Result http_request_impl::build_request_querystring(void* cls, MHD_ValueKind
     // Parameters needed to respect MHD interface, but not used in the implementation.
     std::ignore = kind;
 
-    // TASK-016: cls is a pmr::string* into impl_->querystring; growth
+    // cls is a pmr::string* into impl_->querystring; growth
     // allocates from the per-connection arena.
     std::pmr::string* qs = static_cast<std::pmr::string*>(cls);
 

@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-051 -- Out-of-line bodies for http_resource::add_hook overloads
+// Out-of-line bodies for http_resource::add_hook overloads
 // + the lazy hook_table_ allocator. The public header (http_resource.hpp)
 // stays free of <vector>/<atomic>/<shared_mutex> transitives: only the
 // shared_ptr<detail::resource_hook_table> PIMPL slot is visible there.
@@ -118,8 +118,8 @@ ensure_table(std::shared_ptr<detail::resource_hook_table>& slot) {
 
 // ---- copy / move special members ----------------------------------------
 //
-// TASK-058 step 3 added std::shared_mutex cached_allow_mutex_, which
-// has no copy or move.  The defaulted special members on the public
+// The std::shared_mutex cached_allow_mutex_ member has no copy or
+// move.  The defaulted special members on the public
 // class declaration would therefore be implicitly deleted.  Implement
 // them here by-hand, skipping the mutex.  The copy / move target starts
 // with a fresh, default-constructed mutex and an invalidated Allow-
@@ -219,15 +219,14 @@ hook_handle http_resource::add_hook(hook_phase phase,
 
 // ---- get_allow_header ---------------------------------------------------
 //
-// TASK-058 step 3: lazy Allow-header cache.  See the header-side
-// declaration for the contract.  Implementation:
+// Lazy Allow-header cache.  See the header-side declaration for the
+// contract.  Implementation:
 //
 //   Warm path (cache hit, the common case after the first 405):
 //     1. Take a shared lock.
-//     2. Read methods_allowed_ INSIDE the lock (eliminates the TOCTOU
-//        data race flagged in security-reviewer-iter1-2).
-//     3. Compare with the cached snapshot; if they match, return the
-//        cached string by reference while still holding the shared lock.
+//     2. Snapshot methods_allowed_ and compare with the cached mask;
+//        on match, return the cached string by reference while still
+//        holding the shared lock.
 //
 //   Cold / stale path (cache miss or mask changed):
 //     1. Release the shared lock.
@@ -237,9 +236,14 @@ hook_handle http_resource::add_hook(hook_phase phase,
 //     4. Rebuild via detail::format_allow_header and update the snapshot.
 //     5. Return the cached string by reference.
 //
-// Using std::shared_mutex allows N concurrent warm-path readers without
-// serialisation; only the cold fill path serialises
-// (performance-reviewer-iter1-1).
+// The lock protects the cache fields only; it does not synchronise
+// methods_allowed_ writes (the mutators are unlocked -- see the
+// header-side comment).  Snapshotting the mask inside the lock keeps
+// each fill internally consistent: the cached string always matches
+// the mask it was built from.
+//
+// std::shared_mutex allows N concurrent warm-path readers without
+// serialisation; only the cold fill path serialises.
 //
 // The returned reference is stable until the next mask mutation; the
 // caller (dispatch_resource_handler) consumes it synchronously within

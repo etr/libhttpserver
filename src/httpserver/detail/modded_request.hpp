@@ -18,9 +18,8 @@
      USA
 */
 
-// ADR-002 / TASK-014: PIMPL split removed the transitive include of
-// modded_request.hpp from public headers (webserver.hpp now only forward-
-// declares detail::modded_request). The gate is tightened to
+// Internal detail header: public headers only forward-declare
+// detail::modded_request, so this file is gated to
 // HTTPSERVER_COMPILATION-only, matching http_endpoint.hpp.
 #if !defined(HTTPSERVER_COMPILATION)
 #error "httpserver/detail/modded_request.hpp is internal; only include it when compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
@@ -29,7 +28,7 @@
 #ifndef SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
 #define SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
 
-#include <microhttpd.h>  // TASK-020: MHD_destroy_post_processor (no longer reachable transitively via http_request.hpp -> http_utils.hpp)
+#include <microhttpd.h>  // MHD_destroy_post_processor (not reachable transitively via http_request.hpp -> http_utils.hpp)
 
 #include <chrono>
 #include <string>
@@ -50,14 +49,30 @@ namespace detail {
 // (parsed headers, upload stream, method callback, staged response)
 // across MHD's repeated answer_to_connection invocations for one
 // HTTP request until finalize_answer queues the response.
+//
+// Request lifecycle (MHD callback sequence):
+//   1. uri_log (webserver_callbacks.cpp) allocates this struct; MHD
+//      stores the returned pointer in *con_cls and hands it back to
+//      every later callback for the same request.
+//   2. answer_to_connection (webserver_request.cpp) fires one or more
+//      times; `dhr == nullptr` marks the FIRST invocation, which stamps
+//      start_time, ws, standardized_url, method_enum and builds dhr.
+//   3. Body chunks arrive via requests_answer_second_step
+//      (webserver_body_pipeline.cpp); a hook short-circuit there sets
+//      skip_handler, which drains remaining chunks and later makes
+//      finalize_answer bypass routing/auth/dispatch.
+//   4. The zero-size upload callback signals end-of-body and routes to
+//      complete_request -> finalize_answer, which stages `response`.
+//   5. MHD's completion callback (request_completed) fires the
+//      request_completed hook, then deletes this object.
 struct modded_request {
     struct MHD_PostProcessor *pp = nullptr;
     std::string complete_uri;
     std::string standardized_url;
     webserver* ws = nullptr;
 
-    // TASK-036: pointer-to-member dispatch slot; render_* now return
-    // http_response by value (PRD-RSP-REQ-007 / DR-004). Initialized to
+    // Pointer-to-member dispatch slot; render_* return http_response
+    // by value. Initialized to
     // nullptr; set by resolve_method_callback for recognized HTTP methods.
     // For unrecognized methods mr->method_enum is left at count_ and
     // finalize_answer takes the 405 path before invoking this pointer.
@@ -70,11 +85,14 @@ struct modded_request {
     // is_allowed returns false for unrecognized verbs (the 405 path).
     http_method method_enum = http_method::count_;
 
+    // The http_request object for this connection (the terse name is
+    // inherited v1 naming, used throughout dispatch). Null until the
+    // first answer_to_connection invocation constructs it.
     std::unique_ptr<http_request> dhr = nullptr;
-    // DR-010 / §5.3: anchor kept alive until request_completed. See webserver_impl.hpp for full contract.
+    // Anchor kept alive until request_completed. See webserver_impl.hpp for the full contract.
     std::optional<http_response> response;
     bool has_body = false;
-    // TASK-047: set by a pre-handler hook short-circuit (request_received
+    // Set by a pre-handler hook short-circuit (request_received
     // or body_chunk returning hook_action::respond_with(...)). When true,
     // finalize_answer skips resource resolution / auth / dispatch entirely
     // and goes straight to materialize_and_queue_response on the
@@ -82,7 +100,7 @@ struct modded_request {
     // modded_request destructor.
     bool skip_handler = false;
 
-    // TASK-047 review: monotone counter of body bytes delivered to this
+    // Monotone counter of body bytes delivered to this
     // request's body_chunk hook. Incremented on every chunk regardless of
     // whether grow_content() is called (which is gated on pp == nullptr ||
     // put_processed_data_to_content). Using get_content().size() for the
@@ -92,14 +110,19 @@ struct modded_request {
     // accumulates independently and is the source of truth for ctx.offset.
     std::uint64_t body_bytes_seen = 0;
 
-    // TASK-048: captured by resolve_resource_for_request when a route
-    // matched. The pair populates route_descriptor for both the
-    // route_resolved and before_handler firing sites. Lifetime is the
-    // request (i.e., the modded_request itself), so the string_view in
-    // the descriptor stays valid across hook calls even if a concurrent
+    // Captured by resolve_resource_for_request when a route matched.
+    // The pair populates route_descriptor for both the route_resolved
+    // and before_handler firing sites. Lifetime is the request (i.e.,
+    // the modded_request itself), so the string_view in the descriptor
+    // stays valid across hook calls even if a concurrent
     // unregister_path erases the underlying registration.
-    //   - matched_path_template: owning copy of the matched endpoint's
-    //     url_complete. Empty when no match (404 path).
+    //   - matched_path_template: CAUTION -- despite the name, this
+    //     currently holds the canonicalized REQUEST URL
+    //     (standardized_url), not the registered route pattern: the v2
+    //     lookup result does not retain the matched pattern text, so
+    //     resolve_resource_for_request falls back to the concrete URL.
+    //     Hook consumers reading route_descriptor::path_template see
+    //     the request URL. Empty when no match (404 path).
     //   - matched_is_prefix: true for register_prefix / family-url
     //     registrations; false for exact-path registrations.
     std::string matched_path_template;
@@ -109,7 +132,7 @@ struct modded_request {
     std::string upload_filename;
     std::unique_ptr<std::ofstream> upload_ostrm;
 
-    // TASK-050: captured once on the first invocation of
+    // Captured once on the first invocation of
     // webserver_impl::answer_to_connection for this request (i.e., when
     // mr->dhr is still null -- the "fresh request" branch). The
     // response_sent and request_completed firing sites measure elapsed
@@ -118,14 +141,13 @@ struct modded_request {
     // answer_to_connection has set this field.
     std::chrono::steady_clock::time_point start_time{};
 
-    // TASK-051: weak_ptr to the resource that handled this request.
+    // weak_ptr to the resource that handled this request.
     // Populated in finalize_answer when resolve_resource_for_request
     // returns a non-null hrm. Used by fire_request_completed_gated (which
     // fires from the MHD completion callback, after finalize_answer's
     // owning shared_ptr is gone) and the handler_exception path. If the
     // resource was unregistered between dispatch and completion, lock()
-    // returns null and the per-route chain is skipped (the action-item
-    // contract).
+    // returns null and the per-route chain is skipped.
     //
     // The two in-scope firing helpers (fire_after_handler_gated /
     // fire_response_sent_gated) do NOT lock() this weak_ptr: they run

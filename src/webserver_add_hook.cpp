@@ -35,10 +35,9 @@ namespace httpserver {
 // webserver_add_hook.cpp -- the typed webserver::add_hook overload family,
 // webserver::make_hook_handle_, and their shared register_hook_impl helper.
 //
-// Carved out of src/webserver.cpp in TASK-086 to keep both translation
+// Carved out of src/webserver.cpp to keep both translation
 // units under the project per-file LOC ceiling (FILE_LOC_MAX in
-// scripts/check-file-size.sh). No behaviour change: the bodies are moved
-// verbatim.
+// scripts/check-file-size.sh).
 
 namespace {
 
@@ -71,13 +70,12 @@ template <class Vec, class Fn>
     {
         std::unique_lock lock(impl->hook_table_mutex_);
         vec.push_back({id, std::move(fn)});
-        // Store under the unique_lock. memory_order_release here is
-        // technically redundant because the subsequent mutex unlock also
-        // acts as a release fence. It is kept for clarity, but dispatch
-        // hot-path readers MUST use memory_order_acquire on the load, and
-        // they pair with the MUTEX RELEASE (unlock), not this store. See
-        // webserver_impl.hpp comment on any_hooks_ for the full pairing
-        // rationale.
+        // Store under the unique_lock. The gate is advisory: readers
+        // load it relaxed and take hook_table_mutex_ before touching
+        // the vector, so the mutex -- not this store's ordering --
+        // provides the happens-before for the vector contents. See the
+        // any_hooks_ comment in webserver_impl.hpp for the full
+        // contract.
         impl->any_hooks_[static_cast<std::size_t>(expected)].store(
             true, std::memory_order_release);
     }
@@ -86,7 +84,7 @@ template <class Vec, class Fn>
 
 }  // namespace
 
-// TASK-045: tiny static helper that materialises an armed hook_handle.
+// Tiny static helper that materialises an armed hook_handle.
 // hook_handle's constructor is private but webserver is friend; this
 // static gives the anonymous-namespace register_hook_impl a way to
 // reach into that private surface without making it a friend itself.

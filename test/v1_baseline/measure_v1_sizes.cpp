@@ -17,7 +17,7 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
-// TASK-039 -- one-off measurement TU.
+// One-off measurement TU.
 //
 // Compile this against the `master` (v1.x) source tree to capture
 // the two literal numbers consumed by

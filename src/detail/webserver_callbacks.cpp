@@ -96,7 +96,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     // These parameters are passed to respect the MHD interface, but are not needed here.
     std::ignore = cls;
 
-    // TASK-050: fire request_completed BEFORE the modded_request is
+    // Fire request_completed BEFORE the modded_request is
     // destroyed so the ctx pointers remain backed by live storage. The
     // gate-and-fire helper reads any_hooks_[request_completed] and
     // builds the ctx from mr->dhr, mr->response, and the MHD
@@ -105,7 +105,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     auto* mr = static_cast<detail::modded_request*>(*con_cls);
     if (mr != nullptr) {
         // mr->ws is the parent webserver -- set in answer_to_connection
-        // (hoisted there at TASK-050 time). For paths where
+        // (hoisted there). For paths where
         // answer_to_connection never ran (e.g., very early MHD failures),
         // mr->ws may be null; skip the fire site in that degenerate case.
         if (mr->ws != nullptr && mr->ws->impl_ != nullptr) {
@@ -124,11 +124,11 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     // (2) Now that no live object inside the arena's storage remains,
     //     rewind the bump pointer AND secure-zero the initial buffer so
     //     credentials from the completed request do not linger in the
-    //     reused memory (security-reviewer-iter1-3, CWE-226 / CWE-14).
+    //     reused memory (CWE-226 / CWE-14).
     //     reset_arena() does release + non-elidable zero atomically; see
     //     connection_state::reset_arena() docs and
     //     httpserver/detail/secure_zero.hpp for the platform-specific
-    //     dispatch (TASK-068). The next request on this keep-alive
+    //     dispatch. The next request on this keep-alive
     //     connection reuses the same memory (verified by
     //     http_request_arena and connection_state_sentinel unit tests).
     //
@@ -138,7 +138,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     // point, so the arena holds no live objects for any termination code,
     // including MHD_REQUEST_TERMINATED_WITH_ERROR. Resetting unconditionally
     // is therefore both safe and necessary to prepare the arena for the next
-    // keep-alive request. (code-quality-reviewer-iter1-4)
+    // keep-alive request.
     //
     // MHD ordering guarantee: NOTIFY_COMPLETED always fires before
     // NOTIFY_CLOSED for the same connection (MHD documentation, section
@@ -146,7 +146,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     // accessed here is guaranteed live. The NOTIFY_CLOSED handler
     // (connection_notify) must NOT be called concurrently on a different
     // thread for the same connection while this callback is executing.
-    // (security-reviewer-iter1-4: thread-safety ordering invariant.)
+    // (Thread-safety ordering invariant.)
     if (connection != nullptr) {
         const MHD_ConnectionInfo* ci = MHD_get_connection_info(
             connection, MHD_CONNECTION_INFO_SOCKET_CONTEXT);
@@ -158,7 +158,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
 }
 
 // connection_notify (NOTIFY_STARTED / NOTIFY_CLOSED) and policy_callback
-// live in webserver_callbacks_lifecycle.cpp (TASK-046 split). Both
+// live in webserver_callbacks_lifecycle.cpp. Both
 // callbacks fire lifecycle hooks and reach into <sys/socket.h> via the
 // peer-address adapter; isolating them keeps this TU under the project
 // FILE_LOC_MAX gate.
@@ -327,10 +327,6 @@ void webserver_impl::error_log(void* cls, const char* fmt, va_list ap) {
     if (dws->log_error != nullptr) dws->log_error(msg);
 }
 
-// TASK-050: webserver_impl::access_log removed. log_access is now a
-// response_sent hook alias installed in webserver_aliases.cpp; the v1
-// inline call site in answer_to_connection has been removed.
-
 size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = cls;
@@ -341,7 +337,7 @@ size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char
     // callbacks. Decoding is performed by libhttpserver itself:
     //   - request URL: base_unescaper() in webserver_request.cpp
     //     (answer_to_connection, line ~418)
-    //   - GET args: unescape_in_arena() in http_request_impl.cpp (TASK-072)
+    //   - GET args: unescape_in_arena() in http_request_impl.cpp
     // This is required so we can honour a user-registered unescaper hook
     // (create_webserver::unescaper(...)) and route GET-arg decoding through
     // the per-connection arena. Per microhttpd.h, registering a custom
@@ -349,7 +345,7 @@ size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char
     // so this no-op is what guarantees MHD does not pre-decode behind our
     // back (which would otherwise cause double-decoding of `?key=%2F`).
     //
-    // Historical note (TASK-073, verified against upstream libmicrohttpd
+    // Historical note (verified against upstream libmicrohttpd
     // ChangeLog): this callback originally also worked around a v0.99-era
     // MHD bug where the internal unescape could produce strings containing
     // embedded NULs (e.g. from `%00`), which then broke

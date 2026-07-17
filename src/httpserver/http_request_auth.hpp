@@ -50,7 +50,7 @@
 // storage that lives for the handler call frame only — see the
 // class-level lifetime contract in http_request.hpp.
 //
-// PRD-FLG-REQ-001 contract: every public symbol declared here is
+// Contract: every public symbol declared here is
 // unconditional. http_request_auth.cpp returns documented sentinels
 // (empty std::string_view for the BAUTH getters / get_digested_user;
 // digest_auth_result::WRONG_HEADER for the two check_digest_auth
@@ -63,9 +63,9 @@
  * @return string representation of the username.
  * @note The returned view is only valid within the handler's call frame.
  *       Copy into std::string if the value must outlast the handler.
- * @note (TASK-034 / PRD-FLG-REQ-001) Declared unconditionally.
+ * @note Declared unconditionally.
  *       When HAVE_BAUTH is undefined the implementation returns an
- *       empty std::string_view sentinel (architecture spec §7).
+ *       empty std::string_view sentinel.
 **/
 std::string_view get_user() const;
 
@@ -74,9 +74,9 @@ std::string_view get_user() const;
  * @return the username.
  * @note The returned view is only valid within the handler's call frame.
  *       Copy into std::string if the value must outlast the handler.
- * @note (TASK-034 / PRD-FLG-REQ-001) Declared unconditionally.
+ * @note Declared unconditionally.
  *       When HAVE_DAUTH is undefined the implementation returns an
- *       empty std::string_view sentinel (architecture spec §7).
+ *       empty std::string_view sentinel.
 **/
 std::string_view get_digested_user() const;
 
@@ -85,19 +85,18 @@ std::string_view get_digested_user() const;
  * @return string representation of the password.
  * @note The returned view is only valid within the handler's call frame.
  *       Copy into std::string if the value must outlast the handler.
- * @note (TASK-034 / PRD-FLG-REQ-001) Declared unconditionally.
+ * @note Declared unconditionally.
  *       When HAVE_BAUTH is undefined the implementation returns an
- *       empty std::string_view sentinel (architecture spec §7).
+ *       empty std::string_view sentinel.
 **/
 std::string_view get_pass() const;
 
 // -------------------------------------------------------------------
-// TASK-019: high-level GnuTLS accessors. Declared unconditionally
+// High-level GnuTLS accessors. Declared unconditionally
 // (no build-flag preprocessor gate) so the public surface is
 // identical in TLS-enabled and TLS-disabled builds. When the
 // library is built without GnuTLS the implementations return
-// empty / false / -1 sentinels without throwing (architecture
-// spec §7).
+// empty / false / -1 sentinels without throwing.
 // -------------------------------------------------------------------
 
 /**
@@ -180,7 +179,7 @@ std::int64_t get_client_cert_not_before() const noexcept;
 std::int64_t get_client_cert_not_after() const noexcept;
 
 // -------------------------------------------------------------------
-// Digest-auth verification entrypoints. Same TASK-034 contract: the
+// Digest-auth verification entrypoints. Same contract: the
 // declarations are unconditional; the implementations return the
 // WRONG_HEADER sentinel when the library is built without HAVE_DAUTH.
 // -------------------------------------------------------------------
@@ -188,10 +187,9 @@ std::int64_t get_client_cert_not_after() const noexcept;
 /**
  * Digest-authenticate the current request against (@p realm, @p password).
  *
- * (TASK-034 / PRD-FLG-REQ-001) Declared unconditionally. When the
+ * Declared unconditionally. When the
  * library was built without HAVE_DAUTH the implementation returns
- * the sentinel `digest_auth_result::WRONG_HEADER` (architecture
- * spec §7 "returns a sentinel result") without touching MHD.
+ * the sentinel `digest_auth_result::WRONG_HEADER` without touching MHD.
  *
  * @param realm         protection realm advertised in the WWW-Authenticate header.
  * @param password      cleartext password to verify against.

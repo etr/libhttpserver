@@ -35,26 +35,19 @@
 namespace httpserver {
 namespace detail {
 
-// TASK-048 review cleanup (findings 3 & 4): shared free function for
-// serializing a method_set into the comma-separated string value expected
-// by the HTTP `Allow:` header.
+// Shared free function for serializing a method_set into the
+// comma-separated string value expected by the HTTP `Allow:` header.
 //
-// Previously this logic was duplicated as:
-//   - webserver_impl::serialize_allow_methods (webserver_dispatch.cpp)
-//   - serialize_allow_methods_local (webserver_aliases.cpp, anonymous ns)
-//
-// Both callers iterate the same enum range with identical logic. This
-// single free function replaces both copies; it takes only method_set
-// (no webserver_impl* dependency) so it can be called from any TU that
-// includes this header.
+// It takes only method_set (no webserver_impl* dependency) so it can
+// be called from any TU that includes this header.
 //
 // Enum-declaration order: GET, HEAD, POST, PUT, DELETE, CONNECT,
 // OPTIONS, TRACE, PATCH. The only existing assertion in-tree is
 // "HEAD, POST" which is preserved by enum order.
 inline std::string format_allow_header(method_set allowed) {
     std::string header_value;
-    // Pre-size for 9 methods * ~8 chars each (finding #27: avoid
-    // reallocation across the 9-method upper bound).
+    // Pre-size for 9 methods * ~8 chars each to avoid reallocation
+    // across the 9-method upper bound.
     header_value.reserve(64);
     for (std::uint8_t i = 0;
             i < static_cast<std::uint8_t>(http_method::count_); ++i) {

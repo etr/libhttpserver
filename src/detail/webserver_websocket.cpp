@@ -174,9 +174,9 @@ static void decode_websocket_buffer(struct MHD_WebSocketStream* ws_stream,
 
 namespace detail {
 
-// TASK-050: validate_websocket_handshake / complete_websocket_upgrade moved
-// here from webserver_request.cpp to keep that TU under FILE_LOC_MAX
-// after adding the after_handler / response_sent firing sites.
+// validate_websocket_handshake / complete_websocket_upgrade live here
+// rather than in webserver_request.cpp to keep that TU under
+// FILE_LOC_MAX.
 std::optional<const char*>
 webserver_impl::validate_websocket_handshake(MHD_Connection* connection) {
     const char* connection_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
@@ -197,6 +197,14 @@ webserver_impl::validate_websocket_handshake(MHD_Connection* connection) {
     return ws_key;
 }
 
+// Return contract: an engaged optional carries the MHD_queue_response
+// result for the 101 handshake. std::nullopt is returned for several
+// DISTINCT situations — no websocket handler registered at the request
+// path, MHD_create_response_for_upgrade failure, and Sec-WebSocket-
+// Accept computation failure. The empty optional propagates through
+// try_handle_websocket_upgrade to the dispatch path in
+// webserver_request.cpp, which deliberately degrades ALL of these
+// cases to normal HTTP dispatch rather than failing the request.
 std::optional<MHD_Result>
 webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
                                            detail::modded_request* mr,
@@ -206,7 +214,7 @@ webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
     if (ws_it == registered_ws_handlers.end()) {
         return std::nullopt;
     }
-    // TASK-035: take a shared_ptr copy under the shared lock so the
+    // Take a shared_ptr copy under the shared lock so the
     // handler is kept alive across the MHD upgrade callback even if
     // unregister_ws_resource erases the slot mid-upgrade.
     std::shared_ptr<websocket_handler> handler_sp = ws_it->second;
@@ -257,7 +265,7 @@ void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connectio
     std::ignore = connection;
     std::ignore = req_cls;
 
-    // TASK-035: own ws_upgrade_data via unique_ptr for the duration of
+    // Own ws_upgrade_data via unique_ptr for the duration of
     // the session. The shared_ptr<websocket_handler> inside `data`
     // keeps the handler alive across this upgrade callback even if a
     // concurrent unregister_ws_resource drops the registration in the
@@ -300,9 +308,8 @@ void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connectio
 }  // namespace detail
 #endif  // HAVE_WEBSOCKET
 
-// TASK-050: try_handle_websocket_upgrade lives outside the HAVE_WEBSOCKET
-// guard because it has a no-op definition on the WS-off branch. Moved
-// here from webserver_request.cpp.
+// try_handle_websocket_upgrade lives outside the HAVE_WEBSOCKET
+// guard because it has a no-op definition on the WS-off branch.
 namespace detail {
 std::optional<MHD_Result>
 webserver_impl::try_handle_websocket_upgrade(MHD_Connection* connection,

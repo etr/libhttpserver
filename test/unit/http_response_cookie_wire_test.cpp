@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-064 Cycle 7-8: http_response::with_cookie(cookie) integration.
+// http_response::with_cookie(cookie) integration.
 //
 // Pins:
 //   * structured with_cookie(cookie) appends to get_cookies_parsed()
@@ -32,8 +32,8 @@
 //
 // Wire emission is asserted by walking the structured cookie vector and
 // invoking the renderer the dispatch path uses
-// (cookie::to_set_cookie_header). This is the only TASK-064 contract
-// the dispatch path is allowed to depend on -- the actual
+// (cookie::to_set_cookie_header). This is the only structured-cookie
+// contract the dispatch path is allowed to depend on -- the actual
 // MHD_add_response_header invocation in decorate_mhd_response is a
 // trivial loop and is covered by the integration test
 // `test/integ/basic.cpp::request_with_cookie` end-to-end via curl.
@@ -181,7 +181,7 @@ LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
     LT_CHECK_EQ(v[2].name(), std::string("legacy2"));
 LT_END_AUTO_TEST(mixed_paths_dont_double_emit_on_wire)
 
-// ---------------- Cycle 8: wire-format pin via to_set_cookie_header ----
+// ---------------- wire-format pin via to_set_cookie_header -------------
 
 LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
                    each_structured_cookie_renders_to_one_set_cookie_value)
@@ -205,7 +205,7 @@ LT_END_AUTO_TEST(each_structured_cookie_renders_to_one_set_cookie_value)
 
 LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
                    wire_renderer_emits_full_attribute_set)
-    // Headline AC: a cookie with name/value/secure/strict renders to
+    // Headline contract: a cookie with name/value/secure/strict renders to
     // an RFC 6265 §4.1 well-formed Set-Cookie header value.
     http_response r = http_response::string("body");
     r.with_cookie(cookie{}.with_name("sid").with_value("abc")
@@ -217,7 +217,7 @@ LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
                 std::string("sid=abc; Secure; SameSite=Strict"));
 LT_END_AUTO_TEST(wire_renderer_emits_full_attribute_set)
 
-// ---------------- Cycle 9: partial-mutation guard (TASK-064 fix) ----
+// ---------------- partial-mutation guard on setter throw -----------
 
 LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
                    legacy_with_cookie_bad_key_leaves_maps_clean)

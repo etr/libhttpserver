@@ -176,11 +176,10 @@ class header_reading_resource : public http_resource {
 class full_args_resource : public http_resource {
  public:
      http_response render_get(const http_request& req) {
-         // get_args() returns const http::arg_view_map& (TASK-017). The
+         // get_args() returns const http::arg_view_map&. The
          // .at("arg") call is read-only on const&; the http_arg_value is
-         // implicitly converted to std::string at the call site. This call
-         // site was reviewed for copy-semantic reliance and requires no
-         // modification. (spec-alignment-checker-iter1-20)
+         // implicitly converted to std::string at the call site. The call
+         // site relies on no copy semantics of the returned reference.
          return http_response::string(std::string(req.get_args().at("arg")));
      }
 };
@@ -273,7 +272,7 @@ class static_resource : public http_resource {
 
 class no_response_resource : public http_resource {
  public:
-     // TASK-036: v1 returned shared_ptr<http_response>(nullptr) — the
+     // v1 returned shared_ptr<http_response>(nullptr) — the
      // dispatch path treated that as "no response, route to 500". v2's
      // equivalent is the default-constructed sentinel (status_code_ == -1).
      http_response render_get(const http_request&) override {
@@ -284,7 +283,7 @@ class no_response_resource : public http_resource {
 class empty_response_resource : public http_resource {
  public:
      http_response render_get(const http_request&) override {
-         // TASK-036: handler-returned "empty" response in v2 is the
+         // Handler-returned "empty" response in v2 is the
          // default-constructed http_response (status_code_ == -1 sentinel).
          // The dispatch path recognises the sentinel and routes through
          // internal_error_page — same 500 behaviour the v1 null-pointer
@@ -404,7 +403,7 @@ LT_BEGIN_SUITE(basic_suite)
     std::unique_ptr<webserver> ws;
 
     void set_up() {
-        // TASK-055 / DR-009 Revision 1: the suite-shared `ws` opts into the
+        // The suite-shared `ws` opts into the
         // verbose default-500-body path so the legacy tests that pre-date
         // the CWE-209 sanitization fix continue to assert what they were
         // written to assert. Affected tests: exception_forces_500,
@@ -470,21 +469,21 @@ LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
     auto ok2 = std::make_shared<ok_resource>();
     ws->register_path("OK", ok1);
 
-    // TASK-023: the new void register_path throws std::invalid_argument
+    // The new void register_path throws std::invalid_argument
     // on duplicate registration (replaces v1's silent `return false`).
     LT_CHECK_THROW(ws->register_path("OK", ok2));
     LT_CHECK_THROW(ws->register_path("/OK", ok2));
     LT_CHECK_THROW(ws->register_path("/OK/", ok2));
     LT_CHECK_THROW(ws->register_path("OK/", ok2));
 
-    // TASK-056: registering the SAME path as both exact and prefix is
+    // Registering the SAME path as both exact and prefix is
     // now a collision (the (method, path) cache key can't discriminate
-    // the two), so the prefix call throws. Pre-TASK-056 it silently
+    // the two), so the prefix call throws. Earlier it silently
     // succeeded — see specs/architecture/04-components/route-table.md
     // for the rationale.
     LT_CHECK_THROW(ws->register_prefix("OK", ok2));
 
-    // TASK-067: pre-TASK-067 the v1 `registered_resources` ordered map
+    // Previously the v1 `registered_resources` ordered map
     // was the duplicate-detection oracle, and its key comparator
     // (`http_endpoint::operator<`) was unconditionally case-insensitive
     // via `std::toupper` regardless of the CASE_INSENSITIVE build flag
@@ -504,7 +503,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     const uint16_t port = ws->get_bound_port();
     auto ok1 = std::make_shared<static_resource>("1");
     auto ok2 = std::make_shared<static_resource>("2");
-    // TASK-056: pre-TASK-056 this test registered the SAME path "OK"
+    // This test previously registered the SAME path "OK"
     // as both exact and prefix; the collision guard now forbids that.
     // The test still pins what it always did — exact serves the bare
     // path, prefix serves arbitrary subpaths — but on distinct paths.
@@ -632,7 +631,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    // Post-TASK-053: v2 dispatch is deterministic — exact tier
+    // v2 dispatch is deterministic — exact tier
     // walks before radix, and within the radix tier the trie
     // visits exact children before wildcards in registration
     // order. Both routes are wildcard-rooted, and `ok1`
@@ -1514,7 +1513,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    // TASK-031: default internal_error_page now surfaces the originating
+    // Default internal_error_page now surfaces the originating
     // message in the body. file_body::materialize() returns nullptr for a
     // missing file, which dispatch routes through internal_error_page
     // with a fixed diagnostic message.
@@ -1545,7 +1544,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    // TASK-031: see file_serving_resource_missing — dispatch reports the
+    // See file_serving_resource_missing — dispatch reports the
     // null-materialize diagnostic in the body.
     LT_CHECK_NEQ(s.find("materialize_response returned null"),
                  std::string::npos);
@@ -1563,9 +1562,8 @@ LT_END_AUTO_TEST(file_serving_resource_dir)
 // webserver. The shared ws is configured with
 // expose_exception_messages(true) (basic.cpp:420), so e.what() flows
 // through to the default body. Intentionally kept distinct from
-// dr009_default_body_is_fixed_string (DR-009 Revision 1), which pins
-// the default-off behaviour on a dedicated webserver. Finding
-// task031-review #36.
+// dr009_default_body_is_fixed_string, which pins
+// the default-off behaviour on a dedicated webserver.
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<exception_resource>();
@@ -1582,7 +1580,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    // TASK-031 / DR-009: std::domain_error's what() ("invalid") is forwarded
+    // std::domain_error's what() ("invalid") is forwarded
     // to the default internal_error_page body.
     LT_CHECK_NEQ(s.find("invalid"), std::string::npos);
 
@@ -1595,10 +1593,10 @@ LT_END_AUTO_TEST(exception_forces_500)
 
 // Regression anchor: exercises a char* literal throw (non-std::exception) on
 // the shared webserver. Intentionally kept distinct from
-// dr009_default_body_is_fixed_string_for_non_std_exception (DR-009 Revision 1),
+// dr009_default_body_is_fixed_string_for_non_std_exception,
 // which uses `throw 42` (an int) on a dedicated webserver. The two non-std
 // types (char* vs int) exercise the same catch(...) branch; keeping both
-// provides type-diversity coverage. Finding task031-review #37.
+// provides type-diversity coverage.
 LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<error_resource>();
@@ -1615,7 +1613,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    // TASK-031 / DR-009: non-std::exception throws (here: a char* literal)
+    // Non-std::exception throws (here: a char* literal)
     // produce the sentinel message "unknown exception" in the default body.
     LT_CHECK_NEQ(s.find("unknown exception"), std::string::npos);
 
@@ -2219,9 +2217,9 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render_patch)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(only_render_patch)
 
-// TASK-031 review cleanup: response_throws_invalid_argument,
+// Removed here: response_throws_invalid_argument,
 // response_throws_runtime_error, response_throws_non_std_exception, and
-// internal_error_handler_also_throws were removed here (findings 5 and 6).
+// internal_error_handler_also_throws.
 // Their coverage is a strict subset of the dr009_* suite which follows
 // (dr009_default_body_is_fixed_string,
 //  dr009_default_body_is_fixed_string_for_non_std_exception,
@@ -2449,11 +2447,9 @@ LT_END_AUTO_TEST(querystring_caching)
 class args_cache_resource : public http_resource {
  public:
     http_response render_get(const http_request& req) {
-        // Call get_args twice to test caching. TASK-017: returns const&
+        // Call get_args twice to test caching. get_args returns const&
         // aliasing the impl-owned cache; both calls must return the same
         // address proving the cache is built once and reused.
-        // (code-quality-reviewer-iter1-6 / test-quality-reviewer-iter1-22:
-        // promote address equality to an assertion rather than dead code)
         const auto& args1 = req.get_args();
         const auto& args2 = req.get_args();  // Should hit cache
         // Address equality: the two references must alias the same object.
@@ -2461,8 +2457,8 @@ class args_cache_resource : public http_resource {
             return http_response::string("ERROR: args cache not stable");
         }
 
-        // Also test get_args_flat (still by-value for now -- TASK-017 only
-        // narrows the six container getters listed in its acceptance set).
+        // Also test get_args_flat (still by-value for now -- only the
+        // six container getters were narrowed to return const&).
         auto flat = req.get_args_flat();
 
         std::string response;
@@ -2503,7 +2499,7 @@ class footer_test_resource : public http_resource {
  public:
     http_response render_post(const http_request& req) {
         // Test get_footers() - returns empty map for non-chunked requests.
-        // TASK-017: now returns const& aliasing impl-owned storage.
+        // Now returns const& aliasing impl-owned storage.
         const auto& footers = req.get_footers();
 
         // Test get_footer() with a key that doesn't exist
@@ -3211,8 +3207,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     ws2.stop();
 LT_END_AUTO_TEST(all_methods_fallthrough_to_render)
 
-// TASK-031 review cleanup: builder_custom_internal_error_handler was removed
-// here (finding 7). Its behavior (custom handler body is used) is a strict
+// builder_custom_internal_error_handler was removed
+// here. Its behavior (custom handler body is used) is a strict
 // subset of dr009_runtime_error_message_passed_to_handler (port offset 81), which
 // additionally verifies that e.what() is forwarded as the message argument.
 // Port 76 is now free for future tests.
@@ -3307,7 +3303,7 @@ class client_cert_non_tls_resource : public http_resource {
     http_response render_get(const http_request& req) {
         std::string result;
         // All these should return false/empty since this is not a TLS connection
-        // TASK-019: the four cert-string accessors return string_view.
+        // The four cert-string accessors return string_view.
         // `const char* + string_view` is not in the standard, so we
         // copy each view into a std::string for the `+` chain.
         result += "has_tls_session:" + std::string(req.has_tls_session() ? "yes" : "no") + ";";
@@ -3360,7 +3356,7 @@ LT_END_AUTO_TEST(client_cert_methods_non_tls)
 #endif  // HAVE_GNUTLS
 
 // ============================================================================
-// TASK-031: Handler error-propagation contract (DR-009 / §5.2 / PRD-FLG-REQ-002).
+// Handler error-propagation contract (PRD-FLG-REQ-002).
 //
 // The 6-point contract:
 //   1. Wrap handler invocation in a two-branch catch.
@@ -3375,9 +3371,9 @@ LT_END_AUTO_TEST(client_cert_methods_non_tls)
 
 namespace task031 {
 
-// Port-offset allocation for the DR-009 integration tests (finding
-// task031-review #2: explicit range avoids per-search collisions).
-// TASK-055 / DR-009 Revision 1: port offset 80 and port offset 83 are reused by the
+// Port-offset allocation for the handler-error integration tests: an
+// explicit range avoids per-search collisions.
+// Port offset 80 and port offset 83 are reused by the
 // post-revision "default body is fixed string" tests; port offset 88 and port offset 89
 // cover the verbose-mode opt-in for the same exception paths.
 //   port offset 80  dr009_default_body_is_fixed_string                       (rev1)
@@ -3392,8 +3388,8 @@ namespace task031 {
 //   port offset 89  dr009_verbose_body_surfaces_unknown_exception_when_opted_in (rev1)
 // Next free: port offset 90.
 
-// Thin HTTP GET helper used by the DR-009 integration tests to reduce
-// per-test boilerplate (finding task031-review #1). Sends a GET request to
+// Thin HTTP GET helper used by the handler-error integration tests to reduce
+// per-test boilerplate. Sends a GET request to
 // `url`, captures the body, and returns {body, http_status_code}.
 // curl_global_init must have been called before the first use.
 static std::pair<std::string, int64_t> do_get(const std::string& url) {
@@ -3447,7 +3443,7 @@ class feature_unavailable_resource : public http_resource {
 
 }  // namespace task031
 
-// AC1.a (DR-009 Revision 1 / TASK-055): std::runtime_error("boom") yields
+// AC1.a: std::runtime_error("boom") yields
 // a 500 whose default body is the fixed string "Internal Server Error" —
 // the originating message MUST NOT appear in the body (CWE-209 fix).
 // The verbose opt-in behaviour is covered by
@@ -3471,7 +3467,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_default_body_is_fixed_string)
     ws2.stop();
 LT_END_AUTO_TEST(dr009_default_body_is_fixed_string)
 
-// AC1.a-verbose (DR-009 Revision 1 / TASK-055): with the
+// AC1.a-verbose: with the
 // expose_exception_messages(true) opt-in, the default body restores the
 // pre-revision behaviour of surfacing the originating exception message.
 // This is the development-only round-trip of the v1 behaviour.
@@ -3546,15 +3542,14 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_logged_via_error_logger)
     LT_ASSERT_EQ(http_code, 500);
     std::string log_buf = cap.read_last_msg();
     // AC1.c: the log record must include the dispatch-context prefix AND
-    // the originating message so the log line is self-contained (finding
-    // task031-review: assert both content and context).
+    // the originating message so the log line is self-contained.
     LT_CHECK_NEQ(log_buf.find("dispatch: handler threw"), std::string::npos);
     LT_CHECK_NEQ(log_buf.find("boom"), std::string::npos);
 
     ws2.stop();
 LT_END_AUTO_TEST(dr009_runtime_error_logged_via_error_logger)
 
-// AC2.a (DR-009 Revision 1 / TASK-055): throw 42 (non-std::exception)
+// AC2.a: throw 42 (non-std::exception)
 // yields a 500 whose default body is the fixed string "Internal Server
 // Error" — the documented "unknown exception" sentinel is NOT exposed on
 // the wire any more (CWE-209 fix). The sentinel is still carried through
@@ -3576,7 +3571,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_default_body_is_fixed_string_for_non_std_e
     ws2.stop();
 LT_END_AUTO_TEST(dr009_default_body_is_fixed_string_for_non_std_exception)
 
-// AC2.a-verbose (DR-009 Revision 1 / TASK-055): with the
+// AC2.a-verbose: with the
 // expose_exception_messages(true) opt-in, the default body restores the
 // pre-revision behaviour of surfacing the "unknown exception" sentinel
 // for the non-std::exception throw path.
@@ -3687,7 +3682,7 @@ LT_END_AUTO_TEST(dr009_throwing_handler_logs_generically)
 // AC4: feature_unavailable is a std::runtime_error; it lands as a generic
 // 500 with NO special status mapping. The default body surfaces its
 // what() text (which embeds the feature name and build flag).
-// TASK-055 / DR-009 Revision 1: the verbose body opt-in is part of this
+// The verbose body opt-in is part of this
 // test's contract — the assertion intent is "the what() text of
 // feature_unavailable flows through the message-forwarding path to the
 // body", which is now the development-only verbose path. The

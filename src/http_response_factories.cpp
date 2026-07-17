@@ -48,18 +48,15 @@ namespace httpserver {
 // http_response_factories.cpp -- static named-constructor factories and the
 // shared emplace_body placement-new entry point.
 //
-// Carved out of src/http_response.cpp in TASK-086 to keep both translation
+// Carved out of src/http_response.cpp to keep both translation
 // units under the project per-file LOC ceiling (FILE_LOC_MAX in
-// scripts/check-file-size.sh). emplace_body is moved here (not left in
-// http_response.cpp) because every instantiation lives in this file's
-// factories, so no separate-TU instantiation is needed. No behaviour
-// change: the bodies are moved verbatim.
+// scripts/check-file-size.sh).
 
 // -----------------------------------------------------------------------
 // emplace_body — single placement-new entry point shared by all
-// factories (TASK-010). Centralising the SBO-vs-heap decision here means
+// factories. Centralising the SBO-vs-heap decision here means
 // the matched ::operator new(sizeof(T)) / ::operator delete pairing the
-// destructor relies on (TASK-009 OQ-4) lives in exactly one place; a
+// destructor relies on lives in exactly one place; a
 // stray plain `new T(...)` in any factory would mismatch the
 // destructor's ::operator delete and trip ASan immediately.
 //
@@ -97,7 +94,7 @@ void http_response::emplace_body(body_kind k, Args&&... args) {
 }
 
 // -----------------------------------------------------------------------
-// Static factories (TASK-010). Each factory:
+// Static factories. Each factory:
 //   1. constructs a default http_response (status_code_ = -1, no body),
 //   2. sets the status code and any per-kind headers,
 //   3. emplaces the appropriate detail::body subclass via emplace_body.
@@ -232,13 +229,13 @@ http_response http_response::unauthorized(std::string_view scheme,
 }
 
 #ifdef HAVE_DAUTH
-// TASK-062: RFC 7616 §3.3-compliant Digest challenge factory.
+// RFC 7616 §3.3-compliant Digest challenge factory.
 //
 // Validates the user-supplied fields for header-injection control
 // characters (CR/LF/NUL) and packs the parameters into a
 // detail::digest_challenge_body. No `WWW-Authenticate` header is added
-// at the response-value layer; the dispatch path (TASK-062 branch in
-// materialize_and_queue_response) calls
+// at the response-value layer; the dispatch path (digest-challenge
+// branch in materialize_and_queue_response) calls
 // MHD_queue_auth_required_response3 to attach the authoritative
 // challenge with nonce/opaque/algorithm/qop/charset/userhash bits.
 //
@@ -293,7 +290,7 @@ http_response http_response::unauthorized(digest_challenge challenge) {
     return r;
 }
 #else  // !HAVE_DAUTH
-// PRD-FLG-REQ-002/004: the declaration in http_response_factories.hpp is
+// The declaration in http_response_factories.hpp is
 // unconditional, so a HAVE_DAUTH-off build must still define this overload
 // rather than leave it as a link error. Throw feature_unavailable instead
 // of constructing a response.

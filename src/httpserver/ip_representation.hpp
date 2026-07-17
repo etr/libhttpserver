@@ -45,6 +45,11 @@ namespace http {
 
 struct ip_representation {
     http_utils::IP_version_T ip_version;
+    // One OCTET per element (values 0-255), despite the 16-bit element
+    // type — do not read these as IPv6 hextets. A 4-hex-digit IPv6
+    // group occupies TWO elements (high byte then low byte); an IPv4
+    // or IPv4-mapped address occupies pieces[12..15]. See the parsers
+    // in src/detail/ip_representation.cpp.
     uint16_t pieces[16];
     uint16_t mask;
 
@@ -59,8 +64,10 @@ struct ip_representation {
 
     bool operator<(const ip_representation& b) const;
 
+    // Returns the number of unmasked octets: the popcount of the 16-bit
+    // mask (one bit per element of `pieces`). The magic constants below
+    // are a variable-precision SWAR popcount.
     int weight() const {
-        // variable-precision SWAR algorithm
         uint16_t x = mask;
         x = x - ((x >> 1) & 0x55555555);
         x = (x & 0x33333333) + ((x >> 2) & 0x33333333);

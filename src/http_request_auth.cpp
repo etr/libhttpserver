@@ -45,31 +45,29 @@ std::string_view http_request::get_user() const {
     // guard: an empty username string after a successful MHD call is a
     // valid result (no auth header), but would cause a redundant re-fetch
     // on every subsequent get_user() call without the boolean.
-    // (code-simplifier-iter1 finding #6 / major review item)
     if (!impl_->user_pass_fetched) {
         impl_->fetch_user_pass();
-        // fetch_user_pass() sets user_pass_fetched = true on the live path.
-        // On the test-request path (connection_ == nullptr) it returns early
-        // without setting the flag; set it here so future calls are skipped.
+        // fetch_user_pass() sets the flag only on the live path; set it
+        // here so the test-request (null connection_) path caches too.
         impl_->user_pass_fetched = true;
     }
     return impl_->username;
 #else
-    // TASK-034 §7 sentinel: BAUTH disabled at build time -> empty view.
+    // BAUTH disabled at build time -> empty view (documented sentinel).
     return std::string_view{};
 #endif
 }
 
 std::string_view http_request::get_pass() const {
 #ifdef HAVE_BAUTH
-    // Mirror the get_user() boolean guard (code-simplifier-iter1 #6).
+    // Mirror the get_user() boolean guard.
     if (!impl_->user_pass_fetched) {
         impl_->fetch_user_pass();
         impl_->user_pass_fetched = true;
     }
     return impl_->password;
 #else
-    // TASK-034 §7 sentinel: BAUTH disabled at build time -> empty view.
+    // BAUTH disabled at build time -> empty view (documented sentinel).
     return std::string_view{};
 #endif
 }
@@ -78,8 +76,8 @@ std::string_view http_request::get_digested_user() const {
 #ifdef HAVE_DAUTH
     // Fast-path: cached value (non-empty) or test-request (null connection,
     // digested_user holds whatever create_test_request().digested_user() set).
-    // The two conditions are ORed so the null-connection check is not repeated
-    // below (code-simplifier finding: redundant-guard).
+    // The two conditions are ORed so the null-connection check is not
+    // repeated below.
     if (!impl_->digested_user.empty() || impl_->connection_ == nullptr) {
         return impl_->digested_user;
     }
@@ -96,7 +94,7 @@ std::string_view http_request::get_digested_user() const {
 
     return impl_->digested_user;
 #else
-    // TASK-034 §7 sentinel: DAUTH disabled at build time -> empty view.
+    // DAUTH disabled at build time -> empty view (documented sentinel).
     return std::string_view{};
 #endif
 }
@@ -130,8 +128,8 @@ http::http_utils::digest_auth_result http_request::check_digest_auth(
 
     return static_cast<http::http_utils::digest_auth_result>(result);
 #else
-    // TASK-034 §7 sentinel: DAUTH disabled at build time -> the
-    // call is documented to "return a sentinel result". WRONG_HEADER
+    // DAUTH disabled at build time -> the call is documented
+    // to "return a sentinel result". WRONG_HEADER
     // is the most explicit "this request was never authenticated"
     // terminal value of the digest_auth_result enum.
     (void)realm;
@@ -182,20 +180,22 @@ http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
 }
 
 // ----------------------------------------------------------------------
-// TASK-019: high-level GnuTLS accessors. Public surface is unconditional
+// High-level GnuTLS accessors. Public surface is unconditional
 // (same symbols visible whether HAVE_GNUTLS is on or off at build time);
 // only the body of each method dispatches on HAVE_GNUTLS. Sentinel
 // returns when GnuTLS is disabled match the architecture spec §7:
 // empty for the four string_view accessors, false for the three
 // predicates, -1 for the two time accessors.
 //
-// The five accessors documented as `noexcept` (the three predicates and
-// the two times) wrap populate_all_cert_fields() in try/catch so that a
-// hypothetical std::bad_alloc from the cache-fill path doesn't violate
-// the noexcept commitment; on throw we return the documented sentinel.
-// The four string_view accessors deliberately omit `noexcept` so the
-// allocator failure mode is observable (and they don't need a
-// try/catch).
+// Three of the five `noexcept` accessors (is_client_cert_verified and
+// the two time accessors) wrap populate_all_cert_fields() in try/catch
+// so a hypothetical std::bad_alloc from the cache-fill path doesn't
+// violate the noexcept commitment; on throw they return the documented
+// sentinel. The other two (has_tls_session / has_client_certificate)
+// never call populate_all_cert_fields() -- they query the session
+// directly through non-allocating impl methods, so no try/catch is
+// needed. The four string_view accessors deliberately omit `noexcept`
+// so the allocator failure mode is observable.
 // ----------------------------------------------------------------------
 bool http_request::has_tls_session() const noexcept {
 #ifdef HAVE_GNUTLS

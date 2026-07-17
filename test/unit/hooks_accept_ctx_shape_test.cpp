@@ -8,10 +8,10 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-046: compile-time pin for accept_ctx's extended shape.
+// Compile-time pin for accept_ctx's extended shape.
 //
-// TASK-045 landed accept_ctx with only a `peer_address peer` member.
-// TASK-046 extends it to carry the {accepted, reason} decision so the
+// accept_ctx originally carried only a `peer_address peer` member; it
+// was extended to carry the {accepted, reason} decision so the
 // observation-only hook can render denied-IP log entries (issue #332).
 //
 // The fields are pinned by static_asserts so a future refactor that

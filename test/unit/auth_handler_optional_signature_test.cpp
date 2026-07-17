@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-054 — sentinel that pins the new auth_handler_ptr typedef shape.
+// Sentinel that pins the auth_handler_ptr typedef shape.
 //
 // Goal: catch any future drift back to the v1 std::shared_ptr<http_response>
 // return type at COMPILE TIME, plus exercise the end-to-end happy-path
@@ -168,18 +168,17 @@ LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
 LT_END_AUTO_TEST(engaged_optional_rejects_request)
 
 // 3. Auth handler throwing a std::exception: the auth alias is
-//    FAIL-CLOSED (TASK-085). A throwing auth callable must NOT let the
+//    FAIL-CLOSED. A throwing auth callable must NOT let the
 //    request through to the resource — that would be a security
 //    fail-open on the authentication boundary (CWE-703). Instead the
 //    alias hook catches the exception, logs it, and short-circuits with
-//    a 500, matching the documented §5.2 / DR-009 contract that an
-//    exception thrown by a hook is "routed through the same path as a
-//    throwing resource handler" (which terminates in a 500). The
+//    a 500, matching the documented contract that an exception thrown
+//    by a hook is "routed through the same path as a throwing resource
+//    handler" (which terminates in a 500). The
 //    contrast with the generic short-circuit phases (which still treat
 //    a throwing hook as pass()) is deliberate: the auth seat is the one
 //    place where fail-open is most dangerous, so the alias wraps its own
-//    callable invocation in a fail-closed guard. See the auth_handler
-//    row in specs/architecture/04-components/hooks.md.
+//    callable invocation in a fail-closed guard.
 LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
                    throwing_auth_handler_fails_closed_with_500)
     webserver ws{create_webserver(PORT_3)

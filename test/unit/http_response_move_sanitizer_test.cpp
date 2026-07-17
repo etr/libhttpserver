@@ -18,10 +18,10 @@
      USA
 */
 
-// TASK-038 unit test: sanitizer-clean http_response move semantics.
+// Sanitizer-clean http_response move semantics.
 //
-// This TU is the v2.0 sanitizer canary for http_response's move operations
-// (DR-005, AR-004, PRD-RSP-REQ-001 / PRD-RSP-REQ-007). It complements the
+// This TU is the v2.0 sanitizer canary for http_response's move
+// operations. It complements the
 // existing whitebox SBO test (http_response_sbo_test.cpp) by:
 //
 //   1. Driving the four move-assign cases plus the two move-ctor cases via
@@ -32,9 +32,8 @@
 //      with a synthetic >64B body subclass (fat_body) — no production body
 //      currently exceeds the SBO budget, so this is the first test that
 //      genuinely exercises the heap-pointer-swap path.
-//   3. Pinning the moved-from invariant contract (§4 of the implementation
-//      plan): a moved-from response is destructible, accessor-safe, and
-//      re-assignable.
+//   3. Pinning the moved-from invariant contract: a moved-from response is
+//      destructible, accessor-safe, and re-assignable.
 //
 // CI: this TU runs in `make check` and is picked up automatically by the
 // asan / ubsan matrix entries in .github/workflows/verify-build.yml. Stray
@@ -59,7 +58,7 @@
 #include "httpserver/detail/body.hpp"
 #include "./littletest.hpp"
 
-// TASK-064: this TU intentionally exercises the deprecated string-blob
+// This TU intentionally exercises the deprecated string-blob
 // cookie surface as part of the move/sanitizer coverage. Suppress the
 // [[deprecated]] diagnostic for the whole file.
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -131,7 +130,7 @@ class fat_body final : public body {
     // Returns body_kind::empty by design: fat_body is a test-only
     // synthetic class whose sole purpose is to exceed the SBO budget.
     // It must never reach production dispatch where kind() would be used
-    // as a discriminator (§4.8 body hierarchy contract). This intentional
+    // as a discriminator. This intentional
     // mismatch is acceptable here because fat_body is test-only; a
     // static_assert below enforces that this class never leaves this TU.
     body_kind kind() const noexcept override { return body_kind::empty; }
@@ -188,7 +187,7 @@ LT_END_SUITE(http_response_move_sanitizer_suite)
 
 
 // -----------------------------------------------------------------------
-// Cycle 1 — Move-ctor: inline source (factory-constructed).
+// Move-ctor: inline source (factory-constructed).
 //
 // Exercises the placement-new branch of adopt_body_from. The destination
 // must read the body through its own inline storage (pointer-identity
@@ -232,7 +231,7 @@ LT_END_AUTO_TEST(move_ctor_inline_factory)
 
 
 // -----------------------------------------------------------------------
-// Cycle 2 — Move-ctor: heap source (synthetic fat_body).
+// Move-ctor: heap source (synthetic fat_body).
 //
 // Exercises the pointer-swap branch of adopt_body_from. The body pointer
 // is transferred verbatim; no allocation, no body copy. The destination's
@@ -267,7 +266,7 @@ LT_END_AUTO_TEST(move_ctor_heap_synthetic)
 
 
 // -----------------------------------------------------------------------
-// Cycle 3 — Move-assign: inline ↔ inline.
+// Move-assign: inline ↔ inline.
 //
 // Both sides factory-constructed (string body fits in SBO). The
 // destination's existing body must be destroyed before the source's body
@@ -303,7 +302,7 @@ LT_END_AUTO_TEST(move_assign_inline_to_inline_factory)
 
 
 // -----------------------------------------------------------------------
-// Cycle 4 — Move-assign: inline destination, heap source.
+// Move-assign: inline destination, heap source.
 //
 // Destination is factory-constructed (inline). Source carries a synthetic
 // fat_body on the heap. Post-move: dst takes ownership of the heap body
@@ -336,7 +335,7 @@ LT_END_AUTO_TEST(move_assign_inline_to_heap_synthetic)
 
 
 // -----------------------------------------------------------------------
-// Cycle 5 — Move-assign: heap destination, inline source.
+// Move-assign: heap destination, inline source.
 //
 // Destination is the synthetic heap fat_body. Source is a factory-built
 // inline string body. Post-move: dst now carries the source's body in
@@ -368,7 +367,7 @@ LT_END_AUTO_TEST(move_assign_heap_to_inline_synthetic)
 
 
 // -----------------------------------------------------------------------
-// Cycle 6 — Move-assign: heap destination, heap source.
+// Move-assign: heap destination, heap source.
 //
 // Both sides hold synthetic fat_body instances on the heap, each with a
 // distinct dtor-counter. Move-assign destroys dst's heap body (counter
@@ -405,7 +404,7 @@ LT_END_AUTO_TEST(move_assign_heap_to_heap_synthetic)
 
 
 // -----------------------------------------------------------------------
-// Cycle 7 — Self move-assign safety (public-API surface).
+// Self move-assign safety (public-API surface).
 //
 // http_response.cpp:150-152 guards self-assign with an explicit identity
 // check. Without it, destroy_body() would destroy the body we are about
@@ -432,9 +431,9 @@ LT_END_AUTO_TEST(move_assign_self_inline_statePreserved)
 
 
 // -----------------------------------------------------------------------
-// Cycle 8 — Accessor-safety on a moved-from source.
+// Accessor-safety on a moved-from source.
 //
-// §4 of the implementation plan: a moved-from http_response is in a
+// A moved-from http_response is in a
 // valid, accessor-safe state. get_status(), kind(), get_header(),
 // get_headers().size() must all return *something* without UB; UBSan
 // would flag any dangling read or invalid load.
@@ -493,7 +492,7 @@ LT_END_AUTO_TEST(moved_from_accessors_are_defined)
 
 
 // -----------------------------------------------------------------------
-// Cycle 9 — Re-assignability of a moved-from source.
+// Re-assignability of a moved-from source.
 //
 // A moved-from http_response must be a valid move-assign target. This
 // verifies the moved-from invariant that lets callers reuse the storage
@@ -519,7 +518,7 @@ LT_END_AUTO_TEST(moved_from_is_reassignable)
 
 
 // -----------------------------------------------------------------------
-// Cycle 10 — file_body move-ctor under sanitizers.
+// file_body move-ctor under sanitizers.
 //
 // file_body has a hand-written move ctor (detail/body.hpp:182) that
 // transfers fd ownership and flips materialized_ to suppress double-close
@@ -531,7 +530,7 @@ LT_END_AUTO_TEST(moved_from_is_reassignable)
 // This is the only "real" production heap-aware body the test exercises:
 // while file_body fits the SBO budget, its hand-written move + fd
 // ownership is a different lifetime contract than the trivial-move
-// string/empty path, and TASK-038 §6 of the plan explicitly calls for
+// string/empty path, so this suite deliberately includes
 // at least one file move-construct case.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,

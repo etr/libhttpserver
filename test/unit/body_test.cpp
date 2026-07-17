@@ -19,7 +19,7 @@
 */
 
 // Unit tests for the internal detail::body hierarchy and the public
-// body_kind enum (TASK-008). This TU is a build-tree test and is allowed
+// body_kind enum. This TU is a build-tree test and is allowed
 // to include both the public umbrella (for body_kind) and the private
 // detail/body.hpp directly (for the subclasses) — header-hygiene from
 // the consumer perspective is asserted separately by header_hygiene_*.
@@ -167,8 +167,8 @@ LT_BEGIN_AUTO_TEST(body_suite, file_body_kind_and_materialize_existing_file)
     MHD_destroy_response(r);
 LT_END_AUTO_TEST(file_body_kind_and_materialize_existing_file)
 
-// security-reviewer-iter1-1 + performance-reviewer-iter1-2: file is opened and
-// stat'd at construction so size() is accurate before materialize() is called,
+// The file is opened and stat'd at construction so size() is accurate
+// before materialize() is called,
 // and materialize() uses fstat's st_size rather than lseek (no fd-position
 // side-effect, no TOCTOU window on the size).
 LT_BEGIN_AUTO_TEST(body_suite, file_body_size_known_before_materialize)
@@ -340,7 +340,7 @@ LT_BEGIN_AUTO_TEST(body_suite, deferred_body_trampoline_invokes_stored_callable)
     LT_CHECK_EQ(out[1], 'i');
 LT_END_AUTO_TEST(deferred_body_trampoline_invokes_stored_callable)
 
-// security-reviewer-iter1-3: trampoline must not invoke an empty/null
+// The trampoline must not invoke an empty/null
 // std::function — it should return MHD_CONTENT_READER_END_WITH_ERROR instead
 // of throwing std::bad_function_call (which would terminate in MHD's IO thread).
 LT_BEGIN_AUTO_TEST(body_suite, deferred_body_trampoline_null_cls_returns_error)

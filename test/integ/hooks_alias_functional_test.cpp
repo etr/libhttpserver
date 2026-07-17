@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-048 finding fix: verifies that the three v1 alias hooks are
+// Verifies that the three v1 alias hooks are
 // functional (not observation-only stubs) and that before_handler fires
 // in finalize_answer (not inside dispatch_resource_handler), so auth and
 // method-not-allowed are handled via the hook chain.

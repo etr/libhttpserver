@@ -35,7 +35,7 @@
 
 #include <errno.h>
 #include <microhttpd.h>
-// TASK-034: <microhttpd_ws.h> remains gated (only the upgrade trampolines
+// <microhttpd_ws.h> remains gated (only the upgrade trampolines
 // need it). The public websocket_handler header is unconditional and is
 // included below with the other project headers.
 #ifdef HAVE_WEBSOCKET
@@ -52,7 +52,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <random>           // std::random_device for TASK-062 opaque
+#include <random>           // std::random_device for digest opaque
 #include <regex>
 #include <set>
 #include <shared_mutex>
@@ -63,7 +63,7 @@
 #include <vector>
 
 #include "httpserver/create_webserver.hpp"
-// TASK-034: feature_unavailable + websocket_handler are public headers
+// feature_unavailable + websocket_handler are public headers
 // included unconditionally so the public surface is identical across
 // HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds.
 #include "httpserver/feature_unavailable.hpp"
@@ -85,7 +85,7 @@
 #include <gnutls/gnutls.h>
 #include <gnutls/x509.h>
 
-// TASK-019: pin httpserver::http::http_utils::cred_type_T values to the
+// Pin httpserver::http::http_utils::cred_type_T values to the
 // GnuTLS credentials enum. The cred_type_T enum body in
 // src/httpserver/http_utils.hpp hard-codes the integer values rather
 // than referencing GNUTLS_CRD_* (which would force the public header to
@@ -153,7 +153,7 @@ namespace detail {
 
 // ----- webserver_impl construction / destruction -------------------------
 
-// TASK-062: seed `digest_opaque_` with 16 random bytes from
+// Seed `digest_opaque_` with 16 random bytes from
 // std::random_device, hex-encoded -> 32-char string. RFC 7616 §5.10:
 // opaque is an identifier, not a secret -- std::random_device gives the
 // "unpredictable enough that clients cannot guess server state"
@@ -255,7 +255,7 @@ webserver::webserver(const create_webserver& params):
     digest_auth_random(params._digest_auth_random),
     nonce_nc_size(params._nonce_nc_size),
     default_policy(params._default_policy),
-    // TASK-034: stored unconditionally; the ctor body below throws
+    // Stored unconditionally; the ctor body below throws
     // feature_unavailable if this is true on a HAVE_BAUTH-off build.
     basic_auth_enabled(params._basic_auth_enabled),
     digest_auth_enabled(params._digest_auth_enabled),
@@ -303,7 +303,7 @@ webserver::webserver(const create_webserver& params):
         (params._bind_socket != 0)
             ? static_cast<MHD_socket>(params._bind_socket)
             : MHD_INVALID_SOCKET)) {
-        // TASK-034 §7: any feature the builder asked for that the
+        // Any feature the builder asked for that the
         // library was not compiled with must fail loudly here. Throwing
         // from the ctor body (after the member-initialiser list) lets
         // the just-constructed impl_ unique_ptr destroy itself cleanly
@@ -319,7 +319,7 @@ webserver::webserver(const create_webserver& params):
         }
 #endif
 #ifndef HAVE_DAUTH
-        // security-reviewer-iter1-1 / CWE-287: symmetric guard for digest
+        // CWE-287: symmetric guard for digest
         // auth. Without this a HAVE_DAUTH-off build silently accepts
         // digest_auth_enabled=true and the request handler returns
         // WRONG_HEADER, making the authentication gate a silent no-op.
@@ -328,14 +328,14 @@ webserver::webserver(const create_webserver& params):
         }
 #endif
         ignore_sigpipe();
-        // TASK-048: register the three v1 setter aliases as hooks
+        // Register the three v1 setter aliases as hooks
         // (route_resolved for not_found_handler; before_handler for
         // method_not_allowed_handler and auth_handler). Conditional on
         // each setter being non-null so zero-cost-when-unused holds.
         install_default_alias_hooks_();
 }
 
-// TASK-034: build-time feature reporting (PRD-FLG-REQ-003). The body
+// Build-time feature reporting. The body
 // lives in this TU rather than in the header so consumers see whatever
 // HAVE_* the library was built with — not whatever HAVE_* their own TU
 // happens to define.
@@ -390,18 +390,5 @@ void webserver::stop_and_wait() {
     // entry-points.
     stop();
 }
-
-
-// TASK-045 -- Hook bus skeleton.
-//
-// register_hook_(): single internal funnel used by every add_hook
-// overload. Validates the runtime phase tag matches the overload's
-// compile-time phase, allocates a fresh slot id, takes the unique
-// writer lock, pushes the callable into the per-phase vector, and
-// flips the any_hooks_ gate to true. Returns the armed hook_handle.
-//
-// All eleven public overloads are thin one-liners that pick the right
-// per-phase vector member; the validation, locking, slot allocation,
-// and gate flip live here exactly once.
 
 }  // namespace httpserver

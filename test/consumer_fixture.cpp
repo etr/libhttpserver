@@ -24,7 +24,7 @@
 // HAVE_BAUTH / HAVE_DAUTH / HAVE_GNUTLS / HAVE_WEBSOCKET.
 //
 // Runtime behaviour is irrelevant; main() returns 0 immediately.
-// CI gate: PRD-FLG-REQ-001 / .github/workflows/verify-build.yml (TASK-037).
+// CI gate: .github/workflows/verify-build.yml.
 
 #include <cstddef>
 #include <memory>
@@ -50,14 +50,14 @@ void touch_request_accessors(const httpserver::http_request& req) {
     (void)req.get_user();              // was #ifdef HAVE_BAUTH
     (void)req.get_pass();              // was #ifdef HAVE_BAUTH
     (void)req.get_digested_user();     // was #ifdef HAVE_DAUTH
-    (void)req.get_client_cert_dn();    // already unconditional (TASK-019)
+    (void)req.get_client_cert_dn();    // already unconditional
     (void)req.has_tls_session();
     using ddr = httpserver::http::http_utils::digest_auth_result;
     (void)sizeof(ddr);
 
-    // TASK-037: pin every remaining TLS cert accessor declared in
-    // http_request.hpp. These were #ifdef HAVE_GNUTLS-gated before
-    // TASK-019. Calling them on a TLS-off build returns the documented
+    // Pin every remaining TLS cert accessor declared in
+    // http_request.hpp. These were #ifdef HAVE_GNUTLS-gated before being
+    // made unconditional. Calling them on a TLS-off build returns the documented
     // sentinel (empty string / false / 0) without touching gnutls.
     (void)req.get_client_cert_issuer_dn();
     (void)req.get_client_cert_cn();
@@ -117,7 +117,7 @@ void touch_features() {
 }
 
 void touch_ws(httpserver::webserver& ws) {
-    // TASK-035: exercise all three new public entry points. On
+    // Exercise all three websocket-resource public entry points. On
     // HAVE_WEBSOCKET-off builds each throws feature_unavailable; on
     // HAVE_WEBSOCKET-on builds the smart-ptr overloads throw
     // std::invalid_argument on the null inputs (and unregister_ws_resource
@@ -155,6 +155,6 @@ int main() {
     (void)&fixture::touch_features;
     (void)&fixture::touch_ws;
     (void)&fixture::build_test_req;
-    (void)&fixture::touch_create_webserver_setters;  // TASK-037
+    (void)&fixture::touch_create_webserver_setters;
     return 0;
 }

@@ -18,10 +18,10 @@
      USA
 */
 
-// TASK-035: smart-pointer register_ws_resource overloads.
+// Smart-pointer register_ws_resource overloads.
 //
 // This TU pins both the compile-time signature contract for the new
-// register_ws_resource overloads (mirrors TASK-023's register_resource
+// register_ws_resource overloads (mirrors the register_resource
 // pattern) and the runtime ownership semantics (HAVE_WEBSOCKET-on only):
 //   - unique_ptr overload: webserver takes ownership; handler dtor runs
 //     when the webserver is destroyed.
@@ -29,7 +29,7 @@
 //     long as either the webserver or the caller holds it.
 //   - Null smart-pointer arguments throw std::invalid_argument.
 //   - Duplicate registrations throw std::invalid_argument (mirroring
-//     TASK-023's throw-on-duplicate; v1 silently overwrote).
+//     register_resource's throw-on-duplicate; v1 silently overwrote).
 //   - unregister_ws_resource drops the slot and a subsequent
 //     re-registration succeeds.
 //
@@ -37,7 +37,7 @@
 // owned by webserver_ws_unavailable_test.cpp; this TU's runtime tests
 // are guarded by #ifdef HAVE_WEBSOCKET. The compile-time signature
 // contract is always exercised (it touches the public surface, which is
-// unconditional per TASK-034 / PRD-FLG-REQ-001).
+// unconditional).
 
 #include <atomic>
 #include <memory>
@@ -60,7 +60,7 @@ using httpserver::websocket_handler;
 //
 // Probe overloaded members through `decltype` of a call expression: a
 // well-formed call means the overload exists with the given argument
-// shape. Mirrors the TASK-023 layout in webserver_register_smartptr_test.
+// shape. Mirrors the layout in webserver_register_smartptr_test.
 
 // (1) unique_ptr overload exists and returns void.
 static_assert(std::is_same_v<
@@ -136,7 +136,7 @@ LT_BEGIN_SUITE(webserver_register_ws_smartptr_suite)
     void tear_down() {}
 LT_END_SUITE(webserver_register_ws_smartptr_suite)
 
-// Acceptance criterion (verbatim from TASK-035 spec):
+// Acceptance criterion (verbatim from the spec):
 //   "auto h = std::make_unique<my_ws_handler>();
 //    ws.register_ws_resource('/ws', std::move(h));
 //    compiles and serves WebSocket frames."
@@ -153,8 +153,9 @@ LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
 LT_END_AUTO_TEST(unique_ptr_overload_compiles)
 
 // Acceptance: webserver destruction runs the handler's dtor when the
-// caller transferred ownership via unique_ptr (mirrors TASK-023
-// `unique_ptr_dtor_runs_on_webserver_destruction`).
+// caller transferred ownership via unique_ptr (mirrors
+// `unique_ptr_dtor_runs_on_webserver_destruction` in
+// webserver_register_smartptr_test).
 LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
                    unique_ptr_dtor_runs_on_webserver_destruction)
     LT_CHECK_EQ(counted_ws_handler::dtor_count.load(), 0);
@@ -217,7 +218,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(null_shared_ptr_throws)
 
-// Mirror TASK-023's duplicate-registration throw. v1's
+// Mirror register_resource's duplicate-registration throw. v1's
 // register_ws_resource silently overwrote (operator[] semantics);
 // v2.0 throws to match the rest of the registration surface.
 LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
@@ -271,7 +272,7 @@ LT_END_AUTO_TEST(unregister_missing_ws_resource_is_noop)
 // webserver_websocket.hpp uses enable_if_t<is_base_of_v<websocket_handler, T>>
 // so callers can pass std::make_unique<DerivedHandler>() without an explicit
 // cast to unique_ptr<websocket_handler>. This test pins that the SFINAE shim
-// resolves for a derived type, mirroring TASK-023's pattern for register_path.
+// resolves for a derived type, mirroring register_path's pattern.
 LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
                    derived_unique_ptr_accepted_by_shim)
     webserver ws{create_webserver(PORT + 8)};
@@ -288,7 +289,7 @@ LT_END_AUTO_TEST(derived_unique_ptr_accepted_by_shim)
 
 #endif  // HAVE_WEBSOCKET
 
-// ---- HAVE_WEBSOCKET-off runtime tests (TASK-081 cycle 3) --------------
+// ---- HAVE_WEBSOCKET-off runtime tests ---------------------------------
 //
 // This TU intentionally defines a second LT_BEGIN_SUITE/LT_END_SUITE
 // block below (webserver_register_ws_smartptr_unavailable_suite),
@@ -298,7 +299,7 @@ LT_END_AUTO_TEST(derived_unique_ptr_accepted_by_shim)
 // and housing both here keeps the on-path and off-path runtime tests
 // for the same public surface side by side in one file.
 //
-// Before TASK-081, on a HAVE_WEBSOCKET-off build the only thing this TU
+// Previously, on a HAVE_WEBSOCKET-off build the only thing this TU
 // exercised at run-time was an empty suite (the compile-time signature
 // asserts above fire either way, but littletest cannot count them as
 // "tests executed"). The two tests below ensure that on the

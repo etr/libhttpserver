@@ -27,9 +27,9 @@
 #include "./littletest.hpp"
 
 // uri_log is the MHD URI-log callback defined as a static member of
-// webserver_impl in src/webserver.cpp (TASK-014: it moved from a free
-// function in httpserver:: to a static member of detail::webserver_impl
-// when the PIMPL split landed). The class declaration is reachable
+// webserver_impl in src/webserver.cpp (it moved from a free function in
+// httpserver:: to a static member of detail::webserver_impl when the
+// PIMPL split landed). The class declaration is reachable
 // through httpserver/detail/webserver_impl.hpp under HTTPSERVER_COMPILATION.
 static void* uri_log(void* cls, const char* uri, struct MHD_Connection* con) {
     return httpserver::detail::webserver_impl::uri_log(cls, uri, con);

@@ -32,7 +32,7 @@ namespace httpserver {
 
 namespace {
 
-// TASK-016: heap-deleter used for the test-request impl. The live-request
+// Heap-deleter used for the test-request impl. The live-request
 // constructor in http_request.cpp uses an internal-linkage delete_impl_heap
 // of the same shape; reproducing it here avoids exposing it across TUs.
 // Both implementations call operator delete, matching v1 lifetime exactly.
@@ -103,7 +103,7 @@ http_request create_test_request::build() {
     req.impl_->tls_enabled_local = _tls_enabled;
 #endif  // HAVE_GNUTLS
 
-    // TASK-057: propagate the test-builder opt-in into the impl. The
+    // Propagate the test-builder opt-in into the impl. The
     // webserver-dispatch path does the equivalent assignment in
     // webserver_impl::requests_answer_first_step.
     req.set_expose_credentials_in_logs(_expose_credentials_in_logs);

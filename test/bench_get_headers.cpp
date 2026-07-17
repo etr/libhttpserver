@@ -17,9 +17,9 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
-// TASK-039 Cycle B: runtime microbenchmark verifying that v2.0's
+// Runtime microbenchmark verifying that v2.0's
 // `http_request::get_headers()` is at least 10x faster than v1's
-// (PRD-REQ-REQ-001 / PRD §3.6 acceptance).
+// (a v2.0 numeric acceptance criterion).
 //
 // The bench measures the steady-state (warm-cache) cost: the path a real
 // consumer sees after the first call populates the memoised view map.
@@ -44,8 +44,8 @@ using httpserver::create_test_request;
 using httpserver::http_request;
 using httpserver::v1_baseline::V1_GET_HEADERS_NS_PER_CALL;
 
-// TASK-084: pin the per-stdlib provenance of the v1 baseline at compile
-// time. Before TASK-084, V1_GET_HEADERS_NS_PER_CALL was a single
+// Pin the per-stdlib provenance of the v1 baseline at compile
+// time. Previously, V1_GET_HEADERS_NS_PER_CALL was a single
 // mono-platform literal (760.0, the libc++/Apple-Silicon measurement)
 // reused unchanged on libstdc++/Linux. These static_asserts encode that
 // the constant is now selected per-stdlib and carries the platform's own
@@ -113,7 +113,7 @@ int main() {
 
     // Build a 16-header request; first call to get_headers() warms the cache.
     // Subsequent calls exercise the warm (memoised) path — the path
-    // PRD-REQ-REQ-001 claims is >=10x faster than v1.
+    // required to be >=10x faster than v1.
     create_test_request b;
     for (int i = 0; i < 16; ++i) {
         char k[32];

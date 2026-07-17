@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-062 integration test: WWW-Authenticate challenge format on the wire.
+// Integration test: WWW-Authenticate challenge format on the wire.
 //
 // Spins up a webserver wired to digest_auth_random + nonce_nc_size,
 // registers a resource that returns
@@ -233,8 +233,7 @@ LT_END_AUTO_TEST(rfc7616_challenge_sha256_algorithm_in_header)
 
 // Wire-format round-trip for the opaque and domain fields.  The unit tests
 // formerly asserted these through the internal get_params() friend hook;
-// wire-format assertions here are the appropriate place per the
-// test-quality-reviewer recommendation.
+// wire-format assertions here are the appropriate place.
 LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
                    rfc7616_challenge_opaque_and_domain_in_header)
     webserver ws{create_webserver(0)

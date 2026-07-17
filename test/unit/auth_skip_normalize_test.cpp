@@ -18,19 +18,19 @@
      USA
 */
 
-// TASK-058 step 2: pin that auth_skip_paths entries are normalized at
+// Pin that auth_skip_paths entries are normalized at
 // webserver construction time, so non-canonical inputs ({"/public/",
 // "/a/../b", "/x/./y"}) match canonical request paths ({"/public",
 // "/b", "/x/y"}).
 //
-// Pre-TASK-058: should_skip_auth normalized the *request* path but
+// Previously: should_skip_auth normalized the *request* path but
 // compared it verbatim against the skip list, so a non-canonical skip-
 // list entry never matched.  This was a latent bug -- callers who
 // passed pretty-but-non-canonical skip paths (e.g. trailing slashes
 // from copy-paste, "/foo/./bar" from path-builder code) silently saw
 // their auth-skip preference ignored.
 //
-// After step 2 the skip list is pre-normalized at construction; this
+// Now the skip list is pre-normalized at construction; this
 // test pins the new behaviour and also covers the empty-list early-
 // out path (no skip paths configured -> should_skip_auth returns
 // false without touching normalize_path).
@@ -144,7 +144,7 @@ LT_BEGIN_AUTO_TEST(auth_skip_normalize_suite,
 LT_END_AUTO_TEST(empty_skip_list_returns_false_for_any_path)
 
 // ---------------------------------------------------------------------
-// TASK-058 / security-reviewer-iter1-1: global wildcard "/*" must skip
+// Global wildcard "/*" must skip
 // auth for every path.  Pre-fix the size() > 2 guard in should_skip_auth
 // excluded "/*" (size == 2), so it fell through to an exact-equality
 // check that never matched, silently doing nothing.
@@ -161,7 +161,7 @@ LT_BEGIN_AUTO_TEST(auth_skip_normalize_suite,
 LT_END_AUTO_TEST(global_wildcard_skip_path_matches_any_path)
 
 // ---------------------------------------------------------------------
-// TASK-058 / security-reviewer-iter1-3: percent-encoded entries in
+// Percent-encoded entries in
 // auth_skip_paths must be rejected at construction time.  Passing a
 // '%'-containing entry is a misconfiguration (the entry would silently
 // never match a decoded request path).  The expectation is that

@@ -18,12 +18,15 @@
      USA
 */
 
-// TASK-058 step 1: pin canonicalize_lookup_path's observable contract
+// Pin canonicalize_lookup_path's observable contract
 // behind lookup_v2.  The static helper itself is anonymous-namespaced
 // inside webserver_dispatch.cpp and not linkable from tests, so we pin
-// its observable effect: two lookups under different spellings of the
-// same canonical path must share a cache entry (the second call hits
-// tier_hit::cache).  Also covers the boundary inputs:
+// its observable effect: a non-canonical spelling of a registered path
+// still resolves the same route (found == true, same tier), proving both
+// spellings canonicalise to the same key.  Note the exact tier bypasses
+// route_lru_cache -- it is a concurrent shared_lock map probe -- so a
+// repeated exact-route lookup reports tier_hit::exact, not
+// tier_hit::cache.  Also covers the boundary inputs:
 //   - empty string -> "/"
 //   - "foo" without leading slash -> "/foo"
 //   - "/foo/" with trailing slash -> "/foo"
@@ -73,11 +76,12 @@ LT_BEGIN_AUTO_TEST(route_lookup_canonicalize_suite, empty_path_maps_to_root)
     auto a = impl_of(ws).lookup_v2(ht::http_method::get, std::string(""));
     LT_CHECK(a.found);
 
-    // Second call under the canonical spelling must hit the cache the
-    // empty-string canonicalisation populated.
+    // Second call under the canonical spelling resolves the same exact
+    // route the empty-string spelling did, proving both canonicalise to
+    // "/". (Exact routes bypass the cache, so this is tier_hit::exact.)
     auto b = impl_of(ws).lookup_v2(ht::http_method::get, std::string("/"));
     LT_CHECK(b.found);
-    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::cache);
+    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::exact);
 LT_END_AUTO_TEST(empty_path_maps_to_root)
 
 // ---------------------------------------------------------------------
@@ -93,12 +97,12 @@ LT_BEGIN_AUTO_TEST(route_lookup_canonicalize_suite,
     LT_CHECK(a.found);
     LT_CHECK(a.entry.methods == ht::method_set{}.set_all());
 
-    // The second lookup under the canonical spelling shares the cache
-    // entry installed by the first call -- proves both spellings hash
-    // to the same canonical key.
+    // The second lookup under the canonical spelling resolves the same
+    // exact route -- proves both spellings canonicalise to the same key.
+    // (Exact routes bypass the cache, so this is tier_hit::exact.)
     auto b = impl_of(ws).lookup_v2(ht::http_method::get, std::string("/foo"));
     LT_CHECK(b.found);
-    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::cache);
+    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::exact);
 LT_END_AUTO_TEST(missing_leading_slash_is_prepended)
 
 // ---------------------------------------------------------------------
@@ -115,15 +119,17 @@ LT_BEGIN_AUTO_TEST(route_lookup_canonicalize_suite,
     auto a = impl_of(ws).lookup_v2(ht::http_method::get, std::string("/foo/"));
     LT_CHECK(a.found);
 
+    // Both spellings canonicalise to "/foo" and resolve the same exact
+    // route. (Exact routes bypass the cache, so this is tier_hit::exact.)
     auto b = impl_of(ws).lookup_v2(ht::http_method::get, std::string("/foo"));
     LT_CHECK(b.found);
-    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::cache);
+    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::exact);
 LT_END_AUTO_TEST(trailing_slash_is_stripped)
 
 // ---------------------------------------------------------------------
-// "/" identity: lookup_v2("/") on a registered "/" route hits exact
-// the first time, cache the second.  Pins that the canonicalisation
-// of "/" does NOT pop its single character.
+// "/" identity: lookup_v2("/") on a registered "/" route hits the exact
+// tier on every call (the exact tier bypasses the cache).  Pins that the
+// canonicalisation of "/" does NOT pop its single character.
 // ---------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(route_lookup_canonicalize_suite, root_identity)
     ht::webserver ws{ht::create_webserver(8080)
@@ -136,14 +142,14 @@ LT_BEGIN_AUTO_TEST(route_lookup_canonicalize_suite, root_identity)
 
     auto b = impl_of(ws).lookup_v2(ht::http_method::get, std::string("/"));
     LT_CHECK(b.found);
-    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::cache);
+    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::exact);
 LT_END_AUTO_TEST(root_identity)
 
 // ---------------------------------------------------------------------
 // Already-canonical input takes the no-allocation happy path after
-// step 1.  Behaviorally observable here: same-shape inputs share the
-// cache entry the prior call installed.  (The no-allocation property
-// is closed by the step 4 heap-profile gate.)
+// step 1.  Behaviorally observable here: same-shape inputs resolve the
+// same exact route on every call.  (The no-allocation property is closed
+// by the step 4 heap-profile gate.)
 // ---------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(route_lookup_canonicalize_suite,
                    already_canonical_is_idempotent)
@@ -154,9 +160,10 @@ LT_BEGIN_AUTO_TEST(route_lookup_canonicalize_suite,
     auto a = impl_of(ws).lookup_v2(ht::http_method::get, std::string("/foo"));
     LT_CHECK(a.found);
 
+    // Exact routes bypass the cache, so this is tier_hit::exact.
     auto b = impl_of(ws).lookup_v2(ht::http_method::get, std::string("/foo"));
     LT_CHECK(b.found);
-    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::cache);
+    LT_CHECK(b.tier == ht::detail::webserver_impl::tier_hit::exact);
 LT_END_AUTO_TEST(already_canonical_is_idempotent)
 
 LT_BEGIN_AUTO_TEST_ENV()

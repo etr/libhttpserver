@@ -19,7 +19,7 @@
 */
 
 // Negative test (Check A.2): a consumer including a detail header directly
-// must hit the gate. Post-TASK-014 the gate is HTTPSERVER_COMPILATION-only,
+// must hit the gate. The gate is HTTPSERVER_COMPILATION-only,
 // so even defining _HTTPSERVER_HPP_INSIDE_ (the public-header inside-macro)
 // must NOT satisfy it -- the macro is set here precisely to validate that
 // the stricter gate rejects it.

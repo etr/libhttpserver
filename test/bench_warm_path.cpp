@@ -17,11 +17,11 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
-// TASK-058 -- Warm-path allocation pass benchmark.
+// Warm-path allocation pass benchmark.
 //
-// Six measurements isolate the per-request allocations that TASK-058
-// (and TASK-072, variants 5 and 6) target:
-//   (1) canonicalize: lookup_v2() on a canonical path.  Pre-TASK-058 this
+// Six measurements isolate the per-request allocations that the
+// warm-path allocation work targets:
+//   (1) canonicalize: lookup_v2() on a canonical path.  Previously this
 //       allocated a std::string in canonicalize_lookup_path on every
 //       call; after step 1 the happy path returns a string_view into
 //       the caller's argument and allocates nothing.
@@ -30,21 +30,21 @@
 //       After step 2 the list is pre-normalized at construction so the
 //       per-call cost drops to just the request-side normalize and a
 //       linear scan over (already-canonical) entries.
-//   (3) should_skip_auth (empty list): pre-TASK-058 still normalized
+//   (3) should_skip_auth (empty list): previously this still normalized
 //       the request path even when no skip paths were configured.
 //       After step 2 the empty-list early-out short-circuits before
 //       the normalize call.
 //   (4) serialize_allow_405: the cost of building the Allow: header
-//       value for a 405 response.  Pre-TASK-058 this rebuilds the
+//       value for a 405 response.  Previously this rebuilt the
 //       string on every 405; after step 3 a per-resource cache returns
 //       the previously-computed std::string by reference.
-//   (5) build_request_args_pct2f: TASK-072 -- the cost of inserting a
+//   (5) build_request_args_pct2f: the cost of inserting a
 //       GET arg whose value contains "%2F" (the canonical percent-
-//       encoded form encountered in real workloads).  Before TASK-072
+//       encoded form encountered in real workloads).  Previously
 //       this allocated a std::string temporary on the global heap;
-//       after TASK-072 the unescape output is materialised directly
+//       now the unescape output is materialised directly
 //       in the per-connection arena.
-//   (6) build_request_args_plain: TASK-072 baseline -- same operation
+//   (6) build_request_args_plain: baseline -- same operation
 //       but with a value that has no percent-encoded sequences.  The
 //       median for (5) should land within noise of the (6) baseline.
 //
@@ -53,13 +53,14 @@
 // bench stays green on sanitizer hosts (same convention as
 // bench_route_lookup).
 //
-// CI gate (TASK-083): every measurement is checked against a committed
+// CI gate: every measurement is checked against a committed
 // per-platform baseline in bench_baseline.hpp.  The bench fails (rc=1)
 // when any median regresses more than 5% over its baseline -- i.e. the
 // warm path must stay within 5% of the committed numbers (the
-// ">= 5% improvement vs baseline" acceptance from TASK-058, expressed
-// here as fail-on-regression).  Refresh the baselines via TASK-084 when
-// the runner hardware changes.
+// ">= 5% improvement vs baseline" acceptance criterion, expressed
+// here as fail-on-regression).  Refresh the baselines (see
+// bench_baseline.hpp and test/PERFORMANCE.md) when the runner
+// hardware changes.
 
 #define HTTPSERVER_COMPILATION 1  // unlock webserver_test_access
 
@@ -79,7 +80,7 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/webserver.hpp"
-#include "httpserver/detail/http_request_impl.hpp"  // TASK-072: build_request_args bench
+#include "httpserver/detail/http_request_impl.hpp"  // build_request_args bench
 #include "httpserver/detail/webserver_impl.hpp"
 #include "bench_baseline.hpp"  // NOLINT(build/include_subdir)
 #include "bench_harness.hpp"   // NOLINT(build/include_subdir) -- do_not_optimize, measure_median_ns
@@ -135,7 +136,7 @@ constexpr std::size_t OUTER = 51;
 constexpr std::size_t INNER = 1'000'000;
 constexpr std::size_t INNER_405 = 100'000;
 
-// TASK-072: shared setup for bench sections (5) and (6) in main() below.
+// Shared setup for bench sections (5) and (6) in main() below.
 // Both insert one GET arg into a fresh arena-backed http_request_impl and
 // differ only in whether `value` contains a %2F escape sequence (and
 // therefore in the printed `label`). Extracting the common buf/arena/impl/
@@ -143,17 +144,17 @@ constexpr std::size_t INNER_405 = 100'000;
 // per section.
 //
 // Each measured call mirrors the full production request lifecycle:
-// allocate a fresh arena-backed impl, insert one arg (the warm path the
-// task targets), and destroy the impl.  The 65536-byte arena is more than
+// allocate a fresh arena-backed impl, insert one arg (the warm path
+// under test), and destroy the impl.  The 65536-byte arena is more than
 // large enough for a single insert, so all pmr::string allocations stay
 // inside the arena and zero global-heap allocation occurs during the
 // measured window.
 //
-// Prior design flaw (TASK-083): the old loop accumulated all 1M values
+// Prior design flaw: the old loop accumulated all 1M values
 // under a single key without resetting the arena.  The arena was
 // exhausted after ~819 iterations (~65536 / 80 bytes per pmr::string),
 // so every subsequent call spilled to the upstream heap -- measuring
-// exactly the allocation overhead the task was supposed to eliminate.
+// exactly the allocation overhead this pass was supposed to eliminate.
 // The current design (fresh monotonic_buffer_resource per call) removes
 // this flaw and makes the bench an honest proof of the zero-heap-alloc
 // guarantee.
@@ -304,7 +305,7 @@ int main() {
             OUTER, INNER_405);
     }
 
-    // ----- (5) TASK-072: build_request_args with a %2F-containing value,
+    // ----- (5) build_request_args with a %2F-containing value,
     // one insert per fresh per-request arena. See run_build_args_bench
     // above for the shared setup and the reasoning behind it. -----
     {
@@ -319,10 +320,10 @@ int main() {
             run_build_args_bench("build_request_args_pct2f", kValuePct2f);
     }
 
-    // ----- (6) TASK-072: baseline with no percent-encoded sequences.
+    // ----- (6) baseline with no percent-encoded sequences.
     // Same fresh-impl-per-call structure as (5) so the timings are
     // directly comparable.  The median for (5) should land within noise
-    // of this baseline once TASK-072 lands. -----
+    // of this baseline. -----
     {
         static const char* kValuePlain =
             "abcdefghijklmnopqrstuvwxyz_no_escape_baseline_padding";
@@ -334,8 +335,8 @@ int main() {
     }
 
 #if !defined(__APPLE__)
-    // TASK-083/TASK-084: the baselines below for this platform are
-    // conservative, uncalibrated TODO(TASK-084) placeholders (~3x the
+    // The baselines below for this platform are
+    // conservative, uncalibrated TODO placeholders (~3x the
     // apple-silicon medians, see bench_baseline.hpp) -- surface that in
     // the bench output/CI logs so the reduced gating confidence is visible
     // even when nobody is reading bench_baseline.hpp's comments.
@@ -345,7 +346,7 @@ int main() {
                 "reduced confidence until TASK-084 calibrates them.\n");
 #endif
 
-    // ----- Summary + gates (TASK-083) -----
+    // ----- Summary + gates -----
     // Each median is compared against its committed per-platform baseline
     // (bench_baseline.hpp). A median more than kAllowedRegressionRatio
     // (5%) over baseline fails the bench.

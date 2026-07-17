@@ -18,8 +18,6 @@
      USA
 */
 
-// TASK-064 Cycle 1 sentinel.
-//
 // Pins that the new public header <httpserver/cookie.hpp> exists, is
 // reachable through the umbrella <httpserver.hpp>, declares the
 // httpserver::cookie value type and the same_site_mode enum, and that

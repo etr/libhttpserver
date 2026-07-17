@@ -34,17 +34,16 @@
 #endif
 
 /**
- * Register a websocket handler for @p resource (PRD-HDL-REQ-003 /
- * PRD-HDL-REQ-005 / DR-010; PRD-FLG-REQ-001 / §7).
+ * Register a websocket handler for @p resource.
  *
  * Declared unconditionally so the public surface is identical in
  * HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds. When the library
  * was built without HAVE_WEBSOCKET this call throws
  * feature_unavailable("websocket", "HAVE_WEBSOCKET").
  *
- * TASK-035: this is the smart-pointer-ownership replacement for the
- * v1 raw-pointer overload. The templated unique_ptr<T> shim mirrors
- * TASK-023's pattern so callers can pass `std::make_unique<my_ws>()`
+ * This is the smart-pointer-ownership replacement for the
+ * v1 raw-pointer overload. The templated unique_ptr<T> shim lets
+ * callers pass `std::make_unique<my_ws>()`
  * without an explicit base cast; it funnels into the shared_ptr
  * overload below.
  *
@@ -90,7 +89,7 @@ void register_ws_resource(const std::string& resource,
                           std::shared_ptr<websocket_handler> handler);  // NOLINT(build/include_what_you_use)
 
 /**
- * Drop the websocket handler registered at @p resource (PRD-HDL-REQ-003).
+ * Drop the websocket handler registered at @p resource.
  *
  * No-op if no handler is registered at the path (mirrors the
  * semantics of unregister_path). The handler's destructor runs

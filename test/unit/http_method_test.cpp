@@ -155,7 +155,7 @@ static_assert(httpserver::to_string(httpserver::http_method::patch)
 static_assert(httpserver::to_string(static_cast<httpserver::http_method>(99))
               == std::string_view{});
 
-// TASK-027 Cycle A: method_set::empty() helper for the route table.
+// method_set::empty() helper for the route table.
 // A default-constructed set is empty; setting any bit makes it non-empty;
 // clear_all() returns to empty.
 static_assert(httpserver::method_set{}.empty(),

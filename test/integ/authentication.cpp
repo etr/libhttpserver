@@ -41,10 +41,10 @@
 #include "./test_utils.hpp"
 #include "./digest_client.hpp"
 
-// v2-digest tracking note (updated after TASK-079):
+// v2-digest tracking note:
 //
-// After TASK-062 the resources emit full RFC-7616 challenges via
-// http_response::unauthorized(digest_challenge{...}). After TASK-079 the
+// The resources emit full RFC-7616 challenges via
+// http_response::unauthorized(digest_challenge{...}). The
 // tests drive the nonce/opaque/qop state machine themselves rather than
 // delegating to libcurl's CURLAUTH_DIGEST automation, and every test below
 // performs an explicit two-round flow:
@@ -63,16 +63,15 @@
 //     from a *different* password produces 401, even though the server is
 //     configured with the original HA1.
 //   - digest_user_cache_with_auth now reaches the cache-hit code path
-//     (digest_user_cache_resource was migrated to digest_challenge in
-//     TASK-079 so the handshake can complete).
+//     (digest_user_cache_resource was migrated to digest_challenge so
+//     the handshake can complete).
 //
 // Remaining gap (signal_stale re-challenge path):
 //   The NONCE_STALE branch inside digest_resource/digest_ha1_*_resource
 //   (signal_stale = true) cannot be reliably triggered in CI because MHD's
 //   nonce expiry requires a real time delay and concurrent replay
-//   requests. This gap is documented in TASK-062 test-quality-reviewer
-//   iter1-2; it will be covered when full nonce-expiry testing
-//   infrastructure lands.
+//   requests. This gap remains open; it will be covered when full
+//   nonce-expiry testing infrastructure lands.
 
 using std::shared_ptr;
 using httpserver::webserver;
@@ -161,7 +160,7 @@ class user_pass_resource : public http_resource {
 #endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
-// TASK-062: digest_resource now drives the full RFC-7616 nonce/opaque
+// digest_resource drives the full RFC-7616 nonce/opaque
 // handshake by emitting digest_challenge_body challenges. The first
 // request from a curl --digest client arrives with no Authorization
 // header (get_digested_user() empty), so we emit the initial RFC-7616
@@ -258,7 +257,7 @@ LT_END_AUTO_TEST(base_auth_fail)
 
 // MinGW64's curl --digest parser does not accept the challenge produced by
 // MHD's MHD_queue_auth_required_response3 on Windows, so the authenticated
-// round-trip never completes. Predates TASK-062 (RFC-7616) and is a
+// round-trip never completes. Predates the RFC-7616 work and is a
 // test-infrastructure issue, not a digest-algorithm issue. The HAVE_DAUTH
 // guard separately skips the block when libmicrohttpd is built without
 // digest-auth support.
@@ -283,7 +282,7 @@ static const unsigned char PRECOMPUTED_HA1_SHA256[32] = {
     0x20, 0x7e, 0x02, 0xd7, 0xc4, 0xbd, 0x8a, 0x05
 };
 
-// TASK-062 / TASK-079 refactor: a single parameterised resource replaces the
+// A single parameterised resource replaces the
 // former digest_ha1_md5_resource and digest_ha1_sha256_resource pair. The two
 // classes were structurally identical and differed only in the algorithm enum,
 // the precomputed HA1 constant, and the HA1 byte size. Collapsing them into
@@ -328,7 +327,7 @@ class digest_ha1_resource : public http_resource {
     std::size_t ha1_size_;
 };
 
-// TASK-079: two-round hand-rolled RFC 7616 §3.4 flow. Round 1 fetches the
+// Two-round hand-rolled RFC 7616 §3.4 flow. Round 1 fetches the
 // challenge, the test parses it and computes the response client-side,
 // round 2 ships an explicit `Authorization: Digest …` header. Asserts the
 // full handshake terminates in 200 SUCCESS.
@@ -384,9 +383,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth)
 
-// TASK-079: wrong-password variant. The 401 fires on round 2 (after the
+// Wrong-password variant. The 401 fires on round 2 (after the
 // client has computed a response with the wrong cleartext) -- under the
-// pre-TASK-079 libcurl-driven shape the round-1 challenge alone could
+// earlier libcurl-driven shape the round-1 challenge alone could
 // satisfy the body=="FAIL" assertion, but here we explicitly assert the
 // rejection happens after the full handshake completes.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
@@ -435,7 +434,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
 
-// TASK-079: HA1-precomputed MD5 path. The test never sends cleartext over
+// HA1-precomputed MD5 path. The test never sends cleartext over
 // the wire and never feeds CURLOPT_USERPWD: round 2 signs with the same
 // 16-byte HA1 the server is configured with. A successful 200 proves the
 // server is verifying against the configured HA1 (not by recomputing
@@ -487,7 +486,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
 
-// TASK-079: HA1-precomputed MD5 negative variant. The test signs with an
+// HA1-precomputed MD5 negative variant. The test signs with an
 // HA1 derived from a *different* password the server doesn't know about,
 // so check_digest_auth_digest() rejects with 401. This proves the server-
 // side validation pathway is HA1-driven (it cannot have re-derived the
@@ -540,7 +539,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
 
-// TASK-079: HA1-precomputed SHA-256 path. Same shape as the MD5 sibling
+// HA1-precomputed SHA-256 path. Same shape as the MD5 sibling
 // (test signs with the configured 32-byte HA1 directly, never sends
 // cleartext). Additionally asserts the algorithm token on the wire is
 // "SHA-256" -- the canonical RFC 7616 §3.3 token, distinct from "MD5".
@@ -589,7 +588,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
 
-// TASK-079: HA1-precomputed SHA-256 negative variant. Signs with a
+// HA1-precomputed SHA-256 negative variant. Signs with a
 // wrong-password-derived SHA-256 HA1; server rejects with 401.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     webserver ws{create_webserver(0)
@@ -641,7 +640,7 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_sha256_wrong_pass)
 // Resource that tests get_digested_user() caching.
 // Covers http_request.cpp lines 293-295 (cache hit) and 300 (nullptr branch).
 //
-// TASK-079: migrated from the legacy `unauthorized("Digest", "testrealm",
+// Migrated from the legacy `unauthorized("Digest", "testrealm",
 // "FAIL")` static-string overload to the RFC 7616 `digest_challenge{...}`
 // factory so the nonce/opaque handshake can complete. Once the client has
 // authenticated, the resource validates via check_digest_auth() and then
@@ -714,7 +713,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
     ws.stop();
 LT_END_AUTO_TEST(digest_user_cache_no_auth)
 
-// TASK-079: the resource emits a full RFC 7616 challenge, so the test can
+// The resource emits a full RFC 7616 challenge, so the test can
 // drive the handshake to completion. Round 2 carries a hand-built
 // Authorization header; on the round-2 server-side validation pass,
 // digest_user_cache_resource exercises BOTH legs of get_digested_user()
@@ -769,7 +768,7 @@ class simple_resource : public http_resource {
      }
 };
 
-// Centralized authentication handler (TASK-054 migration from
+// Centralized authentication handler (migrated from
 // std::shared_ptr<http_response> to std::optional<http_response>: nullopt
 // allows the request; an engaged optional short-circuits with the value).
 std::optional<http_response> centralized_auth_handler(const http_request& req) {

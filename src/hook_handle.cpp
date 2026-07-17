@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-045 -- Out-of-line bodies for hook_handle and peer_address.
+// Out-of-line bodies for hook_handle and peer_address.
 //
 // hook_handle's destructor + remove() + move ops need the complete
 // type of detail::webserver_impl (the per-phase vectors live there),
@@ -84,13 +84,13 @@ hook_handle::~hook_handle() {
     }
 }
 
-// TASK-051: drain a per-route registration. Called by hook_handle::remove
+// Drain a per-route registration. Called by hook_handle::remove
 // when impl_ == nullptr (handles produced by http_resource::add_hook).
 // Disarm BEFORE the table call mirrors the server-wide discipline in
 // hook_handle::remove. If the resource owning the table has been
-// destroyed, the weak_ptr is expired and this is a no-op (the action-item
-// contract: "if the resource is destroyed before the handle, remove() is
-// a no-op").
+// destroyed, the weak_ptr is expired and this is a no-op (the
+// contract: "if the resource is destroyed before the handle, remove()
+// is a no-op").
 static void remove_per_route(std::weak_ptr<detail::resource_hook_table>& weak,
                              hook_phase phase,
                              std::uint64_t slot_id) noexcept {
@@ -109,7 +109,10 @@ namespace {
 // stays under the project-wide CCN gate; the per-phase typed dispatch is
 // intrinsically one-arm-per-phase so the CCN cost lives here instead.
 // The dispatch is split into two helpers (`_lifecycle` / `_handler`) so
-// each helper stays inside the CCN ceiling.
+// each helper stays inside the CCN ceiling. The helper names mirror the
+// enum ranges (phase <= route_resolved vs the rest), not true
+// lifecycle-vs-handler semantics -- e.g. connection_closed lands in the
+// `_handler_` helper.
 
 template <class EraseFn>
 void erase_slot_for_lifecycle_phase_(detail::webserver_impl* impl,
@@ -140,7 +143,7 @@ void erase_slot_for_handler_phase_(detail::webserver_impl* impl,
         erase_and_reset(impl->hooks_before_handler_); break;
     case hook_phase::handler_exception:
         // The alias slot (handler_exception_alias_) is immutable after
-        // construction (DR-012 / §4.10), so remove() only touches the
+        // construction, so remove() only touches the
         // user vector here. install_internal_error_alias()
         // (src/detail/webserver_aliases.cpp) is the place that sets
         // any_hooks_[handler_exception] = true at construction time when
@@ -185,7 +188,7 @@ void hook_handle::remove() noexcept {
     if (!armed_) {
         return;
     }
-    // TASK-051: handles produced by http_resource::add_hook have
+    // Handles produced by http_resource::add_hook have
     // impl_ == nullptr and carry a (possibly-expired) weak_ptr to
     // the resource's hook table. Handles produced by webserver::add_hook
     // have a non-null impl_ and a default-constructed (empty) weak_ptr.
@@ -227,8 +230,8 @@ void hook_handle::remove() noexcept {
                     // alias_ are the "still has a hook" signal for their
                     // phases even after the last user-vector entry is
                     // removed. Both slots are write-once at webserver
-                    // construction and immutable thereafter (DR-012 /
-                    // §4.10), so reading them here under
+                    // construction and immutable thereafter, so
+                    // reading them here under
                     // hook_table_mutex_ needs no extra synchronization.
                     const bool alias_still_wired =
                         (phase == hook_phase::handler_exception &&
@@ -271,8 +274,8 @@ hook_handle hook_handle::detach() && noexcept {
 
 // ---- peer_address::to_string ---------------------------------------------
 //
-// Moved to src/peer_address.cpp in TASK-051. See the rationale comment
-// at the top of that file.
+// Defined in src/peer_address.cpp. See the rationale comment at the
+// top of that file.
 
 
 }  // namespace httpserver

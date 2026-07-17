@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-050 acceptance criterion 2.
+// Contract under test:
 //
 // "An after_handler hook returning hook_action::pass() after calling
 //  ctx.response->with_header('X-Foo', 'bar') produces a response on the

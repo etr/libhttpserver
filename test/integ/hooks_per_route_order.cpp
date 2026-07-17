@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-051 acceptance criterion 1:
+// Contract under test:
 //
 // "New integ test hooks_per_route_order: registers a server-wide
 //  response_sent hook A and a per-route response_sent hook B on

@@ -28,7 +28,7 @@
 
 // unescaper_func is the MHD_OPTION_UNESCAPE_CALLBACK registered as a
 // static member of webserver_impl in src/detail/webserver_callbacks.cpp
-// (see the historical note there, TASK-073). It is a deliberate no-op:
+// (see the historical note there). It is a deliberate no-op:
 // it must not mutate the buffer it is handed (decoding is performed
 // later, by libhttpserver itself) and must return the string length so
 // MHD does not truncate downstream key/value storage. The only existing

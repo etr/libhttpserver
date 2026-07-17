@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-051 acceptance criterion 4:
+// Contract under test:
 //
 // "hooks_per_route_resource_destroyed_first: a hook_handle whose
 //  resource was destroyed has remove() as a no-op (no crash, no UAF --

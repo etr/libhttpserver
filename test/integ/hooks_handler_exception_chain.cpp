@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-049 acceptance criterion 1.
+// Contract under test:
 //
 // "New integ test hooks_handler_exception_chain: registers two
 //  handler_exception hooks (A returns pass(), B returns

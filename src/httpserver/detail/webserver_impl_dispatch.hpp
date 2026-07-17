@@ -44,17 +44,17 @@
 // touches both backend state on this impl and const config on the
 // owning webserver (via `parent`).
 //
-// TASK-036: synth-response helpers return http_response by value;
-// the dispatch path moves into modded_request::response (DR-010).
+// Synth-response helpers return http_response by value; the dispatch
+// path moves into modded_request::response.
 ::httpserver::http_response not_found_page(modded_request* mr) const;
 ::httpserver::http_response method_not_allowed_page(modded_request* mr) const;
-// TASK-031: error-propagation entry point. @p msg carries the
+// Error-propagation entry point. @p msg carries the
 // originating exception's text (e.what() for std::exception, the
 // sentinel "unknown exception" for non-std throws, or a fixed
 // internal-diagnostic string for the few non-handler-throw call
 // sites that synthesise a 500 with no exception in flight).
 //
-// Behaviour matches DR-009:
+// Behaviour:
 //   - parent->internal_error_handler set, !force_our:
 //       invoke it with (*mr->dhr, msg) and return the result.
 //   - force_our=true: return a hardcoded 500 with an EMPTY body
@@ -62,7 +62,7 @@
 //       itself threw).
 //   - otherwise (no handler set, !force_our): return a default 500
 //       whose body is the fixed string "Internal Server Error"
-//       (DR-009 Revision 1 / CWE-209). @p msg is forwarded into the
+//       (CWE-209). @p msg is forwarded into the
 //       body only when parent->expose_exception_messages is true
 //       (development opt-in).
 //
@@ -82,13 +82,13 @@
     std::string_view msg,
     bool force_our = false) const;
 
-// TASK-031: log @p msg via parent->log_error if a logger is configured.
+// Log @p msg via parent->log_error if a logger is configured.
 // Swallows any exception thrown by the logger -- dispatch must never
 // re-enter the catch from inside its own catch. Marked noexcept because
 // the outer catch(...) absorbs any bad_alloc from std::string(msg)
-// construction, so no exception can escape (security-reviewer-iter1-8).
+// construction, so no exception can escape.
 //
-// DR-009 Revision 1 (TASK-055): @p msg is forwarded to the user
+// @p msg is forwarded to the user
 // log_error callback UNCHANGED, regardless of
 // create_webserver::expose_exception_messages. The error log is the
 // canonical destination for verbatim exception text in v2; the HTTP
@@ -100,22 +100,22 @@
 // internal_error_handler_t @security block in create_webserver.hpp.
 void log_dispatch_error(std::string_view msg) const noexcept;
 
-// TASK-046 -- Lifecycle hook firing helpers.
+// Lifecycle hook firing helpers.
 //
 // Each helper snapshots the relevant phase vector under a shared_lock
 // on hook_table_mutex_, releases the lock, then iterates the snapshot
 // invoking each hook inside a try/catch. Any exception is routed
-// through log_dispatch_error so the MHD callback stays clean (DR-009
-// §5.2). The helpers are noexcept: even an out-of-band failure (e.g.
+// through log_dispatch_error so the MHD callback stays clean.
+// The helpers are noexcept: even an out-of-band failure (e.g.
 // std::bad_alloc in the snapshot copy) is contained by std::terminate
 // rather than escaping into MHD.
 //
 // `fire_accept_decision` returns void: the YES/NO decision is fixed
-// in policy_callback BEFORE the hook fires (DR-012 §4.10); a throwing
-// hook cannot change it.
+// in policy_callback BEFORE the hook fires; a throwing hook cannot
+// change it.
 //
 // Callers MUST gate each call with the relaxed any_hooks_ short-
-// circuit so zero-cost-when-unused holds (PRD-HOOK-REQ-008).
+// circuit so zero-cost-when-unused holds.
 void fire_connection_opened(
     const ::httpserver::connection_open_ctx& ctx) noexcept;
 void fire_accept_decision(
@@ -123,9 +123,9 @@ void fire_accept_decision(
 void fire_connection_closed(
     const ::httpserver::connection_close_ctx& ctx) noexcept;
 
-// TASK-047 -- Pre-handler short-circuit hook firing helpers.
+// Pre-handler short-circuit hook firing helpers.
 //
-// These two phases differ from the TASK-046 trio in two ways:
+// These two phases differ from the lifecycle trio in two ways:
 //   1. The callable returns hook_action (not void) -- a hook can
 //      respond_with(...) to short-circuit the chain. We surface the
 //      short-circuit response as std::optional<http_response>: engaged
@@ -133,7 +133,7 @@ void fire_connection_closed(
 //   2. The context is mutable (request_received_ctx&, body_chunk_ctx&),
 //      so a hook can mutate per-request state before the handler runs.
 //
-// Same snapshot-under-shared_lock pattern as TASK-046. Same exception
+// Same snapshot-under-shared_lock pattern as the lifecycle trio. Same exception
 // containment: a throwing hook is caught + logged via
 // log_dispatch_error and treated as pass(); the chain continues. Callers
 // MUST gate each call with the relaxed any_hooks_ short-circuit so
@@ -144,12 +144,12 @@ fire_request_received(::httpserver::request_received_ctx& ctx) noexcept;
 [[nodiscard]] std::optional<::httpserver::http_response>
 fire_body_chunk(::httpserver::body_chunk_ctx& ctx) noexcept;
 
-// TASK-048 -- route_resolved + before_handler firing helpers.
+// route_resolved + before_handler firing helpers.
 //
 // route_resolved is observation-only (void return, const ctx). It fires
 // from finalize_answer right after resolve_resource_for_request returns
 // — both on hit and on miss — so user-supplied hooks can observe routing
-// decisions without the ability to alter the in-flight response (DR-012).
+// decisions without the ability to alter the in-flight response.
 //
 // before_handler is short-circuit-capable. It fires from
 // dispatch_resource_handler AFTER the existing post-processor destroy
@@ -158,7 +158,7 @@ fire_body_chunk(::httpserver::body_chunk_ctx& ctx) noexcept;
 // check and the resource handler, and the response goes straight to
 // materialization.
 //
-// Same exception containment as TASK-046/047: a throwing hook is caught
+// Same exception containment as the phases above: a throwing hook is caught
 // + logged via log_dispatch_error and treated as pass(). Callers MUST
 // gate each call with the relaxed any_hooks_ short-circuit so
 // zero-cost-when-unused holds.
@@ -168,7 +168,7 @@ void fire_route_resolved(
 [[nodiscard]] std::optional<::httpserver::http_response>
 fire_before_handler(::httpserver::before_handler_ctx& ctx) noexcept;
 
-// TASK-049 -- handler_exception firing helper.
+// handler_exception firing helper.
 //
 // Returns engaged optional iff some hook (user-added or the
 // internal_error_handler alias slot) short-circuited with respond_with().
@@ -180,15 +180,16 @@ fire_before_handler(::httpserver::before_handler_ctx& ctx) noexcept;
 //   1. User-added hooks in hooks_handler_exception_ (registration order).
 //   2. handler_exception_alias_ (the v1 internal_error_handler), if set.
 // If no hook short-circuits, returns std::nullopt -- the caller then
-// emits the hardcoded empty-body 500 (DR-009 §5.2 point 4) DIRECTLY,
+// emits the hardcoded empty-body 500 DIRECTLY,
 // WITHOUT re-invoking the user internal_error_handler: the alias slot
 // has already had its turn at this request, so a second call would
 // observably invoke the user code twice.
 //
-// Per DR-012: a throwing hook in THIS phase is caught, logged via
+// A throwing hook in THIS phase is caught, logged via
 // log_dispatch_error, and the chain CONTINUES to the next hook -- this
-// is the one phase that does not abort to DR-009 §5.2 on a throwing
-// hook, because the whole point of the chain IS exception recovery.
+// is the one phase that does not abort to the standard 500 path on a
+// throwing hook, because the whole point of the chain IS exception
+// recovery.
 // The same containment applies to the alias slot.
 //
 // noexcept: same contract as fire_before_handler. Snapshot-copy failure
@@ -197,7 +198,7 @@ fire_before_handler(::httpserver::before_handler_ctx& ctx) noexcept;
 fire_handler_exception(
     const ::httpserver::handler_exception_ctx& ctx) noexcept;
 
-// TASK-050 -- after_handler / response_sent / request_completed firing
+// after_handler / response_sent / request_completed firing
 // helpers.
 //
 // after_handler is short-circuit-capable: a hook returning
@@ -207,7 +208,7 @@ fire_handler_exception(
 //
 // response_sent and request_completed are observation-only (void return,
 // const ctx). response_sent has an alias-slot tail (log_access_alias_)
-// invoked AFTER the user vector, exactly like the TASK-049
+// invoked AFTER the user vector, exactly like the
 // handler_exception alias.
 //
 // All three are noexcept. Snapshot-copy failure is logged and degraded
@@ -221,7 +222,7 @@ void fire_response_sent(
 void fire_request_completed(
     const ::httpserver::request_completed_ctx& ctx) noexcept;
 
-// TASK-050: gated-fire helpers, members so the http_response friendship
+// Gated-fire helpers, members so the http_response friendship
 // applies (response_sent_ctx::bytes_queued reads response.body_->size()).
 // Definitions live in src/detail/webserver_finalize.cpp.
 //
@@ -242,7 +243,7 @@ void fire_response_sent_gated(modded_request* mr,
 void fire_request_completed_gated(modded_request* mr,
                                   enum MHD_RequestTerminationCode toe);
 
-// TASK-051: gated fire of before_handler, server-wide AND per-route,
+// Gated fire of before_handler, server-wide AND per-route,
 // with short-circuit detection. Returns true iff either chain
 // short-circuited (mr->response already populated; caller must go
 // straight to materialize_and_queue_response). False means both chains
@@ -254,7 +255,7 @@ bool fire_before_handler_gated(
     modded_request* mr,
     const std::shared_ptr<::httpserver::http_resource>& hrm);
 
-// TASK-031: invoke the user-supplied internal_error_handler safely.
+// Invoke the user-supplied internal_error_handler safely.
 // On success, returns the response it produced. If the user handler
 // itself throws, logs generically via log_dispatch_error and returns
 // a hardcoded empty-body 500.
@@ -309,28 +310,25 @@ std::optional<MHD_Result> complete_websocket_upgrade(MHD_Connection* connection,
                                                      const char* ws_key);
 #endif  // HAVE_WEBSOCKET
 
-// TASK-053: Locate the resource serving @p mr by consulting lookup_v2
+// Locate the resource serving @p mr by consulting lookup_v2
 // (cache -> exact -> radix -> regex). Returns true and sets @p hrm on
 // hit (also populates URL parameter captures on @p mr->dhr via
 // set_arg, and sets mr->matched_path_template + matched_is_prefix when
 // any hook in the route_resolved / before_handler phases is registered);
 // false otherwise.
 //
-// TASK-067: single_resource mode no longer has a dedicated short-circuit.
-// Its register_prefix("/") registration lives in the radix tier and is
+// single_resource mode has no dedicated short-circuit: its
+// register_prefix("/") registration lives in the radix tier and is
 // resolved by the same lookup_v2 walk used for every other request.
 //
-// The v1 resolver (`registered_resources_str` exact + linear
-// `registered_resources_regex` scan + LRU front-end) and its helpers
-// were deleted in TASK-053 step 3; this entry point is the only
-// dispatch-side route resolver.
+// This entry point is the only dispatch-side route resolver.
 bool resolve_resource_for_request(modded_request* mr,
         std::shared_ptr<::httpserver::http_resource>& hrm);
 
 // Invoke the resource handler bound to @p mr, populating
 // mr->response. On is_allowed=false, queues a 405 with an Allow
 // header. On handler-throw, routes through the safe internal-error
-// path (TASK-031 / DR-009).
+// path.
 void dispatch_resource_handler(modded_request* mr,
         const std::shared_ptr<::httpserver::http_resource>& hrm);
 
@@ -352,7 +350,7 @@ MHD_Result materialize_and_queue_response(MHD_Connection* connection,
                                           modded_request* mr,
                                           ::httpserver::http_resource* resource);
 
-// TASK-062: kind-dispatched MHD queue entry-point.  For
+// Kind-dispatched MHD queue entry-point.  For
 // body_kind::digest_challenge, branches into the auth-required
 // queueing API (MHD_queue_auth_required_response3) so libmicrohttpd
 // writes the authoritative RFC-7616 WWW-Authenticate header with our
@@ -372,7 +370,7 @@ int queue_response_dispatching_kind(MHD_Connection* connection,
 // input validation and the public ordering; everything that mutates
 // the v2 3-tier route table lives here.
 //
-// TASK-067: caller must hold route_table_mutex_ (unique_lock) for
+// Caller must hold route_table_mutex_ (unique_lock) for
 // the whole prepare_or_create_lambda_shim -> commit_handlers_to_shim
 // -> upsert_v2_table_entry_locked_ sequence so the v2 conflict probe
 // and the table mutation are atomic against concurrent registrations.
@@ -395,14 +393,13 @@ void upsert_v2_table_entry_locked_(const detail::http_endpoint& idx,
 void upsert_v2_radix_route(const std::string& key,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim);
-// TASK-056: throw std::invalid_argument if registering a v2 entry of
+// Throw std::invalid_argument if registering a v2 entry of
 // the opposite prefix/exact kind at `key` would silently shadow an
 // existing entry. Must be called BEFORE any mutation of the route
 // table so atomicity holds. Caller holds route_table_mutex_.
 void reject_terminus_collision(const std::string& key, bool want_is_prefix);
-// TASK-067: throw std::invalid_argument if a same-kind v2 entry already
-// exists at the canonical key. Replaces the v1 `registered_resources`
-// insert-fails-on-dup oracle removed in TASK-067. Caller must hold
+// Throw std::invalid_argument if a same-kind v2 entry already
+// exists at the canonical key. Caller must hold
 // route_table_mutex_ (unique_lock); the probe runs before any mutation
 // so the atomicity contract holds.
 void reject_duplicate_v2_entry_(const detail::http_endpoint& idx, bool family);
@@ -493,8 +490,8 @@ static MHD_Result policy_callback(void* cls, const struct sockaddr* addr,
 static void error_log(void* cls, const char* fmt, va_list ap);
 static void* uri_log(void* cls, const char* uri,
                      struct MHD_Connection* con);
-// TASK-050: webserver_impl::access_log removed. log_access is now a
-// response_sent hook alias (see src/detail/webserver_aliases.cpp).
+// There is no access_log callback here: log_access is implemented as
+// a response_sent hook alias (see src/detail/webserver_aliases.cpp).
 static size_t unescaper_func(void* cls, struct MHD_Connection* c, char* s);
 
 #ifdef HAVE_GNUTLS

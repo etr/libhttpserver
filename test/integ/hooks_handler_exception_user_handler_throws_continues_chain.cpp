@@ -3,12 +3,12 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-049 acceptance criterion 2.
+// Contract under test:
 //
 // "New integ test hooks_handler_exception_user_handler_throws_continues_chain:
 //  A throws; B is still invoked; B's response is queued."
 //
-// Per DR-012 §4.10, handler_exception is the one phase where an
+// handler_exception is the one phase where an
 // exception-in-handler-of-exception does NOT abort the chain. A throwing
 // hook is caught, logged via log_error, and the chain continues to the
 // next hook. We pin both behaviours: B's response is observed on the
@@ -53,7 +53,7 @@ class throwing_resource : public httpserver::http_resource {
     }
 };
 
-// log_capture is defined in log_capture.hpp (finding #39).
+// log_capture is defined in log_capture.hpp.
 
 }  // namespace
 

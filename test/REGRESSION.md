@@ -1,6 +1,6 @@
 # v2.0 Routing Regression Gate
 
-Per architecture §9 (testing) item 5 and TASK-028 (AR-003 release-blocker
+Per architecture §9 (testing) item 5 (AR-003 release-blocker
 risk): the v1 routing-test corpus must pass against the v2.0
 implementation without regression. Any divergence from v1 routing
 semantics is either documented here with rationale **or fixed**.
@@ -17,10 +17,9 @@ cd build/test && ./routing_regression
 ## Why two surfaces
 
 Dispatch in `webserver_impl::finalize_answer` is driven by the v2 3-tier
-table (TASK-027) — `resolve_resource_for_request` calls `lookup_v2()`
-exclusively after the **TASK-053** cutover (and supersedes the original
-TASK-036 plan). **TASK-067** deleted the v1 registration-side maps and
-mutex; the v2 table is now the only routing surface end-to-end —
+table — `resolve_resource_for_request` calls `lookup_v2()`
+exclusively after the dispatch cutover. The v1 registration-side maps and
+mutex were later deleted; the v2 table is now the only routing surface end-to-end —
 lambda/class conflict detection probes the v2 tiers directly via
 `find_v2_entry_by_path_`.
 
@@ -28,7 +27,7 @@ So this gate protects two distinct surfaces:
 
 1. **End-to-end dispatch (now via the v2 3-tier table).** The full
    routing corpus continues to round-trip through curl in
-   `test/integ/basic.cpp` plus the TASK-024/025/026 unit suites.
+   `test/integ/basic.cpp` plus the v2 registration-API unit suites.
 2. **v2 3-tier table semantics.** `routing_regression_test.cpp` and
    `v2_dispatch_contract_test.cpp` together pin v2-lookup correctness.
    A failure in either is a release blocker.
@@ -50,8 +49,8 @@ here AND a test in `routing_regression_test.cpp`.
 | Regex (anchored, no `{}`) | `basic_suite::regex_matching`, `regex_url_exact_match`, `url_with_regex_like_pieces` | `test/integ/basic.cpp` | API-ported |
 | Regex-checking disabled | `basic_suite::*` with `no_regex_checking()` | `test/integ/basic.cpp` | unchanged |
 | Method-mismatched (405 + Allow) | `basic_suite::method_not_allowed_header`, `head_request`, `options_request`, `trace_request`, `only_render_*`, `custom_method_not_allowed_handler` | `test/integ/basic.cpp` | API-ported |
-| Lambda-only registration (`on_get` / `on_post` / ...) | (new in v2) | `test/unit/webserver_on_methods_test.cpp` (TASK-025) | new |
-| Generic `route(http_method, ...)` / `route(method_set, ...)` | (new in v2) | `test/unit/webserver_route_test.cpp` (TASK-026) | new |
+| Lambda-only registration (`on_get` / `on_post` / ...) | (new in v2) | `test/unit/webserver_on_methods_test.cpp` | new |
+| Generic `route(http_method, ...)` / `route(method_set, ...)` | (new in v2) | `test/unit/webserver_route_test.cpp` | new |
 | Register / unregister cycles | `basic_suite::register_unregister`, `unregister_then_404`, `unregister_path` (was `unregister_resource`) | `test/integ/basic.cpp` | API-ported (one rename) |
 | Overlapping (regex vs regex; exact vs prefix; exact vs regex) | `basic_suite::overlapping_endpoints` | `test/integ/basic.cpp` | API-ported; v2 changes the precedence story — see "Documented divergences" |
 
@@ -69,13 +68,13 @@ rationale. The corresponding assertions in `routing_regression_test.cpp`
 are pinned to v2 behavior; if v2 ever changes, the test edit makes the
 new contract explicit rather than silent.
 
-### 1. `*_nonexistent_method` tests removed (TASK-021)
+### 1. `*_nonexistent_method` tests removed
 
 v1 had two tests in `http_resource_test.cpp` —
 `set_allowing_nonexistent_method` and `is_allowed_nonexistent_method` —
 that exercised allowing/disallowing methods by string name including
 strings outside the `http_method` enum. v2 replaced the boolean
-per-method map with the `method_set` bitmask (DR-021). The bitmask
+per-method map with the `method_set` bitmask. The bitmask
 makes "nonexistent method by name" structurally unreachable, so the
 tests were dropped. Two more were renamed:
 
@@ -86,10 +85,10 @@ One new test was added: `set_allowing_count_sentinel_has_no_effect`.
 
 No port required.
 
-### 2. `unregister_resource` → `unregister_path` rename (TASK-024)
+### 2. `unregister_resource` → `unregister_path` rename
 
 v2 splits resource registration into the public `register_path` /
-`register_prefix` pair (TASK-024). The symmetric removal API renames
+`register_prefix` pair. The symmetric removal API renames
 to match: `unregister_resource(path)` → `unregister_path(path)`, with
 a new `unregister_prefix(path)` for the prefix half. The old name is
 preserved as a `[[deprecated]]` forwarder for source compatibility.
@@ -98,11 +97,11 @@ The v1 test was renamed in place; behavior unchanged.
 ### 3. Custom-regex parameter constraints — RESOLVED (v1 parity restored)
 
 In v1, `/items/{id|([0-9]+)}` was enforced by the `registered_resources_regex`
-map (deleted in TASK-067): the per-segment `[0-9]+` constraint
+map (since deleted): the per-segment `[0-9]+` constraint
 participates in `std::regex_match`, so `/items/abc` does not match the
 route.
 
-Between the TASK-053 cutover and the current commit, the v2 radix tier
+Between the initial cutover and the current commit, the v2 radix tier
 briefly diverged: `{id|([0-9]+)}` was stored as a single wildcard
 segment with the full source token as its name, with no constraint
 enforcement. `/items/abc` and `/items/42` both resolved to the same
@@ -158,13 +157,13 @@ dispatch.
 
 The v2 `lookup_v2` initially took the raw path string and probed
 `exact_routes_` / radix / regex directly, which made `/ok` (stored
-canonical) miss against an `/ok/` request. TASK-028 fixed this in
+canonical) miss against an `/ok/` request. This was fixed in
 `webserver.cpp` by adding `canonicalize_lookup_path()` and applying
 it at the head of `lookup_v2`, including cache keying. This brings v2
 in line with v1 semantics; the test
 `exact_path_normalization_aliases` pins it.
 
-### 6. CONNECT-method client-roundtrip integ test (TASK-078)
+### 6. CONNECT-method client-roundtrip integ test
 
 `test/integ/basic.cpp` previously contained two `/* ... */`-commented
 CONNECT bodies inside `basic_suite::complete` and `basic_suite::only_render`
@@ -202,6 +201,3 @@ When adding a new routing pattern to the public API:
 
 - [`specs/architecture/09-testing.md`](../specs/architecture/09-testing.md) item 5 — testing strategy.
 - [`specs/architecture/12-open-questions.md`](../specs/architecture/12-open-questions.md) AR-003 — release-blocker risk.
-- [`specs/tasks/M5-routing-lifecycle/TASK-028.md`](../specs/tasks/M5-routing-lifecycle/TASK-028.md) — this gate's source task.
-- [`specs/tasks/M5-routing-lifecycle/TASK-027.md`](../specs/tasks/M5-routing-lifecycle/TASK-027.md) — the 3-tier table this gate validates.
-- [`specs/tasks/M5-routing-lifecycle/TASK-036.md`](../specs/tasks/M5-routing-lifecycle/TASK-036.md) — downstream consumer (dispatch cutover).

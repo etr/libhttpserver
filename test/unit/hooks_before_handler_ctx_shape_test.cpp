@@ -3,9 +3,9 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-048: compile-time pin for before_handler_ctx and route_resolved_ctx.
+// Compile-time pin for before_handler_ctx and route_resolved_ctx.
 //
-// TASK-045 landed both contexts; TASK-048 extends before_handler_ctx with
+// before_handler_ctx additionally carries
 // the http_method + http_resource* surface the in-dispatch firing site
 // exposes (the 405-alias body needs both). Pin the shape so a future
 // refactor that drops or reshapes either field breaks here, where the

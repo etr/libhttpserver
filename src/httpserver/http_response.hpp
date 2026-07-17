@@ -58,7 +58,7 @@ class webserver;
 namespace detail { class webserver_impl; }
 
 /**
- * RFC-7616 Digest auth challenge parameters (TASK-062).
+ * RFC-7616 Digest auth challenge parameters.
  *
  * Passed by value to `http_response::unauthorized(digest_challenge)`,
  * which produces a `body_kind::digest_challenge` response. The dispatch
@@ -98,23 +98,23 @@ struct digest_challenge {
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/
-// PRD-HDR-REQ-004 exemption (DR-003a): http_response is the v2 sealed
+// http_response is the v2 sealed
 // value type and does NOT use the PIMPL pattern. It carries a 64-byte
 // SBO buffer (`body_storage_`) so the polymorphic body lives inline for
 // the common cases (string/empty/file/iovec/pipe/deferred), and falls
-// back to a heap pointer for outsized bodies. Move-only (DR-005);
+// back to a heap pointer for outsized bodies. Move-only;
 // copying a response would have to deep-copy the body, which is
 // semantically wrong for fd-owning bodies and unnecessary in practice.
 //
-// `final` (PRD §3.5): the v1 polymorphic subclass hierarchy
+// `final`: the v1 polymorphic subclass hierarchy
 // (string_response, file_response, iovec_response, pipe_response,
 // deferred_response, empty_response, basic_auth_fail_response,
-// digest_auth_fail_response) was removed in TASK-013; the only way to
-// build a response is now through the static factories below.
+// digest_auth_fail_response) was removed; the only way to
+// build a response is through the static factories below.
 class http_response final {
  public:
-     // Public type-trait shim used by the SBO unit test (TASK-009) to
-     // assert the exemption from PRD-HDR-REQ-004 without poking private
+     // Public type-trait shim used by the SBO unit test to
+     // assert the exemption without poking private
      // members. The trait check is `!std::is_same_v<body_pointer_type,
      // std::unique_ptr<detail::body>>`.
      using body_pointer_type = detail::body*;
@@ -126,7 +126,7 @@ class http_response final {
 
      http_response() = default;
 
-     // Move-only (DR-005, PRD-RSP-REQ-007). Copy ops are deleted because
+     // Move-only. Copy ops are deleted because
      // a response's body may own non-copyable resources (file fds, pipe
      // fds, std::function targets) and a deep-copy would either silently
      // duplicate ownership or be a slice. v2 propagation is always by
@@ -140,16 +140,16 @@ class http_response final {
      http_response(http_response&& other) noexcept;
      http_response& operator=(http_response&& other) noexcept;
 
-     // De-virtualised in TASK-013: the class is `final`, so polymorphic
+     // Non-virtual: the class is `final`, so polymorphic
      // destruction through a base pointer is impossible. Out-of-line
      // because the body destruct + ::operator delete pairing needs the
      // complete type detail::body.
      ~http_response();
 
-     // Body-kind discriminator (TASK-010 AC). Mirrors the kind reported
+     // Body-kind discriminator. Mirrors the kind reported
      // by the underlying detail::body, but answered without a virtual
      // call: the kind is recorded into kind_ at factory time and
-     // preserved across moves. TASK-011's dispatch path will consume
+     // preserved across moves. The dispatch path consumes
      // this for its kind-specific fast paths.
      [[nodiscard]] body_kind kind() const noexcept { return kind_; }
 
@@ -162,7 +162,7 @@ class http_response final {
 #undef SRC_HTTPSERVER_HTTP_RESPONSE_HPP_INSIDE_CLASS_
 
      // -----------------------------------------------------------------
-     // Read accessors (TASK-011, PRD-RSP-REQ-002 / PRD-RSP-REQ-003).
+     // Read accessors.
      //
      // Lifetime contract for the string_view-returning accessors:
      //
@@ -192,7 +192,7 @@ class http_response final {
      // -----------------------------------------------------------------
 
      /// Returns the value of header `key`, or an empty view if absent.
-     /// Does NOT insert on miss (PRD-RSP-REQ-003).
+     /// Does NOT insert on miss.
      /// View lifetime: see lifetime contract above.
      [[nodiscard]] std::string_view get_header(std::string_view key) const;
 
@@ -203,7 +203,7 @@ class http_response final {
      /// Returns the value of cookie `key`, or an empty view if absent.
      /// Does NOT insert on miss. View lifetime: see lifetime contract.
      ///
-     /// TASK-064: deprecated in v2.0. Use `get_cookies_parsed()` to walk
+     /// Deprecated in v2.0. Use `get_cookies_parsed()` to walk
      /// the structured cookie vector instead. Will be removed in v2.1.
      [[deprecated("TASK-064: use get_cookies_parsed() (returns const "
                   "std::vector<httpserver::cookie>&). Removed in v2.1.")]]
@@ -228,7 +228,7 @@ class http_response final {
      /**
       * Method used to get all response cookies (legacy string-blob view).
       *
-      * TASK-064: deprecated. The map is a `name -> value` mirror that the
+      * Deprecated. The map is a `name -> value` mirror that the
       * dispatch path NO LONGER uses for wire rendering. Use
       * `get_cookies_parsed()` for the authoritative structured view.
       * Will be removed in v2.1.
@@ -240,11 +240,12 @@ class http_response final {
      [[deprecated("TASK-064: use get_cookies_parsed() (returns const "
                   "std::vector<httpserver::cookie>&). Removed in v2.1.")]]
      [[nodiscard]] const http::header_map& get_cookies() const noexcept {
+         ensure_cookie_mirror_();
          return cookies_;
      }
 
      /**
-      * Structured cookie accessor (TASK-064). Returns the in-order list
+      * Structured cookie accessor. Returns the in-order list
       * of cookies attached via `with_cookie(...)`. Each entry carries
       * name/value plus optional attributes (Domain, Path, Expires,
       * Max-Age, Secure, HttpOnly, SameSite).
@@ -267,7 +268,7 @@ class http_response final {
      }
 
      // ------------------------------------------------------------------
-     // Fluent setters (TASK-012, PRD-RSP-REQ-004).
+     // Fluent setters.
      //
      // Each setter is overloaded on the value-category of *this so that
      // both lvalue and rvalue (factory) chains keep the response live
@@ -287,14 +288,13 @@ class http_response final {
      // insert_or_assign, so callers can either copy or move into the
      // setter without an extra allocation.
      //
-     // Backward compatibility (constraint): pre-TASK-012 callers wrote
+     // Backward compatibility (constraint): v1 callers wrote
      //         r.with_header(k, v);
      // in statement form, discarding the (then `void`) return. Switching
      // the return type to a non-`[[nodiscard]]` reference is strictly
      // source-compatible — the reference is silently ignored.
      //
-     // Cookie API (TASK-064, superseding the TASK-012 action item #4
-     // decision below): the structured `cookie` type (see cookie.hpp) is
+     // Cookie API: the structured `cookie` type (see cookie.hpp) is
      // the current surface. `with_cookie(cookie{}.with_name(...)
      // .with_value(...))` validates the name and value at the cookie's
      // own setter sites and throws on a `;` in the value (attribute
@@ -314,7 +314,7 @@ class http_response final {
      http_response& with_footer(std::string key, std::string value) &;
      http_response&& with_footer(std::string key, std::string value) &&;
 
-     // TASK-064: structured cookie overload. Appends a typed cookie to
+     // Structured cookie overload. Appends a typed cookie to
      // the response. Validated at the cookie's own setter sites; the
      // renderer (dispatch path) emits one `Set-Cookie` header per entry,
      // RFC 6265 §4.1 compliant. Accepts the cookie by VALUE so callers
@@ -322,10 +322,9 @@ class http_response final {
      http_response& with_cookie(cookie c) &;
      http_response&& with_cookie(cookie c) &&;
 
-     // Legacy string-blob overload (TASK-012). Kept as a thin shim that
+     // Legacy string-blob overload. Kept as a thin shim that
      // forwards through the structured path, so wire output matches:
-     // `Set-Cookie: name=value`. Deprecated in TASK-064; will be
-     // removed in v2.1.
+     // `Set-Cookie: name=value`. Deprecated; will be removed in v2.1.
      [[deprecated("TASK-064: use with_cookie(cookie{}.with_name(...)"
                   ".with_value(...)) for RFC-6265 attribute safety. "
                   "Removed in v2.1.")]]
@@ -346,12 +345,16 @@ class http_response final {
 
      http::header_map headers_;
      http::header_map footers_;
-     // Legacy name->value mirror, retained so the deprecated
-     // get_cookies() / get_cookie() accessors keep returning the v1
-     // shape. The dispatch path renders from `structured_cookies_`
-     // (TASK-064), so this mirror is observation-only.
-     http::header_map cookies_;
-     // TASK-064: authoritative structured cookie list. One entry per
+     // Legacy name->value mirror backing the deprecated get_cookies() /
+     // get_cookie() accessors. Rebuilt lazily from structured_cookies_ by
+     // ensure_cookie_mirror_() (gated by cookies_mirror_valid_) on first
+     // read after a mutation, so the hot
+     // with_cookie() setters do not pay a map insert whose result the wire
+     // path never reads (it renders from structured_cookies_).
+     // `mutable` because the const accessors populate it on demand.
+     mutable http::header_map cookies_;
+     mutable bool cookies_mirror_valid_ = false;
+     // Authoritative structured cookie list. One entry per
      // `with_cookie(...)` call. The dispatch path renders one
      // `Set-Cookie` header per entry via cookie::to_set_cookie_header().
      std::vector<cookie> structured_cookies_;
@@ -361,7 +364,7 @@ class http_response final {
      // allocated via ::operator new(sizeof(T)) + placement-new (heap
      // fallback). body_inline_ discriminates the two non-null cases so
      // the destructor knows whether to invoke ::operator delete.
-     // kind_ will let dispatch sites (TASK-010/011) fast-path on body
+     // kind_ lets dispatch sites fast-path on body
      // kind without a virtual call.
      body_kind kind_ = body_kind::empty;
      alignas(16) std::byte body_storage_[body_buf_size]{};
@@ -369,13 +372,13 @@ class http_response final {
      bool body_inline_ = false;
 
      // SBO lifecycle helpers shared by destructor / move ctor /
-     // move-assign. Both noexcept (DR-005). See http_response.cpp for
+     // move-assign. Both noexcept. See http_response.cpp for
      // the inline-vs-heap discriminator details.
      void destroy_body() noexcept;
      void adopt_body_from(http_response& other) noexcept;
 
-     // Shared mutation helpers for the fluent setters (TASK-012
-     // review-pass). Each helper validates its inputs, then performs the
+     // Shared mutation helpers for the fluent setters.
+     // Each helper validates its inputs, then performs the
      // map mutation or scalar assignment.  Centralising the logic here
      // means the & and && overloads only differ in their return
      // statement; the mutation + validation is in exactly one place.
@@ -387,10 +390,14 @@ class http_response final {
      // http::header_comparator, matching `cookies_`) replaces the
      // existing structured entry instead of appending a duplicate.
      void do_set_cookie(std::string key, std::string value);
-     // TASK-064: structured entry point. Appends `c` to
-     // `structured_cookies_` and mirrors name/value into `cookies_`
-     // so the deprecated string-blob accessors keep working.
+     // Structured entry point. Appends `c` (duplicate names append) to
+     // `structured_cookies_` (the authoritative store) and invalidates the
+     // lazy `cookies_` mirror so the deprecated accessors rebuild on read.
      void do_set_cookie_struct(cookie c);
+     // Rebuilds the deprecated `cookies_` name->value mirror from
+     // `structured_cookies_` when `cookies_mirror_valid_` is false. const
+     // + noexcept so the deprecated const accessors can populate on demand.
+     void ensure_cookie_mirror_() const noexcept;
      void do_set_status(int code);
 
      // Placement-new a concrete detail::body subclass into the SBO
@@ -413,10 +420,10 @@ class http_response final {
      // subclasses to inherit any protected access anyway.
      friend std::ostream &operator<< (std::ostream &os, const http_response &r);
 
-     // The TASK-009 SBO unit test exercises the four-case move
+     // The SBO unit test exercises the four-case move
      // cross-product directly through the SBO state above. Only the test
-     // TU is friended; production callers go through the (forthcoming
-     // TASK-010) factory functions. The friend is restricted by name and
+     // TU is friended; production callers go through the factory
+     // functions. The friend is restricted by name and
      // does not widen the public API.
      friend struct http_response_sbo_test_access;
 

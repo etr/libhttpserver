@@ -185,7 +185,7 @@ LT_BEGIN_AUTO_TEST(ip_access_control_suite, reject_policy_neither_allowed_nor_de
 LT_END_AUTO_TEST(reject_policy_neither_allowed_nor_denied)
 
 // Under REJECT policy, allow_ip admits the peer; remove_allowed_ip refuses
-// it again. This is the allow-list mode that TASK-029 left unreachable.
+// it again. This is the allow-list mode that was previously unreachable.
 LT_BEGIN_AUTO_TEST(ip_access_control_suite, reject_allow_admits_then_remove_refuses)
     webserver ws{create_webserver(0).default_policy(http_utils::REJECT)};
     ws.start(false);

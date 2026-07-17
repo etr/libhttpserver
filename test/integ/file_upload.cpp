@@ -24,7 +24,7 @@
 #include <direct.h>
 #define MKDIR(path) _mkdir(path)
 #else
-#include <unistd.h>  // TASK-020: unlink/rmdir; previously reachable transitively via <httpserver.hpp> -> <sys/socket.h>
+#include <unistd.h>  // unlink/rmdir; previously reachable transitively via <httpserver.hpp> -> <sys/socket.h>
 #define MKDIR(path) mkdir(path, 0755)
 #endif
 #include <cassert>
@@ -248,7 +248,7 @@ class print_file_upload_resource : public http_resource {
  public:
      http_response render_post(const http_request& req) {
          content = req.get_content();
-         // TASK-017: get_args() now returns a const& -- read-only iteration
+         // get_args() returns a const& -- read-only iteration
          // here, so bind by const reference. The body still copies into the
          // owning `args` member because req goes out of scope after render.
          const auto& args_view = req.get_args();

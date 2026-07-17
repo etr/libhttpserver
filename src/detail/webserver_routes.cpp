@@ -105,19 +105,12 @@ void webserver::validate_on_methods_inputs_(method_set methods,
             "The handler function passed to on_*/route must be non-empty");
     }
     // Same single-resource constraint as register_path: only "" or "/"
-    // is acceptable, and the matching mode must be exact (which on_*/
-    // route are). Note: register_impl_ has an additional `!family` arm
-    // in its guard (`single_resource && (...) || !family)`) that is always
-    // true for on_* because on_*/route always use exact (non-prefix) matching
-    // — omitting it here is intentional, not an oversight.
-    //
-    // Security note (CWE-284): lambda routes registered via on_*/route are
-    // ALWAYS exact (family=false) by design. The `family` path-prefix
-    // constraint enforced by register_impl_() at line 111 of
-    // webserver_register.cpp does NOT apply here; prefix-matching is only
-    // available via register_prefix(). The guard below is therefore
-    // complete: path must be "" or "/" in single_resource mode, and the
-    // route is always exact-matched — no additional family check is needed.
+    // is acceptable. register_impl_'s version of this guard
+    // (webserver_register.cpp) has an additional `!family` arm; it is
+    // deliberately omitted here because on_*/route routes are ALWAYS
+    // exact-matched (family=false by design -- prefix matching is only
+    // available via register_prefix()), so the arm would always be
+    // true. The guard below is therefore complete for lambda routes.
     if (single_resource && path != "" && path != "/") {
         throw std::invalid_argument(
             "When using a single_resource server, on_*/route requires "
@@ -132,7 +125,7 @@ void webserver::validate_on_methods_inputs_(method_set methods,
         throw std::invalid_argument(
             "Route path must not contain embedded null bytes");
     }
-    // Hardening (security-reviewer): registration is a privileged
+    // Hardening: registration is a privileged
     // server-setup call, not a network-reachable path, but an
     // accidentally megabyte-scale path would still be stored in the
     // route table data structures for no benefit. Reject unreasonably
@@ -152,18 +145,17 @@ void webserver::on_methods_(method_set methods,
                               /*registration=*/true, regex_checking);
 
     {
-        // TASK-067: single-locked window across the v2 conflict probe,
-        // the per-method atomicity pre-check, the slot writes, and the
-        // table mutation. Prior to TASK-067 a separate registered_resources
-        // mutex covered the prepare/commit/insert phase and was released
-        // before the v2 upsert; the gap was harmless only because the
-        // post-throw rollback unwound the v1 inserts.  With the v1 maps
-        // gone, the route_table_mutex_ is the only consistency boundary
-        // and must cover both the probe and the mutation. An upsert throw
-        // (e.g. reject_terminus_collision) now leaves the local shim
-        // unreferenced and discarded -- no rollback required since the
-        // table itself was never touched.
+        // Single-locked window across the v2 conflict probe, the
+        // per-method atomicity pre-check, the slot writes, and the
+        // table mutation. route_table_mutex_ is the only consistency
+        // boundary and must cover both the probe and the mutation. An
+        // upsert throw (e.g. reject_terminus_collision) leaves the
+        // local shim unreferenced and discarded -- no rollback required
+        // since the table itself was never touched.
         std::unique_lock table_lock(impl_->route_table_mutex_);
+        // is_new_entry is the bool prepare_or_create_lambda_shim
+        // returns as /*fresh=*/ and upsert_v2_table_entry_locked_
+        // receives as `fresh` -- the same flag under three names.
         auto [shim, is_new_entry] =
             impl_->prepare_or_create_lambda_shim(idx, methods);
         impl_->commit_handlers_to_shim(*shim, methods, std::move(handler));
@@ -212,7 +204,7 @@ void webserver::on_head(const std::string& path,
     on_methods_(method_set{}.set(http_method::head), path, std::move(handler));
 }
 
-// TASK-026: generic table-driven entry points. The single-method form
+// Generic table-driven entry points. The single-method form
 // rejects http_method::count_ explicitly because the public route()
 // overload accepts a runtime value (and so the sentinel is reachable);
 // the on_* forwarders never pass count_, so the on_methods_ helper
@@ -246,7 +238,7 @@ void webserver::route(method_set methods,
     on_methods_(methods, path, std::move(handler));
 }
 
-// TASK-035: canonical smart-pointer overload. The templated unique_ptr
+// Canonical smart-pointer overload. The templated unique_ptr
 // shim in webserver.hpp constructs a shared_ptr from the unique_ptr and
 // forwards here, so this is the single funnel for both ownership shapes.
 void webserver::register_ws_resource(const std::string& resource,
@@ -260,13 +252,13 @@ void webserver::register_ws_resource(const std::string& resource,
     auto result = impl_->registered_ws_handlers.emplace(std::move(url_key),
                                                         std::move(handler));
     if (!result.second) {
-        // Mirror TASK-023's throw-on-duplicate. v1's operator[]-based
-        // insert silently overwrote; v2.0 surfaces the collision.
+        // v1's operator[]-based insert silently overwrote; v2.0
+        // surfaces the collision by throwing.
         throw std::invalid_argument(
             "A websocket_handler is already registered at this path");
     }
 #else
-    // TASK-034 §7: WebSocket compiled out -- fail loudly at the public
+    // WebSocket compiled out -- fail loudly at the public
     // entry point so callers can catch feature_unavailable.
     (void)resource;
     (void)handler;

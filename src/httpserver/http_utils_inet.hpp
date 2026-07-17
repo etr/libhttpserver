@@ -26,7 +26,7 @@
 // httpserver::http (sockaddr -> string/port, header/arg map dumps, URL
 // unescape, file loading).
 //
-// Carved out of httpserver/http_utils.hpp in TASK-086 to keep that header
+// Carved out of httpserver/http_utils.hpp to keep that header
 // under the project per-file line-count ceiling (FILE_LOC_MAX in
 // scripts/check-file-size.sh). Included from the bottom of http_utils.hpp
 // after the types these declarations reference (header_view_map /

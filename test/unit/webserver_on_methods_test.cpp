@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-025: lambda handler entry points on_get / on_post / on_put /
+// Lambda handler entry points on_get / on_post / on_put /
 // on_delete / on_patch / on_options / on_head.
 //
 // Goal: stateless endpoints can be registered without subclassing
@@ -30,7 +30,7 @@
 //
 // This TU pins both the compile-time signature contract and the runtime
 // behaviour (real curl round-trips against a running webserver),
-// matching the TASK-024 test pattern.
+// matching the register_path/register_prefix test pattern.
 
 #include <curl/curl.h>
 
@@ -172,9 +172,9 @@ static_assert(std::is_same_v<
                   void>,
               "on_head must exist and return void");
 
-// (2) The route_entry detail type pins the §4.7 shape: method_set +
+// (2) The route_entry detail type pins the shape: method_set +
 //     a single-arm shared_ptr<http_resource> handler + a bool is_prefix
-//     flag. TASK-071 collapsed the variant: the lambda_handler arm was
+//     flag. The former variant was collapsed: the lambda_handler arm was
 //     dead code (every writer wrapped user lambdas in a lambda_resource
 //     shim and stored the shim as shared_ptr<http_resource>; no path
 //     stored a lambda directly).
@@ -523,7 +523,7 @@ LT_END_AUTO_TEST(on_head_dispatches_head)
 // regex or double-inserting, and both methods must be served.
 //
 // This test guards the refactored classify_route_tier helper and the
-// fresh-gated update path (finding code-simplifier-iter2-1, -2).
+// fresh-gated update path.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    on_get_and_on_post_compose_on_true_regex_path)
     webserver ws{create_webserver(PORT + 18)};
@@ -556,7 +556,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
     ws.stop();
 LT_END_AUTO_TEST(on_get_and_on_post_compose_on_true_regex_path)
 
-// ---- serialize_allow_methods ordering contract (finding test-quality-reviewer-iter1-3) --
+// ---- serialize_allow_methods ordering contract --------------------------
 //
 // serialize_allow_methods emits methods in enum-declaration order:
 //   GET HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH (indices 0..8).
@@ -638,7 +638,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
     ws.stop();
 LT_END_AUTO_TEST(allow_header_all_on_star_methods_enum_ordered)
 
-// ---- upsert_v2_param_route method-bitmask merge (finding test-quality-reviewer-iter1-4) --
+// ---- upsert_v2_param_route method-bitmask merge --------------------------
 //
 // upsert_v2_param_route performs a read-merge-reinsert on the radix/param
 // tier. Specifically, it must fold the existing entry's method bitmask before

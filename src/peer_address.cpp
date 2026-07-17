@@ -19,8 +19,7 @@
 */
 
 // peer_address::to_string out-of-line body. Carved out of hook_handle.cpp
-// in TASK-051 to keep both TUs under FILE_LOC_MAX (the per-route hook
-// additions to hook_handle.cpp pushed it past the 500-line ceiling).
+// to keep both TUs under the FILE_LOC_MAX 500-line ceiling.
 
 #include <array>
 #include <cstddef>
@@ -48,7 +47,7 @@ struct zero_run {
 // Assemble eight 16-bit groups in network byte order from the 16 raw
 // bytes. Cast each byte to unsigned before shifting to avoid signed-int
 // promotion UB and to match the unsigned int expected by '%x'
-// (CWE-704 / TASK-045 finding #1 & #25).
+// (CWE-704).
 ipv6_groups assemble_groups(const std::array<std::uint8_t, 16>& bytes) {
     ipv6_groups g{};
     for (std::size_t i = 0; i < 8; ++i) {
@@ -152,8 +151,8 @@ std::string emit_canonical(const ipv6_groups& g, const zero_run& collapse) {
 // 16-byte buffer rather than delegating to `inet_ntop`:
 //
 //   (a) `peer_address.cpp` stays free of <netinet/in.h> / <sys/socket.h>
-//       (see file-header comment above), matching the original TASK-051
-//       split's "no backend-platform headers in this TU" rule.
+//       (see file-header comment above), keeping the "no
+//       backend-platform headers in this TU" rule.
 //   (b) Post-processing produces deterministic, identical output across
 //       glibc / musl / macOS / Windows builds. Platform `inet_ntop`
 //       behaviour for the IPv4-mapped dotted-quad form (RFC 5952 §5) is

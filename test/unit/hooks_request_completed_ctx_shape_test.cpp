@@ -3,12 +3,13 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-050: compile-time pin for request_completed_ctx.
+// Compile-time pin for request_completed_ctx.
 //
-// TASK-045 landed a placeholder shape {request, duration}; TASK-050 adds
-// `resp` (nullable -- on early failure paths there may be no response object)
-// and `succeeded` (mapped from MHD_RequestTerminationCode by the fire site).
-// `duration` is kept for back-compat with the TASK-045 shape.
+// The hook bus skeleton landed a placeholder shape {request, duration};
+// the wired-up fire site adds `resp` (nullable -- on early failure paths
+// there may be no response object) and `succeeded` (mapped from
+// MHD_RequestTerminationCode by the fire site). `duration` is kept for
+// back-compat with the placeholder shape.
 //
 // Pin the shape so a future refactor that drops or reshapes a field breaks
 // here.

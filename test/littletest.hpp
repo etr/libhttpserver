@@ -276,7 +276,7 @@
     __lt_tr__->add_failure(); \
     throw littletest::assert_unattended("");
 
-// TASK-076: LT_SKIP / LT_SKIP_IF. Report SKIP — not PASS — when a
+// LT_SKIP / LT_SKIP_IF. Report SKIP — not PASS — when a
 // runtime dependency required by a test is absent (e.g. gnutls-cli not
 // in $PATH) or when an environment-conditional setup step fails for an
 // expected, non-broken reason. Bumps the runner's skip_counter, emits
@@ -351,7 +351,7 @@ struct warn_unattended : public std::exception
         std::string message;
 };
 
-// TASK-076: SKIP signal. Thrown by LT_SKIP / LT_SKIP_IF(true,...). The
+// SKIP signal. Thrown by LT_SKIP / LT_SKIP_IF(true,...). The
 // test::run_test outer try-catch swallows it silently (the [SKIP] line
 // and skip_counter bump are emitted by LT_SKIP before the throw).
 struct skip_unattended : public std::exception
@@ -466,7 +466,7 @@ class test_runner
             std::cout << "Total time spent in tests: " << good_time_total << " ms" << std::endl;
             std::cout << "Average set up time: " << (total_set_up_time / test_counter) << " ms" << std::endl;
             std::cout << "Average tear down time: " << (total_tear_down_time / test_counter) << " ms" << std::endl;
-            // TASK-076: if a binary produced ONLY skip outcomes (no
+            // If a binary produced ONLY skip outcomes (no
             // failures, no successes) signal whole-binary SKIP to
             // Automake by returning 77 (test-driver line 131:
             // `77:*) col=$blu res=SKIP recheck=no`). Mixed
@@ -490,7 +490,7 @@ class test_runner
             success_counter++;
         }
 
-        // TASK-076: record a SKIP — invoked by the LT_SKIP macro
+        // Record a SKIP — invoked by the LT_SKIP macro
         // before it throws skip_unattended.
         void add_skip()
         {
@@ -543,7 +543,7 @@ class test_runner
             return failures_counter;
         }
 
-        // TASK-076: read the skip counter. Used by
+        // Read the skip counter. Used by
         // littletest_skip_semantics_test and by any test that needs to
         // observe SKIP propagation.
         int get_skips()
@@ -568,7 +568,7 @@ class test_runner
         int test_counter;
         int success_counter;
         int failures_counter;
-        int skip_counter;  // TASK-076
+        int skip_counter;
         double good_time_total;
         double total_set_up_time;
         double total_tear_down_time;
@@ -620,7 +620,7 @@ class test : public test_base
             {
                 ;
             }
-            // TASK-076: SKIP halts the test body without recording a
+            // SKIP halts the test body without recording a
             // failure. The LT_SKIP macro already emitted the [SKIP]
             // line and bumped skip_counter; this catch just swallows
             // the throw so subsequent post-skip code in the test body

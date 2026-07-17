@@ -8,7 +8,7 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-068 unit test: pins that connection_state::reset_arena() zeros the
+// Pins that connection_state::reset_arena() zeros the
 // entire initial_buffer_ after a sentinel-prefill.
 //
 // CWE-226 mitigation: writing the per-request sentinel pattern across the

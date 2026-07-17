@@ -51,7 +51,7 @@ namespace detail {
 // MHD_GET_ARGUMENT_KIND). Called from both get_connection_value() and
 // ensure_headerlike_cache() to keep the kind→map dispatch in one place.
 // Adding a new kind (e.g. MHD_POSTDATA_KIND) only requires updating this
-// function. (code-simplifier-iter1 findings #3/#4 / major review items)
+// function.
 const http::header_map* http_request_impl::local_map_for(MHD_ValueKind kind) const noexcept {
     switch (kind) {
         case MHD_HEADER_KIND: return &headers_local;
@@ -67,7 +67,7 @@ std::string_view http_request_impl::get_connection_value(std::string_view key, M
         const auto* map = local_map_for(kind);
         if (map != nullptr) {
             // header_comparator is_transparent: find(string_view) works without
-            // constructing a temporary std::string. (performance-reviewer-iter1-30)
+            // constructing a temporary std::string.
             auto it = map->find(key);
             if (it != map->end()) return it->second;
         }
@@ -77,7 +77,7 @@ std::string_view http_request_impl::get_connection_value(std::string_view key, M
     // std::string_view is not guaranteed null-terminated, but
     // MHD_lookup_connection_value requires a C-string. Construct a temporary
     // null-terminated string from the view to avoid an OOB read when callers
-    // pass a non-terminated substring view. (Item 20: security-reviewer.)
+    // pass a non-terminated substring view.
     const std::string key_str(key);
     const char* header_c = MHD_lookup_connection_value(connection_, kind, key_str.c_str());
 
@@ -101,7 +101,6 @@ const http::header_view_map& http_request_impl::ensure_headerlike_cache(MHD_Valu
     // up front so the cold (build) and warm (return) paths share a single
     // reference without re-switching. local_map_for() provides the
     // local-storage fallback pointer without duplicating the switch.
-    // (code-simplifier-iter1 findings #3/#4 / major review items)
     http::header_view_map* cache = nullptr;
     bool* built = nullptr;
     switch (kind) {
@@ -121,8 +120,7 @@ const http::header_view_map& http_request_impl::ensure_headerlike_cache(MHD_Valu
             // The public API (get_headers / get_footers / get_cookies) only
             // passes valid kinds; this branch is unreachable through all
             // current callers. An assertion here makes any future misuse fail
-            // loudly rather than silently returning stale header data
-            // (security-reviewer-iter1-16 / code-quality-reviewer-iter1-3).
+            // loudly rather than silently returning stale header data.
             assert(false && "ensure_headerlike_cache: unsupported MHD_ValueKind");
             // Fallback for release builds: return headers cache to avoid UB.
             cache = &headers_cached_;
@@ -181,7 +179,6 @@ void http_request_impl::ensure_args_view_cached() const {
     // after populate_args(). Building the cache here (inside the impl class)
     // keeps all cache-maintenance code in one place, analogous to
     // ensure_headerlike_cache() / ensure_path_pieces_cached().
-    // (code-simplifier-iter1-9)
     if (args_view_cache_built_) {
         return;
     }
@@ -254,12 +251,21 @@ void http_request_impl::ensure_cookies_parsed_cached() const {
 namespace {
 
 // Type alias to avoid repeating the verbose map type in every helper
-// signature and call site. (code-quality-reviewer-iter1-11)
+// signature and call site.
 using args_map_t = std::pmr::map<std::pmr::string, std::pmr::vector<std::pmr::string>, http::arg_comparator>;  // NOLINT(whitespace/line_length)
 
-// Helper: look up `key` via heterogeneous string_view (no alloc), insert
-// a pmr::string key + an empty vector if missing, then append `value`.
-// All allocations use the map's allocator (the per-connection arena).
+// Helper: look up `key` via heterogeneous string_view (no alloc), and
+// insert a pmr::string key + an empty vector if missing. All allocations
+// use the map's allocator (the per-connection arena).
+//
+// Invariant: every vector in unescaped_args holds >= 1 element, because
+// every insert path appends a value immediately after inserting the
+// empty vector (append_arg / set_arg_flat / grow_last_arg below,
+// build_request_args in http_request_impl_args.cpp, and the
+// create_test_request build loop, whose source map only ever gains a
+// key together with a pushed value). get_arg_flat()'s unguarded
+// it->second[0] relies on this; the empty-vector skip in
+// ensure_args_flat_view_cached() is defensive only.
 inline std::pmr::vector<std::pmr::string>& find_or_insert_arg(
     args_map_t& args,
     std::string_view key) {
@@ -289,9 +295,7 @@ inline void append_arg(
 
 void http_request_impl::set_arg(const std::string& key, const std::string& value,
                                 std::size_t content_size_limit) {
-    // Invalidate the args_view_cached_ so a subsequent get_args() call
-    // rebuilds the view map from the updated unescaped_args.
-    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    // Invalidation rule: see args_view_cache_built_ in http_request_impl.hpp.
     args_view_cache_built_ = false;
     append_arg(unescaped_args, key,
                std::string_view(value).substr(
@@ -300,9 +304,7 @@ void http_request_impl::set_arg(const std::string& key, const std::string& value
 
 void http_request_impl::set_arg(const char* key, const char* value, std::size_t size,
                                 std::size_t content_size_limit) {
-    // Invalidate the args_view_cached_ so a subsequent get_args() call
-    // rebuilds the view map from the updated unescaped_args.
-    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    // Invalidation rule: see args_view_cache_built_ in http_request_impl.hpp.
     args_view_cache_built_ = false;
     append_arg(unescaped_args, key,
                std::string_view(value, std::min(size, content_size_limit)));
@@ -310,9 +312,7 @@ void http_request_impl::set_arg(const char* key, const char* value, std::size_t 
 
 void http_request_impl::set_arg_flat(const std::string& key, const std::string& value,
                                      std::size_t content_size_limit) {
-    // Invalidate the args_view_cached_ so a subsequent get_args() call
-    // rebuilds the view map from the updated unescaped_args.
-    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    // Invalidation rule: see args_view_cache_built_ in http_request_impl.hpp.
     args_view_cache_built_ = false;
     auto& vec = find_or_insert_arg(unescaped_args, key);
     vec.clear();
@@ -322,9 +322,7 @@ void http_request_impl::set_arg_flat(const std::string& key, const std::string& 
 
 void http_request_impl::set_args(const std::map<std::string, std::string>& args,
                                  std::size_t content_size_limit) {
-    // Invalidate the args_view_cached_ so a subsequent get_args() call
-    // rebuilds the view map from the updated unescaped_args.
-    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    // Invalidation rule: see args_view_cache_built_ in http_request_impl.hpp.
     args_view_cache_built_ = false;
     for (auto const& [key, value] : args) {
         append_arg(unescaped_args, key,
@@ -334,9 +332,7 @@ void http_request_impl::set_args(const std::map<std::string, std::string>& args,
 }
 
 void http_request_impl::grow_last_arg(const std::string& key, const std::string& value) {
-    // Invalidate the args_view_cached_ so a subsequent get_args() call
-    // rebuilds the view map from the updated unescaped_args.
-    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    // Invalidation rule: see args_view_cache_built_ in http_request_impl.hpp.
     args_view_cache_built_ = false;
     auto& vec = find_or_insert_arg(unescaped_args, key);
     if (!vec.empty()) {
@@ -365,7 +361,6 @@ void http_request_impl::fetch_user_pass() const {
     // Mark as fetched so subsequent get_user()/get_pass() calls skip the
     // MHD round-trip -- even when the request carries no auth header and
     // the credential strings remain empty after this call.
-    // (code-simplifier-iter1 finding #6 / major review item)
     user_pass_fetched = true;
 }
 #endif  // HAVE_BAUTH

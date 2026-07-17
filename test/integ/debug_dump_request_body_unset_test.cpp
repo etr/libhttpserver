@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-074: when LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY is unset (or
+// When LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY is unset (or
 // "0"), the server MUST NOT write request bodies to stdout, and MUST
 // NOT emit the security warning to stderr -- on ANY build
 // configuration. This test binary unsets the env var at the top of

@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-051: per-resource hook bus storage. Internal header; only
+// Per-resource hook bus storage. Internal header; only
 // reachable when compiling libhttpserver translation units. NOT part
 // of the installed surface; consumers cannot reach it through the
 // public umbrella.
@@ -55,7 +55,7 @@ namespace detail {
 // the other six phases are server-scope only (validated at the
 // http_resource::add_hook entry point).
 //
-// Lock discipline (architecture §5.6):
+// Lock discipline:
 //   route_table_mutex_ (dispatch, shared)  ->
 //     resource hook_table_mutex_ (this class, shared during firing)  ->
 //       webserver hook_table_mutex_ (server-wide vectors)
@@ -81,9 +81,8 @@ class resource_hook_table {
     resource_hook_table& operator=(resource_hook_table&&) = delete;
     ~resource_hook_table() = default;
 
-    // Append a slot. The expected_phase argument is the phase the
-    // calling overload binds to (used to update the any_hooks_ gate).
-    // Returns the freshly-allocated slot_id.
+    // Append a slot to the overload's phase vector and set that
+    // phase's any_hooks_ gate. Returns the freshly-allocated slot_id.
     std::uint64_t append_before_handler(
         std::function<hook_action(before_handler_ctx&)> fn);
     std::uint64_t append_handler_exception(
@@ -144,7 +143,7 @@ class resource_hook_table {
     // implementation uses named vectors instead for type safety at the
     // append_*/fire_* call sites (each vector's element type differs), at
     // the cost of six empty-but-unused conceptual slots (the pre-route
-    // phases are never represented here). See DR-012 "Per-route storage".
+    // phases are never represented here).
     std::vector<entry<hook_action(before_handler_ctx&)>>
         hooks_before_handler_;
     std::vector<entry<hook_action(const handler_exception_ctx&)>>

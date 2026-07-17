@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-064 Cycle 11: [[deprecated]] attribute pin.
+// [[deprecated]] attribute pin for the legacy cookie surface.
 //
 // Compile-only sentinel verifying that the legacy string-blob cookie
 // surface on http_response still compiles -- but does so behind a

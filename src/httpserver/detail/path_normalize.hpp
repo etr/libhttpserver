@@ -33,17 +33,19 @@
 namespace httpserver {
 namespace detail {
 
-// TASK-058 step 2: pre-normalize an auth_skip_paths list so the per-
-// request comparison in webserver_impl::should_skip_auth runs against
-// already-canonical entries.  Each entry is fed through normalize_path
-// (the same helper that normalizes the *request* path inside
-// should_skip_auth).  Entries ending in "/*" keep their trailing "/*"
-// wildcard suffix; the prefix before the wildcard is normalized.
+// Pre-normalize an auth_skip_paths list so the per-request comparison
+// in webserver_impl::should_skip_auth runs against already-canonical
+// entries.  Each entry is fed through normalize_path — the helper that
+// normalizes the *request* path inside should_skip_auth.  Note that
+// normalize_path is declared in no header: it is a file-local
+// (unnamed-namespace) function in src/detail/webserver_request.cpp.
+// Entries ending in "/*" keep their trailing "/*" wildcard suffix;
+// the prefix before the wildcard is normalized.
 //
 // Pure function: no shared state, callable from the webserver
-// constructor body.  The definition lives in detail/webserver_request.cpp
-// alongside normalize_path so the helper and its callers share a single
-// canonicalisation rule.
+// constructor body.  The definition lives in
+// src/detail/webserver_request.cpp alongside normalize_path so the
+// helper and its callers share a single canonicalisation rule.
 std::vector<std::string> normalize_auth_skip_paths(
         const std::vector<std::string>& raw);
 

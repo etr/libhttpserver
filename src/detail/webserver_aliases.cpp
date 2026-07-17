@@ -18,39 +18,38 @@
      USA
 */
 
-// TASK-048: lifecycle-hook alias installation for the three v1-derived
-// single-slot setters (auth_handler, not_found_handler,
-// method_not_allowed_handler).
+// v1 setter aliases: wiring of the create_webserver single-slot setters
+// into the v2 lifecycle-hook bus. One concept -- "a v1 setter is an
+// alias for a hook registration" -- implemented via three distinct
+// mechanisms:
 //
-// Each setter, when non-null on the create_webserver builder, registers
-// one hook at the matching phase:
+//   1. FUNCTIONAL first-position hooks (auth_handler,
+//      method_not_allowed_handler): real add_hook registrations at
+//      hook_phase::before_handler that enforce behaviour themselves by
+//      returning hook_action::respond_with(...) to short-circuit
+//      dispatch. auth_handler is registered before method_not_allowed
+//      so auth fires first (auth alias is hook[0], method_not_allowed
+//      alias is hook[1]).
 //
-//   - not_found_handler          -> hook_phase::route_resolved
-//     Observation-only per DR-012 §4.10: route_resolved_ctx does not carry
-//     a mutable response slot, so the 404 synthesis remains in finalize_answer
-//     via not_found_page(). The hook seats the alias in the bus so its count
-//     is observable via the hook API.
+//   2. DEDICATED last-position slot members that bypass the hook
+//      vectors entirely (internal_error_handler ->
+//      webserver_impl::handler_exception_alias_, log_access ->
+//      webserver_impl::log_access_alias_): the fire sites run the
+//      user-added vector first and only then the slot, so these
+//      aliases always fire LAST.
 //
-//   - method_not_allowed_handler -> hook_phase::before_handler (FUNCTIONAL)
-//     Checks ctx.resource->is_allowed(ctx.method). If the method is not
-//     allowed, calls method_not_allowed_handler, appends the Allow header,
-//     and returns hook_action::respond_with(...) to short-circuit dispatch.
-//     When a functional hook fires, dispatch_resource_handler is not entered.
-//
-//   - auth_handler               -> hook_phase::before_handler (FUNCTIONAL)
-//     Registered before method_not_allowed so auth fires first (DR-012 §4.10
-//     ordering: auth alias is hook[0], method_not_allowed alias is hook[1]).
-//     Respects auth_skip_paths, calls auth_handler(req), and returns
-//     hook_action::respond_with(*resp) if auth fails. Replaces the former
-//     apply_auth_short_circuit inline path in finalize_answer.
+//   3. A NO-OP observation-marker hook for not_found_handler at
+//      hook_phase::route_resolved: that phase is observation-only, so
+//      the hook merely keeps the registration observable via the hook
+//      API; the real 404 synthesis happens in
+//      webserver_impl::not_found_page (webserver_error_pages.cpp).
 //
 // Registration is conditional (only when the user supplied a non-null
-// callable). Users who never call any of the three setters observe zero
-// default hooks -- the zero-cost-when-unused invariant (PRD-HOOK-REQ-008)
-// holds.
+// callable). Users who never call any of the setters observe zero
+// default hooks -- the zero-cost-when-unused invariant holds.
 //
 // Doxygen note: each setter explicitly states "This is an alias. Calling it
-// registers a hook at <phase>." per TASK-048 action item.
+// registers a hook at <phase>."
 
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
@@ -80,7 +79,7 @@ namespace httpserver {
 
 namespace {
 
-// TASK-049: install the internal_error_handler alias into the dedicated
+// Install the internal_error_handler alias into the dedicated
 // last-position slot on webserver_impl. Extracted from
 // install_default_alias_hooks_ so the added `if` does not push the host
 // function over the CCN bar. See webserver_impl::handler_exception_alias_
@@ -89,10 +88,10 @@ namespace {
 // Naming: no trailing underscore -- this is a file-scope free function in
 // an anonymous namespace, not a private member function. Matches the
 // naming convention of install_log_access_alias (which itself follows
-// the same pattern). (TASK-049 review findings #20/#22.)
+// the same pattern).
 //
 // Also sets any_hooks_[handler_exception] so the gate is the single source
-// of truth even when only the alias is wired (finding #4). A future caller
+// of truth even when only the alias is wired. A future caller
 // that checks only any_hooks_ (e.g., a stats collector) then observes the
 // correct true value without also needing to know about the alias slot.
 void install_internal_error_alias(
@@ -106,7 +105,6 @@ void install_internal_error_alias(
             // handle_dispatch_exception; this guard is purely defensive for
             // any future call site that relaxes that invariant. If that
             // invariant is violated in debug builds, assert fires first.
-            // (Findings #5, #8, #9: assert in debug, guard stays for safety.)
             assert(ctx.request != nullptr &&
                    "handler_exception_ctx::request must be non-null");
             if (ctx.request == nullptr) return hook_action::pass();
@@ -115,7 +113,7 @@ void install_internal_error_alias(
         };
     // Set the any_hooks_ gate so it remains the canonical zero-cost fast-
     // check for handler_exception, regardless of whether hooks are in the
-    // vector or only in the alias slot (finding #4 / DR-012 §4.10).
+    // vector or only in the alias slot.
     impl->any_hooks_[static_cast<std::size_t>(hook_phase::handler_exception)]
         .store(true, std::memory_order_release);
 }
@@ -132,9 +130,9 @@ void append_sanitized(std::string& out, std::string_view sv) {
     }
 }
 
-// TASK-050: install the log_access alias into the dedicated response_sent
+// Install the log_access alias into the dedicated response_sent
 // alias slot on webserver_impl. Extracted from install_default_alias_hooks_
-// for the same reason as install_internal_error_alias_: keeping the host
+// for the same reason as install_internal_error_alias: keeping the host
 // function under the project CCN gate. See webserver_impl::log_access_alias_
 // for the lifetime contract.
 void install_log_access_alias(
@@ -166,7 +164,8 @@ void install_log_access_alias(
 }  // namespace
 
 // ----------------------------------------------------------------
-// auth_handler -> before_handler (registered first per DR-012 §4.10).
+// auth_handler -> before_handler (registered first, ahead of the
+// method_not_allowed alias, so auth always fires before it).
 //
 // This is an alias. Calling auth_handler(fn) registers a hook at
 // hook_phase::before_handler. Equivalent to
@@ -191,7 +190,7 @@ void install_log_access_alias(
 // security boundary; there is no separate apply_auth_short_circuit
 // fallback path remaining.
 //
-// Design note (security-reviewer-iter1-7 / CWE-200): the route-hit-only
+// Design note (CWE-200): the route-hit-only
 // firing above creates an auth oracle — requests to unregistered paths
 // get 404 without auth, while registered paths get 401 if blocked, so
 // 401-vs-404 distinguishes registered from unregistered routes.
@@ -207,7 +206,7 @@ void webserver::install_auth_alias_() {
     detail::webserver_impl* impl_ptr = impl_.get();
     // add_hook returns a prvalue hook_handle; .detach() is called
     // directly on it -- std::move() on a prvalue is a no-op and
-    // is omitted here (finding #19).
+    // is omitted here.
     add_hook(hook_phase::before_handler,
         std::function<hook_action(before_handler_ctx&)>(
             [ws_ptr, impl_ptr](before_handler_ctx& ctx) -> hook_action {
@@ -215,16 +214,16 @@ void webserver::install_auth_alias_() {
                 // Respect auth_skip_paths: skip auth for listed prefixes.
                 // Empty skip-list is the production-typical case — skip
                 // the std::string allocation entirely when there is
-                // nothing to compare against (TASK-054 review #21;
-                // should_skip_auth's own empty-list early-out from
-                // TASK-058 still fires for the non-empty path).
+                // nothing to compare against (should_skip_auth's own
+                // empty-list early-out still fires for the non-empty
+                // path).
                 if (!ws_ptr->auth_skip_paths_normalized.empty()) {
                     if (impl_ptr->should_skip_auth(ctx.request->get_path())) {
                         return hook_action::pass();
                     }
                 }
-                // Call the user-supplied auth_handler. TASK-054: the
-                // return type is std::optional<http_response>. nullopt
+                // Call the user-supplied auth_handler. The return
+                // type is std::optional<http_response>. nullopt
                 // means "allow"; an engaged optional carries the
                 // rejection response. Compared to the v1
                 // shared_ptr<http_response> shape this saves the
@@ -232,14 +231,14 @@ void webserver::install_auth_alias_() {
                 // (one heap alloc removed per request that runs through
                 // this hook), and small responses ride the http_response
                 // SBO with zero further allocs.
-                // Fail-closed (TASK-085): the auth seat is a security
+                // Fail-closed: the auth seat is a security
                 // boundary, so a throwing auth callable must NOT fall
                 // through to the resource. The generic short-circuit
                 // firing path (fire_short_circuit_hooks_for_phase) treats
                 // a throwing hook as pass(), which would be a security
                 // fail-open here (CWE-703). Wrap the callable in a local
                 // try/catch that short-circuits with a 500 instead,
-                // matching the documented §5.2 / DR-009 contract that an
+                // matching the documented dispatch contract that an
                 // exception thrown by a hook is routed through the same
                 // path as a throwing resource handler (which yields 500).
                 std::optional<http_response> rejection;
@@ -302,9 +301,6 @@ void webserver::install_method_not_allowed_alias_() {
                 http_response resp =
                     ws_ptr->method_not_allowed_handler(*ctx.request);
                 // Append Allow header from the matched route descriptor.
-                // TASK-048 review cleanup: use the shared free function
-                // detail::format_allow_header (method_utils.hpp) instead of
-                // the former local duplicate serialize_allow_methods_local.
                 if (ctx.matched) {
                     std::string allow_value =
                         detail::format_allow_header(ctx.matched->methods);
@@ -320,13 +316,13 @@ void webserver::install_method_not_allowed_alias_() {
 }
 
 // ----------------------------------------------------------------
-// not_found_handler -> route_resolved (observation-only per DR-012 §4.10).
+// not_found_handler -> route_resolved (observation-only phase).
 //
 // This is an alias. Calling not_found_handler(fn) registers a hook
 // at hook_phase::route_resolved. Equivalent to
 // ws.add_hook(hook_phase::route_resolved, ...).
 //
-// Structural pin: per DR-012 §4.10, route_resolved is observation-only
+// Structural pin: route_resolved is observation-only
 // — it cannot mutate the in-flight response or its delivery, and
 // route_resolved_ctx exposes no mutable response slot. The user-
 // provided not_found_handler is therefore consulted at the v1 call
@@ -334,7 +330,7 @@ void webserver::install_method_not_allowed_alias_() {
 // and the materialize-fallback path; see src/detail/webserver_error_pages.cpp
 // and src/detail/webserver_request.cpp). The alias seat here is the
 // architectural anchor: it reserves a stable hook[0] index at this
-// phase (per PRD-HOOK-REQ-009), it keeps the hook count observable
+// phase, it keeps the hook count observable
 // via the public hook API (verified by hooks_alias_count_test), and
 // it gives future observation-only integrations (logging, metrics)
 // a known phase boundary to subscribe alongside. The on-wire 404
@@ -350,8 +346,8 @@ void webserver::install_not_found_alias_() {
                 // hook intentionally does NOT re-invoke the user
                 // handler (doing so would double-count the user
                 // handler's call rate and violate v1 observed-call-
-                // count semantics). DR-012 §4.10 forbids mutating the
-                // response from this phase. The unused parameter makes
+                // count semantics). The route_resolved phase forbids
+                // mutating the response. The unused parameter makes
                 // explicit that no response-shaping decision is taken
                 // here.
             }))
@@ -365,11 +361,10 @@ void webserver::install_default_alias_hooks_() {
 
     // ----------------------------------------------------------------
     // internal_error_handler -> handler_exception alias slot (LAST position).
-    // [TASK-049]
     //
     // This is an alias. Calling internal_error_handler(fn) on the builder
     // makes the user callable the LAST-position fallback in the
-    // handler_exception chain (DR-012 §4.10, PRD-HOOK-REQ-009).
+    // handler_exception chain.
     //
     // Unlike auth_handler / method_not_allowed_handler / not_found_handler
     // (which install at the FIRST position via add_hook so they short-
@@ -392,13 +387,13 @@ void webserver::install_default_alias_hooks_() {
     // twice for one logical exception). See webserver_dispatch.cpp.
     //
     // The alias slot is written exactly once here and is immutable
-    // thereafter (DR-012 / §4.10). Runtime extension of the
+    // thereafter. Runtime extension of the
     // handler_exception phase is via add_hook(); the alias slot is not
     // user-mutable post-construction.
     install_internal_error_alias(impl_.get(), internal_error_handler);
 
     // ----------------------------------------------------------------
-    // log_access -> response_sent alias slot. [TASK-050]
+    // log_access -> response_sent alias slot.
     //
     // This is an alias. Calling log_access(fn) on the create_webserver
     // builder wires `fn` into the dedicated single-slot member

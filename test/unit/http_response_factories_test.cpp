@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-010 unit test: static factory functions on http_response.
+// Unit tests for the static factory functions on http_response.
 //
 // Each factory placement-news the corresponding detail::body subclass
 // into the SBO buffer (or, in the future, onto the heap) and tags the
@@ -28,15 +28,15 @@
 //   * the SBO inline placement, asserted through the existing
 //     http_response_sbo_test_access friend so no new private members
 //     are exposed;
-//   * the lifetime guarantees called out by AC #4 (pipe fd ownership)
-//     and AC #3 (unauthorized status + header).
+//   * the lifetime guarantees for pipe fd ownership and the
+//     unauthorized() status + WWW-Authenticate header contract.
 //
 // The TU is built with -DHTTPSERVER_COMPILATION (set by the test
 // AM_CPPFLAGS) so it can include httpserver/detail/body.hpp directly,
 // matching http_response_sbo_test.cpp's pattern.
 //
-// Header hygiene note: this TU does NOT include <sys/uio.h>. AC #2
-// requires that http_response::iovec(...) compile from user code
+// Header hygiene note: this TU does NOT include <sys/uio.h>.
+// http_response::iovec(...) must compile from user code
 // without that header in scope; the umbrella header_hygiene tests
 // guard the umbrella surface, and this file simply does not pull it
 // in to give callers a working reference.
@@ -119,7 +119,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, empty_factory)
 LT_END_AUTO_TEST(empty_factory)
 
 // -----------------------------------------------------------------------
-// string() — covers AC #1 (kind() == body_kind::string).
+// string() — kind() must report body_kind::string.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_factories_suite, string_factory_kind)
     auto r = http_response::string("hi");
@@ -165,7 +165,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
 LT_END_AUTO_TEST(file_factory_missing_path_does_not_throw)
 
 // -----------------------------------------------------------------------
-// iovec() — covers AC #2 (compiles without <sys/uio.h>).
+// iovec() — must compile without <sys/uio.h> in scope.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_kind)
     static const char a[] = "abc";
@@ -229,8 +229,8 @@ LT_END_AUTO_TEST(iovec_factory_single_entry)
 
 // Pin: pipe() must accept exactly one argument (the fd). Any future
 // reintroduction of a size_hint / chunk_size / Content-Length parameter
-// is a deliberate API change and must update this assertion. See
-// TASK-063 — rationale: an accepted-but-ignored parameter teaches
+// is a deliberate API change and must update this assertion.
+// Rationale: an accepted-but-ignored parameter teaches
 // callers a lie; honoring it would require synthesising Content-Length
 // without ground truth from the pipe fd.
 //
@@ -303,7 +303,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
 LT_END_AUTO_TEST(deferred_factory_releases_capture_on_destruction)
 
 // -----------------------------------------------------------------------
-// unauthorized() — covers AC #3 (401 + WWW-Authenticate header).
+// unauthorized() — 401 status + WWW-Authenticate header.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
                    unauthorized_basic_status_and_header)
@@ -311,7 +311,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
     LT_CHECK_EQ(r.get_status(),
                 httpserver::http::http_utils::http_unauthorized);
     LT_CHECK_EQ(r.get_status(), 401);
-    // AC requires byte-for-byte match.
+    // The rendered header value must match byte-for-byte.
     LT_CHECK_EQ(r.get_header(httpserver::http::http_utils::http_header_www_authenticate),
                 std::string(R"(Basic realm="myrealm")"));
 LT_END_AUTO_TEST(unauthorized_basic_status_and_header)
@@ -345,8 +345,8 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
 LT_END_AUTO_TEST(unauthorized_with_explicit_body)
 
 // -----------------------------------------------------------------------
-// unauthorized() — header injection validation (security-reviewer-iter1-1,
-// security-reviewer-iter1-2). CRLF sequences in scheme or realm must be
+// unauthorized() — header injection validation.
+// CRLF sequences in scheme or realm must be
 // rejected (std::invalid_argument) to prevent header injection (CWE-113).
 // Double-quotes embedded in realm must be escaped per RFC 7235 §2.1
 // (backslash-escape) so the quoted-string is syntactically valid.
@@ -483,7 +483,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
 LT_END_AUTO_TEST(factory_move_preserves_kind_and_headers)
 
 // -----------------------------------------------------------------------
-// TASK-012 zero-copy invariant: chained with_* calls on a factory's
+// Zero-copy invariant: chained with_* calls on a factory's
 // rvalue must not perturb the SBO placement. http_response::string(...)
 // places a string_body inline in the SBO buffer; the && overloads of
 // with_header / with_status return http_response&& (i.e. propagate the

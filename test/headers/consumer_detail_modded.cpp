@@ -23,7 +23,7 @@
 // covers http_endpoint.hpp; both detail headers carry the same
 // HTTPSERVER_COMPILATION-only gate and both must be verified independently.
 // _HTTPSERVER_HPP_INSIDE_ is defined precisely to validate that the
-// stricter post-TASK-014 gate rejects it.
+// stricter HTTPSERVER_COMPILATION-only gate rejects it.
 #define _HTTPSERVER_HPP_INSIDE_
 #include "httpserver/detail/modded_request.hpp"
 int main() { return 0; }

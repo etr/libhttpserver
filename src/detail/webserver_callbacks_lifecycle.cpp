@@ -8,9 +8,9 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-046 -- Lifecycle MHD callbacks (connection_notify, policy_callback)
+// Lifecycle MHD callbacks (connection_notify, policy_callback)
 // plus the sockaddr-to-peer_address adapter. Extracted out of
-// webserver_callbacks.cpp during TASK-046 wiring because adding the
+// webserver_callbacks.cpp because adding the
 // firing-site code pushed that TU past the project FILE_LOC_MAX gate
 // (scripts/check-file-size.sh).
 //
@@ -20,7 +20,7 @@
 //     `connection_opened` / `connection_closed` hooks.
 //   - policy_callback: MHD accept-policy callback; computes the
 //     accept/reject decision (deny + allow IP lists) and fires the
-//     `accept_decision` hook AFTER the decision is fixed (DR-012).
+//     `accept_decision` hook AFTER the decision is fixed.
 //   - anonymous-namespace `make_peer_address` adapter: converts MHD's
 //     `const struct sockaddr*` into the public `peer_address` POD.
 
@@ -65,7 +65,7 @@ namespace {
 // Convert MHD's POSIX sockaddr (AF_INET / AF_INET6) into the
 // libhttpserver-defined peer_address POD that the hook public API
 // exposes. Keeps every <sys/socket.h> reference inside this TU so the
-// public hook surface stays MHD-clean (PRD-HDR-REQ-001).
+// public hook surface stays MHD-clean.
 //
 // On AF_INET, the four address bytes go into bytes[0..3] (the rest stay
 // zero); on AF_INET6, all sixteen bytes are copied. `port` is stored in
@@ -201,9 +201,8 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             // this branch, request_completed has already called reset_arena()
             // and the modded_request has already been deleted -- so the
             // connection_state is no longer referenced by any live object.
-            // (security-reviewer-iter1-4: documents the invariant that
-            // prevents the concurrent request_completed + NOTIFY_CLOSED
-            // race described in CWE-362.)
+            // (Documents the invariant that prevents the concurrent
+            // request_completed + NOTIFY_CLOSED race described in CWE-362.)
             delete static_cast<detail::connection_state*>(*socket_context);
             *socket_context = nullptr;
             break;
@@ -221,7 +220,7 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
     // then fire `accept_decision` strictly AFTER the decision is fixed
     // in `decision`. A throwing hook lands in fire_accept_decision's
     // catch and cannot change `decision` — this is a structural
-    // guarantee, not a runtime check (DR-012 §4.10).
+    // guarantee, not a runtime check.
     bool accepted = true;
     std::optional<std::string_view> reason{};
 
@@ -241,7 +240,7 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
     const MHD_Result decision = accepted ? MHD_YES : MHD_NO;
 
     // Fire the hook strictly after `decision` is fixed. The relaxed
-    // atomic gate keeps zero-cost-when-unused (PRD-HOOK-REQ-008).
+    // atomic gate keeps zero-cost-when-unused.
     if (is_phase_armed(impl, ::httpserver::hook_phase::accept_decision)) {
         ::httpserver::accept_ctx ctx{
             make_peer_address(addr), accepted, reason};

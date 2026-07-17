@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-068: portable secure-zero primitive.
+// Portable secure-zero primitive.
 //
 // CWE-14 mitigation: the per-connection arena clearing path needs a write
 // that the optimizer is forbidden to elide as a dead store, since the

@@ -18,9 +18,9 @@
      USA
 */
 
-// Header-hygiene sentinel for TASK-004:
+// Header-hygiene sentinel for iovec_entry.hpp:
 //
-// AC #4 of TASK-004 ("public header must not include <sys/uio.h>") is
+// The contract "public header must not include <sys/uio.h>" is
 // enforced by including iovec_entry.hpp in isolation, then checking the
 // well-known include-guard macros that <sys/uio.h> defines on every
 // supported platform:

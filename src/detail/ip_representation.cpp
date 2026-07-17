@@ -55,15 +55,14 @@ namespace http {
 
 namespace {
 
-// TASK-060: the pre-existing CHECK_BIT/CLEAR_BIT function-like macros
-// here drove a file-scoped `#pragma GCC diagnostic ignored
-// "-Warray-bounds"`. Replacing them with `constexpr` helpers that take
-// the bit index as `unsigned int` and force the shift through `1u`
-// silences the warning at the source (GCC's VRP no longer loses the
-// `[0, 15]` bound across a macro expansion site) and lets us drop the
-// suppression. `mask` is a `uint16_t`, so the bitwise-and-assign goes
-// through an explicit `static_cast<uint16_t>` to keep the destination
-// type visible.
+// Bit helpers for the 16-bit `mask`. Deliberately `constexpr`
+// functions rather than function-like macros, taking the bit index as
+// `unsigned int` and forcing the shift through `1u`: GCC's VRP keeps
+// the `[0, 15]` bound across a function call (it loses it across a
+// macro expansion site), so no file-scoped `-Warray-bounds`
+// suppression is needed. `mask` is a `uint16_t`, so the
+// bitwise-and-assign goes through an explicit `static_cast<uint16_t>`
+// to keep the destination type visible.
 constexpr bool check_bit(uint16_t var, unsigned int pos) {
     return (var & (1u << pos)) != 0;
 }
@@ -169,6 +168,27 @@ void ip_representation::parse_ipv4(const std::string& ip) {
     }
 }
 
+// Returns how many 16-bit groups the single empty placeholder token
+// expands to when apply_ipv6_part later walks `parts`.
+//
+// `parts` comes from string_split(ip, ':', /*collapse=*/false), which
+// emits one empty token per empty field but never a trailing empty
+// token:
+//   "a::b" -> {"a", "", "b"}   (one empty placeholder)
+//   "::1"  -> {"", "", "1"}    (leading "::" gives TWO empties)
+//   "::"   -> {"", ""}         (trailing empty dropped)
+//
+// `8 - (parts.size() - 1)` assumes exactly one token is the
+// placeholder and every other token writes exactly one group. Two
+// shapes break that assumption and are corrected below:
+//   - a trailing nested-IPv4 dotted quad is one token but writes TWO
+//     groups, so one fewer group is omitted (omitted -= 1);
+//   - a leading "::" yields two empty tokens, so the size formula
+//     counted the second empty as a group-writing token: one more
+//     group is omitted (omitted += 1) and the duplicate is removed
+//     via parts.erase(parts.begin()). NOTE this side effect mutates
+//     the vector the caller (parse_ipv6) iterates, leaving exactly
+//     one empty placeholder for apply_ipv6_part to expand.
 unsigned int ip_representation::compute_ipv6_omitted_segments(std::vector<std::string>& parts) {
     unsigned int omitted = 8 - (parts.size() - 1);
     if (omitted == 0) return 0;
@@ -179,10 +199,9 @@ unsigned int ip_representation::compute_ipv6_omitted_segments(std::vector<std::s
     }
     if (empty_count <= 1) return omitted;
 
-    // > 1 empty segments: the only legal shape is a leading "::" (which
-    // string_split produces as two consecutive empties) on an IPv6 that
-    // also has a nested IPv4 trailing dotted-quad — the "::" produces
-    // one extra empty segment beyond the canonical single placeholder.
+    // > 1 empty tokens: the only legal shape is a leading "::" (two
+    // consecutive empties). A trailing dotted quad writes two groups,
+    // not one — see the contract comment above.
     if (parts.back().find('.') != std::string::npos) omitted -= 1;
 
     const bool leading_double_colon =
@@ -323,6 +342,30 @@ bool is_v4_mapped_prefix_octet_pair(uint16_t a, uint16_t b) {
 
 }  // namespace
 
+// Strict-weak ordering for std::set<ip_representation> (the allow and
+// deny lists). NOT lexicographic: each operand gets a position-weighted
+// score — the sum over octet index i of (16 - i) * pieces[i] — and the
+// totals are compared. An octet contributes only when it is unmasked
+// on BOTH operands (see accumulate_octet_score), so wildcard octets on
+// either side drop out of the comparison entirely: a wildcard entry
+// and any address it overlaps compare EQUIVALENT (neither is less).
+//
+// Bytes 10-11 (the v4-mapped prefix position) are excluded from the
+// first accumulation pass so they can be handled specially. If the
+// scores over all other octets are tied AND both operands' bytes 10
+// and 11 each hold a v4-mapped-prefix value (0x00 or 0xFF, see
+// is_v4_mapped_prefix_octet_pair), the mid-function `return false`
+// means "not less". The condition is symmetric in *this and b, so the
+// reversed comparison also returns false: keys such as
+// `::ffff:x.y.z.w`, `::x.y.z.w` and plain IPv4 x.y.z.w are treated as
+// EQUIVALENT rather than ordered by the 0xFF bytes. Only when that
+// case does not apply are bytes 10-11 folded into the scores and the
+// totals compared.
+//
+// insert_wildcard_aware in src/detail/webserver_setup.cpp relies on
+// this equivalence: std::set::find must locate a stored entry that
+// merely OVERLAPS the new one (wildcard-subsumed, or v4-mapped vs
+// plain form) so the more-permissive entry can win.
 bool ip_representation::operator <(const ip_representation& b) const {
     int64_t this_score = 0;
     int64_t b_score = 0;

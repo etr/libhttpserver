@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-007: consumer source used by the `make check-hygiene` target.
+// Consumer source used by the `make check-hygiene` target.
 //
 // The top-level Makefile.am preprocesses this file against ONLY the
 // staged install include path (DESTDIR=$(CHECK_HYGIENE_STAGE)) plus the

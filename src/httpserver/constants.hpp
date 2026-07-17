@@ -60,10 +60,10 @@ inline constexpr std::string_view NOT_METHOD_ERROR = "Method not Acceptable";
 
 // v1 API-parity constant. Retained for external consumers that may
 // reference the exact string "Internal Error"; the live 500 dispatch
-// path uses INTERNAL_SERVER_ERROR (DR-009 Revision 1), below.
+// path uses INTERNAL_SERVER_ERROR, below.
 inline constexpr std::string_view GENERIC_ERROR = "Internal Error";
 
-// TASK-055 / DR-009 Revision 1: fixed, sanitized default body for the
+// Fixed, sanitized default body for the
 // "no internal_error_handler configured, and expose_exception_messages
 // is false" path in webserver_impl::internal_error_page. This is the
 // CWE-209 fix: the originating exception's e.what() text MUST NOT cross

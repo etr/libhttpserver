@@ -3,12 +3,12 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-071: end-to-end pin for the not_found_handler -> route_resolved
+// End-to-end pin for the not_found_handler -> route_resolved
 // alias seat.
 //
-// Sub-item A from TASK-071 — replace the empty stub callback in
-// webserver::install_not_found_alias_ with the wired observation hook
-// documented per DR-012 §4.10. The on-wire 404 body still flows through
+// The empty stub callback in
+// webserver::install_not_found_alias_ is replaced by the wired
+// observation hook. The on-wire 404 body still flows through
 // webserver_impl::not_found_page (route_resolved is observation-only;
 // the response slot is not exposed at this phase), but the alias seat
 // in the bus must be a real hook so:
@@ -20,7 +20,7 @@
 //       returns 404 with the canonical "Not Found" body.
 //   (3) AC-1 (custom branch): a webserver with a user not_found_handler
 //       returns 404 with the user-supplied body on a miss path.
-//   (4) DR-012 §4.10 ordering pin: user-registered route_resolved hooks
+//   (4) Ordering pin: user-registered route_resolved hooks
 //       still fire alongside the alias seat (observation phase is not
 //       short-circuit-capable). A user observation hook must still see
 //       the miss.
@@ -135,14 +135,14 @@ LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
     LT_CHECK_EQ(code, 404L);
     LT_CHECK_EQ(body, std::string("CUSTOM_404"));
     // The user handler fires exactly once. The alias hook body is a
-    // pure observation marker (DR-012 §4.10); it does NOT re-invoke
+    // pure observation marker; it does NOT re-invoke
     // the user handler. The on-wire body comes from not_found_page.
     LT_CHECK_EQ(handler_calls.load(), 1);
 
     ws.stop();
 LT_END_AUTO_TEST(not_found_alias_custom_handler_returns_user_body_on_miss)
 
-// DR-012 §4.10 ordering pin. The alias seat installs hook[0] at
+// Ordering pin. The alias seat installs hook[0] at
 // route_resolved when not_found_handler is set; a user-added observation
 // hook becomes hook[1]. Both fire on a miss (observation phase is not
 // short-circuit-capable). Cross-pins that the alias upgrade did not

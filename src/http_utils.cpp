@@ -20,16 +20,16 @@
 
 #include "httpserver/http_utils.hpp"
 
-// TASK-020: <microhttpd.h> is no longer pulled in transitively by
+// <microhttpd.h> is not pulled in transitively by
 // <httpserver/http_utils.hpp>. Include it directly here so the
 // MHD_*-using bodies below still compile.
-#include <microhttpd.h>  // TASK-020: needed directly; no longer reachable transitively
+#include <microhttpd.h>  // needed directly; not reachable transitively
 
-// TASK-020: <sys/socket.h> (or its Windows equivalent) must also be
+// <sys/socket.h> (or its Windows equivalent) must also be
 // requested explicitly: it provides struct sockaddr's full definition
 // for get_ip_str / get_port / ip_representation::ip_representation.
 #if defined(_WIN32) && !defined(__CYGWIN__)
-#include <winsock2.h>    // TASK-020: needed directly; no longer reachable transitively
+#include <winsock2.h>    // needed directly; not reachable transitively
 #include <ws2tcpip.h>
 #include <io.h>
 #include <sys/stat.h>
@@ -39,7 +39,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <sys/socket.h>  // TASK-020: needed directly; no longer reachable transitively
+#include <sys/socket.h>  // needed directly; not reachable transitively
 #include <sys/types.h>
 #endif  // WIN32 check
 
@@ -284,7 +284,7 @@ std::string http_utils::sanitize_upload_filename(const std::string& filename) {
     // concatenated path is passed to std::ofstream::open() (which calls
     // c_str() and hands a const char* to the OS open() syscall), creating
     // a file at the truncated location rather than the full path.
-    // (CWE-626 / null-byte injection, security finding #12)
+    // (CWE-626 / null-byte injection)
     if (filename.find('\0') != std::string::npos) return "";
 
     // Find the basename: take everything after the last '/' or '\'
@@ -303,11 +303,10 @@ std::string http_utils::sanitize_upload_filename(const std::string& filename) {
 // src/detail/ip_representation.cpp to keep this TU under the project
 // per-file LOC ceiling. See FILE_LOC_MAX in scripts/check-file-size.sh.
 
-// TASK-072 (code-simplifier-iter1-1/2): hex_digit_value and the core
-// unescape loop have been promoted to the shared internal header
-// src/httpserver/detail/unescape_helpers.hpp so that this TU and
-// src/detail/http_request_impl.cpp share one truth-source.
-// http_unescape is now a thin wrapper around unescape_buf_raw.
+// hex_digit_value and the core unescape loop live in the shared
+// internal header src/httpserver/detail/unescape_helpers.hpp so that
+// this TU and src/detail/http_request_impl.cpp share one truth-source.
+// http_unescape is a thin wrapper around unescape_buf_raw.
 size_t http_unescape(std::string* val) {
     if (val->empty()) return 0;
     const std::size_t new_size =
@@ -375,6 +374,13 @@ void dump_arg_map(std::ostream& os, const std::string& prefix, const http::arg_v
     }
 }
 
+// Contract: decodes *s IN PLACE and returns the new length. When the
+// user configured no custom unescaper (create_webserver::unescaper not
+// set, so `unescaper` is nullptr), the default percent-decoder
+// http_unescape is applied. A custom unescaper REPLACES the default
+// entirely — no percent-decoding happens around it.
+// Note: on an empty string, (*s)[0] is the null terminator (valid per
+// C++11 operator[]), so the `== 0` test is a legitimate empty-check.
 size_t base_unescaper(std::string* s, unescaper_ptr unescaper) {
     if ((*s)[0] == 0) return 0;
 
@@ -398,7 +404,7 @@ const char* http_utils::get_mhd_version() {
     return MHD_get_version();
 }
 
-// TASK-020: pin start_method_T to libmicrohttpd's MHD_FLAG enum and
+// Pin start_method_T to libmicrohttpd's MHD_FLAG enum and
 // digest_algorithm / digest_auth_result to MHD_DigestAuthAlgo3 /
 // MHD_DigestAuthResult. The public-header values are hard-coded so the
 // umbrella does not transitively include <microhttpd.h>; these asserts

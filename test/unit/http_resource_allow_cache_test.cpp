@@ -18,13 +18,13 @@
      USA
 */
 
-// TASK-058 step 3: lazy Allow-header cache on http_resource.
+// Lazy Allow-header cache on http_resource.
 //
 // Goal: on the 405 (method-not-allowed) dispatch path, the Allow
-// header value is rebuilt with detail::format_allow_header() on every
-// request, allocating a fresh std::string each time.  Step 3 attaches
-// a lazy cache to http_resource so subsequent 405s on the same
-// resource return the previously-computed string by reference.
+// header value used to be rebuilt with detail::format_allow_header()
+// on every request, allocating a fresh std::string each time.  The
+// lazy cache attached to http_resource lets subsequent 405s on the
+// same resource return the previously-computed string by reference.
 //
 // Invalidation is implicit: get_allow_header() compares the resource's
 // current methods_allowed_ mask against a "mask at time of cache"
@@ -152,8 +152,7 @@ LT_END_AUTO_TEST(consecutive_calls_return_same_buffer)
 // (3) Concurrency: concurrent reads from multiple threads must all
 // observe the same (correct) cached value.  This test will expose a
 // data race under TSAN if methods_allowed_ is read outside the mutex
-// (security-reviewer-iter1-2) or if the mutex is not acquired as a
-// shared lock on the warm path (performance-reviewer-iter1-1).
+// or if the mutex is not acquired as a shared lock on the warm path.
 // ---------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_resource_allow_cache_suite,
                    concurrent_reads_all_return_correct_value)

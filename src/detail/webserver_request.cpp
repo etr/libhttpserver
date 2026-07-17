@@ -98,57 +98,81 @@ namespace detail {
 
 namespace {
 
-// Apply one path segment to the running stack: "" / "." are skipped,
-// ".." pops, anything else pushes. Pulled out of normalize_path so the
-// caller stays a flat tokenize-and-rebuild loop.
-void apply_normalized_segment(std::vector<std::string>& segments,
-                              std::string_view seg) {
-    if (seg == "..") {
-        if (!segments.empty()) segments.pop_back();
-        return;
-    }
-    if (seg.empty() || seg == ".") return;
-    segments.emplace_back(seg);
-}
-
 // NOTE: the caller (should_skip_auth) must receive an already-unescaped
 // path (i.e., no %XX sequences remain). libhttpserver's base_unescaper()
 // (called in answer_to_connection) runs before should_skip_auth, so this
 // invariant is satisfied on the dispatch path. Double slashes (//) and
-// trailing slashes are collapsed automatically: apply_normalized_segment
-// skips empty segment strings, so consecutive '/' separators produce zero
-// segments (same as a single '/').
+// trailing slashes are collapsed automatically: empty segments between
+// consecutive '/' separators are skipped, producing the same result as a
+// single '/'.
+//
+// Path-normalization chain (per request, in order):
+//   1. http_utils::standardize_url (answer_to_connection) collapses
+//      duplicate '/' runs and strips a trailing '/'.
+//   2. normalize_path (below), applied to the standardized URL,
+//      resolves dot-segments ("." / "..") into a canonical absolute
+//      path; the result is stored as mr->standardized_url and is the
+//      single path the rest of dispatch sees.
+//   3. canonicalize_lookup_path, inside lookup_v2
+//      (webserver_dispatch.cpp), canonicalizes slashes on the lookup
+//      key (leading '/' ensured, trailing '/' stripped) so lookups hit
+//      the same keys registration stored.
+// should_skip_auth re-runs normalize_path on its input (idempotent on
+// the already-normalized dispatch path), so the auth-skip decision and
+// the route lookup always agree on the same canonical path. A past
+// auth-bypass fix (dot-segment mismatch between auth and routing,
+// commit a3e53f3) depends on this agreement -- do not let the two
+// views diverge.
+//
+// Single pass, no per-segment heap allocation: each retained segment is
+// appended straight into the output buffer, and a stack of segment start
+// offsets lets ".." pop the previous segment by truncating the buffer
+// back to that offset. This runs on every request (the auth-bypass
+// canonicalisation, commit a3e53f3), so it avoids the vector<std::string>
+// of owning segments the earlier tokenize-and-rebuild form allocated.
 std::string normalize_path(std::string_view path) {
-    std::vector<std::string> segments;
+    std::string out;
+    out.reserve(path.size() + 1);
+    out.push_back('/');
+    // Offsets into `out` where each retained segment begins, recorded
+    // just BEFORE its leading separator so ".." can drop the whole "/seg"
+    // by resizing back to the recorded offset.
+    std::vector<std::string::size_type> seg_marks;
     std::string::size_type start = 0;
     if (!path.empty() && path[0] == '/') start = 1;
     while (start < path.size()) {
         auto end = path.find('/', start);
         if (end == std::string::npos) end = path.size();
-        apply_normalized_segment(segments, path.substr(start, end - start));
+        std::string_view seg = path.substr(start, end - start);
         start = end + 1;
+        if (seg.empty() || seg == ".") continue;
+        if (seg == "..") {
+            if (!seg_marks.empty()) {
+                out.resize(seg_marks.back());
+                seg_marks.pop_back();
+            }
+            continue;
+        }
+        seg_marks.push_back(out.size());
+        if (out.size() > 1) out.push_back('/');
+        out.append(seg.data(), seg.size());
     }
-    std::string normalized = "/";
-    for (size_t i = 0; i < segments.size(); i++) {
-        if (i > 0) normalized += "/";
-        normalized += segments[i];
-    }
-    return normalized;
+    return out;
 }
 
 }  // namespace
 
-// TASK-058 step 2: pre-normalize each auth_skip_paths entry once at
+// Pre-normalize each auth_skip_paths entry once at
 // webserver construction time.  Entries ending in "/*" keep their
 // wildcard suffix; the prefix before the wildcard is normalized.
 // Callers (webserver::webserver) pass the raw config-bag list and
 // store the result on the webserver instance as a sibling to the
-// original `auth_skip_paths` list.  Pre-TASK-058 the skip list was
-// matched verbatim against a normalized request path, so non-
-// canonical inputs (e.g. "/public/", "/a/../b") silently never
-// matched -- the on-the-wire bug this normalization closes.
+// original `auth_skip_paths` list.  Without this pre-normalization
+// the skip list would be matched verbatim against a normalized
+// request path, so non-canonical entries (e.g. "/public/",
+// "/a/../b") would silently never match.
 //
-// security-reviewer-iter1-3: entries containing '%' are rejected with
+// Entries containing '%' are rejected with
 // std::invalid_argument.  Skip-path entries must be provided in
 // decoded form (the same form as the request path after
 // libhttpserver's base_unescaper() runs).  A '%'-encoded entry would
@@ -197,7 +221,7 @@ std::vector<std::string> normalize_auth_skip_paths(
 }
 
 bool webserver_impl::should_skip_auth(std::string_view path) const {
-    // TASK-058 step 2: empty-list early-out.  Servers with no
+    // Empty-list early-out.  Servers with no
     // auth_skip_paths configured pay zero normalization cost.  This
     // is the production-typical case for any server whose auth
     // surface either covers every route or has no auth_handler at
@@ -206,7 +230,7 @@ bool webserver_impl::should_skip_auth(std::string_view path) const {
         return false;
     }
 
-    // TASK-058 step 2: compare against the pre-normalized list (built
+    // Compare against the pre-normalized list (built
     // once at construction time) instead of re-normalizing skip-list
     // entries on every request.  The per-request normalize_path call
     // on @p path remains -- the inbound URL is per-request data and
@@ -216,7 +240,7 @@ bool webserver_impl::should_skip_auth(std::string_view path) const {
     for (const auto& skip_path : parent->auth_skip_paths_normalized) {
         if (skip_path == normalized) return true;
         // Support wildcard suffix (e.g., "/public/*").
-        // security-reviewer-iter1-1: use >= 2 (not > 2) so the global
+        // Use >= 2 (not > 2) so the global
         // wildcard "/*" (size == 2) is handled.  When skip_path is "/*"
         // the prefix is "/" and every normalized path starts with "/",
         // so we return true immediately for any request.
@@ -232,10 +256,9 @@ bool webserver_impl::should_skip_auth(std::string_view path) const {
     return false;
 }
 
-// TASK-047: requests_answer_first_step and requests_answer_second_step
-// moved to detail/webserver_body_pipeline.cpp to keep this TU under the
-// 500-LOC ceiling (FILE_LOC_MAX in scripts/check-file-size.sh) once the
-// request_received and body_chunk hook firing sites landed.
+// requests_answer_first_step and requests_answer_second_step
+// live in detail/webserver_body_pipeline.cpp to keep this TU under the
+// 500-LOC ceiling (FILE_LOC_MAX in scripts/check-file-size.sh).
 
 static void fire_route_resolved_gated(webserver_impl* impl,
                                       detail::modded_request* mr,
@@ -264,7 +287,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
         return *ws_result;
     }
 
-    // TASK-047: a pre-handler short-circuit hook (request_received or
+    // A pre-handler short-circuit hook (request_received or
     // body_chunk) already populated mr->response. Skip route lookup,
     // auth, and handler dispatch -- go straight to the response queue.
     // NOTE: after_handler is NOT fired on this path (no handler ran);
@@ -274,14 +297,14 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
         return materialize_and_queue_response(connection, mr, nullptr);
     }
 
-    // TASK-023: hold a shared_ptr copy across dispatch. If a concurrent
+    // Hold a shared_ptr copy across dispatch. If a concurrent
     // unregister_resource erases the route mid-call, the resource stays
     // alive until our local shared_ptr drops at the end of
     // finalize_answer.
     std::shared_ptr<http_resource> hrm;
     bool found = resolve_resource_for_request(mr, hrm);
 
-    // TASK-051: capture the resolved resource on the request so the
+    // Capture the resolved resource on the request so the
     // tail-end firing helpers (fire_response_sent_gated /
     // fire_request_completed_gated) can fire the per-route hook chain
     // after the server-wide one. weak_ptr does not keep the resource
@@ -289,7 +312,6 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // finalize_answer, after which mr->response no longer references
     // the resource directly.
     if (found) {
-        mr->resource_weak_ = hrm;
         // Snapshot whether this resource carries a per-route hook table,
         // so fire_request_completed_gated (which fires after this
         // shared_ptr is gone) can gate its weak_ptr lock() on the common
@@ -297,11 +319,29 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
         // fire_before_handler_gated relies on (hrm came from
         // resolve_resource_for_request under the route-table shared_lock).
         mr->route_has_hook_table_ = (hrm->hook_table_raw_() != nullptr);
+
+        // Only stamp the weak_ptr when a later out-of-scope consumer can
+        // actually use it: fire_request_completed_gated fires from the MHD
+        // completion callback (after the owning shared_ptr is gone) and
+        // needs it iff this resource has a per-route hook table OR a
+        // server-wide request_completed hook is registered. The in-scope
+        // tail helpers (after_handler / response_sent) take the live hrm
+        // directly, and handle_dispatch_exception's per-route lookup
+        // degrades to a null lock() exactly when route_has_hook_table_ is
+        // false (no per-route table exists to find), so nothing is lost by
+        // skipping the stamp there. Gating this drops 2 control-block
+        // atomics (weak-count increment + decrement) per matched request
+        // on the overwhelmingly common zero-hook path -- the shared
+        // cache-line traffic commit 9af15a1 set out to remove.
+        if (mr->route_has_hook_table_ ||
+                has_hooks_for(hook_phase::request_completed)) {
+            mr->resource_weak_ = hrm;
+        }
     }
 
     fire_route_resolved_gated(this, mr, found, hrm);
 
-    // TASK-048 / TASK-051: fire before_handler from finalize_answer (not
+    // Fire before_handler from finalize_answer (not
     // from inside dispatch_resource_handler). This ensures auth and
     // method-not-allowed alias hooks run as part of the unified
     // before_handler chain, with the auth alias as the first hook
@@ -322,8 +362,8 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
         mr->response.emplace(not_found_page(mr));
     }
 
-    // TASK-050: after_handler fires between handler return (or 404
-    // synthesis) and materialize_and_queue_response. Per §4.10 the
+    // after_handler fires between handler return (or 404
+    // synthesis) and materialize_and_queue_response. The
     // phase is conceptually a "post-handler" phase, so the
     // mr->skip_handler early-exit branch above bypasses it -- a
     // pre-handler short-circuit means no handler ran. Whether to fire
@@ -359,10 +399,9 @@ void webserver_impl::resolve_method_callback(const char* method,
     // default-initializer value) for unrecognised methods; the 405 guard
     // in dispatch_resource_handler fires before it is ever invoked.
     //
-    // Data-driven lookup table (finding #3): replaces the former 9-branch
-    // if/else chain. A new HTTP method requires only one row here (wire
-    // string, callback pointer, enum value, has_body flag). CCN reduced
-    // from ~10 to ~3 (one loop + one conditional for has_body).
+    // Data-driven lookup table: a new HTTP method requires only one
+    // row here (wire string, callback pointer, enum value, has_body
+    // flag).
     using render_fn = http_response (http_resource::*)(const http_request&);
     struct method_entry {
         const char*  wire;
@@ -412,15 +451,15 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
                    reinterpret_cast<char*>(&yes), sizeof(int));
     }
 
-    // TASK-050: anchor for response_sent.elapsed and
+    // Anchor for response_sent.elapsed and
     // request_completed.duration. Captured here -- the earliest moment
     // for the request inside the dispatch path. uri_log runs earlier
     // but is also invoked on non-HTTP traffic (#371); answer_to_connection
     // is the first point where a real HTTP request is unambiguously
     // in flight.
     mr->start_time = std::chrono::steady_clock::now();
-    // TASK-050: hoist the parent-webserver back-pointer here (was set
-    // later in complete_request) so the request_completed firing site
+    // Hoist the parent-webserver back-pointer here (rather than in
+    // complete_request) so the request_completed firing site
     // can reach impl_->any_hooks_ even on request_received short-circuit
     // paths that may not reach complete_request.
     mr->ws = impl->parent;

@@ -77,8 +77,8 @@
 #include <gnutls/x509.h>
 #endif  // HAVE_GNUTLS
 
-// TASK-020-review: pin add_connection's unsigned-int/socklen_t ABI contract
-// at file scope so the assertion is evaluated once at TU start rather than
+// Pin add_connection's unsigned-int/socklen_t ABI contract at file
+// scope so the assertion is evaluated once at TU start rather than
 // being associated with the specific function body. socklen_t is a 32-bit
 // integer on every supported platform (unsigned on POSIX, signed `int` on
 // Windows winsock2). `unsigned int` is at least as wide as either, so the
@@ -114,16 +114,15 @@ static MHD_OptionItem make_option(enum MHD_OPTION opt, intptr_t val,
 void webserver_impl::add_base_mhd_options(std::vector<MHD_OptionItem>& iov) const {
     iov.push_back(make_option(MHD_OPTION_NOTIFY_COMPLETED,
                               (intptr_t) &webserver_impl::request_completed, nullptr));
-    // TASK-016: per-connection arena anchor. MHD_OPTION_NOTIFY_CONNECTION
+    // Per-connection arena anchor. MHD_OPTION_NOTIFY_CONNECTION
     // hands us a per-connection void** (socket_context) on STARTED, where
     // we new a detail::connection_state (which owns the arena), and on
     // CLOSED, where we delete it. This makes the arena's lifetime equal
     // to the MHD_Connection's lifetime; request_completed reuses the
     // arena across keep-alive request boundaries via arena_.release().
-    // TASK-046 -- closure pointer is the owning webserver* so the
-    // callback can reach impl_->any_hooks_ / fire_connection_opened /
-    // fire_connection_closed. (Until TASK-046 this was nullptr because
-    // the trampoline only managed the per-connection arena.)
+    // The closure pointer is the owning webserver* so the callback can
+    // reach impl_->any_hooks_ / fire_connection_opened /
+    // fire_connection_closed.
     iov.push_back(make_option(MHD_OPTION_NOTIFY_CONNECTION,
                               (intptr_t) &webserver_impl::connection_notify, parent));
     iov.push_back(make_option(MHD_OPTION_URI_LOG_CALLBACK,
@@ -295,7 +294,7 @@ bool webserver::start(bool blocking) {
             "Cannot specify maximum number of threads when using a thread per connection");
     }
 
-    // TASK-074: fire the one-shot raw-body-dump opt-in SECURITY
+    // Fire the one-shot raw-body-dump opt-in SECURITY
     // WARNING before MHD_start_daemon so the operator sees the
     // notice on every fresh process invocation that actually starts
     // accepting traffic. Defined in webserver_body_pipeline.cpp
@@ -318,6 +317,9 @@ bool webserver::start(bool blocking) {
                 &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_END);
     } else {
+        // libmicrohttpd ignores the port argument when MHD_OPTION_SOCK_ADDR
+        // is supplied; the literal 1 is a placeholder that only needs to be
+        // non-zero.
         d = MHD_start_daemon(start_conf, 1, &detail::webserver_impl::policy_callback, this,
                 &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_SOCK_ADDR, bind_address, MHD_OPTION_END);
@@ -417,7 +419,7 @@ bool webserver::run_wait(int32_t millisec) {
 
 bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set,
                           fd_set* except_fd_set, int* max_fd) {
-    // TASK-020-review: signature uses typed fd_set* rather than void*,
+    // The signature uses typed fd_set* rather than void*,
     // restoring compile-time type safety. The public header pulls in
     // <sys/select.h> / <winsock2.h> directly because fd_set is a typedef
     // and cannot be portably forward-declared.
@@ -447,7 +449,7 @@ bool webserver::get_timeout(uint64_t* timeout) {
 }
 
 bool webserver::add_connection(int client_socket, const struct sockaddr* addr, unsigned int addrlen) {
-    // TASK-020: the public signature accepts `unsigned int` instead of
+    // The public signature accepts `unsigned int` instead of
     // `socklen_t` so the public header does not need <sys/socket.h>.
     // POSIX guarantees `socklen_t` is an unsigned integer of at least 32
     // bits; `unsigned int` matches on every supported platform.
@@ -466,7 +468,14 @@ bool webserver::add_connection(int client_socket, const struct sockaddr* addr, u
 // more specific, std::set::insert is a no-op and the existing entry is
 // kept. The unconditional insert covers all three cases: (1) no existing
 // entry — insert; (2) equal/higher weight — no-op insert; (3) lower
-// weight — erase first, then insert. Caller holds the list's mutex.
+// weight — erase first, then insert. This works only because
+// ip_representation::operator< treats OVERLAPPING entries as equivalent:
+// octets masked out on either side are excluded from the comparison, so
+// a wildcard and any address it matches compare equal under std::set's
+// ordering. find(t_ip) may therefore return a DIFFERENT stored entry —
+// one the new entry subsumes or collides with — not just an exact
+// duplicate; that comparator invariant is what the erase-then-insert
+// relies on. Caller holds the list's mutex.
 static void insert_wildcard_aware(std::set<ip_representation>& list,
                                   const ip_representation& t_ip) {
     auto it = list.find(t_ip);

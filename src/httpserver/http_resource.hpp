@@ -31,15 +31,15 @@
 #include <shared_mutex>
 #include <string>
 
-// TASK-036: render_* virtuals now return http_response by value; the
-// inline defaults call render(req) and forward the prvalue, which
+// render_* virtuals return http_response by value; the inline
+// defaults call render(req) and forward the prvalue, which
 // requires http_response to be a complete type at every override site.
 // Hard-include is the simplest correct shape (the umbrella already
 // reaches both headers).
 #include "httpserver/http_method.hpp"
 #include "httpserver/http_response.hpp"
 
-// TASK-051: add_hook overloads on http_resource return hook_handle; the
+// add_hook overloads on http_resource return hook_handle; the
 // public header is part of the umbrella surface (no MHD leak).
 #include "httpserver/hook_handle.hpp"
 #include "httpserver/hook_phase.hpp"
@@ -53,10 +53,10 @@ namespace httpserver::detail { class resource_hook_table; }
 
 namespace httpserver {
 
-// TASK-036 / DR-004 / PRD-RSP-REQ-007: render_* virtuals return
+// render_* virtuals return
 // http_response by value. The webserver dispatch path moves the value
 // into mr->response (an std::optional<http_response> living on the
-// per-connection modded_request, see §5.3) and keeps it alive until
+// per-connection modded_request) and keeps it alive until
 // MHD fires request_completed. The default render() returns a
 // default-constructed http_response whose status_code_ == -1 is the
 // v1-compatible sentinel for "handler did not produce a response"; the
@@ -71,7 +71,7 @@ namespace httpserver {
  * returns a sentinel `http_response{}` that the dispatch path
  * translates to a 405 Method Not Allowed.
  *
- * @par Thread-safety (DR-008 §5.1)
+ * @par Thread-safety
  * A single registered instance may be invoked concurrently from
  * multiple libmicrohttpd worker threads. All state accessed by
  * `render_*` overrides must be externally synchronized.
@@ -226,9 +226,9 @@ class http_resource {
       * @brief Return the cached comma-separated Allow header value for
       * the current methods_allowed_ mask.
       *
-      * TASK-058 step 3.  The 405 dispatch path reads this on every
-      * method-not-allowed response; pre-TASK-058 the value was rebuilt
-      * (heap-allocating) on every call via
+      * The 405 dispatch path reads this on every
+      * method-not-allowed response; without the cache the value would
+      * be rebuilt (heap-allocating) on every call via
       * detail::format_allow_header().  This getter caches the result
       * lazily and regenerates only when the mask differs from the
       * snapshot taken at cache-fill time -- so set_allowing,
@@ -256,7 +256,7 @@ class http_resource {
       * @brief Register a per-resource hook on one of the five
       * post-route-resolution phases.
       *
-      * TASK-051 / DR-012 / PRD-HOOK-REQ-006. The five permitted phases
+      * The five permitted phases
       * are:
       *
       *   - `hook_phase::before_handler`     (short-circuit-capable)
@@ -311,7 +311,7 @@ class http_resource {
       * the original will also fire for the copy. If independent hook tables
       * are needed, register hooks on the copy separately after construction.
       *
-      * TASK-058 step 3: cached_allow_mutex_ is non-copyable / non-movable
+      * cached_allow_mutex_ is non-copyable / non-movable
       * (std::shared_mutex has no copy or move).  The copy / move special
       * members are therefore written by hand and skip the mutex member
       * entirely -- the copy / move target gets a freshly
@@ -329,14 +329,14 @@ class http_resource {
 
  private:
      friend class webserver;
-     friend class detail::webserver_impl;  // TASK-014: dispatch helpers
+     friend class detail::webserver_impl;  // dispatch helpers
 
      // Default-allow every valid method. method_set::set_all() is
      // constexpr, so the chained call is a constant expression and the
      // default member initialiser stays well-formed.
      method_set methods_allowed_ = method_set{}.set_all();
 
-     // TASK-051: per-resource hook bus storage (PIMPL). Lazily allocated
+     // Per-resource hook bus storage (PIMPL). Lazily allocated
      // on first add_hook() call; resources that never register a hook
      // pay zero allocation cost and only sizeof(shared_ptr) of nullptr
      // storage. shared_ptr lets the hook_handle hold a weak_ptr that
@@ -349,7 +349,7 @@ class http_resource {
      // only reads the table; only the public add_hook(non-const) writes).
      mutable std::shared_ptr<detail::resource_hook_table> hook_table_;
 
-     // TASK-058 step 3: lazy cache of the formatted Allow header value
+     // Lazy cache of the formatted Allow header value
      // for the 405 dispatch path.  Built on first call to
      // get_allow_header(); reused on subsequent calls as long as the
      // resource's methods_allowed_ mask is unchanged.  Mask changes
@@ -367,10 +367,15 @@ class http_resource {
      // Thread-safety: the dispatch path can call get_allow_header()
      // concurrently from multiple MHD worker threads against the same
      // resource.  std::shared_mutex allows concurrent warm-path reads
-     // (std::shared_lock) while the cache-fill (miss/invalidate) path
-     // takes an exclusive std::unique_lock.  The methods_allowed_
-     // snapshot is taken INSIDE the lock (not before it) to eliminate
-     // the TOCTOU data race noted in security-reviewer-iter1-2.
+     // (std::shared_lock) while the cache-fill (miss/stale) path takes
+     // an exclusive std::unique_lock.  The lock protects ONLY the three
+     // cache fields below -- the mask mutators (set_allowing /
+     // allow_all / disallow_all) never take it, so it does NOT
+     // synchronise methods_allowed_ writes.  Snapshotting the mask
+     // inside the lock keeps each cache fill internally consistent (the
+     // cached string always matches the mask it was built from); mask
+     // mutation concurrent with serving falls under the library-wide
+     // rule that resources are configured before the server starts.
      //
      // `mutable` for the same reason as hook_table_: the dispatch path
      // calls get_allow_header() on a `const http_resource&` (the cache
@@ -404,8 +409,8 @@ class http_resource {
      //   atomic_store in ensure_table().  Do NOT call this from a thread
      //   that races with ensure_table() without external synchronisation.
      //   (ensure_table() itself uses the non-member std::atomic_*_explicit
-     //   overloads (deprecated as of C++26); once TASK-070 migrates the
-     //   field to std::atomic<std::shared_ptr<T>>, an acquire load should
+     //   overloads (deprecated as of C++26); once the field migrates to
+     //   std::atomic<std::shared_ptr<T>>, an acquire load should
      //   replace the .get() call here too.)
      detail::resource_hook_table* hook_table_raw_() const noexcept {
          return hook_table_.get();
@@ -420,14 +425,14 @@ class http_resource {
 // table PIMPL (shared_ptr<resource_hook_table>) was added later, growing the
 // cap to vptr + shared_ptr + method_set + padding.
 //
-// TASK-058 step 3 added a lazy Allow-header cache: std::shared_mutex +
+// The lazy Allow-header cache adds: std::shared_mutex +
 // std::string + method_set + bool.  std::shared_mutex is a sizeof~56
 // storage on pthread platforms (libc++/macOS) and ~56 on libstdc++/Linux
 // (similar to std::mutex); std::string SBO adds ~24-32; the method_set /
 // bool fields slot into existing padding.  The new ceiling is the old
 // (3*void* + 2*method_set) plus the new cache payload, padded for
 // alignment.  See test/bench_sizeof_http_resource.cpp for the v1-anchored
-// algebra; the value here documents the post-TASK-058 layout shape.
+// algebra; the value here documents the current layout shape.
 static_assert(sizeof(http_resource) <=
                   sizeof(void*) * 3 + sizeof(method_set) * 2
                   + sizeof(std::shared_mutex) + sizeof(std::string)

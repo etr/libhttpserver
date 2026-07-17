@@ -8,7 +8,7 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-068 unit test: pins that httpserver::detail::secure_zero() is not
+// Pins that httpserver::detail::secure_zero() is not
 // dead-code-eliminated by the optimizer.
 //
 // The header centralizes a portable secure-zero primitive (CWE-14
@@ -99,7 +99,7 @@ LT_BEGIN_AUTO_TEST(secure_zero_suite, nullptr_with_zero_size_is_safe)
     }
 LT_END_AUTO_TEST(nullptr_with_zero_size_is_safe)
 
-// TASK-068 finding-34: pin that secure_zero() zeroes the FULL requested
+// Pin that secure_zero() zeroes the FULL requested
 // length, not just a prefix. A buggy implementation that stops early (e.g.
 // zeroes only the first N/2 bytes) would pass the other tests in this file
 // (which prefill uniformly) but fail here, where the two halves start with

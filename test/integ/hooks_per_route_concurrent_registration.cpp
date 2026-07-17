@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-051 acceptance criterion 5:
+// Contract under test:
 //
 // "TSan-clean under the existing tsan CI matrix entry; the route_table
 //  -> resource -> server-wide lock order is exercised by

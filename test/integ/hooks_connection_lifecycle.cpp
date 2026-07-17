@@ -8,7 +8,7 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-046 acceptance criterion 1.
+// Contract under test:
 //
 //   "New integ test `hooks_connection_lifecycle`: opens a connection,
 //    registers one hook on each of the three phases, observes

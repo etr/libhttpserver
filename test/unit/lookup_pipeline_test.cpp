@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-027: tier-order pin for the v2 route lookup pipeline. Drives the
+// Tier-order pin for the v2 route lookup pipeline. Drives the
 // public webserver registration surface (register_path / on_get) and
 // then peeks into the impl via webserver_impl::lookup_v2() to assert
 //   1. an exact-registered path hits the exact tier;
@@ -54,7 +54,7 @@ LT_BEGIN_SUITE(lookup_pipeline_suite)
     void tear_down() {}
 LT_END_SUITE(lookup_pipeline_suite)
 
-LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, exact_path_hits_exact_tier_and_promotes_to_cache)
+LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, exact_path_hits_exact_tier_not_cache)
     ht::webserver ws{ht::create_webserver(8080).start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/exact", std::make_shared<noop_resource>());
 
@@ -63,11 +63,14 @@ LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, exact_path_hits_exact_tier_and_promote
     LT_CHECK(r1.found);
     LT_CHECK(r1.tier == ht::detail::webserver_impl::tier_hit::exact);
 
-    // Second lookup: cache hit.
+    // Second lookup: the exact tier deliberately bypasses route_lru_cache
+    // (it is a concurrent shared_lock map probe -- caching it would only
+    // add exclusive-mutex serialisation), so repeated lookups keep
+    // resolving via the exact tier, never tier_hit::cache.
     auto r2 = impl.lookup_v2(ht::http_method::get, std::string("/exact"));
     LT_CHECK(r2.found);
-    LT_CHECK(r2.tier == ht::detail::webserver_impl::tier_hit::cache);
-LT_END_AUTO_TEST(exact_path_hits_exact_tier_and_promotes_to_cache)
+    LT_CHECK(r2.tier == ht::detail::webserver_impl::tier_hit::exact);
+LT_END_AUTO_TEST(exact_path_hits_exact_tier_not_cache)
 
 LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, parameterized_path_hits_radix_tier_and_captures)
     ht::webserver ws{ht::create_webserver(8080).start_method(ht::http::http_utils::INTERNAL_SELECT)};
@@ -137,7 +140,7 @@ LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, regex_route_hits_regex_tier)
     LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::regex);
 LT_END_AUTO_TEST(regex_route_hits_regex_tier)
 
-// Critical #3 (test-quality-reviewer): verify that captured_params from
+// Verify that captured_params from
 // lookup_v2() are produced in the correct (name, value) shape and that
 // those name/value pairs bind correctly to http_request::get_arg(). The
 // test simulates what the dispatch site must do when the v2 path is

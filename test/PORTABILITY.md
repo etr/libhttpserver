@@ -3,7 +3,7 @@
 Tracks integration tests in `test/integ/` that are skipped on Windows or
 Darwin, the reason for the skip, and the plan (if any) to restore coverage.
 
-The CI lint `scripts/check-skip-rationales.sh` (TASK-077) enforces that every
+The CI lint `scripts/check-skip-rationales.sh` enforces that every
 `#ifndef _WINDOWS`, `#ifndef DARWIN`, or `#if !defined(_WINDOWS)` block in
 `test/integ/` carries a `// reason: ...` comment naming the underlying
 limitation and pointing at a section of this file (or a follow-up task) where
@@ -43,11 +43,11 @@ Each section names a specific skip site (`<file>:<line>`) and records:
   series. libhttpserver's `start_method()` enum does not surface an IOCP-
   shaped alternative, so a Windows-shaped variant of the suite would
   require either flipping the MHD build to `--enable-poll=yes` (out of
-  TASK-077 scope) or adding a new `start_method` to libhttpserver.
+  the current porting scope) or adding a new `start_method` to libhttpserver.
 - **Restoration plan**: not currently planned. Coverage of the basic
   daemon-starts-accepts-one-request flow is already restored on Windows
-  through the `ws_start_stop_suite::windows_smoke` variant added by
-  TASK-077; the specific `INTERNAL_SELECT` + thread-pool combo is not
+  through the `ws_start_stop_suite::windows_smoke` variant; the
+  specific `INTERNAL_SELECT` + thread-pool combo is not
   observably different on the Windows lanes from what `windows_smoke`
   already verifies. Re-open if a future Windows-specific bug is suspected
   in the thread-pool dispatch path.
@@ -62,11 +62,11 @@ Each section names a specific skip site (`<file>:<line>`) and records:
   `custom_socket` test relies on POSIX `<sys/socket.h>` semantics not
   cleanly available on the MSYS build; and the SNI/PSK variants depend on
   GnuTLS callback shapes whose Windows behaviour has not been verified.
-- **Restoration plan**: TASK-077 ports the simplest case — a non-TLS HTTP
-  GET round-trip — as the new `ws_start_stop_suite::windows_smoke` test
+- **Restoration plan**: the simplest case — a non-TLS HTTP
+  GET round-trip — is ported as the new `ws_start_stop_suite::windows_smoke` test
   that runs under `#ifdef _WINDOWS`. The remaining cases (TLS / IPv6 /
   SNI / PSK / custom-socket / bind-address) are tracked as a future
-  follow-up task and are NOT in TASK-077's scope. Reopen if a specific
+  follow-up task and are NOT in the current porting scope. Reopen if a specific
   Windows TLS bug is suspected.
 
 ### `authentication.cpp` — digest-auth block (line 265)
@@ -77,15 +77,15 @@ Each section names a specific skip site (`<file>:<line>`) and records:
   the second (authenticated) round-trip.
 - **Root cause**: MinGW64's curl `--digest` parser has historically been
   unable to handle the challenge produced by MHD on Windows. The
-  pre-existing comment ("Will fix this separately", in place before
-  TASK-077) was never followed up because TASK-062's RFC-7616 work
+  pre-existing comment ("Will fix this separately", in place
+  beforehand) was never followed up because the RFC-7616 work
   focused on the algorithm-handling code in libhttpserver, not on the
   test-infrastructure issue that prevents the round-trip from completing
   on MinGW64.
 - **Restoration plan**: a future follow-up task. The actual port requires
   isolating whether the failure is in MinGW64 curl's challenge parser,
   in MHD's challenge format, or in the way libhttpserver wires the two
-  together — out of TASK-077's "restore coverage or document" framing.
+  together — out of the current "restore coverage or document" framing.
 
 ### `connection_state_body_residue_test.cpp` — single test body (line 137)
 
@@ -93,7 +93,7 @@ Each section names a specific skip site (`<file>:<line>`) and records:
   hook firing, which in turn depends on MHD reaching the lifecycle path
   that the test exercises. On Windows under the MinGW64 build that path
   has not been verified.
-- **Root cause**: predates TASK-077 — the test was added under the same
+- **Root cause**: predates the current portability sweep — the test was added under the same
   `#ifndef _WINDOWS` convention used by `ws_start_stop.cpp` and was not
   separately verified on Windows. The connection-lifecycle hook firing
   has not been validated against the MSYS curl + MHD combo.
@@ -121,7 +121,7 @@ Each section names a specific skip site (`<file>:<line>`) and records:
   reuses the listen socket binding semantics.
 - **Restoration plan**: the hypothesis recorded above (Darwin requires
   `SO_REUSEPORT` alongside `SO_REUSEADDR`) is plausible but not
-  confirmed end-to-end on the CI lane. TASK-077 retains the skip with
+  confirmed end-to-end on the CI lane. The skip is retained with
   this `// reason:` comment so the gap is documented; promoting the
   port to "fixed" requires a CI run on `macos-latest` that actually
   exercises the modified socket setup. Tracked as a future follow-up

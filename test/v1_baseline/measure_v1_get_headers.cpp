@@ -17,7 +17,7 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
-// TASK-039 -- one-off measurement TU.
+// One-off measurement TU.
 //
 // Capture v1's `get_headers()` median ns/call against a 16-header
 // request, for the V1_GET_HEADERS_NS_PER_CALL constant consumed by
@@ -39,7 +39,7 @@
 // transcription is necessary because the v1 method is non-static and
 // the v1 library is not linked here.
 //
-// Build (run from feature/v2.0 .worktrees/TASK-039 against the v1
+// Build (run from the feature/v2.0 tree against the v1
 // header tree):
 //   c++ -std=c++20 -O3 \
 //       -I/opt/homebrew/include \

@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-047 acceptance criterion 3.
+// Contract under test:
 //
 // "A `body_chunk` short-circuit drops the post-processor without leaking
 //  (verified under ASan in the existing `build-type: asan` CI matrix

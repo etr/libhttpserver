@@ -22,7 +22,7 @@
 // bench_warm_path.cpp, and (as an EXTRA_DIST documentation TU)
 // measure_v1_get_headers.cpp.
 //
-// Until TASK-083 the hook/route/warm benches each carried a private
+// Previously the hook/route/warm benches each carried a private
 // duplicate of do_not_optimize, so the hardened MSVC sink could not reach
 // them. They now all include this single canonical definition.
 //
@@ -75,7 +75,7 @@
 inline volatile const void* volatile do_not_optimize_sink = nullptr;
 #endif
 
-// TASK-083: sanitizer-build detection, shared by every bench TU that
+// Sanitizer-build detection, shared by every bench TU that
 // includes this header (previously copy-pasted verbatim in
 // bench_hook_overhead.cpp, bench_route_lookup.cpp, and bench_warm_path.cpp).
 // constexpr (without `inline`) gives each TU its own internal-linkage copy,

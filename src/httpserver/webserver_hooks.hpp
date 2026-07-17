@@ -23,7 +23,7 @@
 #endif
 
 // webserver_hooks.hpp — lifecycle-hook registration surface of class
-// webserver (TASK-045 / §4.10 / DR-012). Carries member-function
+// webserver. Carries member-function
 // DECLARATIONS only; meant to be included from WITHIN the body of
 // `class webserver` in httpserver/webserver.hpp.
 #ifndef SRC_HTTPSERVER_WEBSERVER_HOOKS_HPP_
@@ -34,8 +34,7 @@
 #endif
 
 /**
- * @brief Register a hook on a server-wide lifecycle phase
- * (TASK-045 / §4.10 / DR-012).
+ * @brief Register a hook on a server-wide lifecycle phase.
  *
  * Eleven overloads, one per @ref httpserver::hook_phase value. The
  * accepted phases are:
@@ -112,7 +111,7 @@ hook_handle add_hook(hook_phase phase,
     std::function<void(const connection_close_ctx&)> fn);
 
 #if defined(HTTPSERVER_COMPILATION)
-// TASK-045: tiny static factory for an armed hook_handle. Bridges
+// Tiny static factory for an armed hook_handle. Bridges
 // the anonymous-namespace register_hook_impl helper in
 // src/webserver.cpp into hook_handle's private constructor without
 // widening hook_handle's friend list. Visible only when compiling
@@ -123,7 +122,7 @@ static hook_handle make_hook_handle_(detail::webserver_impl* impl,
                                      hook_phase phase,
                                      std::uint64_t slot_id) noexcept;
 
-// TASK-048: install the default hook-bus aliases at webserver
+// Install the default hook-bus aliases at webserver
 // construction. For each of `not_found_handler`, `method_not_allowed_handler`,
 // and `auth_handler` that the user set on the builder, registers a hook
 // at the matching phase (route_resolved, before_handler, before_handler).
@@ -133,10 +132,10 @@ static hook_handle make_hook_handle_(detail::webserver_impl* impl,
 // apply_auth_short_circuit / 405 branch was removed, not duplicated), so
 // the auth alias is the security boundary and the method-not-allowed alias
 // emits the 405. Only `not_found_handler` is observation-only: its body is
-// empty because `route_resolved_ctx` has no mutable response slot (DR-012
-// §4.10) and the 404 bytes are produced by webserver_impl::not_found_page;
-// the seat still exists so hook-count introspection reflects it
-// (PRD-HOOK-REQ-009). On-the-wire behaviour remains identical to v1.
+// empty because `route_resolved_ctx` has no mutable response slot
+// and the 404 bytes are produced by webserver_impl::not_found_page;
+// the seat still exists so hook-count introspection reflects it.
+// On-the-wire behaviour remains identical to v1.
 //
 // Called once from the webserver ctor body; never re-called. The
 // registrations are detach()-ed so they live for the webserver's

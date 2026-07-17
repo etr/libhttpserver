@@ -36,7 +36,7 @@
 #include <utility>
 #include <vector>
 
-// TASK-016: pull in connection_state to read the per-connection arena
+// Pull in connection_state to read the per-connection arena
 // out of MHD on impl construction. Both headers are gated by
 // HTTPSERVER_COMPILATION so this stays internal.
 #include "httpserver/detail/http_request_impl.hpp"
@@ -48,8 +48,8 @@ namespace httpserver {
 
 const char http_request::EMPTY[] = "";
 
-// (arguments_accumulator moved to http_request_impl.hpp so unit tests
-// can drive build_request_args directly; see security-reviewer-iter1-2.)
+// (arguments_accumulator lives in http_request_impl.hpp so unit tests
+// can drive build_request_args directly.)
 
 
 // ============================================================================
@@ -83,14 +83,14 @@ static void destroy_impl_arena(http_request_impl* p) noexcept {
 
 namespace {
 
-// TASK-016: pick the right memory resource for an http_request_impl.
+// Pick the right memory resource for an http_request_impl.
 // On the live request path (a real MHD_Connection*), look up the
 // per-connection arena set by webserver_impl::connection_notify and use
 // it. If nothing is registered (test paths, very old MHD versions, or
 // connection_notify hasn't fired yet for some reason), fall back to the
 // default heap resource so behavior matches v1.
 //
-// performance-reviewer-iter1-4: the fallback is intentionally silent in
+// The fallback is intentionally silent in
 // production (to preserve v1 behaviour), but in debug builds we log a
 // warning and increment a counter so integration tests can observe
 // misconfiguration (e.g. MHD_OPTION_NOTIFY_CONNECTION not wired).
@@ -123,7 +123,7 @@ std::pmr::memory_resource* pick_resource(struct MHD_Connection* connection) {
 
 }  // namespace
 
-// TASK-068: internal-only accessor for the per-connection arena residue
+// Internal-only accessor for the per-connection arena residue
 // integration test. See http_request.hpp for the contract. Returns the
 // MHD_Connection* the impl was constructed against (nullptr on the
 // test-request / create_test_request path).
@@ -154,19 +154,12 @@ http_request::http_request(struct MHD_Connection* underlying_connection, unescap
         impl_.get_deleter().fn = &detail::destroy_impl_arena;
     }
 
-    // TASK-018: assemble the querystring eagerly on the live-MHD path so
-    // the public reader can be `noexcept`. On the test-request path
-    // (connection_ == nullptr) the create_test_request builder is the
-    // sole writer of impl_->querystring; leave it untouched here.
-    // Allocations during assembly land on the per-connection arena (or
-    // the heap fallback) and may throw -- that's permitted during
-    // construction.
-    if (impl_->connection_ != nullptr) {
-        MHD_get_connection_values(
-            impl_->connection_, MHD_GET_ARGUMENT_KIND,
-            &detail::http_request_impl::build_request_querystring,
-            reinterpret_cast<void*>(&impl_->querystring));
-    }
+    // The querystring is assembled lazily on the
+    // first get_querystring() call, not eagerly here. A handler that
+    // never reads the raw querystring pays nothing -- it was previously
+    // built for every live request, including the common REST case that
+    // reads named args (get_args) but not the querystring. The public
+    // reader stays noexcept; see get_querystring().
 }
 
 http_request::~http_request() {
@@ -196,9 +189,8 @@ void http_request::set_method(const std::string& method) {
 }
 
 const std::vector<std::string>& http_request::get_path_pieces() const {
-    // TASK-017: lazily populate the cache and return it by const&. All
+    // Lazily populate the cache and return it by const&. All
     // cache-maintenance logic lives inside the impl class.
-    // (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8)
     impl_->ensure_path_pieces_cached(path);
     return impl_->path_pieces_cached_;
 }
@@ -236,7 +228,7 @@ const http::header_view_map& http_request::get_cookies() const {
     return impl_->ensure_headerlike_cache(MHD_COOKIE_KIND);
 }
 
-// TASK-064: structured-cookie accessor. Forwards to the impl's
+// Structured-cookie accessor. Forwards to the impl's
 // lazily-built cache (parses the request's `Cookie:` header once, then
 // returns the same buffer on every subsequent call).
 const std::vector<cookie>& http_request::get_cookies_parsed() const {
@@ -273,13 +265,12 @@ std::string_view http_request::get_arg_flat(std::string_view key) const {
     // key is absent after that pass, MHD will also not have it, so calling
     // get_connection_value(key, MHD_GET_ARGUMENT_KIND) is redundant and
     // would bypass unescaping, returning a raw (non-unescaped) value.
-    // (Items 4, 12, 18: code-simplifier / code-quality / performance.)
     return EMPTY;
 }
 
 const http::arg_view_map& http_request::get_args() const {
-    // TASK-017: lazily populate the args view-map cache. All build logic
-    // lives inside the impl class (code-simplifier-iter1-9).
+    // Lazily populate the args view-map cache. All build logic
+    // lives inside the impl class.
     impl_->populate_args();
     impl_->ensure_args_view_cached();
     return impl_->args_view_cached_;
@@ -301,12 +292,34 @@ const std::map<std::string, std::map<std::string, http::file_info>>& http_reques
 }
 
 std::string_view http_request::get_querystring() const noexcept {
-    // TASK-018: querystring is assembled eagerly during construction (live
-    // MHD path) or set directly by create_test_request (test path), so the
-    // reader is a trivial member access -- genuinely noexcept.
-    // impl_ is always non-null on live requests; the default constructor is
-    // private and only callable by create_test_request, which constructs a
-    // valid impl_ before build() returns. (Item 5.)
+    // Assemble the querystring lazily on first read,
+    // mirroring the args_populated / user_pass_fetched lazy-cache pattern
+    // so a handler that never reads it pays nothing. On the test-request
+    // path (connection_ == nullptr) create_test_request already wrote the
+    // querystring directly, so we only flip the guard.
+    //
+    // noexcept is preserved: the only failure mode is arena/heap
+    // allocation during assembly. We catch it and leave the querystring
+    // empty rather than propagate -- a best-effort convenience view whose
+    // emptiness under OOM is acceptable -- and set the guard so a doomed
+    // build is never retried.
+    //
+    // impl_ is always non-null on live requests; the default constructor
+    // is private and only callable by create_test_request, which
+    // constructs a valid impl_ before build() returns.
+    if (!impl_->querystring_built) {
+        if (impl_->connection_ != nullptr) {
+            try {
+                MHD_get_connection_values(
+                    impl_->connection_, MHD_GET_ARGUMENT_KIND,
+                    &detail::http_request_impl::build_request_querystring,
+                    reinterpret_cast<void*>(&impl_->querystring));
+            } catch (...) {
+                impl_->querystring.clear();
+            }
+        }
+        impl_->querystring_built = true;
+    }
     return impl_->querystring;
 }
 
@@ -319,7 +332,6 @@ std::string_view http_request::get_requestor() const {
     // of checking requestor_ip.empty() is consistent with the args_populated /
     // path_pieces_cached / user_pass_fetched pattern and is robust if the
     // connection layer ever returns an empty IP string.
-    // (code-simplifier-iter1 findings #7 + #8/#9 / major+minor review items)
     if (impl_->requestor_ip_cached || impl_->connection_ == nullptr) {
         return impl_->requestor_ip;
     }
@@ -396,7 +408,7 @@ bool iequal_ascii(std::string_view a, std::string_view b) noexcept {
         });
 }
 
-// TASK-057: Authorization-class header names whose values carry
+// Authorization-class header names whose values carry
 // credential material (Basic / Digest / Bearer payloads). Matched
 // case-insensitively against the keys in the Headers / Footers maps
 // so that the redaction policy is robust to header-case variation.
@@ -406,7 +418,7 @@ bool is_authorization_header_key(std::string_view key) noexcept {
     return iequal_ascii(key, kAuth) || iequal_ascii(key, kProxyAuth);
 }
 
-// TASK-057: shared redaction-aware dumper for the Headers, Footers, and
+// Shared redaction-aware dumper for the Headers, Footers, and
 // Cookies maps. ValueFor lets the caller decide per-entry whether to emit
 // the original value or the fixed redaction token, so the stream-output
 // boilerplate (empty-guard, prefix line, key/quote framing) lives in
@@ -425,7 +437,7 @@ void dump_map_redacted(std::ostream& os, const std::string& prefix,
     os << "]" << std::endl;
 }
 
-// TASK-057: emit a Headers/Footers map with Authorization-class header
+// Emit a Headers/Footers map with Authorization-class header
 // values replaced by the fixed redaction token. Mirrors the wire shape
 // of http::dump_header_map(header_view_map) for non-authorization
 // entries so the on-the-wire diagnostic format is unchanged.
@@ -436,7 +448,7 @@ void dump_header_map_redacted(std::ostream& os, const std::string& prefix,
     });
 }
 
-// TASK-057: cookie values are credential material by default (session
+// Cookie values are credential material by default (session
 // IDs, CSRF tokens, JWTs); redaction is unconditional on the keys
 // (which remain visible for log triage). On HAVE_BAUTH-off / HAVE_DAUTH-off
 // builds the pass and digested-user surfaces are absent by construction,

@@ -3,15 +3,16 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-050: compile-time pin for response_sent_ctx.
+// Compile-time pin for response_sent_ctx.
 //
-// TASK-045 landed a placeholder shape {request, response, sent_at}; TASK-050
-// replaces sent_at with the three fields callers actually need: integer
-// status, byte count queued to MHD, and the steady_clock elapsed measured
-// from the first invocation of answer_to_connection for the request.
+// The hook bus skeleton landed a placeholder shape {request, response,
+// sent_at}; sent_at was replaced with the three fields callers actually
+// need: integer status, byte count queued to MHD, and the steady_clock
+// elapsed measured from the first invocation of answer_to_connection for
+// the request.
 //
 // Pin the shape so a future refactor that drops or reshapes a field breaks
-// here, where the data #281 and #69 ask for is documented.
+// here, where the data access-logging consumers ask for is documented.
 
 #include <chrono>
 #include <cstddef>

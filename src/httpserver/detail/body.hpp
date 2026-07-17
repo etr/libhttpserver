@@ -58,17 +58,17 @@ namespace httpserver {
 namespace detail {
 
 // Polymorphic body that http_response stores in its small-buffer
-// optimisation slot (TASK-009). materialize() walks across the C++ /
+// optimisation slot. materialize() walks across the C++ /
 // libmicrohttpd boundary by returning a fresh MHD_Response* with NO
 // headers / footers / cookies attached — those decorations are applied
-// by the dispatch path (TASK-011), mirroring v1's
+// by the dispatch path, mirroring v1's
 // http_response::decorate_response split.
 //
 // Lifetime contract: the body owns whatever payload it carries
 // (std::string, std::vector, std::function, owned fd). After
 // materialize() returns, libmicrohttpd holds borrowed pointers into the
 // body's storage; the body must therefore outlive the MHD_Response
-// (TASK-009/011 enforce this through http_response's own lifetime).
+// (enforced through http_response's own lifetime).
 class body {
  public:
     virtual ~body();
@@ -82,8 +82,7 @@ class body {
     // guarantees to have correct alignment and at least sizeof(*this)
     // bytes). Used by http_response's move ctor / move-assign to relocate
     // an inline-stored body across SBO buffers without copying. Must be
-    // noexcept so http_response's move ops can themselves be noexcept
-    // (TASK-009 AC, DR-005).
+    // noexcept so http_response's move ops can themselves be noexcept.
     virtual void move_into(void* dst) noexcept = 0;
 
  protected:
@@ -97,7 +96,7 @@ class body {
     // existing instance — it always destroys-and-reconstructs.
     // Move ctor is provided so subclasses can offer their own noexcept move
     // ctors. However, the body base class is NOT movable in the usual sense:
-    // http_response stores bodies inline via placement-new (DR-005) and
+    // http_response stores bodies inline via placement-new and
     // relocates them by calling move_into(dst) rather than std::move. Callers
     // MUST NOT move-construct a body into an externally-owned heap object;
     // use move_into() to relocate an inline-stored body across SBO buffers.
@@ -214,7 +213,7 @@ class file_body final : public body {
 // MHD_IoVec doesn't expose total length and the architecture-spec
 // size() contract is "logical body size in bytes".
 //
-// LIFETIME CONTRACT (security-reviewer-iter1-2 / CWE-416):
+// LIFETIME CONTRACT (CWE-416):
 //   iovec_body owns the entries_ vector (the container), but the iov_base
 //   pointers inside each iovec_entry are BORROWED — they point into
 //   caller-owned buffers. After materialize() returns, libmicrohttpd holds
@@ -222,12 +221,12 @@ class file_body final : public body {
 //
 //   CALLERS MUST guarantee that all iov_base buffers (and the iovec_body
 //   itself) outlive the MHD_Response* returned by materialize(). The
-//   TASK-009/010 factory path enforces this by tying the iovec_body's
+//   factory path enforces this by tying the iovec_body's
 //   lifetime to http_response, and http_response must outlive the MHD
 //   connection. Do NOT free the underlying buffer data before the
 //   MHD_Response is destroyed.
 //
-// ALLOCATION NOTE (performance-reviewer-iter1-1):
+// ALLOCATION NOTE:
 //   std::vector unconditionally heap-allocates its backing store, so every
 //   iovec_body construction performs one heap allocation. The SBO
 //   static_assert only verifies that the vector control block (3 words)
@@ -235,7 +234,7 @@ class file_body final : public body {
 //   the heap. This is intentional: iovec payloads are by definition
 //   scatter lists of borrowed pointers, so a further small-vector
 //   optimisation would only save one allocation while adding complexity.
-//   Per DR-005 the heap fallback is accepted for iovec_body.
+//   The heap fallback is an accepted trade-off for iovec_body.
 // ---------------------------------------------------------------------------
 class iovec_body final : public body {
  public:
@@ -308,14 +307,14 @@ class pipe_body final : public body {
 // to producer_. Exposed publicly (static method) so unit tests can
 // drive it without a daemon.
 //
-// NULL GUARD (security-reviewer-iter1-3 / CWE-476):
+// NULL GUARD (CWE-476):
 //   trampoline() checks for null cls and empty producer_ before invoking
 //   the callable. MHD's callback mechanism does not catch C++ exceptions;
 //   a null-invoke would call std::terminate() in MHD's IO thread.
 //   If cls is null or producer_ is empty, trampoline returns
 //   MHD_CONTENT_READER_END_WITH_ERROR to signal an error to MHD.
 //
-// ALLOCATION NOTE (performance-reviewer-iter1-3):
+// ALLOCATION NOTE:
 //   std::function internally uses small-buffer optimisation (SBO), but
 //   the SBO threshold is implementation-defined (typically 16-32 bytes on
 //   libstdc++ / libc++). Lambdas that capture more than one pointer (e.g.
@@ -361,7 +360,7 @@ class deferred_body final : public body {
 };
 
 // ---------------------------------------------------------------------------
-// digest_challenge_body — RFC-7616 Digest auth challenge marker (TASK-062).
+// digest_challenge_body — RFC-7616 Digest auth challenge marker.
 //
 // Stores the parameters needed to drive
 // MHD_queue_auth_required_response3 at dispatch time. materialize()
@@ -373,7 +372,7 @@ class deferred_body final : public body {
 // algorithm, qop, charset, userhash bits) directly into the connection.
 //
 // Parameters live on the heap inside a single unique_ptr to keep the
-// body's inline footprint under the 64-byte SBO budget (DR-005). The
+// body's inline footprint under the 64-byte SBO budget. The
 // trade-off — one extra small allocation at factory time — is accepted
 // because the alternative (promoting digest_challenge_body to a
 // heap-fallback body via the existing oversized path) would also
@@ -433,10 +432,10 @@ class digest_challenge_body final : public body {
 };
 
 // ---------------------------------------------------------------------------
-// SBO budget asserts. Per DR-005 every concrete body must fit in the
-// 64-byte buffer http_response carries. If any of these fires on a new
-// platform, TASK-010's factory must heap-allocate that subclass instead
-// (and TASK-009's destructor must dispatch on body_inline_).
+// SBO budget asserts. Every concrete body must fit in the 64-byte
+// buffer http_response carries. If any of these fires on a new
+// platform, http_response's factory must heap-allocate that subclass
+// instead (and its destructor must dispatch on body_inline_).
 // ---------------------------------------------------------------------------
 static_assert(sizeof(empty_body) <= 64,
               "empty_body must fit in http_response SBO (DR-005)");
@@ -468,7 +467,7 @@ static_assert(alignof(digest_challenge_body) <= 16,
               "digest_challenge_body alignment must be <= 16 (DR-005)");
 
 // Per-subclass nothrow-move contract. http_response::move_into(...) is
-// noexcept (TASK-009 AC), and that depends on every concrete body's move
+// noexcept, and that depends on every concrete body's move
 // constructor being noexcept. If a future change to one of the members
 // breaks this (e.g. swapping std::function for a wrapper that allocates
 // on move), the assert fires here so the regression is caught at the

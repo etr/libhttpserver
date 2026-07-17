@@ -46,7 +46,7 @@
 namespace httpserver {
 
 // -----------------------------------------------------------------------
-// Layout / trait acceptance asserts (TASK-009 AC). Duplicated in
+// Layout / trait acceptance asserts. Duplicated in
 // test/unit/http_response_sbo_test.cpp; placing them in the .cpp catches
 // drift on every library build, even before tests are linked.
 // -----------------------------------------------------------------------
@@ -71,7 +71,7 @@ static_assert(alignof(http_response) >= 16,
 // adopt logic that the destructor, move ctor, and move-assign all need.
 // Keeping each branch in exactly one place makes the inline-vs-heap
 // discriminator impossible to get out of sync. Both helpers are
-// noexcept (DR-005): destroy_body relies on body subclass dtors being
+// noexcept: destroy_body relies on body subclass dtors being
 // noexcept, adopt_body_from relies on the noexcept move_into() virtual
 // (statically asserted per-subclass in detail/body.hpp).
 //
@@ -83,7 +83,7 @@ void http_response::destroy_body() noexcept {
     body_->~body();
     if (!body_inline_) {
         // Heap path: ::operator delete pairs with the
-        // ::operator new(sizeof(T)) the factory uses (TASK-010).
+        // ::operator new(sizeof(T)) the factory uses.
         ::operator delete(body_);
     }
     // Invariant: leave in the empty/no-body state regardless of which
@@ -113,14 +113,13 @@ void http_response::adopt_body_from(http_response& other) noexcept {
     // Reset the moved-from source's kind_ to empty so any code that reads
     // kind() on a moved-from http_response sees a consistent state
     // (body_ == nullptr always corresponds to body_kind::empty).
-    // Findings: performance-reviewer-iter1-34 / security-reviewer-iter1-40.
     other.kind_ = body_kind::empty;
 }
 
 // -----------------------------------------------------------------------
 // Destructor.
 //
-// De-virtualised in TASK-013: the class is `final`, so polymorphic
+// Non-virtual: the class is `final`, so polymorphic
 // destruction through a base pointer is impossible. Out-of-line because
 // destroy_body() needs the complete type detail::body.
 // -----------------------------------------------------------------------
@@ -141,6 +140,7 @@ http_response::http_response(http_response&& other) noexcept
       headers_(std::move(other.headers_)),
       footers_(std::move(other.footers_)),
       cookies_(std::move(other.cookies_)),
+      cookies_mirror_valid_(other.cookies_mirror_valid_),
       structured_cookies_(std::move(other.structured_cookies_)),
       kind_(other.kind_) {
     adopt_body_from(other);
@@ -165,6 +165,7 @@ http_response& http_response::operator=(http_response&& other) noexcept {
     headers_ = std::move(other.headers_);
     footers_ = std::move(other.footers_);
     cookies_ = std::move(other.cookies_);
+    cookies_mirror_valid_ = other.cookies_mirror_valid_;
     structured_cookies_ = std::move(other.structured_cookies_);
     kind_ = other.kind_;
     adopt_body_from(other);
@@ -176,7 +177,7 @@ void http_response::shoutCAST() {
 }
 
 // -----------------------------------------------------------------------
-// Fluent with_* setters (TASK-012, PRD-RSP-REQ-004).
+// Fluent with_* setters.
 //
 // Validation helpers are in the anonymous namespace above; the & / &&
 // overload pairs delegate to do_set_*() private helpers.
@@ -217,9 +218,8 @@ void http_response::do_set_cookie(std::string key, std::string value) {
     // Legacy v1 string-blob entry point. Build and validate the
     // structured cookie FIRST — with_name / with_value throw
     // std::invalid_argument for forbidden characters (CR, LF, NUL,
-    // ';', '=' in names). Only after the structured object is
-    // successfully constructed do we mirror name/value into the legacy
-    // `cookies_` map so the two stores never diverge on failure.
+    // ';', '=' in names), so structured_cookies_ (the authoritative,
+    // wire-rendered store) is only mutated once the input is known good.
     //
     // Note: validate_http_field is intentionally NOT called here. The
     // structured cookie::with_name / with_value setters enforce the
@@ -229,23 +229,22 @@ void http_response::do_set_cookie(std::string key, std::string value) {
     // earlier error citing 'forbidden control character' rather than
     // the real reason.
     //
-    // v1 overwrite semantics (code-review finding on TASK-064): in v1,
+    // v1 overwrite semantics: in v1,
     // calling with_cookie("sid", "old") then with_cookie("sid", "new")
-    // silently overwrote — one Set-Cookie header on the wire. The
-    // legacy `cookies_` map already preserves that (insert_or_assign),
-    // so the structured mirror must too: an existing structured cookie
+    // silently overwrote — one Set-Cookie header on the wire. So the
+    // structured store overwrites too: an existing structured cookie
     // with the same name is REPLACED in place (keeping its position);
     // only a genuinely new name is appended. Name equivalence uses
-    // http::header_comparator — the same case-insensitive ordering that
-    // keys `cookies_` — so the two stores can never diverge. The
-    // structured path (do_set_cookie_struct) intentionally keeps append
-    // semantics.
+    // http::header_comparator — the same case-insensitive ordering used
+    // by the deprecated `cookies_` mirror. The structured path
+    // (do_set_cookie_struct) intentionally keeps append semantics.
     cookie new_cookie;
-    new_cookie.with_name(key).with_value(value);  // throws before any map mutation
-    // with_name/with_value take std::string BY VALUE, so they copy out of
-    // the key/value lvalues above; key and value are therefore still valid
-    // here regardless of call ordering, and the moves below are safe.
-    cookies_.insert_or_assign(std::move(key), std::move(value));
+    new_cookie.with_name(key).with_value(value);  // throws before any mutation
+    // The deprecated `cookies_` name->value mirror is now rebuilt lazily
+    // from structured_cookies_ on demand (get_cookies / get_cookie), so
+    // this hot setter no longer pays a red-black-tree insert whose result
+    // is never read on the wire path -- it just invalidates the mirror.
+    cookies_mirror_valid_ = false;
     const http::header_comparator name_less;
     auto it = std::find_if(
         structured_cookies_.begin(), structured_cookies_.end(),
@@ -261,9 +260,11 @@ void http_response::do_set_cookie(std::string key, std::string value) {
 }
 
 void http_response::do_set_cookie_struct(cookie c) {
-    // Structured entry point. Mirror name/value into the legacy
-    // `cookies_` map so the deprecated `get_cookie`/`get_cookies`
-    // accessors keep returning sane data.
+    // Structured entry point. structured_cookies_ is authoritative; the
+    // deprecated `cookies_` name->value mirror is rebuilt lazily from it
+    // (get_cookie / get_cookies), so this appends and invalidates the
+    // mirror rather than eagerly inserting into a map the wire path never
+    // reads.
     //
     // NOTE: cookies created by cookie::parse_cookie_header() bypass
     // all name/value validators and store raw wire bytes directly.
@@ -272,7 +273,7 @@ void http_response::do_set_cookie_struct(cookie c) {
     // with_value().  The render-time guard in
     // cookie::to_set_cookie_header() will throw if a forbidden byte
     // reaches the wire, providing a last line of defense.
-    cookies_.insert_or_assign(c.name(), c.value());
+    cookies_mirror_valid_ = false;
     structured_cookies_.push_back(std::move(c));
 }
 
@@ -320,7 +321,7 @@ http_response&& http_response::with_cookie(std::string key,
     return std::move(*this);
 }
 
-// TASK-064: structured with_cookie(cookie) overloads.
+// Structured with_cookie(cookie) overloads.
 http_response& http_response::with_cookie(cookie c) & {
     do_set_cookie_struct(std::move(c));
     return *this;
@@ -342,11 +343,11 @@ http_response&& http_response::with_status(int code) && {
 }
 
 // -----------------------------------------------------------------------
-// Const single-key accessors (TASK-011).
+// Const single-key accessors.
 //
 // All three share the same shape: heterogeneous lookup into the
 // corresponding header_map (transparent header_comparator), returning an
-// empty std::string_view on miss. NEVER inserts (PRD-RSP-REQ-003); the
+// empty std::string_view on miss. NEVER inserts; the
 // previous v1 accessors used `headers_[key]`, which silently inserted
 // an empty entry on miss and consequently could not be const.
 //
@@ -370,13 +371,37 @@ std::string_view http_response::get_footer(std::string_view key) const {
     return header_map_find_view(footers_, key);
 }
 
+void http_response::ensure_cookie_mirror_() const noexcept {
+    // Rebuild the deprecated name->value mirror from the authoritative
+    // structured_cookies_ list, on the first read after a mutation. Kept
+    // noexcept (get_cookies() is declared noexcept): on allocation failure
+    // we surface an empty mirror rather than propagate. Not synchronised
+    // -- an http_response is owned by a single request thread, like the
+    // rest of this class. Duplicate names in structured_cookies_ collapse
+    // last-wins here, matching the old eager insert_or_assign path.
+    if (cookies_mirror_valid_) {
+        return;
+    }
+    try {
+        cookies_.clear();
+        for (const auto& c : structured_cookies_) {
+            cookies_.insert_or_assign(c.name(), c.value());
+        }
+    } catch (...) {
+        cookies_.clear();
+    }
+    cookies_mirror_valid_ = true;
+}
+
 std::string_view http_response::get_cookie(std::string_view key) const {
+    ensure_cookie_mirror_();
     return header_map_find_view(cookies_, key);
 }
 
 std::ostream &operator<< (std::ostream& os, const http_response& r) {
     os << "Response [response_code:" << r.status_code_ << "]" << std::endl;
 
+    r.ensure_cookie_mirror_();
     http::dump_header_map(os, "Headers", r.headers_);
     http::dump_header_map(os, "Footers", r.footers_);
     http::dump_header_map(os, "Cookies", r.cookies_);

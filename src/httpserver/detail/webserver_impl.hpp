@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-014: webserver PIMPL backing class.
+// webserver PIMPL backing class.
 //
 // This header is *internal*. It is reachable only when compiling the
 // libhttpserver translation units themselves (HTTPSERVER_COMPILATION
@@ -86,7 +86,7 @@ class webserver;
 class http_resource;
 class http_response;
 // Forward declaration is unconditional to match the public webserver.hpp
-// surface (PRD-FLG-REQ-001). The class body and member functions remain
+// surface. The class body and member functions remain
 // conditionally compiled; only the declaration is always present.
 class websocket_handler;
 
@@ -102,7 +102,7 @@ class lambda_resource;
 
 /**
  * @brief Whether the runtime opt-in for raw-body debug dumping is in
- *        effect for this process (TASK-074).
+ *        effect for this process.
  *
  * Reads the env var LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY once on
  * first call via a function-local static; subsequent setenv() calls
@@ -114,7 +114,7 @@ bool debug_dump_request_body_opted_in();
 
 /**
  * @brief Emit a one-shot SECURITY WARNING when raw-body dumping is
- *        opted in (TASK-074).
+ *        opted in.
  *
  * Called from webserver::start() before MHD_start_daemon. If the env
  * var opt-in is active, writes a single line naming the env var, the
@@ -178,7 +178,7 @@ class webserver_impl {
     std::atomic<bool> running{false};
 
 #ifdef HAVE_DAUTH
-    // TASK-062: per-webserver-instance `opaque` value handed to
+    // Per-webserver-instance `opaque` value handed to
     // MHD_queue_auth_required_response3 when the user's
     // digest_challenge factory leaves the field empty. Generated once
     // at construction from std::random_device (16 bytes hex-encoded ->
@@ -189,12 +189,12 @@ class webserver_impl {
     std::string digest_opaque_;
 #endif  // HAVE_DAUTH
 
-    // LRU cache size (architecture spec): 256 entries.
+    // LRU cache size: 256 entries.
     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
 
-    // --- v2 3-tier route table (TASK-027, architecture §4.7) -------------
+    // --- v2 3-tier route table -------------------------------------------
 
-    // TASK-027 v2 3-tier route table fronted by `route_lru_cache`.
+    // The 3-tier route table is fronted by `route_lru_cache`.
     // Tier walk order and rationale live in lookup_v2's implementation
     // comment (src/detail/webserver_dispatch.cpp); not duplicated here.
     //
@@ -208,13 +208,13 @@ class webserver_impl {
     // **CWE-407 hash-flooding immunity.** exact_routes_ uses std::map
     // (not std::unordered_map) so the keyed lookup on the dispatch hot
     // path is hash-free. Same posture as the radix-tree per-segment
-    // child container (TASK-056). std::less<> enables transparent
+    // child container. std::less<> enables transparent
     // string_view lookup without constructing a temporary std::string.
     std::shared_mutex route_table_mutex_;
     std::map<std::string, route_entry, std::less<>> exact_routes_;
     radix_tree<route_entry> param_and_prefix_routes_;
-    // Pre-compiled regex objects. Architecture §4.7 specifies this as a
-    // vector of (compiled std::regex, route_entry) pairs so that lookup_v2
+    // Pre-compiled regex objects: a vector of (compiled std::regex,
+    // route_entry) pairs so that lookup_v2
     // calls std::regex_match on an already-compiled object without paying
     // the compilation cost on every cache miss. Compiled at registration
     // time in register_impl_ / on_methods_ when idx.is_regex_compiled()
@@ -231,9 +231,7 @@ class webserver_impl {
     };
     std::vector<regex_route> regex_routes_;
 
-    // TASK-027 LRU front-end. 256 entries per architecture spec.
-    // Renamed from route_cache_v2 in TASK-053 step 3 once the v1
-    // dispatch cache (route_cache_list / route_cache_map) was removed.
+    // LRU front-end for the route table.
     route_cache route_lru_cache{ROUTE_CACHE_MAX_SIZE};
 
     // tier_hit identifies which tier of the v2 route table answered a
@@ -258,16 +256,14 @@ class webserver_impl {
     // documented above. Returns lookup_result; populates `tier` even on
     // miss (tier_hit::none) so callers can branch deterministically.
     //
-    // NOTE (TASK-053 / TASK-067): lookup_v2 is the only dispatch path.
-    // As of TASK-053 step 3, resolve_resource_for_request() calls
-    // lookup_v2() exclusively, and TASK-067 deleted the v1 registration
-    // bookkeeping maps -- the v2 3-tier table is now the single routing
-    // surface. Lambda/class conflict detection probes the same v2 tiers
-    // (find_v2_entry_by_path_); WebSocket dispatch uses a dedicated
-    // registered_ws_handlers_mutex_.
+    // NOTE: lookup_v2 is the only dispatch path --
+    // resolve_resource_for_request() calls it exclusively, and the
+    // 3-tier table is the single routing surface. Lambda/class conflict
+    // detection probes the same tiers (find_v2_entry_by_path_);
+    // WebSocket dispatch uses a dedicated registered_ws_handlers_mutex_.
     lookup_result lookup_v2(http_method method, const std::string& path);
 
-    // TASK-045 -- Lifecycle hook bus (skeleton, no firing yet).
+    // Lifecycle hook bus.
     //
     // Per-phase callable storage. Each phase has its own
     // std::vector<phase_entry<Sig>> because phase signatures differ
@@ -275,23 +271,25 @@ class webserver_impl {
     // Concurrency:
     //   - `hook_table_mutex_` is a shared_mutex covering ALL eleven
     //     phase vectors. Writers (add_hook, hook_handle::remove) take
-    //     a unique_lock; future firing sites (TASK-046+) will take
-    //     a shared_lock to snapshot a phase vector before iterating.
-    //   - `any_hooks_[i]` is a short-circuit gate read with
-    //     memory_order_acquire semantics on the dispatch hot path so a
-    //     phase with no registrations costs one atomic load. The correct
-    //     hot-path pattern is:
-    //       if (any_hooks_[i].load(std::memory_order_acquire)) {
-    //           std::shared_lock lk(hook_table_mutex_); /* iterate */ }
-    //     The acquire pairs with the memory_order_release store in
-    //     register_hook_impl / hook_handle::remove(), providing the
-    //     full happens-before the vector contents require. Do NOT use
-    //     memory_order_relaxed here: a relaxed load gives no ordering
-    //     guarantee and could observe any_hooks_[phase]==true while
-    //     seeing a stale (empty or partially-written) phase vector.
-    //     Set on first registration of a phase and cleared when the
-    //     phase's vector drops to empty (memory_order_release on both
-    //     edges).
+    //     a unique_lock; firing sites take a shared_lock to snapshot a
+    //     phase vector before iterating.
+    //   - `any_hooks_[i]` is an ADVISORY short-circuit gate so that a
+    //     phase with no registrations costs one atomic load on the
+    //     dispatch hot path:
+    //       if (has_hooks_for(phase)) {   // relaxed load
+    //           std::shared_lock lk(hook_table_mutex_); /* snapshot */ }
+    //     The relaxed load is sufficient because no reader ever touches
+    //     a phase vector without first acquiring hook_table_mutex_; the
+    //     mutex, not the atomic, provides the happens-before for the
+    //     vector contents. The gate may be momentarily stale in either
+    //     direction and both races are benign: a stale false skips
+    //     hooks whose registration ran concurrently with the firing,
+    //     and a stale true costs one shared_lock acquisition that finds
+    //     the vector empty. The gate is set on first registration of a
+    //     phase and cleared when the phase's vector drops to empty,
+    //     always under the unique_lock (the release ordering on those
+    //     stores is redundant with the mutex unlock; it carries no
+    //     extra guarantee).
     //   - `next_slot_id_` is a monotonic 64-bit counter. It is never
     //     reused, so a hook_handle whose slot has already been erased
     //     simply finds no match in remove() -- the idempotent no-op
@@ -309,9 +307,9 @@ class webserver_impl {
                static_cast<std::size_t>(hook_phase::count_)> any_hooks_{};
 
     // Returns true iff at least one hook is registered for phase @p p.
-    // Reads the atomic gate with relaxed ordering -- the same semantics
-    // used at every firing site. Encapsulates the cast so call sites read
-    // as `has_hooks_for(hook_phase::X)` instead of the raw index expression.
+    // Relaxed load is sufficient -- see the any_hooks_ contract above.
+    // Encapsulates the cast so call sites read as
+    // `has_hooks_for(hook_phase::X)` instead of the raw index expression.
     bool has_hooks_for(::httpserver::hook_phase p) const noexcept {
         return any_hooks_[static_cast<std::size_t>(p)].load(
             std::memory_order_relaxed);
@@ -335,10 +333,10 @@ class webserver_impl {
     std::vector<phase_entry<::httpserver::hook_action(
             const ::httpserver::handler_exception_ctx&)>>
         hooks_handler_exception_;
-    // TASK-049: internal_error_handler alias slot. Last-position fallback
-    // in the handler_exception chain. Distinct from hooks_handler_exception_
-    // because it must fire AFTER all user hooks (DR-012 §4.10) -- the
-    // opposite of the TASK-048 aliases which run before user hooks. By
+    // internal_error_handler alias slot. Last-position fallback in the
+    // handler_exception chain. Distinct from hooks_handler_exception_
+    // because it must fire AFTER all user hooks -- the opposite of the
+    // functional first-position aliases which run before user hooks. By
     // sitting in a dedicated slot rather than the vector, the alias never
     // contends for ordering when a user does add_hook(handler_exception, ...).
     //
@@ -346,8 +344,8 @@ class webserver_impl {
     // at webserver construction, before start() is called -- the daemon is
     // not yet running, so no synchronisation is required for the write.
     // Read on the dispatch hot path from fire_handler_exception with no
-    // lock. Slot is immutable after construction (DR-012 / §4.10); the
-    // reader path requires no synchronisation.
+    // lock. Slot is immutable after construction; the reader path
+    // requires no synchronisation.
     std::function<::httpserver::hook_action(
             const ::httpserver::handler_exception_ctx&)>
         handler_exception_alias_;
@@ -356,8 +354,8 @@ class webserver_impl {
         hooks_after_handler_;
     std::vector<phase_entry<void(const ::httpserver::response_sent_ctx&)>>
         hooks_response_sent_;
-    // TASK-050: log_access alias slot. Mirrors handler_exception_alias_
-    // (TASK-049): single-writer-at-construction, read on the dispatch hot
+    // log_access alias slot. Mirrors handler_exception_alias_:
+    // single-writer-at-construction, read on the dispatch hot
     // path from fire_response_sent without a lock. webserver's ctor wires
     // this slot from create_webserver().log_access(fn) if the user
     // supplied a non-null callable.
@@ -365,8 +363,8 @@ class webserver_impl {
     // The slot fires AFTER user-added response_sent hooks so user hooks
     // observe the response before the legacy access logger formats it.
     //
-    // Slot is immutable after construction (DR-012 / §4.10); the reader
-    // path requires no synchronisation.
+    // Slot is immutable after construction; the reader path requires no
+    // synchronisation.
     std::function<void(const ::httpserver::response_sent_ctx&)>
         log_access_alias_;
     std::vector<phase_entry<void(const ::httpserver::request_completed_ctx&)>>
@@ -381,18 +379,16 @@ class webserver_impl {
     std::set<http::ip_representation> allow_list;
 
 #ifdef HAVE_WEBSOCKET
-    // TASK-035: shared_ptr storage. The dispatch path
+    // shared_ptr storage. The dispatch path
     // (complete_websocket_upgrade) takes a shared_ptr copy under the
     // shared lock that keeps the handler alive across an MHD upgrade
     // callback, even if unregister_ws_resource races to drop the
     // registration mid-upgrade. The webserver always holds one reference
     // until the slot is erased.
     //
-    // Lock: registered_ws_handlers_mutex_ guards this map exclusively.
-    // TASK-067 split this off from the shared HTTP route-table mutex
-    // (deleted alongside the v1 HTTP registration bookkeeping). No call
-    // site ever held both mutexes simultaneously, so the split is
-    // invariant-preserving.
+    // Lock: registered_ws_handlers_mutex_ guards this map exclusively,
+    // independent of the HTTP route_table_mutex_; no call site ever
+    // holds both mutexes simultaneously.
     std::shared_mutex registered_ws_handlers_mutex_;
     std::map<std::string, std::shared_ptr<::httpserver::websocket_handler>>
         registered_ws_handlers;
@@ -414,7 +410,7 @@ class webserver_impl {
     mutable std::shared_mutex sni_credentials_mutex;
 #endif  // HAVE_GNUTLS && MHD_OPTION_HTTPS_CERT_CALLBACK
 
-    // TASK-045 review: single accessor for the per-phase vector size.
+    // Single accessor for the per-phase vector size.
     // Exposes the per-phase registration count through one switch rather
     // than requiring callers (e.g., test code) to name individual per-phase
     // vector members. The HTTPSERVER_COMPILATION friend bridge in

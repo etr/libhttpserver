@@ -25,7 +25,7 @@
 #ifndef SRC_HTTPSERVER_HTTP_UTILS_HPP_
 #define SRC_HTTPSERVER_HTTP_UTILS_HPP_
 
-// TASK-019 / TASK-020: backend headers (libmicrohttpd, GnuTLS, BSD-socket)
+// Backend headers (libmicrohttpd, GnuTLS, BSD-socket)
 // are deliberately NOT included from this public header.
 // The enums declared below previously took their integer values from
 // upstream macros (MHD_USE_*, MHD_DIGEST_AUTH_ALGO3_*, MHD_DAUTH_*,
@@ -93,11 +93,11 @@ struct generateFilenameException : public std::exception {
 
 class http_utils {
  public:
-     // TASK-019: hard-coded values matching gnutls_credentials_type_t
+     // Hard-coded values matching gnutls_credentials_type_t
      // (a stable public ABI). Values pinned to the GnuTLS macros via
      // static_assert in src/webserver.cpp so an upstream renumber would
-     // break the build. The enum is unconditional (PRD-FLG-REQ-001
-     // forbids gating public-header declarations on HAVE_GNUTLS); when
+     // break the build. The enum is unconditional (public-header
+     // declarations are never gated on HAVE_GNUTLS); when
      // GnuTLS is disabled at build time, selecting one of these via
      // create_webserver().cred_type(...) hits the existing
      // feature-unavailable path on use_ssl(true).
@@ -110,7 +110,7 @@ class http_utils {
          IA = 5            // GNUTLS_CRD_IA
      };
 
-     // TASK-020: hard-coded values mirroring libmicrohttpd's MHD_FLAG enum
+     // Hard-coded values mirroring libmicrohttpd's MHD_FLAG enum
      // (MHD_USE_AUTO=65536, MHD_USE_SELECT_INTERNALLY=8,
      //  MHD_USE_THREAD_PER_CONNECTION=4). Pinned to the upstream macros
      // via static_assert in src/webserver.cpp so an upstream renumber
@@ -132,15 +132,15 @@ class http_utils {
          IPV6 = 16
      };
 
-     // TASK-020: hard-coded values mirroring libmicrohttpd's
+     // Hard-coded values mirroring libmicrohttpd's
      // MHD_DigestAuthAlgo3 / MHD_DigestAuthResult enums. The integer
      // values follow upstream's bitfield encoding
      // (BASE_ALGO_X | NON_SESSION = X | 64 for the algorithms; the
      // result codes are stable signed ints). Pinned via static_assert
      // in src/http_request.cpp where <microhttpd.h> is reachable, so
      // an upstream renumber breaks the build at the right place.
-     // The enums are unconditional (PRD-FLG-REQ-001 forbids gating
-     // public-header declarations on HAVE_DAUTH); when digest auth is
+     // The enums are unconditional (public-header declarations are
+     // never gated on HAVE_DAUTH); when digest auth is
      // disabled at build time, the corresponding methods on
      // http_request hit the existing feature-unavailable path.
      enum class digest_algorithm {
@@ -321,7 +321,7 @@ class http_utils {
      static std::string sanitize_upload_filename(const std::string& filename);
 
      static const char* reason_phrase(unsigned int status_code);
-     // TASK-020: parameter is the integer value of an `MHD_FEATURE`
+     // The parameter is the integer value of an `MHD_FEATURE`
      // enumerator. The signature is `int` rather than `enum MHD_FEATURE`
      // so this header doesn't have to drag in <microhttpd.h>; callers
      // can still pass an `MHD_FEATURE_*` enumerator directly because the
@@ -330,6 +330,11 @@ class http_utils {
      static const char* get_mhd_version();
 };
 
+// Body of a strict-weak-ordering "less than": compares LENGTH FIRST
+// (shorter sorts before longer), then per-character under `op`. This is
+// NOT plain lexicographic order ("b" sorts before "aa"). WARNING: the
+// macro expands to multiple `return` statements at the call site, so it
+// must be the entire body of a bool-returning function.
 #define COMPARATOR(x, y, op) { \
     size_t l1 = (x).size(); \
     size_t l2 = (y).size(); \
@@ -359,7 +364,7 @@ class header_comparator {
      // is_transparent enables heterogeneous lookup against header_map
      // (std::map<std::string, std::string, header_comparator>): callers
      // can pass std::string_view directly to find()/count() without
-     // constructing a std::string. Required by TASK-011's
+     // constructing a std::string. Required by the
      // string_view-returning const accessors on http_response.
      using is_transparent = std::true_type;
      /**
@@ -367,7 +372,9 @@ class header_comparator {
       * @param x first string to compare.
       * @param y second string to compare.
       * @return `true` iff @p x sorts before @p y under case-insensitive
-      *         lexicographic order.
+      *         length-first-then-per-character order (shorter names
+      *         sort first; equal lengths compare character by
+      *         character after ASCII upcasing).
      **/
      bool operator()(std::string_view x, std::string_view y) const {
          COMPARATOR(x, y, http_header_toupper);
@@ -389,9 +396,11 @@ class arg_comparator {
      /**
       * Less-than comparison between two argument keys.
       *
-      * Defaults to case-sensitive byte-wise ordering; if the library was
-      * built with `-DCASE_INSENSITIVE` it folds upper-case before
-      * comparing, matching arg_map's documented contract.
+      * Length-first-then-per-character order (shorter keys sort
+      * first; equal lengths compare byte by byte). Defaults to
+      * case-sensitive comparison; if the library was built with
+      * `-DCASE_INSENSITIVE` it folds upper-case before comparing,
+      * matching arg_map's documented contract.
       *
       * @param x first string to compare.
       * @param y second string to compare.

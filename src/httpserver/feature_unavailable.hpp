@@ -45,7 +45,7 @@ namespace httpserver {
  * dependencies, must be cheap to throw from anywhere in the codebase, and
  * avoids ABI churn for what is effectively a labelled `std::runtime_error`.
  *
- * ### Throw sites (architecture spec §7)
+ * ### Throw sites
  *
  * The library throws `feature_unavailable` from these sites; each one
  * pairs the feature label with the `HAVE_*` build flag that gates it:
@@ -58,8 +58,8 @@ namespace httpserver {
  *     values without throwing; feature-unavailability is validated
  *     lazily at `webserver` construction, not at the setter call.
  *   - @ref http_response::unauthorized(digest_challenge) — thrown on a
- *     `HAVE_DAUTH`-off build. The declaration is unconditional
- *     (PRD-FLG-REQ-001); only the definition branches on `HAVE_DAUTH`.
+ *     `HAVE_DAUTH`-off build. The declaration is unconditional;
+ *     only the definition branches on `HAVE_DAUTH`.
  *   - @ref webserver::register_ws_resource and
  *     @ref webserver::unregister_ws_resource — on a `HAVE_WEBSOCKET`-off
  *     build (every websocket entry point throws this).

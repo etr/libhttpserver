@@ -36,14 +36,14 @@
  * @brief Move-only RAII receipt returned by webserver / http_resource
  *        `add_hook` calls.
  *
- * TASK-045 / §5.6 / DR-012. The PIMPL backing classes are forward-
+ * The PIMPL backing classes are forward-
  * declared so this header carries no libmicrohttpd / pthread / gnutls
  * baggage.
  */
 namespace httpserver {
 
 namespace detail { class webserver_impl; }
-// TASK-051: per-resource hook table -- the per-route handle holds a
+// Per-resource hook table -- the per-route handle holds a
 // weak_ptr<resource_hook_table>, expired when the resource is
 // destroyed (remove() then becomes a safe no-op).
 namespace detail { class resource_hook_table; }
@@ -90,7 +90,7 @@ class http_resource;
  * exactly once during webserver construction and are immutable
  * thereafter. To add or remove an observation/intervention point at
  * runtime, use `webserver::add_hook(phase, ...)` and the returned
- * `hook_handle`. See DR-012 / §4.10.
+ * `hook_handle`.
  */
 class hook_handle {
  public:
@@ -131,14 +131,16 @@ class hook_handle {
     void remove() noexcept;
 
     /**
-     * @brief Disarm the destructor.
+     * @brief Disarm the destructor, making the registration permanent.
      *
      * The underlying registration persists for the webserver's
      * lifetime. The source handle is left in the disarmed state.
-     * Conventionally invoked as `auto h2 = std::move(h).detach();`.
+     * Conventionally invoked as `std::move(h).detach();`.
      *
-     * @return a new handle that owns the registration (or a disarmed
-     *         handle if the source was already disarmed).
+     * @return an inert (disarmed) receipt carrying the same slot data;
+     *         its remove() and destructor are no-ops. It does NOT own
+     *         the registration — after detach() nothing does, which is
+     *         the point.
      */
     hook_handle detach() && noexcept;
 
@@ -150,11 +152,12 @@ class hook_handle {
                 std::uint64_t slot_id) noexcept
         : impl_(impl), slot_id_(slot_id), phase_(phase), armed_(true) {}
 
-    // TASK-051: constructor used by http_resource::add_hook to build an
-    // armed handle bound to a per-resource hook table. Discriminator is
-    // the non-empty weak_ptr -- remove() inspects table_weak_ first, and
-    // falls through to the server-wide impl_ path only if the weak_ptr
-    // is empty (default-constructed = "never had a table" sentinel).
+    // Constructor used by http_resource::add_hook to build an armed
+    // handle bound to a per-resource hook table. The discriminator
+    // between the two handle kinds is impl_: remove() takes the
+    // per-resource path when impl_ == nullptr (this constructor leaves
+    // it null) and the server-wide path otherwise; table_weak_ is only
+    // consulted on the per-resource path.
     //
     // The handle holds a weak_ptr so a resource that outlives the handle
     // is not kept alive by the handle (the handle is non-owning), and a

@@ -51,7 +51,6 @@ class http_request;
  * Callback signature for the 404 and 405 error-page handlers.
  *
  * Returned by value; the webserver writes the response to the wire.
- * (TASK-030 / PRD-NAM-REQ-003 — see specs/architecture/04-components/create-webserver.md.)
  */
 typedef std::function<http_response(const http_request&)> error_handler;
 
@@ -72,9 +71,9 @@ typedef std::function<http_response(const http_request&)> error_handler;
  * or attacker-influenced data that triggered the exception). Implementations
  * MUST NOT forward this value into HTTP response bodies without sanitization
  * (CWE-209: Information Exposure Through an Error Message). See also
- * @ref handler_exception_ctx::message. (Finding #32 / security-reviewer.)
+ * @ref handler_exception_ctx::message.
  *
- * Full contract: DR-009 §5.2 (see @ref webserver class-level block).
+ * Full contract: see the @ref webserver class-level block.
  */
 typedef std::function<http_response(const http_request&, std::string_view message)> internal_error_handler_t;
 
@@ -98,16 +97,14 @@ typedef std::function<bool(const std::string&, const std::string&, const http::f
  * before_handler chain and sends that response on the wire (typically a
  * 401 produced by `http_response::unauthorized(realm)`).
  *
- * Migrated from `std::function<std::shared_ptr<http_response>(...)>` to
- * remove the per-authenticated-request control-block allocation; the
- * by-value `http_response` carries small bodies via SBO without any heap
- * traffic. See TASK-054, DR-009, PRD-RSP-REQ-007.
+ * The by-value `http_response` return avoids a per-authenticated-request
+ * shared_ptr control-block allocation; small bodies travel via SBO
+ * without any heap traffic.
  */
 typedef std::function<std::optional<http_response>(const http_request&)> auth_handler_ptr;
 
 /**
- * Fluent builder for @ref webserver instances (PRD-NAM-REQ-004,
- * PRD-CFG-REQ-001..003 / TASK-033).
+ * Fluent builder for @ref webserver instances.
  *
  * Each setter returns `*this` so calls can chain:
  * `webserver ws{create_webserver{}.port(8080).use_ssl(true).max_threads(4)};`
@@ -134,7 +131,7 @@ class create_webserver {
 
      explicit create_webserver(std::uint16_t port): _port(port) { }
 
-     // TASK-033 / PRD-CFG-REQ-003: validate at the setter. The `int` overload
+     // Validate at the setter. The `int` overload
      // exists so out-of-uint16_t values like 70000 are expressible (and
      // throwable); the `std::uint16_t` overload preserves type-safe calls.
      create_webserver& port(std::uint16_t port) { _port = port; return *this; }
@@ -160,8 +157,8 @@ class create_webserver {
       *
       * @note This is an alias. Calling it (with a non-null callable)
       *       installs a hook at @ref httpserver::hook_phase::response_sent
-      *       via a dedicated alias slot on the webserver implementation
-      *       (TASK-050 / PRD-HOOK-REQ-009 / §4.10). The alias fires AFTER
+      *       via a dedicated alias slot on the webserver implementation.
+      *       The alias fires AFTER
       *       any user-added response_sent hooks so those hooks observe the
       *       response first. Re-registration replaces the previous callable.
       *       For richer structured access logging — including HTTP status
@@ -192,9 +189,8 @@ class create_webserver {
       *
       * Caps how many unique `?key=value` pairs `populate_args()` will accept
       * before returning MHD_NO. The guard mitigates arena exhaustion from
-      * crafted requests with thousands of unique parameters
-      * (security-reviewer-iter1-2). The same protection on a byte basis is
-      * provided by @ref max_args_bytes.
+      * crafted requests with thousands of unique parameters. The same
+      * protection on a byte basis is provided by @ref max_args_bytes.
       *
       * Pass `0` to keep the compile-time default
       * (@c httpserver::detail::arguments_accumulator::DEFAULT_MAX_ARGS_COUNT,
@@ -215,7 +211,7 @@ class create_webserver {
       */
      create_webserver& max_args_bytes(std::size_t v) { _max_args_bytes = v; return *this; }
 
-     // Boolean flag setters (TASK-033 / PRD-CFG-REQ-001).
+     // Boolean flag setters.
      /**
       * Enable TLS for the webserver (HTTPS).
       *
@@ -236,7 +232,7 @@ class create_webserver {
      create_webserver& debug(bool enable = true) { _debug = enable; return *this; }
      create_webserver& pedantic(bool enable = true) { _pedantic = enable; return *this; }
      /**
-      * Restore the v1 / pre-DR-009-Revision-1 behaviour of surfacing the
+      * Restore the v1 behaviour of surfacing the
       * originating exception message in the default internal-server-error
       * response body.
       *
@@ -255,14 +251,13 @@ class create_webserver {
       *               500 body (dev only), `false` for the sanitized
       *               fixed-string default.
       * @return reference to this builder for chaining.
-      * @see DR-009 Revision 1 (specs/architecture/11-decisions/DR-009.md)
       */
      create_webserver& expose_exception_messages(bool enable = true) {
          _expose_exception_messages = enable; return *this;
      }
 
      /**
-      * Restore the v1 / pre-TASK-057 behaviour of streaming credential
+      * Restore the v1 behaviour of streaming credential
       * material verbatim from @ref httpserver::operator<<(std::ostream&, const http_request&).
       *
       * @warning CWE-312 / CWE-532 (OWASP A09:2021): when this flag is
@@ -302,7 +297,7 @@ class create_webserver {
      create_webserver& nonce_nc_size(int v) { check_non_negative("nonce_nc_size", v); _nonce_nc_size = v; return *this; }
      create_webserver& default_policy(const http::http_utils::policy_T& v) { _default_policy = v; return *this; }
 
-     // TASK-034 / PRD-FLG-REQ-001: setter is unconditional. The actual
+     // Setter is unconditional. The actual
      // validation lives in webserver(const create_webserver&), which
      // throws feature_unavailable when this is set to true on a
      // HAVE_BAUTH-off build.
@@ -381,7 +376,7 @@ class create_webserver {
 #undef SRC_HTTPSERVER_CREATE_WEBSERVER_HPP_INSIDE_CLASS_
 
  private:
-     // Throw helpers (TASK-033 / PRD-CFG-REQ-003). Defined inline so the
+     // Throw helpers. Defined inline so the
      // single-line setters above stay one-liners.
      static void throw_invalid(const char* name, int64_t value, const char* range) {
          throw std::invalid_argument(std::string(name) + ": " + std::to_string(value) + " out of range " + range);
@@ -415,11 +410,11 @@ class create_webserver {
      bool _use_dual_stack = false;
      bool _debug = false;
      bool _pedantic = false;
-     // TASK-055 / DR-009 Revision 1: default false (CWE-209 fix). When
+     // Default false (CWE-209 fix). When
      // true, internal_error_page surfaces the originating exception's
      // message in the default 500 body (development-only behaviour).
      bool _expose_exception_messages = false;
-     // TASK-057: default false (CWE-312 / CWE-532 fix). When true,
+     // Default false (CWE-312 / CWE-532 fix). When true,
      // http_request::operator<< restores the v1 verbose form for the
      // four credential surfaces (pass, Authorization /
      // Proxy-Authorization header values, cookie values).
@@ -433,11 +428,11 @@ class create_webserver {
      std::string _digest_auth_random;
      int _nonce_nc_size = 0;
      http::http_utils::policy_T _default_policy = http::http_utils::ACCEPT;
-     // TASK-034: stored unconditionally. The default values are computed
+     // Stored unconditionally. The default values are computed
      // by basic_auth_default() and digest_auth_default() in
      // create_webserver.cpp, where the HAVE_BAUTH / HAVE_DAUTH build
      // flags are reachable — that keeps the public header free of
-     // build-flag preprocessor gates (PRD-FLG-REQ-001) while preserving
+     // build-flag preprocessor gates while preserving
      // the historical defaults (true on the respective auth-on builds;
      // false on auth-off builds so an unmodified builder doesn't trip
      // the feature_unavailable throw at construction time).

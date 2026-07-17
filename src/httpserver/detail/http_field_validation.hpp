@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-086 code-review follow-up: kForbiddenFieldChars used to be defined
+// kForbiddenFieldChars used to be defined
 // independently in both src/http_response.cpp and
 // src/http_response_factories.cpp (identical value, but a silent-drift
 // risk on a security-relevant character set — CWE-113 header injection).

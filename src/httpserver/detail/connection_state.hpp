@@ -52,7 +52,7 @@ namespace detail {
 // they remain valid until the request-completion callback fires for the
 // request they were derived from. Capturing them past the user
 // handler's return is undefined behavior. (See architecture doc
-// 04-components/http-request.md.) (spec-alignment-checker-iter1-4)
+// 04-components/http-request.md.)
 //
 // Initial-buffer sizing math (8 KiB):
 //   - sizeof(http_request_impl) ~= 600-700 B with libstdc++/libc++
@@ -64,7 +64,7 @@ namespace detail {
 //     in tree nodes alone. 4 KiB was undersized for realistic requests
 //     with moderate arg counts; 8 KiB matches the test's own generous
 //     buffer and covers the common case without overflow to the upstream
-//     heap. (performance-reviewer-iter1-1.)
+//     heap.
 //   - Overflow spills to the upstream resource (default = heap) silently
 //     -- it is a correctness fall-through, not a hard limit.
 //   - ARENA_INITIAL_BYTES stays compile-time intentionally: the buffer is
@@ -92,8 +92,12 @@ struct connection_state {
     // / max_args_bytes by webserver_impl::connection_notify at
     // MHD_CONNECTION_NOTIFY_STARTED. populate_args() reads these from the
     // socket_context to set up the per-request arguments_accumulator. A
-    // value of 0 means "use the arguments_accumulator compile-time
-    // default", matching create_webserver's sentinel convention.
+    // value of 0 is a sentinel meaning "use the arguments_accumulator
+    // compile-time default" (DEFAULT_MAX_ARGS_COUNT / _BYTES); the
+    // 0-check lives in http_request_impl::populate_args
+    // (src/detail/http_request_impl_args.cpp), which only overrides the
+    // accumulator's defaults for non-zero values. This matches
+    // create_webserver's own 0-means-default convention.
     std::size_t max_args_count = 0;
     std::size_t max_args_bytes = 0;
 
@@ -111,9 +115,9 @@ struct connection_state {
     // the arena by a previous request would therefore linger in the buffer
     // until overwritten by the next request's lazy-cache population.
     // Explicit zeroing after release() closes that residual-credential
-    // window. (security-reviewer-iter1-3, CWE-226.)
+    // window. (CWE-226.)
     //
-    // CWE-14 mitigation (TASK-068): the clear uses
+    // CWE-14 mitigation: the clear uses
     // httpserver::detail::secure_zero (defined in
     // httpserver/detail/secure_zero.hpp), which dispatches to
     // explicit_bzero / RtlSecureZeroMemory where available
@@ -142,11 +146,9 @@ struct connection_state {
     // process. The buffer is sized to hold typical requests without
     // overflow (see the sizing comment above); credentials are several
     // hundred bytes at most, so they are reliably inside the 8 KiB
-    // window in practice. TASK-095 (specs/tasks/M7-v2-cleanup/
-    // TASK-095.md) tracks closing the overflow gap (hand-rolled arena
-    // or a zero-on-deallocate upstream adapter); TASK-068 explicitly
-    // accepted this residue. (security-reviewer-iter1-3,
-    // code-quality-reviewer-iter1-5, TASK-068.)
+    // window in practice. Closing the overflow gap would take a
+    // hand-rolled arena or a zero-on-deallocate upstream adapter;
+    // until then this residue is accepted.
     void reset_arena() noexcept {
         arena_.release();
         secure_zero(initial_buffer_.data(), ARENA_INITIAL_BYTES);

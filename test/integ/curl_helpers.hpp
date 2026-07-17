@@ -18,7 +18,7 @@
      02110-1301 USA
 */
 
-// TASK-047 review finding #5: a header-only place for boilerplate that
+// A header-only place for boilerplate that
 // is otherwise re-declared in every integ test that uses libcurl
 // (writefunc, the obvious starting point). Extracted incrementally;
 // existing per-TU duplicates in older test files can migrate as they

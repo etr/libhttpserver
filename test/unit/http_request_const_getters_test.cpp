@@ -8,10 +8,10 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-018: compile-time guarantees of http_request's per-key and
+// Compile-time guarantees of http_request's per-key and
 // always-present getters.
 //
-// We assert the structural invariants TASK-018 owns:
+// We assert the structural invariants this TU owns:
 //   1. Every per-key getter (get_header / get_cookie / get_footer /
 //      get_arg / get_arg_flat) is callable on `const http_request&` with
 //      a `std::string_view` key.
@@ -24,8 +24,7 @@
 //      lock that contract in.
 //   4. Return-type lockdowns: every per-key getter returns
 //      `std::string_view`, except `get_arg` which deliberately returns
-//      `httpserver::http_arg_value` to preserve multi-value semantics
-//      (see TASK-018 plan section 4 for the rationale).
+//      `httpserver::http_arg_value` to preserve multi-value semantics.
 //
 // The intent of these static_asserts is to catch silent regressions:
 // e.g. if a future refactor narrows `get_arg`'s signature without
@@ -128,7 +127,7 @@ static_assert(std::is_same_v<
               "get_querystring must return std::string_view");
 
 // (5) Const-qualifier lockdowns via method-pointer type matching.
-//     Item 28 (test-quality-reviewer): confirms that each per-key getter is
+//     Confirms that each per-key getter is
 //     declared `const` at the type-system level, not just invocable on a
 //     const& (which would also accept non-const overloads). Using
 //     std::is_same_v<decltype(&h::method), ReturnType (h::*)(ArgType) const>

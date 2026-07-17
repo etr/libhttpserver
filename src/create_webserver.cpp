@@ -39,7 +39,7 @@
 
 namespace httpserver {
 
-// TASK-034 / PRD-FLG-REQ-001: defined here (not as a default member
+// Defined here (not as a default member
 // initializer in the header) so the public header carries no
 // #ifdef HAVE_BAUTH. The library was compiled with the right
 // HAVE_BAUTH state; the consumer TU's HAVE_BAUTH is irrelevant.
@@ -51,7 +51,7 @@ bool create_webserver::basic_auth_default() noexcept {
 #endif
 }
 
-// PRD-FLG-REQ-001: same pattern as basic_auth_default(). Returns true
+// Same pattern as basic_auth_default(). Returns true
 // on HAVE_DAUTH-on builds (preserving historical behaviour) and false
 // on HAVE_DAUTH-off builds so an unmodified builder doesn't trip the
 // feature_unavailable guard in webserver::webserver().

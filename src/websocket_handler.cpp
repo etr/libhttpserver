@@ -37,7 +37,7 @@
 
 namespace httpserver {
 
-// TASK-020-review: pin the public-header `std::uintptr_t` choice for the
+// Pin the public-header `std::uintptr_t` choice for the
 // websocket socket handle to libmicrohttpd's `MHD_socket` typedef. Using
 // uintptr_t (unsigned) rather than intptr_t preserves all bit patterns of
 // SOCKET/MHD_socket through the round-trip on Windows where SOCKET is
@@ -115,8 +115,8 @@ static void send_control_frame(control_frame_encoder encode,
     } else {
         // Encode failure (e.g. stream already in error state): treat as a
         // closed session so callers stop issuing further frames on this
-        // connection. Previously encode failures were silently swallowed,
-        // leaving valid==true despite a broken stream. (finding #2)
+        // connection, rather than leaving valid==true despite a broken
+        // stream.
         valid = false;
     }
 }
@@ -167,10 +167,10 @@ void websocket_handler::on_close(websocket_session&, uint16_t, const std::string
 
 #else   // !HAVE_WEBSOCKET
 
-// TASK-034: WebSocket compiled out. The class declarations are public
-// and unconditional (PRD-FLG-REQ-001), so we still need out-of-line
+// WebSocket compiled out. The class declarations are public
+// and unconditional, so we still need out-of-line
 // definitions for every member function or the link step will fail.
-// The policy (architecture spec §7):
+// The policy:
 //   - constructors/destructor are no-ops (the session never holds a live
 //     handle anyway);
 //   - is_valid() returns false;
@@ -188,7 +188,7 @@ void websocket_handler::on_close(websocket_session&, uint16_t, const std::string
 namespace httpserver {
 
 // Single site for the feature name and macro string so they stay in sync
-// across all five stub methods (code-simplifier finding).
+// across all five stub methods.
 [[noreturn]] static void throw_ws_unavailable() {
     throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
 }

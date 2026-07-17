@@ -18,12 +18,12 @@
      USA
 */
 
-// TASK-067 -- Sentinel: the v1 compat auth-handler shim is gone.
+// Sentinel: the v1 compat auth-handler shim is gone.
 //
 // In v2.0 the canonical auth_handler_ptr accepts only
 //   std::function<std::optional<http_response>(const http_request&)>.
 //
-// During the v2.0 transitional window (TASK-054) a deprecated overload
+// During the v2.0 transitional window a deprecated overload
 // at create_webserver::auth_handler(compat::auth_handler_v1_ptr) and a
 // namespace httpserver::compat shim accepted the v1 shape
 //   std::function<std::shared_ptr<http_response>(const http_request&)>
@@ -32,14 +32,15 @@
 //
 // SFINAE probe: a call to
 //   create_webserver{}.auth_handler(legacy_sig{})
-// must NOT compile after TASK-067. We check the negative case at
+// must NOT compile now that the shim is removed. We check the negative case at
 // compile time with std::void_t and a detection idiom.
 //
 // If this static_assert ever fires, somebody re-introduced an overload
 // that accepts the v1 shared_ptr-returning callable -- either by
 // resurrecting the compat::auth_handler_v1_ptr typedef, by adding a
 // generic templated forwarder, or by an implicit conversion. Any of
-// those would silently re-open the bug DR-009 closes.
+// those would silently re-open the ownership-ambiguity bug the
+// optional-returning auth-handler signature was introduced to close.
 
 #include <functional>
 #include <memory>
@@ -61,8 +62,8 @@ struct accepts_auth_handler<CW, F, std::void_t<
 decltype(std::declval<CW&>().auth_handler(std::declval<F>()))>>
 : std::true_type {};
 
-// The v1 shape: shared_ptr-returning auth callable. The TASK-054
-// transitional overload bound this shape; with TASK-067 done, no
+// The v1 shape: shared_ptr-returning auth callable. The transitional
+// overload bound this shape; with the shim removed, no
 // auth_handler overload should accept it.
 using legacy_sig = std::function<
 std::shared_ptr<httpserver::http_response>(const httpserver::http_request&)>;

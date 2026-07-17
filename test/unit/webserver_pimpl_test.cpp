@@ -8,9 +8,9 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-014: compile-time guarantees of the PIMPL split.
+// Compile-time guarantees of the webserver PIMPL split.
 //
-// We assert the structural invariants TASK-014 owns:
+// We assert the structural invariants the split owns:
 //   1. webserver is non-copyable and non-movable (PIMPL ABI lock-down).
 //   2. sizeof(webserver) is bounded -- it should be the config bag plus
 //      one impl_ pointer; everything backend-coupled lives behind that
@@ -18,11 +18,11 @@
 //
 // Note: the literal "no <microhttpd.h>/<pthread.h> in <webserver.hpp>"
 // grep is enforced by `make check-hygiene` on the staged install, and by
-// `grep -E '#include\s+<microhttpd\.h>' src/httpserver/webserver.hpp` per
-// the TASK-014 acceptance criteria. We do *not* repeat that as a runtime
-// or preprocessor assertion here because <httpserver/http_utils.hpp> is
-// still on the preprocessor side of the umbrella in TASK-014's scope --
-// scrubbing that path is TASK-020's job (the existing XFAIL_TESTS gate).
+// `grep -E '#include\s+<microhttpd\.h>' src/httpserver/webserver.hpp`.
+// We do *not* repeat that as a runtime or preprocessor assertion here
+// because <httpserver/http_utils.hpp> is still on the preprocessor side
+// of the umbrella -- scrubbing that path is a separate cleanup (the
+// existing XFAIL_TESTS gate).
 
 // HTTPSERVER_COMPILATION is supplied by test/Makefile.am AM_CPPFLAGS.
 #include "httpserver/webserver.hpp"
@@ -41,8 +41,8 @@ static_assert(!std::is_move_assignable_v<httpserver::webserver>,
               "webserver must not be move-assignable");
 
 // (2) Size bounds: webserver still owns the full config bag.
-//     TASK-019 and TASK-020 shipped without moving config members into
-//     the impl -- they were about backend-header hygiene, not member
+//     The backend-header hygiene work shipped without moving config
+//     members into the impl -- it was about header hygiene, not member
 //     migration -- so sizeof(webserver) is approximately:
 //       N * sizeof(std::string) + 2 * sizeof(std::vector<std::string>)
 //         + the scalar config fields + 1 * std::unique_ptr<webserver_impl>.
@@ -50,7 +50,7 @@ static_assert(!std::is_move_assignable_v<httpserver::webserver>,
 //     libstdc++ is 32 bytes.  That is why the libstdc++ lanes record a
 //     larger observed size than the libc++ lane.
 //
-// Per-lane observed sizes (TASK-082; locked at max(observed) across
+// Per-lane observed sizes (locked at max(observed) across
 // every CI lane that compiles this TU; CI lanes are enumerated in
 // .github/workflows/verify-build.yml; the ARM cross-compile lanes
 // skip `make check` and therefore do NOT compile this gate):

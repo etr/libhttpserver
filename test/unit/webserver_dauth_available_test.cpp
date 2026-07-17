@@ -18,8 +18,7 @@
      USA
 */
 
-// TASK-081 cycle 2 — paired on-path companion to
-// webserver_dauth_unavailable_test.cpp.
+// Paired on-path companion to webserver_dauth_unavailable_test.cpp.
 //
 // webserver_dauth_unavailable_test.cpp pins the HAVE_DAUTH-OFF throw-site
 // contract (constructing a webserver with digest_auth(true) throws

@@ -18,7 +18,7 @@
      USA
 */
 
-// security-reviewer-iter1-1 / TASK-034 cycle E:
+// Digest-auth gating on HAVE_DAUTH-off builds:
 //
 // On a HAVE_DAUTH-off build the webserver constructor must throw
 // feature_unavailable (naming "digest_auth" and "HAVE_DAUTH") when
@@ -75,7 +75,7 @@ LT_END_AUTO_TEST(ctor_throws_feature_unavailable_when_digest_auth_requested)
 // This pins that _digest_auth_enabled defaults to false via
 // digest_auth_default(), not to the hardcoded true.
 // listen_socket(false) avoids binding a real port so the test is
-// port-safe in CI (port-safety finding from test-quality-reviewer).
+// port-safe in CI.
 LT_BEGIN_AUTO_TEST(webserver_dauth_unavailable_suite,
                    default_ctor_does_not_throw_on_dauth_off)
     bool threw = false;

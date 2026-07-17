@@ -18,7 +18,7 @@
      02110-1301  USA
 */
 
-// TASK-030 compile-time sentinel.
+// Compile-time sentinel.
 // Pins two API guarantees:
 //   (1) PRD-NAM-REQ-004: webserver(const create_webserver&) is explicit.
 //       Implicit conversion (`webserver w = some_create_webserver;`) must
@@ -36,8 +36,8 @@
 
 namespace ht = httpserver;
 using error_handler_fn = std::function<ht::http_response(const ht::http_request&)>;
-// TASK-031 / DR-009 §5.2: internal_error_handler now takes a second
-// argument carrying the originating exception's message.
+// internal_error_handler takes a second argument carrying the
+// originating exception's message.
 using internal_error_handler_fn =
     std::function<ht::http_response(const ht::http_request&, std::string_view)>;
 
@@ -73,7 +73,7 @@ struct has_internal_error_handler<CW, std::void_t<
     decltype(std::declval<CW&>().internal_error_handler(std::declval<internal_error_handler_fn>()))>>
     : std::true_type {};
 
-// TASK-031: pin that the OLD single-arg signature is NOT accepted -- the
+// Pin that the OLD single-arg signature is NOT accepted -- the
 // widening to (request, message) is a hard API change.
 template <typename, typename = void>
 struct accepts_old_internal_error_handler : std::false_type {};

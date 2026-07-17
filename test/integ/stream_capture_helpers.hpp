@@ -18,7 +18,7 @@
      02110-1301 USA
 */
 
-// TASK-074 review: shared stdout/stderr capture helpers for integ
+// Shared stdout/stderr capture helpers for integ
 // tests that must assert on what the process writes to those streams
 // (debug_dump_request_body_set_test.cpp and
 // debug_dump_request_body_unset_test.cpp previously carried verbatim

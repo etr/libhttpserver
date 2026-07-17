@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-050 acceptance criterion 4.
+// Contract under test:
 //
 // "A request_received hook short-circuits to a 413; request_completed
 //  still fires with succeeded == true and the 413 response object

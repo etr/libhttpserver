@@ -8,7 +8,7 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-072: arena-allocated unescape on the warm path.
+// Arena-allocated unescape on the warm path.
 //
 // Two batches of tests in this TU:
 //   1. zero-global-heap-allocation pins (headline). build_request_args
@@ -161,7 +161,6 @@ constexpr const char* kLongValueWithPct2F = "a%2Fbcdefghijklmnopqrstuvwxyz_paddi
 // calls build_request_args once for (key, raw_value) with no unescaper,
 // retrieves the stored value, deletes the impl, and returns the decoded
 // std::string.  Each correctness test is a single LT_CHECK_EQ call.
-// (code-simplifier-iter1-3)
 // ---------------------------------------------------------------------------
 using httpserver::detail::http_request_impl;
 using httpserver::detail::arguments_accumulator;
@@ -198,7 +197,6 @@ std::string decode_via_arena(const char* raw_value) {
 // runs `warmup_rounds` cold calls to prime caches and grow any
 // thread_local buffers, then opens a count_new_window and runs one
 // measured call, returning the observed global-allocation count.
-// (code-simplifier-iter1-6)
 // ---------------------------------------------------------------------------
 std::size_t run_alloc_pin(httpserver::unescaper_ptr fn,
                           int warmup_rounds) {
@@ -267,7 +265,6 @@ struct arena_impl_fixture {
 // arena+impl via the helpers above.  set_up/tear_down are present
 // (required by the littletest template) but empty; the comments
 // signal this is intentional, not an oversight.
-// (code-simplifier-iter1-4)
 LT_BEGIN_SUITE(http_request_unescape_arena_suite)
     void set_up() {}    // per-test setup is in the helpers above
     void tear_down() {}  // per-test teardown is in the helpers above
@@ -276,7 +273,7 @@ LT_END_SUITE(http_request_unescape_arena_suite)
 // (1) Headline pin -- default unescaper. With a value strictly longer
 // than std::string's SSO threshold, the v1 code path copies into a
 // std::string temporary that is guaranteed to allocate on the global
-// heap. After the TASK-072 fix the unescape destination is materialised
+// heap. After the fix the unescape destination is materialised
 // in the per-connection arena and no global-heap allocation occurs in
 // the build_request_args call itself.
 //
@@ -367,7 +364,8 @@ LT_END_AUTO_TEST(unescape_empty_value)
 // (7) Lifetime pin: a string_view obtained from unescaped_args after
 // one build_request_args call must remain valid after a subsequent call
 // inserts another arg, until the request completes. This pins the
-// TASK-018 lifetime contract on the arena-routed path.
+// request-lifetime string_view contract of the per-key getters on the
+// arena-routed path.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_view_outlives_subsequent_inserts)
     arena_impl_fixture f;

@@ -24,10 +24,9 @@
 // src/detail/http_request_impl.cpp (arena-routed unescape).
 // Not part of the public API; not installed.
 //
-// TASK-072: extracted from the two translation units that previously
+// Extracted from the two translation units that previously
 // each maintained a private copy.  Having one source of truth ensures
 // that bug-fixes and RFC-3986 edge-case corrections propagate uniformly.
-// (code-simplifier-iter1-1, code-simplifier-iter1-2)
 
 // Internal detail header. Strict gate: reachable only from libhttpserver
 // translation units.

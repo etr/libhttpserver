@@ -46,7 +46,7 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
 
-// TASK-020: socket-layer types kept minimal in this public header.
+// Socket-layer types kept minimal in this public header.
 // `struct sockaddr` is a POSIX-tagged struct and can be forward-declared
 // per-use, but `fd_set` is a typedef of an unnamed struct in glibc, so
 // it must be a complete type when get_fdset's signature is parsed.
@@ -60,13 +60,13 @@
 
 // Forward declarations: backend (MHD) types are intentionally NOT pulled in.
 // The libmicrohttpd and pthread headers live behind the PIMPL
-// boundary in detail/webserver_impl.hpp (TASK-014).
+// boundary in detail/webserver_impl.hpp.
 namespace httpserver {
 class http_resource;
 class http_response;
-// TASK-034: forward-declared unconditionally so the public surface of
+// Forward-declared unconditionally so the public surface of
 // webserver is identical in HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off
-// builds (PRD-FLG-REQ-001). When HAVE_WEBSOCKET is undefined the
+// builds. When HAVE_WEBSOCKET is undefined the
 // class definition in websocket_handler.hpp is still included via the
 // umbrella header; member-function bodies live in src/websocket_handler.cpp.
 class websocket_handler;
@@ -82,7 +82,7 @@ namespace httpserver {
 /**
  * Class representing the webserver. Main class of the apis.
  *
- * ### Threading contract (DR-008 / §5.1)
+ * ### Threading contract
  *
  * The webserver dispatches each request on one of libmicrohttpd's worker
  * threads. The thread-safety contract:
@@ -122,10 +122,7 @@ namespace httpserver {
  *      any registered lifecycle hook (@ref add_hook / @ref http_resource::add_hook )
  *      -- may run concurrently on multiple threads. Implementations MUST be thread-safe.
  *
- * See specs/architecture/11-decisions/DR-008.md and §5.1 for the
- * decision record.
- *
- * ### Handler error-propagation contract (DR-009 / §5.2 / PRD-FLG-REQ-002)
+ * ### Handler error-propagation contract
  *
  * Every registered request handler is invoked from the dispatch path under
  * a two-branch try/catch. The contract:
@@ -136,8 +133,8 @@ namespace httpserver {
  *      `log_error` callback, then `internal_error_handler` is invoked with
  *      `e.what()`. The response it returns is sent on the wire. When no
  *      handler is configured, the default 500 carries the fixed body
- *      `"Internal Server Error"` (DR-009 Revision 1 / TASK-055 / CWE-209
- *      fix); the originating message is still surfaced via the
+ *      `"Internal Server Error"` (CWE-209 fix);
+ *      the originating message is still surfaced via the
  *      `log_error` callback. The verbose v1 body (message in the body)
  *      is opt-in via @ref create_webserver::expose_exception_messages.
  *   3. On non-`std::exception` (e.g. `throw 42`): same path with the
@@ -150,7 +147,7 @@ namespace httpserver {
  *      other `std::exception`.
  *   6. The `log_error` callback may be invoked concurrently from multiple
  *      MHD worker threads; user implementations MUST be thread-safe.
- *   7. Hook layering (DR-012 §4.10):
+ *   7. Hook layering:
  *      @ref hook_phase::handler_exception hooks fire BEFORE this alias;
  *      throwing hooks are caught and the chain continues; (4) fires
  *      without re-invoking the alias on full chain failure.
@@ -159,7 +156,7 @@ namespace httpserver {
 **/
 class webserver {
  public:
-     // PRD-NAM-REQ-004: explicit to forbid implicit conversion from
+     // Explicit to forbid implicit conversion from
      // create_webserver. Callers must direct-init: webserver ws{cw};
      explicit webserver(const create_webserver& params);
      /**
@@ -170,8 +167,6 @@ class webserver {
       * webserver from inside a handler thread deadlocks (or, on some
       * libmicrohttpd versions, aborts with "Failed to join a thread.").
       * Destroy the webserver from the thread that constructed it.
-      *
-      * See specs/architecture/11-decisions/DR-008.md and §5.1.
       *
       * @see stop() for the threading constraints that apply equally here.
      **/
@@ -196,8 +191,7 @@ class webserver {
       * until every worker (including the calling one) drains, so a
       * call from inside a handler self-joins and deadlocks (or, on
       * some libmicrohttpd versions, aborts with "Failed to join a
-      * thread."). This is the documented DR-008 contract — see
-      * specs/architecture/11-decisions/DR-008.md and §5.1.
+      * thread.").
       *
       * For the same reason, ~webserver() (which calls stop())
       * deadlocks if it runs on a handler thread; destroy the
@@ -303,7 +297,7 @@ class webserver {
 #include "httpserver/webserver_runtime.hpp"
 #undef SRC_HTTPSERVER_WEBSERVER_HPP_INSIDE_CLASS_
 
-     // Websocket registration surface and lifecycle hook bus (TASK-045)
+     // Websocket registration surface and lifecycle hook bus
      // live in sibling headers to keep this class under the project
      // per-file LOC ceiling.
 #define SRC_HTTPSERVER_WEBSERVER_HPP_INSIDE_CLASS_
@@ -339,12 +333,12 @@ class webserver {
      const bool use_dual_stack;
      const bool debug;
      const bool pedantic;
-     // TASK-055 / DR-009 Revision 1: when true, the default
+     // When true, the default
      // internal_error_page surfaces the originating exception message in
      // the 500 body (development-only behaviour; CWE-209). Default is
      // false: the body is the fixed string "Internal Server Error".
      const bool expose_exception_messages;
-     // TASK-057: when true, http_request::operator<< streams credential
+     // When true, http_request::operator<< streams credential
      // material verbatim (v1 verbose form; development-only behaviour;
      // CWE-312 / CWE-532). Default is false: the four credential
      // surfaces are replaced by the fixed token "<redacted>".
@@ -358,7 +352,7 @@ class webserver {
      const std::string digest_auth_random;
      const int nonce_nc_size;
      const http::http_utils::policy_T default_policy;
-     // TASK-034: stored unconditionally. webserver(create_webserver const&)
+     // Stored unconditionally. webserver(create_webserver const&)
      // throws feature_unavailable when this is true but HAVE_BAUTH is off.
      const bool basic_auth_enabled;
      const bool digest_auth_enabled;
@@ -378,7 +372,7 @@ class webserver {
      const file_cleanup_callback_ptr file_cleanup_callback;
      const auth_handler_ptr auth_handler;
      const std::vector<std::string> auth_skip_paths;
-     // TASK-058 step 2: pre-normalized form of @ref auth_skip_paths,
+     // Pre-normalized form of @ref auth_skip_paths,
      // populated once at construction.  webserver_impl::should_skip_auth
      // compares request paths against this list (not @ref auth_skip_paths)
      // so non-canonical entries like "/public/" or "/a/../b" match the
@@ -418,7 +412,7 @@ class webserver {
      // requested kind.
      void unregister_impl_(const std::string& path, bool family);
 
-     // TASK-025/TASK-026: shared lambda-registration helper. Builds-or-
+     // Shared lambda-registration helper. Builds-or-
      // merges a hidden detail::lambda_resource shim at @p path, sets every
      // bit in @p methods on it, and stores @p handler into each of those
      // method slots. All seven public on_* overloads and both public
@@ -457,7 +451,7 @@ class webserver {
      friend class detail::webserver_impl;
      friend class http_response;
 #if defined(HTTPSERVER_COMPILATION)
-     // TASK-027: test-only hook so unit tests in test/unit/ can poke
+     // Test-only hook so unit tests in test/unit/ can poke
      // at the v2 route-table impl (lookup_v2, the three tier maps)
      // without widening the public API. The pattern matches the SBO
      // test access friend used by http_response. Gated on

@@ -18,7 +18,7 @@
     USA
 */
 
-// TASK-057: secure-by-default redaction of credential material in
+// Secure-by-default redaction of credential material in
 // http_request::operator<<. Default-built test requests must NOT leak
 // the Basic-auth password, Authorization / Proxy-Authorization header
 // values, or any cookie value into the diagnostic dump. The opt-in
@@ -56,7 +56,7 @@ LT_BEGIN_SUITE(http_request_operator_stream_suite)
 LT_END_SUITE(http_request_operator_stream_suite)
 
 #ifdef HAVE_BAUTH
-// TASK-057 — Acceptance: default-built http_request must redact
+// Acceptance: default-built http_request must redact
 // credentials when streamed via operator<<.
 LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_redacts_credentials)
     auto req = create_test_request()
@@ -104,7 +104,7 @@ LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_redacts_c
     LT_CHECK(out.find("page") != std::string::npos);
 LT_END_AUTO_TEST(operator_stream_redacts_credentials)
 
-// TASK-057 — Acceptance: opt-in flag (development-only) restores the
+// Acceptance: opt-in flag (development-only) restores the
 // v1 verbose form bit-for-bit. The redaction token MUST NOT appear in
 // the output when the opt-in is set.
 LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_exposes_credentials_when_opted_in)
@@ -140,7 +140,7 @@ LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_exposes_c
     LT_CHECK(out.find("<redacted>") == std::string::npos);
 LT_END_AUTO_TEST(operator_stream_exposes_credentials_when_opted_in)
 #else
-// TASK-081 cycle 4 — HAVE_BAUTH-off complement of the redaction tests
+// HAVE_BAUTH-off complement of the redaction tests
 // above. On this build the user/pass surfaces are absent (get_user() /
 // get_pass() return empty views per src/http_request_auth.cpp), but the
 // Authorization-class header redaction and cookie redaction are
@@ -226,7 +226,7 @@ LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite,
 LT_END_AUTO_TEST(operator_stream_redacts_cookies_on_bauth_off)
 #endif  // HAVE_BAUTH
 
-// TASK-057 — Edge case: the no-credentials request still emits the
+// Edge case: the no-credentials request still emits the
 // `pass:"<redacted>"` token (because the field is unconditional), but
 // no Cookies section appears (the redacted dumper short-circuits on
 // empty maps) and no header value collides with the redaction token.

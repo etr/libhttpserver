@@ -87,7 +87,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_headers)
     LT_CHECK_EQ(std::string(req.get_header("Accept")), std::string("text/plain"));
     LT_CHECK_EQ(std::string(req.get_header("NonExistent")), std::string(""));
 
-    // TASK-017: get_headers() returns const&; bind by reference.
+    // get_headers() returns const&; bind by reference.
     const auto& headers = req.get_headers();
     LT_CHECK_EQ(headers.size(), static_cast<size_t>(2));
 LT_END_AUTO_TEST(build_headers)
@@ -101,7 +101,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_footers_cookies)
     LT_CHECK_EQ(std::string(req.get_footer("X-Checksum")), std::string("abc123"));
     LT_CHECK_EQ(std::string(req.get_cookie("session_id")), std::string("xyz789"));
 
-    // TASK-017: get_footers/get_cookies() return const&; bind by reference.
+    // get_footers/get_cookies() return const&; bind by reference.
     const auto& footers = req.get_footers();
     LT_CHECK_EQ(footers.size(), static_cast<size_t>(1));
 
@@ -147,10 +147,10 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_content)
     LT_CHECK_EQ(std::string(req.get_content()), std::string("{\"key\":\"value\"}"));
 LT_END_AUTO_TEST(build_content)
 
-// TASK-034: setters are unconditional. On a HAVE_BAUTH-on build the
+// Auth setters are unconditional. On a HAVE_BAUTH-on build the
 // values land in the http_request impl and get_user / get_pass echo
 // them; on a HAVE_BAUTH-off build the same builder chain compiles and
-// runs, but get_user / get_pass return the sentinel empty view (§7).
+// runs, but get_user / get_pass return the sentinel empty view.
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_basic_auth)
     auto req = create_test_request()
         .user("admin")
@@ -165,7 +165,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_basic_auth)
 #endif
 LT_END_AUTO_TEST(build_basic_auth)
 
-// TASK-034: same shape for digested_user.
+// Same unconditional-setter shape for digested_user.
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_digested_user)
     auto req = create_test_request()
         .digested_user("admin")
@@ -194,10 +194,10 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_default_requestor)
     LT_CHECK_EQ(req.get_requestor_port(), static_cast<uint16_t>(0));
 LT_END_AUTO_TEST(build_default_requestor)
 
-// TASK-034: tls_enabled() setter is unconditional. On HAVE_GNUTLS-on
+// tls_enabled() setter is unconditional. On HAVE_GNUTLS-on
 // builds has_tls_session() echoes the recorded flag; on HAVE_GNUTLS-off
 // builds the flag is silently dropped (has_tls_session() always returns
-// false — already true since TASK-019). The contract being pinned here
+// false). The contract being pinned here
 // is that the *setter* is callable in both modes.
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_tls_enabled)
     auto req = create_test_request()
@@ -216,7 +216,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_no_tls)
     LT_CHECK_EQ(req.has_tls_session(), false);
 LT_END_AUTO_TEST(build_no_tls)
 
-// TASK-019: the high-level cert accessors are declared unconditionally,
+// The high-level cert accessors are declared unconditionally,
 // so they must compile and behave (return sentinels) in both build
 // modes -- HAVE_GNUTLS on or off. This test is NOT #ifdef-gated; the
 // runtime contract is the same either way: no live cert means
@@ -227,7 +227,7 @@ LT_END_AUTO_TEST(build_no_tls)
 // MHD connection). All cert getters must still return the documented
 // sentinels; only has_tls_session() reflects the recorded flag (on a
 // HAVE_GNUTLS build). This subsumes the old build_tls_enabled_no_peer_cert
-// test. (test-quality-reviewer items 11, 29)
+// test.
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_no_client_cert_returns_sentinels)
     // Default builder: no TLS, no cert.
     auto req = create_test_request().build();
@@ -261,8 +261,6 @@ LT_END_AUTO_TEST(build_no_client_cert_returns_sentinels)
 // Smoke-check that all getters on a minimal request return empty/default without
 // crashing. Each path (header, footer, cookie, arg, container) is exercised
 // once; any crash here pinpoints the specific getter.
-// (test-quality-reviewer-iter1-23: renamed from empty_getters_no_crash to
-// communicate intent more clearly)
 LT_BEGIN_AUTO_TEST(create_test_request_suite, empty_getters_smoke_check)
     auto req = create_test_request().build();
     // These should all return empty/default without crashing
@@ -296,7 +294,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, render_with_test_request)
         .path("/greet")
         .arg("name", "Alice")
         .build();
-    // TASK-036: render_get returns http_response by value.
+    // render_get returns http_response by value.
     auto resp = resource.render_get(req);
     // Verify the response body kind is string.
     LT_CHECK_EQ(static_cast<int>(resp.kind()),
@@ -342,7 +340,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, full_chain)
     LT_CHECK_EQ(std::string(req.get_user()), std::string("testuser"));
     LT_CHECK_EQ(std::string(req.get_pass()), std::string("testpass"));
 #else
-    // TASK-034 §7: on HAVE_BAUTH-off builds the accessors return empty.
+    // On HAVE_BAUTH-off builds the accessors return empty.
     LT_CHECK(req.get_user().empty());
     LT_CHECK(req.get_pass().empty());
 #endif
@@ -355,7 +353,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_path_pieces)
     auto req = create_test_request()
         .path("/api/users/42")
         .build();
-    // TASK-017: get_path_pieces() returns const&; bind by reference.
+    // get_path_pieces() returns const&; bind by reference.
     const auto& pieces = req.get_path_pieces();
     LT_CHECK_EQ(pieces.size(), static_cast<size_t>(3));
     LT_CHECK_EQ(pieces[0], std::string("api"));
@@ -371,7 +369,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, method_uppercase)
     LT_CHECK_EQ(std::string(req.get_method()), std::string("POST"));
 LT_END_AUTO_TEST(method_uppercase)
 
-// TASK-017: container getters return `const ContainerType&` aliasing
+// Container getters return `const ContainerType&` aliasing
 // impl-owned storage. Repeated calls on the same const http_request must
 // return the same address (the cached container in the impl), proving:
 //   (a) the return type is a reference (you can take its address),
@@ -403,11 +401,10 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, getters_return_const_ref_stable)
     // get_files() returns a direct reference to impl_->files_ (no cache flag),
     // so it cannot misbehave in the same way as the other five; include it here
     // for symmetry and completeness of the sanity block.
-    // (test-quality-reviewer-iter1-24)
     LT_CHECK_EQ(cref.get_files().size(), static_cast<size_t>(0));
 LT_END_AUTO_TEST(getters_return_const_ref_stable)
 
-// TASK-018: per-key getters must be empty-on-miss and must NOT insert
+// Per-key getters must be empty-on-miss and must NOT insert
 // the missing key into the underlying maps. We assert this externally by
 // observing the public container-getter sizes before and after a series
 // of misses. The container caches are built on the first call (so we
@@ -430,7 +427,6 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, missing_key_does_not_insert)
 
     // One miss on each kind is sufficient to prove the invariant; the
     // container-size check below catches any accidental insertion.
-    // (Item 27: removed loop — a single miss is equally rigorous.)
     LT_CHECK(r.get_header("Missing-Header").empty());
     LT_CHECK(r.get_footer("Missing-Footer").empty());
     LT_CHECK(r.get_cookie("Missing-Cookie").empty());
@@ -445,7 +441,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, missing_key_does_not_insert)
     LT_CHECK_EQ(r.get_args().size(),    args_before);
 LT_END_AUTO_TEST(missing_key_does_not_insert)
 
-// Item 26 (test-quality-reviewer): get_arg_flat must return the first value
+// get_arg_flat must return the first value
 // when a key has multiple values. This directly covers the documented
 // first-value disambiguation behaviour.
 LT_BEGIN_AUTO_TEST(create_test_request_suite, get_arg_flat_multi_value_returns_first)
@@ -461,13 +457,13 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, get_arg_flat_multi_value_returns_f
     LT_CHECK_EQ(std::string(arg.values[1]), std::string("second"));
 LT_END_AUTO_TEST(get_arg_flat_multi_value_returns_first)
 
-// Item 8 (code-quality-reviewer): note that the fallback path in
+// Note: the fallback path in
 // get_arg_flat() that previously called get_connection_value(key,
-// MHD_GET_ARGUMENT_KIND) on a miss has been removed (Item 4/12/18 fix).
+// MHD_GET_ARGUMENT_KIND) on a miss has been removed.
 // The MHD live-connection path is exercised by integration tests; on the
 // test-request path (connection_ == nullptr) a miss correctly returns EMPTY.
 
-// Item 9 (code-quality-reviewer): get_arg_flat on a miss must return a
+// get_arg_flat on a miss must return a
 // string_view whose data() points to the canonical empty sentinel, not a
 // nullptr. This is a direct check on the return value, complementing the
 // container-size invariant check in missing_key_does_not_insert.
@@ -479,7 +475,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, get_arg_flat_miss_returns_empty_se
     LT_CHECK(sv.data() != nullptr);
 LT_END_AUTO_TEST(get_arg_flat_miss_returns_empty_sentinel)
 
-// TASK-018: per-key getters return string_view aliasing the request's
+// Per-key getters return string_view aliasing the request's
 // owned storage and surface the correct value on a hit.
 LT_BEGIN_AUTO_TEST(create_test_request_suite, getters_return_string_view_correct_value)
     auto req = create_test_request()
@@ -496,7 +492,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, getters_return_string_view_correct
     LT_CHECK_EQ(std::string(r.get_arg_flat("q")),     std::string("q-value"));
 LT_END_AUTO_TEST(getters_return_string_view_correct_value)
 
-// security-reviewer-iter1-2 / CWE-476: check_digest_auth and
+// CWE-476 guard: check_digest_auth and
 // check_digest_auth_digest must not dereference a null connection_ when called
 // on a test request (connection_ == nullptr). The documented contract is to
 // return WRONG_HEADER — the same sentinel returned on HAVE_DAUTH-off builds

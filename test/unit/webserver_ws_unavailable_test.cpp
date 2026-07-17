@@ -18,12 +18,12 @@
      USA
 */
 
-// TASK-034 cycle D / TASK-035: on a HAVE_WEBSOCKET-off build,
+// On a HAVE_WEBSOCKET-off build,
 // every public webserver WebSocket entry point must throw
 // feature_unavailable whose what() names both "websocket" and
-// "HAVE_WEBSOCKET" (PRD-FLG-REQ-002 and the TASK-003 invariant).
+// "HAVE_WEBSOCKET".
 //
-// TASK-035 replaced the v1 raw-pointer register_ws_resource overload
+// v2 replaced the v1 raw-pointer register_ws_resource overload
 // with two smart-pointer overloads (unique_ptr, shared_ptr) and added
 // unregister_ws_resource. All three are exercised here.
 //

@@ -17,8 +17,8 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
-// TASK-039: v1 baseline literals captured from `master` for the
-// performance acceptance gates in TASK-039.
+// v1 baseline literals captured from `master` for the performance
+// acceptance gates.
 //
 // The values in this header are sampled ONCE on `master` (the v1.x
 // release branch) and committed alongside the bench TUs that consume
@@ -30,7 +30,7 @@
 //
 // Baseline environment (full details in test/PERFORMANCE.md). Both the
 // sizeof constants AND the get_headers ns/call constant are selected
-// per-stdlib at compile time (TASK-084 split the ns/call constant, which
+// per-stdlib at compile time (the ns/call constant was split after it
 // had previously reused the libc++ value on libstdc++). The host triple
 // below describes the libc++ reference host; the libstdc++ ns/call
 // provenance is documented against its own branch lower in this file.
@@ -96,10 +96,10 @@ inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 24;
 // bench_get_headers.cpp), std::chrono::steady_clock, asm-volatile
 // sink to defeat dead-store elimination.
 //
-// This constant is selected per-stdlib (TASK-084). It was previously a
+// This constant is selected per-stdlib. It was previously a
 // single mono-platform literal (the libc++ value) reused unchanged on
-// libstdc++/Linux; TASK-084 re-measured the libstdc++ value so the
-// TASK-039 >=10x speedup gate has a real per-stdlib baseline. The
+// libstdc++/Linux; the libstdc++ value was later re-measured so the
+// >=10x speedup gate has a real per-stdlib baseline. The
 // dominant per-call cost is the std::map node layout + 16 string copies,
 // which differs between the two standard libraries' map implementations.
 //
@@ -108,7 +108,7 @@ inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 24;
 // jitter (a lower v1 baseline makes the gate strictly harder, never
 // spuriously easier).
 #if defined(__GLIBCXX__)
-// libstdc++ (Linux / GCC): re-measured under TASK-084.
+// libstdc++ (Linux / GCC): re-measured for the per-stdlib split.
 //
 // Provenance: gcc-14 (g++-14 14.2.0, Ubuntu 24.04, the verify-build.yml
 // performance lane's toolchain), -std=c++20 -O3 -DNDEBUG, libstdc++
@@ -131,7 +131,7 @@ inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 24;
 // intentional given the wider observed native/emulated spread).
 inline constexpr double V1_GET_HEADERS_NS_PER_CALL = 640.0;
 #elif defined(_LIBCPP_VERSION)
-// libc++ (macOS / Apple clang) -- the original TASK-039 measurement.
+// libc++ (macOS / Apple clang) -- the original baseline measurement.
 //
 // Measured median on the baseline host: 767.665 ns/call (range
 // 756 .. 784 across the 11 reps). We commit the rounded lower end of

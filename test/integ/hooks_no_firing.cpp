@@ -8,16 +8,17 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-045 integration sentinel — narrowed incrementally by TASK-046..051.
+// Integration sentinel for unwired hook phases, narrowed incrementally
+// as each phase came on the wire.
 //
-// Originally named all_phases_silent_across_round_trip (TASK-045). As
-// TASK-046..051 wired each phase, the test narrowed: it now only asserts
+// Originally named all_phases_silent_across_round_trip. As
+// each phase was wired, the test narrowed: it now only asserts
 // silence on phases that are still unwired. Renamed to
-// unwired_phases_silent_across_round_trip (TASK-048 review cleanup) to
+// unwired_phases_silent_across_round_trip to
 // accurately reflect that it is a sentinel for the unwired residual,
 // NOT a claim that all phases are silent.
 //
-// As of TASK-051, all eleven phases are wired; not_yet_wired returns
+// Today, all eleven phases are wired; not_yet_wired returns
 // false for every phase. The loop below is therefore a no-op but is
 // preserved to document the wiring boundary: if a new phase is added
 // in a future task, it will initially return true from not_yet_wired
@@ -163,20 +164,20 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, unwired_phases_silent_across_round_tri
 
     ws.stop();
 
-    // TASK-046 carved out the three lifecycle phases. TASK-047 added
+    // The three lifecycle phases were carved out first, then
     // request_received and body_chunk (the GET round-trip below fires
     // request_received for every request; body_chunk does not fire on
     // a GET, but we exclude it for symmetry with the wiring contract).
-    // TASK-048 added route_resolved (fires on every request) and
-    // before_handler (fires on every request hit). TASK-049 added
+    // Next came route_resolved (fires on every request) and
+    // before_handler (fires on every request hit). Then came
     // handler_exception, but it only fires when the handler throws --
     // the successful GET below does not exercise it -- so the silence
     // assertion would still hold for it. We exclude it from
     // not_yet_wired anyway to reflect the implementation contract.
-    // TASK-050 wires after_handler, response_sent, and request_completed
+    // after_handler, response_sent, and request_completed were wired last
     // -- all three fire on the happy-path GET below, so they too are now
     // excluded from not_yet_wired. The predicate now returns false for
-    // every phase that TASK-046..051 has put on the wire; only the
+    // every phase that has been put on the wire; only the
     // residual unwired phases (if any) would still pin silence.
     auto not_yet_wired = [](hook_phase p) {
         switch (p) {
@@ -208,15 +209,15 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, unwired_phases_silent_across_round_tri
         return counters[static_cast<std::size_t>(p)].load()
                >= static_cast<std::size_t>(1);
     };
-    // TASK-048: route_resolved and before_handler fire on every route hit.
+    // route_resolved and before_handler fire on every route hit.
     LT_CHECK(fired(hook_phase::route_resolved));
     LT_CHECK(fired(hook_phase::before_handler));
-    // TASK-050: after_handler, response_sent, and request_completed fire
+    // after_handler, response_sent, and request_completed fire
     // on every happy-path request.
     LT_CHECK(fired(hook_phase::after_handler));
     LT_CHECK(fired(hook_phase::response_sent));
     LT_CHECK(fired(hook_phase::request_completed));
-    // TASK-046: connection_opened and connection_closed bracket the session.
+    // connection_opened and connection_closed bracket the session.
     LT_CHECK(fired(hook_phase::connection_opened));
     LT_CHECK(fired(hook_phase::connection_closed));
     // request_received fires on every request (pre-body phase).

@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-027: unit tests for the bespoke segment-trie route storage and
+// Unit tests for the bespoke segment-trie route storage and
 // the LRU route cache. Exercises insert/find for exact, parameterized
 // and prefix routes (trie), and cache key equality, LRU promotion,
 // method-distinct keys (cache).
@@ -43,7 +43,7 @@ namespace htd = httpserver::detail;
 // and ride on the sentinel id field in the test below. The handler field
 // is irrelevant — the radix_tree / route_cache tests only care about the
 // entry payload identity through pointer equality and the methods/is_prefix
-// fields. (TASK-071: route_entry::handler was originally a
+// fields. (route_entry::handler was originally a
 // std::variant<lambda_handler, shared_ptr<http_resource>>; the variant arm
 // was collapsed to a bare shared_ptr<http_resource>.)
 struct test_entry {
@@ -256,7 +256,7 @@ LT_BEGIN_AUTO_TEST(route_table_suite, cache_clear_empties_storage)
     LT_CHECK(!cache.find({ht::http_method::get, "/b"}, out));
 LT_END_AUTO_TEST(cache_clear_empties_storage)
 
-// Critical #2 (performance-reviewer): find_by_view avoids constructing
+// find_by_view avoids constructing
 // a cache_key on the warm-cache hot path. The view overload must return
 // identical results to the key-based overload.
 LT_BEGIN_AUTO_TEST(route_table_suite, cache_find_by_view_matches_find_by_key)

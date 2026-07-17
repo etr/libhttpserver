@@ -28,14 +28,14 @@
 #include "./littletest.hpp"
 #include "./httpserver.hpp"
 
-// TASK-064: this TU intentionally exercises the deprecated string-blob
+// This TU intentionally exercises the deprecated string-blob
 // cookie surface (`with_cookie(string, string)`, `get_cookie(...)`,
 // `get_cookies()`). Suppress the [[deprecated]] diagnostic for the
 // whole file -- the legacy path still works through a thin
 // forwarder, and the tests must keep passing during the v2.0
 // transitional release. The structured-overload behaviour is pinned
 // by cookie_render_test, cookie_header_sentinel_test, and the
-// http_response_cookie_wire_test added in TASK-064.
+// http_response_cookie_wire_test.
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 using std::string;
@@ -204,7 +204,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, overwrite_cookie)
     LT_CHECK_EQ(resp.get_cookie("Cookie"), "NewValue");
 LT_END_AUTO_TEST(overwrite_cookie)
 
-// TASK-064 code-review finding: the legacy with_cookie(string, string)
+// The legacy with_cookie(string, string)
 // path must overwrite the STRUCTURED mirror too, not just the legacy
 // map. Before the fix, two calls with the same name appended two
 // entries to structured_cookies_ and the dispatch path emitted TWO
@@ -308,7 +308,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, cookie_special_characters)
 LT_END_AUTO_TEST(cookie_special_characters)
 
 // =====================================================================
-// TASK-011: const-correct accessors. The single-key accessors must be
+// Const-correct accessors. The single-key accessors must be
 // callable on a const http_response&, return std::string_view, and must
 // NOT insert on miss. The map-returning accessors and the trivial
 // scalar accessors (get_status, kind) must be noexcept.
@@ -475,7 +475,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_header_view_stable_across_unrelated_
 LT_END_AUTO_TEST(get_header_view_stable_across_unrelated_mutation)
 
 // -----------------------------------------------------------------------
-// TASK-012: fluent with_* setters return http_response& / http_response&&
+// Fluent with_* setters return http_response& / http_response&&
 // (PRD-RSP-REQ-004).
 // -----------------------------------------------------------------------
 
@@ -538,7 +538,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, with_setters_return_types_are_ref_qualif
 LT_END_AUTO_TEST(with_setters_return_types_are_ref_qualified)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, statement_form_with_setters_still_compile)
-    // Backward-compat: pre-TASK-012 callers wrote `r.with_X(k, v);` in
+    // Backward-compat: legacy callers wrote `r.with_X(k, v);` in
     // statement form, discarding the (then void) return. Switching to
     // a reference return must keep this form compiling unchanged.
     http_response resp = http_response::string("body");
@@ -597,7 +597,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, with_header_moves_string_args)
 LT_END_AUTO_TEST(with_header_moves_string_args)
 
 // -----------------------------------------------------------------------
-// TASK-012 review-pass: security validation on fluent setters.
+// Security validation on fluent setters.
 //
 // with_header, with_footer, with_cookie must reject keys/values that
 // contain CR (\r), LF (\n), or NUL (\0) — these characters allow

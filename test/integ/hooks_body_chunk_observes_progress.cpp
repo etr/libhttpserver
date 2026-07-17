@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-047 acceptance criterion 2.
+// Contract under test:
 //
 // "A `body_chunk` hook accumulates bytes.size() across firings; total
 //  equals the request body length when the upload completes."

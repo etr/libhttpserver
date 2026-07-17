@@ -43,7 +43,7 @@
 #endif
 
      // -----------------------------------------------------------------
-     // Static factories (TASK-010, DR-005).
+     // Static factories.
      //
      // Each factory placement-news the corresponding detail::body
      // subclass into the response's SBO buffer (or, if the body ever
@@ -123,8 +123,7 @@
          std::string_view realm,
          std::string body = {});  // NOLINT(build/include_what_you_use)
 
-     /// Construct an RFC 7616 §3.3 Digest 401 Unauthorized response
-     /// (TASK-062).
+     /// Construct an RFC 7616 §3.3 Digest 401 Unauthorized response.
      ///
      /// The returned response carries a `body_kind::digest_challenge`
      /// body that the webserver dispatch path recognises: instead of
@@ -150,11 +149,11 @@
      /// are rejected with `std::invalid_argument` if they contain CR,
      /// LF, or NUL (CWE-113).
      ///
-     /// Always declared, regardless of `HAVE_DAUTH` (PRD-FLG-REQ-001:
-     /// public declarations must not be conditionally compiled). On a
+     /// Always declared, regardless of `HAVE_DAUTH` (public
+     /// declarations must not be conditionally compiled). On a
      /// `HAVE_DAUTH`-off build the call throws
      /// `feature_unavailable("digest_auth", "HAVE_DAUTH")`
-     /// (PRD-FLG-REQ-002/004) instead of constructing a response.
+     /// instead of constructing a response.
      ///
      /// @see http_response::unauthorized(std::string_view,std::string_view,std::string)
      [[nodiscard]] static http_response unauthorized(

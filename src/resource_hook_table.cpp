@@ -18,11 +18,12 @@
      USA
 */
 
-// TASK-051 -- Out-of-line bodies for detail::resource_hook_table.
+// Out-of-line bodies for detail::resource_hook_table.
 //
-// Mirrors src/hook_handle.cpp's fire_hooks_for_phase /
-// fire_short_circuit_hooks_for_phase templates, but the firing helpers
-// here are members on a per-resource table (not on webserver_impl).
+// Mirrors the fire_hooks_for_phase / fire_short_circuit_hooks_for_phase
+// templates in src/detail/hook_phase_dispatch.cpp, but the firing
+// helpers here are members on a per-resource table (not on
+// webserver_impl).
 // The lock discipline (snapshot under shared_lock, release, iterate)
 // is identical, so re-entrant add_hook / remove() calls from inside a
 // hook callback do not deadlock.

@@ -83,7 +83,7 @@ class create_test_request {
         return *this;
     }
 
-    // TASK-034: setters are unconditional. On HAVE_BAUTH-off /
+    // Setters are unconditional. On HAVE_BAUTH-off /
     // HAVE_DAUTH-off builds the values are silently dropped on .build()
     // (matching the sentinel-empty contract of the corresponding
     // http_request accessors).
@@ -112,15 +112,15 @@ class create_test_request {
         return *this;
     }
 
-    // TASK-034: setter is unconditional. On HAVE_GNUTLS-off builds the
+    // Setter is unconditional. On HAVE_GNUTLS-off builds the
     // value is silently dropped (has_tls_session() returns false
-    // regardless — TASK-019 sentinel contract).
+    // regardless — documented sentinel contract).
     create_test_request& tls_enabled(bool enabled = true) {
         _tls_enabled = enabled;
         return *this;
     }
 
-    // TASK-057: opt out of the default credential-redaction policy in
+    // Opt out of the default credential-redaction policy in
     // http_request::operator<<. Mirrors the webserver-side builder
     // setter @ref create_webserver::expose_credentials_in_logs for the
     // unit-test scope (no webserver construction). The no-argument form
@@ -145,7 +145,7 @@ class create_test_request {
     http::header_map _cookies;
     std::map<std::string, std::vector<std::string>, http::arg_comparator> _args;
     std::string _querystring;
-    // TASK-034: fields stored unconditionally. On HAVE_*-off builds the
+    // Fields stored unconditionally. On HAVE_*-off builds the
     // values are populated by the setters but silently dropped during
     // .build() propagation, matching the sentinel-empty contract on
     // the http_request accessor side.
@@ -155,7 +155,7 @@ class create_test_request {
     std::string _requestor = "127.0.0.1";
     uint16_t _requestor_port = 0;
     bool _tls_enabled = false;
-    // TASK-057: default false (secure-by-default). When true, build()
+    // Default false (secure-by-default). When true, build()
     // sets http_request_impl::expose_credentials_in_logs_ so the
     // diagnostic dump streams the v1 verbose form.
     bool _expose_credentials_in_logs = false;

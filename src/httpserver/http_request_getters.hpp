@@ -53,7 +53,7 @@
       * @note The string_view keys and values inside the returned map are
       *       only valid within the handler call frame. Copy to std::string
       *       if a longer lifetime is required.
-      *       (security-reviewer-iter1-18 / CWE-672)
+      *       (CWE-672)
      **/
      [[nodiscard]] const http::header_view_map& get_headers() const;
 
@@ -65,7 +65,7 @@
       * @note The string_view keys and values inside the returned map are
       *       only valid within the handler call frame. Copy to std::string
       *       if a longer lifetime is required.
-      *       (security-reviewer-iter1-18 / CWE-672)
+      *       (CWE-672)
      **/
      [[nodiscard]] const http::header_view_map& get_footers() const;
 
@@ -77,12 +77,12 @@
       * @note The string_view keys and values inside the returned map are
       *       only valid within the handler call frame. Copy to std::string
       *       if a longer lifetime is required.
-      *       (security-reviewer-iter1-18 / CWE-672)
+      *       (CWE-672)
      **/
      [[nodiscard]] const http::header_view_map& get_cookies() const;
 
      /**
-      * TASK-064: structured cookie accessor. Returns the in-order list
+      * Structured cookie accessor. Returns the in-order list
       * of cookies parsed from the request's `Cookie:` header per RFC
       * 6265 §5.4. Each entry carries `name` and `value`; request
       * cookies do not carry attributes per the spec, so domain/path/
@@ -90,8 +90,8 @@
       *
       * Lifetime: the returned reference and the strings it holds remain
       * valid until the http_request is destroyed (typically when the
-      * handler returns). Backed by a per-request lazy cache (TASK-016 /
-      * TASK-017 arena pattern): the first call parses the Cookie header
+      * handler returns). Backed by a per-request lazy cache (arena
+      * pattern): the first call parses the Cookie header
       * and builds the vector; subsequent calls are O(1) and reuse the
       * same buffer.
       *
@@ -108,7 +108,7 @@
       * @note The string_view keys and values inside the returned map are
       *       only valid within the handler call frame. Copy to std::string
       *       if a longer lifetime is required.
-      *       (security-reviewer-iter1-18 / CWE-672)
+      *       (CWE-672)
      **/
      [[nodiscard]] const http::arg_view_map& get_args() const;
 
@@ -118,13 +118,12 @@
       * @return a const reference to a cached "first value per key" view map.
       *         The reference (and the string_view keys/values it holds) remain
       *         valid until the http_request is destroyed.
-      * @note (Item 22) The returned views carry the same CWE-416 dangling risk as
+      * @note The returned views carry the same CWE-416 dangling risk as
       *       get_arg_flat() and the other affected getters listed in the class-level
       *       string_view lifetime contract block above. Copy to std::string if a
       *       longer lifetime is required.
-      * @note (Item 19 / Item 24 / PRD-REQ-REQ-001) Previously returned by value;
-      *       now returns const& backed by a lazily-populated cache, so repeat
-      *       calls are O(1) and zero-allocating.
+      * @note Returns const& backed by a lazily-populated
+      *       cache, so repeat calls are O(1) and zero-allocating.
      **/
      [[nodiscard]] const std::map<std::string_view, std::string_view, http::arg_comparator>& get_args_flat() const;
 
@@ -147,7 +146,7 @@
       *       NOT copied; they remain subject to cleanup when the
       *       http_request destructor runs unless the file_cleanup_callback
       *       suppresses deletion.
-      *       (architecture-alignment-checker-iter1-2 / CWE-672)
+      *       (CWE-672)
      **/
      [[nodiscard]] const std::map<std::string, std::map<std::string, http::file_info>>& get_files() const noexcept;  // NOLINT(build/include_what_you_use)
 
@@ -182,7 +181,7 @@
       * @note The `std::string_view` values inside the returned `http_arg_value`
       *       alias the request's arena storage and carry the same lifetime
       *       restriction as the standalone view accessors: do not store them
-      *       past the handler invocation. (Item 25: spec-alignment-checker.)
+      *       past the handler invocation.
      **/
      http_arg_value get_arg(std::string_view key) const;
 

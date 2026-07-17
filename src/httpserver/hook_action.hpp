@@ -34,8 +34,6 @@
 /**
  * @file hook_action.hpp
  * @brief Return type of short-circuit-capable hook phases.
- *
- * TASK-045 / DR-012 / §5.6 / PRD-HOOK-REQ-003.
  */
 namespace httpserver {
 
@@ -50,8 +48,8 @@ namespace httpserver {
  * in place of any handler output.
  *
  * Storage is `std::optional<http_response>`: empty means pass, engaged
- * means short-circuit. Move-only because `http_response` is move-only
- * (DR-005). `take_response()` is rvalue-qualified so the "consumed
+ * means short-circuit. Move-only because `http_response` is move-only.
+ * `take_response()` is rvalue-qualified so the "consumed
  * once" contract is syntactically explicit at the firing site.
  */
 class hook_action {

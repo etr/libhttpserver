@@ -8,7 +8,7 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-068 integ test: a basic-auth username carried on a first request
+// Integ test: a basic-auth username carried on a first request
 // (the canonical CWE-226 channel -- decoded credentials are stored in
 // pmr::string members of http_request_impl that live in the per-
 // connection arena) is NOT observable from a subsequent request on the

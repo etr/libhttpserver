@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-079: pure-CPU self-test for the test-side digest client helper
+// Pure-CPU self-test for the test-side digest client helper
 // (`test/integ/digest_client.hpp`). Pins the FIPS MD5/SHA-256 test
 // vectors that prove the inline reference crypto primitives are correct,
 // pins parse_www_authenticate() against the canonical RFC 7616 §3.3
@@ -35,9 +35,8 @@
 // Intentional upward include: this file exists specifically to unit-verify
 // the integ-only digest_client.hpp primitives (crypto vectors, challenge
 // parsing) in isolation before any integ test consumes them, so the
-// cross-directory include is a deliberate exception rather than an
-// accidental layering violation (see architecture 09-testing.md §9 for the
-// unit/integ test-surface split).
+// cross-directory include is a deliberate exception to the unit/integ
+// test-surface split rather than an accidental layering violation.
 #include "../integ/digest_client.hpp"
 #include "./littletest.hpp"
 

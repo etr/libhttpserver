@@ -18,7 +18,7 @@
      USA
 */
 
-// Header-hygiene sentinel for TASK-045:
+// Header-hygiene sentinel for the hook bus public headers:
 //
 // PRD-HOOK-REQ-007 / PRD-HDR-REQ-001: the four new hook bus public
 // headers (hook_phase.hpp, hook_action.hpp, hook_handle.hpp,

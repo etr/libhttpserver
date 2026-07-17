@@ -18,12 +18,12 @@
      USA
 */
 
-// TASK-027 LRU cache fronting the 3-tier route table.
+// LRU cache fronting the 3-tier route table.
 //
 // Plain std::mutex (not shared_mutex) because every cache touch — the
 // LRU promotion on a hit included — is a write (std::list::splice).
 // Lock-order discipline: route_table_mutex_ is always acquired BEFORE
-// the cache's internal mutex when both are held; see architecture §4.7.
+// the cache's internal mutex when both are held.
 //
 // Internal header — only reachable when compiling libhttpserver.
 #if !defined(HTTPSERVER_COMPILATION)
@@ -66,6 +66,9 @@ struct cache_key_hash {
     // Golden-ratio mix constant: reduces hash clustering vs. plain XOR.
     static constexpr std::size_t kHashMix = 0x9e3779b97f4a7c15ULL;
 
+    // Keep this formula in sync with the inline string_view copy in
+    // route_cache::find_by_view below -- the two must agree for the
+    // manual bucket probe to land where insert() put the entry.
     std::size_t operator()(const cache_key& k) const noexcept {
         std::size_t h1 = std::hash<std::string>{}(k.path);
         std::size_t h2 = static_cast<std::size_t>(k.method);
@@ -122,24 +125,28 @@ class route_cache {
     // bucket.
     bool find_by_view(http_method method, std::string_view path,
                       cache_value& out) {
-        // Compute the same hash as cache_key_hash without owning `path`.
+        // Compute the same hash as cache_key_hash without owning `path`
+        // (mirror of cache_key_hash::operator() -- keep in sync).
         std::size_t h1 = std::hash<std::string_view>{}(path);
         std::size_t h2 = static_cast<std::size_t>(method);
         std::size_t bucket_hash = h1 ^ (h2 + cache_key_hash::kHashMix
                                         + (h1 << 6) + (h1 >> 2));
         std::lock_guard<std::mutex> lock(mutex_);
-        // Walk the bucket manually via equal_range on the raw bucket index.
-        // unordered_map::bucket() + bucket_begin()/bucket_end() lets us
-        // scan the correct bucket without constructing a full cache_key.
-        // TASK-053: empty-cache early-out. On libc++ a default-constructed
-        // unordered_map has bucket_count() == 0 and calling cbegin(0) /
-        // cend(0) dereferences a null bucket-list pointer (UB). Before
-        // TASK-053 this path was only hit by tests; the TASK-053 dispatch
-        // cutover puts find_by_view on the request hot path, so the first
-        // request against a fresh server reliably reproduced the crash.
+        // Empty-cache early-out. On libc++ a default-constructed
+        // unordered_map has bucket_count() == 0, and calling begin(0) /
+        // end(0) on it dereferences a null bucket-list pointer (UB);
+        // the first request against a fresh server hits exactly this.
         if (map_.bucket_count() == 0) {
             return false;
         }
+        // Walk the target bucket manually via the bucket-iterator
+        // overloads begin(b)/end(b) so no full cache_key is constructed.
+        // ASSUMPTION: bucket index == hash % bucket_count(). The
+        // standard does not mandate that mapping, but libstdc++ and
+        // libc++ both use it; on an implementation that maps
+        // differently this probe would merely report a miss (the miss
+        // path re-walks the tiers and re-inserts), costing hit rate,
+        // never correctness.
         std::size_t b = bucket_hash % map_.bucket_count();
         for (auto it = map_.begin(b), end = map_.end(b); it != end; ++it) {
             if (it->first.method == method && it->first.path == path) {

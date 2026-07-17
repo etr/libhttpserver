@@ -3,7 +3,6 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-049 review cleanup (finding #39 / test-quality-reviewer):
 // Shared test utility for capturing log_error output in integration tests.
 // Extracted from hooks_handler_exception_fallback_to_hardcoded_500.cpp and
 // hooks_handler_exception_user_handler_throws_continues_chain.cpp, where

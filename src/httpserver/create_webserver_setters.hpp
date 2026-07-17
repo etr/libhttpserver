@@ -59,7 +59,7 @@
       * @note This is an alias. Calling it (with a non-null callable)
       *       installs a hook at @ref httpserver::hook_phase::route_resolved.
       *       Equivalent to `ws.add_hook(hook_phase::route_resolved, ...)`
-      *       at webserver construction (TASK-048 / PRD-HOOK-REQ-009 / §4.10).
+      *       at webserver construction.
       *       The on-the-wire 404 synthesis flows through the v1 dispatch
       *       path; the hook registration is the alias-equivalence story.
       *
@@ -78,7 +78,7 @@
       * @note This is an alias. Calling it (with a non-null callable)
       *       installs a hook at @ref httpserver::hook_phase::before_handler.
       *       Equivalent to `ws.add_hook(hook_phase::before_handler, ...)`
-      *       at webserver construction (TASK-048 / PRD-HOOK-REQ-009 / §4.10).
+      *       at webserver construction.
       *       The on-the-wire 405 synthesis flows through the v1 dispatch
       *       path; the hook registration is the alias-equivalence story.
       *
@@ -95,8 +95,8 @@
       * for `std::exception`, or `"unknown exception"` otherwise) and the
       * originating @ref httpserver::http_request, and returns the response to send.
       * If null, a default 500 with the fixed body
-      * `"Internal Server Error"` is sent (DR-009 Revision 1 / TASK-055,
-      * CWE-209 fix); the originating message is still surfaced via the
+      * `"Internal Server Error"` is sent (CWE-209: the exception message
+      * is never leaked to the client); the originating message is still surfaced via the
       * configured `log_error` callback. The v1 behaviour of including
       * the message in the default body is opt-in via
       * @ref httpserver::create_webserver::expose_exception_messages — development
@@ -105,7 +105,7 @@
       * from multiple MHD worker threads).
       *
       * For the full six-point dispatch exception contract see the
-      * @ref httpserver::webserver class-level block (DR-009 §5.2 / PRD-FLG-REQ-002).
+      * @ref httpserver::webserver class-level block.
       *
       * @note This is an alias. Calling it with a non-null callable
       *       installs the callable as a LAST-position hook at
@@ -114,20 +114,19 @@
       *       at webserver construction, except that the alias slot
       *       ALWAYS fires last in the chain -- user-added
       *       handler_exception hooks added via `add_hook` run first and
-      *       may short-circuit before the alias is reached. See DR-012
-      *       / §4.10 / PRD-HOOK-REQ-009.
+      *       may short-circuit before the alias is reached.
       *
-      *       Throwing-hook semantics (per DR-012): a throwing
+      *       Throwing-hook semantics: a throwing
       *       handler_exception hook -- user-added or this alias -- is
       *       caught and the chain CONTINUES to the next hook. If every
       *       hook (including this alias) either throws or returns
       *       @ref httpserver::hook_action::pass(), the dispatcher falls
-      *       back to the hardcoded empty-body 500 (DR-009 §5.2 point 4)
+      *       back to the hardcoded empty-body 500
       *       WITHOUT re-invoking @p h.
       *
       * @param h @ref httpserver::internal_error_handler_t callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
-      * @see webserver (DR-009 §5.2 contract), not_found_handler, method_not_allowed_handler
+      * @see webserver (dispatch exception contract), not_found_handler, method_not_allowed_handler
       */
      create_webserver& internal_error_handler(internal_error_handler_t h) { _internal_error_handler = std::move(h); return *this; }
      create_webserver& file_cleanup_callback(file_cleanup_callback_ptr v) { _file_cleanup_callback = std::move(v); return *this; }
@@ -141,7 +140,7 @@
       * @note This is an alias. Calling it (with a non-null callable)
       *       installs a hook at @ref httpserver::hook_phase::before_handler.
       *       Equivalent to `ws.add_hook(hook_phase::before_handler, ...)`
-      *       at webserver construction (TASK-048 / PRD-HOOK-REQ-009 / §4.10).
+      *       at webserver construction.
       *       The on-the-wire auth short-circuit flows through the v1
       *       dispatch path; the hook registration is the
       *       alias-equivalence story.
@@ -164,12 +163,13 @@
      create_webserver& auth_skip_paths(std::vector<std::string> v) { _auth_skip_paths = std::move(v); return *this; }
      create_webserver& sni_callback(sni_callback_t v) { _sni_callback = std::move(v); return *this; }
 
-     // TASK-033: renamed from no_listen_socket()/no_thread_safety()/no_alpn();
-     // public-API polarity is inverted (private field still stores the "no_"
-     // form to avoid churning webserver.cpp).
-     create_webserver& listen_socket(bool enable = true) { _no_listen_socket = !enable; return *this; }
-     create_webserver& thread_safety(bool enable = true) { _no_thread_safety = !enable; return *this; }
-     create_webserver& alpn(bool enable = true) { _no_alpn = !enable; return *this; }
+     // Public-API polarity is inverted relative to the private "_no_*"
+     // fields: each member stores the NEGATED flag so its polarity
+     // matches the underlying MHD_USE_NO_* / MHD_OPTION_TLS_NO_ALPN
+     // option it feeds.
+     create_webserver& listen_socket(bool enable = true) { _no_listen_socket = !enable; return *this; }  // member stores the NEGATED flag
+     create_webserver& thread_safety(bool enable = true) { _no_thread_safety = !enable; return *this; }  // member stores the NEGATED flag
+     create_webserver& alpn(bool enable = true) { _no_alpn = !enable; return *this; }  // member stores the NEGATED flag
 
      create_webserver& turbo(bool enable = true) { _turbo = enable; return *this; }
      create_webserver& suppress_date_header(bool enable = true) { _suppress_date_header = enable; return *this; }

@@ -42,14 +42,14 @@ class simple_resource : public http_resource {
      }
 };
 
-// sizeof(http_resource) tripwire (TASK-082).  This is a bystander
+// sizeof(http_resource) tripwire.  This is a bystander
 // gate: any new field on http_resource breaks the build until the
 // maintainer rolls the threshold and records the new size in the
 // table below.  The authoritative v1-anchored static_assert lives in
 // test/bench_sizeof_http_resource.cpp; this one is the day-to-day
 // tripwire that runs as part of `make check`.
 //
-// Per-lane observed sizes (TASK-082; locked at the value of
+// Per-lane observed sizes (locked at the value of
 // max(observed) across every CI lane that compiles this TU; CI lanes
 // are enumerated in .github/workflows/verify-build.yml):
 //
@@ -85,8 +85,8 @@ static_assert(sizeof(http_resource) <= 248,
               "max + 16-byte slack; see comment table above for the "
               "re-measurement procedure");
 
-// TASK-036 acceptance: render_* virtuals return http_response by value.
-// Pins PRD-RSP-REQ-007 / DR-004 / DR-010 at compile time so any future
+// render_* virtuals return http_response by value.
+// Pinned at compile time so any future
 // regression to shared_ptr<http_response> fails to compile rather than
 // silently restoring the v1 dispatch shape.
 static_assert(std::is_same_v<
@@ -220,14 +220,14 @@ class empty_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, default_render_returns_sentinel)
-    // The unique contract of TASK-036: the default render() returns a
+    // The unique contract here: the default render() returns a
     // default-constructed http_response whose status_code_ == -1 is the
     // v1-compatible "handler did not produce a response" sentinel.
     // finalize_answer recognises -1 and routes through internal_error_page.
     // This is the one contract that empty_resource exercises that
     // allow_all_methods / is_allowed_known_methods do NOT.
     //
-    // TASK-058 housekeeping: http_request() is private (only the
+    // Note: http_request() is private (only the
     // libhttpserver translation units can default-construct one);
     // public consumers (including tests) construct an http_request
     // through create_test_request().build().  The previous bare

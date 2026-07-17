@@ -52,7 +52,7 @@ using httpserver::http_resource;
 using httpserver::http_response;
 using httpserver::webserver;
 
-// TASK-085: this TU is parallel-runner safe.
+// This TU is parallel-runner safe.
 //   - The one test that starts a server and does a curl round-trip
 //     (unique_ptr_overload_compiles_and_serves) binds an OS-assigned
 //     ephemeral port via create_webserver(0) and reads it back with
@@ -79,7 +79,7 @@ class ok_resource : public http_resource {
 
 // Resource whose destructor increments a caller-supplied counter, so
 // tests can observe ownership-driven destruction. The counter is a
-// per-test local std::atomic<int> passed by pointer (TASK-085) rather
+// per-test local std::atomic<int> passed by pointer rather
 // than a shared static, so concurrent tests cannot contaminate each
 // other's count under a parallel runner.
 class counted_resource : public http_resource {
@@ -102,12 +102,12 @@ class counted_resource : public http_resource {
 
 LT_BEGIN_SUITE(webserver_register_smartptr_suite)
     // No shared mutable state to reset: the destructor-counting tests
-    // each own a local std::atomic<int> (TASK-085).
+    // each own a local std::atomic<int>.
     void set_up() {}
     void tear_down() {}
 LT_END_SUITE(webserver_register_smartptr_suite)
 
-// Acceptance criterion (verbatim from TASK-023 spec):
+// Acceptance criterion:
 //   "auto r = std::make_unique<my_resource>();
 //    ws.register_path('/foo', std::move(r)); compiles and serves."
 //
@@ -124,7 +124,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
     ws.register_path("/foo", std::move(r));
     ws.start(false);
     // OS-assigned ephemeral port: no fixed port to collide under a
-    // parallel runner (TASK-085).
+    // parallel runner.
     const std::string url =
         "localhost:" + std::to_string(ws.get_bound_port()) + "/foo";
 

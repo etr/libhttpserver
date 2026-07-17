@@ -18,10 +18,10 @@
      USA
 */
 
-// TASK-009 unit test: SBO value-type layout for http_response.
+// SBO value-type layout for http_response.
 //
-// Verifies the type-trait acceptance criteria, the no-PIMPL exemption
-// (PRD-HDR-REQ-004), and the four-case move cross-product (inline↔inline,
+// Verifies the required type traits, the no-PIMPL exemption,
+// and the four-case move cross-product (inline↔inline,
 // inline↔heap, heap↔inline, heap↔heap) plus self-move-assignment safety.
 // Compile-time `static_assert`s sit at TU scope so any future drift is
 // caught on every build, even if no runtime test references them.
@@ -48,7 +48,7 @@
 #include "httpserver/detail/body.hpp"        // private hierarchy
 #include "./littletest.hpp"
 
-// TASK-064: this TU intentionally exercises the deprecated string-blob
+// This TU intentionally exercises the deprecated string-blob
 // cookie surface as part of the move-semantics coverage. Suppress the
 // [[deprecated]] diagnostic for the whole file.
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -71,8 +71,8 @@ static_assert(!std::is_copy_constructible_v<http_response>,
 static_assert(!std::is_copy_assignable_v<http_response>,
               "TASK-009 AC: responses are move-only");
 
-// PRD-HDR-REQ-004 exemption: http_response is the explicit non-PIMPL
-// value type. The body member is a raw detail::body* (NOT a
+// Exemption from the public-headers-are-PIMPL rule: http_response is the
+// explicit non-PIMPL value type. The body member is a raw detail::body* (NOT a
 // unique_ptr<detail::body>), and there is no PIMPL impl_ pointer.
 static_assert(!std::is_same_v<http_response::body_pointer_type,
                               std::unique_ptr<body>>,
@@ -80,13 +80,13 @@ static_assert(!std::is_same_v<http_response::body_pointer_type,
 static_assert(std::is_same_v<http_response::body_pointer_type, body*>,
               "TASK-009: body_pointer_type is detail::body*");
 
-// SBO budget per DR-005.
+// SBO buffer budget.
 static_assert(http_response::body_buf_size == 64,
               "DR-005: SBO buffer is 64 bytes");
 
-// TASK-013 AC: with the v1 *_response subclass hierarchy gone, http_response
-// is the v2 sealed value type. Deferred from TASK-009 (OQ-1) because the v1
-// subclasses still inherited at that point. PRD §3.5 mandates the seal.
+// With the v1 *_response subclass hierarchy gone, http_response is the
+// v2 sealed value type. This could not be asserted while the v1
+// subclasses still inherited from it.
 static_assert(std::is_final_v<httpserver::http_response>,
               "TASK-013 AC: http_response is sealed (PRD §3.5)");
 
@@ -119,7 +119,7 @@ namespace {
 using SBO = httpserver::http_response_sbo_test_access;
 
 // SBO placement helpers. These deliberately bypass http_response's
-// production factory path (http_response::string() et al., TASK-010) so
+// production factory path (http_response::string() et al.) so
 // individual tests can force a specific inline vs. heap placement and
 // validate the SBO state machine on both legs. counter_body in particular
 // is a test-only dtor probe with no factory analogue. The factory path is
@@ -239,7 +239,7 @@ LT_END_AUTO_TEST(move_ctor_heap_source)
 // Move-assignment 4-case cross product.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_inline_to_inline)
-    // finding-6: dst's old inline body dtor must fire; finding-20: kind_ must propagate.
+    // dst's old inline body dtor must fire; kind_ must propagate.
     int dtor_count = 0;
     http_response dst;
     http_response src;
@@ -262,10 +262,10 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_inline_to_inline)
                 static_cast<int>(body_kind::empty));
 LT_END_AUTO_TEST(move_assign_inline_to_inline)
 
-// Naming note (finding-50): "inline_to_heap" was ambiguous — this test has
+// Naming note: "inline_to_heap" was ambiguous — this test has
 // dst=inline, src=heap; the name now reads as "heap src into inline dst".
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_src_into_inline_dst)
-    // finding-20: kind_ must propagate; also verifies old inline dst body dtor.
+    // kind_ must propagate; also verifies old inline dst body dtor.
     int dtor_count = 0;
     http_response dst;
     http_response src;
@@ -287,7 +287,7 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_src_into_inline_dst
 LT_END_AUTO_TEST(move_assign_heap_src_into_inline_dst)
 
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_to_inline)
-    // finding-7: old heap dst body dtor must fire; finding-20: kind_ must propagate.
+    // old heap dst body dtor must fire; kind_ must propagate.
     int dtor_count = 0;
     http_response dst;
     http_response src;
@@ -309,7 +309,7 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_to_inline)
 LT_END_AUTO_TEST(move_assign_heap_to_inline)
 
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_to_heap)
-    // finding-20: kind_ must propagate from src to dst, and src must be reset.
+    // kind_ must propagate from src to dst, and src must be reset.
     http_response dst;
     http_response src;
     place_heap_string(dst, "old-heap");
@@ -356,7 +356,7 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite,
 LT_END_AUTO_TEST(destructor_heap_calls_dtor_and_delete)
 
 // -----------------------------------------------------------------------
-// Move-construction: null body source (finding-52).
+// Move-construction: null body source.
 // Default-constructed responses have body_==nullptr. The adopt_body_from
 // early-return path must leave both dst and src with null body pointers.
 // -----------------------------------------------------------------------
@@ -388,7 +388,7 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, self_move_assign_safe)
 LT_END_AUTO_TEST(self_move_assign_safe)
 
 // -----------------------------------------------------------------------
-// Self-move-assign safety: heap body path (finding-22).
+// Self-move-assign safety: heap body path.
 // If the `this == &o` guard in operator= were accidentally removed, the
 // heap path would double-free. This mirrors the inline test above.
 // -----------------------------------------------------------------------
@@ -412,7 +412,7 @@ LT_END_AUTO_TEST(self_move_assign_safe_heap)
 // Header/footer/cookie fields move with the rest of the response.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, headers_move_with_response)
-    // TASK-013: legacy 2-arg ctor and get_response_code() shim removed.
+    // The legacy 2-arg ctor and get_response_code() shim were removed.
     // Construct via the v2 string() factory and read via get_status().
     http_response src = http_response::string("body", "application/json")
                             .with_status(201)

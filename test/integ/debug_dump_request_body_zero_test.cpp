@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-074: when LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY is explicitly set
+// When LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY is explicitly set
 // to "0", the server MUST behave exactly as when the var is unset -- no
 // request bodies written to stdout, and no security warning on stderr.
 // This is a distinct code path from "unset" (see

@@ -51,7 +51,7 @@ namespace detail {
 
 namespace {
 
-// TASK-051: helper to fetch the per-route hook table (if any) from
+// Helper to fetch the per-route hook table (if any) from
 // the request's resource_weak_ slot. Holds the shared_ptr<http_resource>
 // alive in `res_out` so the caller can keep the table pointer valid.
 // Returns nullptr when no per-route table exists for this request.
@@ -69,9 +69,9 @@ resource_hook_table* per_route_table(detail::modded_request* mr,
 
 }  // namespace
 
-// TASK-051: gated fire of before_handler, server-wide AND per-route,
+// Gated fire of before_handler, server-wide AND per-route,
 // with short-circuit detection. Carved out of finalize_answer to keep
-// the host function under CCN_MAX after TASK-051's per-route extension
+// the host function under CCN_MAX after the per-route extension
 // roughly doubled the local branch count. Returns true iff either chain
 // short-circuited (mr->response has already been emplaced; caller must
 // route straight to materialize_and_queue_response). False means both
@@ -124,7 +124,7 @@ bool webserver_impl::fire_before_handler_gated(
     return false;
 }
 
-// TASK-050: gated fire of after_handler. Fires between
+// Gated fire of after_handler. Fires between
 // dispatch_resource_handler (which populates mr->response) and
 // materialize_and_queue_response. A hook returning respond_with(...)
 // REPLACES mr->response; the new response then flows through the
@@ -132,7 +132,7 @@ bool webserver_impl::fire_before_handler_gated(
 // mutated *mr->response in place via ctx.response->with_header(...)
 // (the lvalue & overload).
 //
-// Per §4.10: after_handler fires only when a handler conceptually ran.
+// after_handler fires only when a handler conceptually ran.
 // The pre-handler short-circuit branch (mr->skip_handler) is handled
 // upstream in finalize_answer and never reaches this site.
 void webserver_impl::fire_after_handler_gated(detail::modded_request* mr,
@@ -151,7 +151,7 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr,
     after_handler_ctx ctx{mr->dhr.get(), &*mr->response};
     if (server_gate) {
         if (auto sc = fire_after_handler(ctx)) {
-            // Short-circuit: REPLACE mr->response (DR-010 -- emplace
+            // Short-circuit: REPLACE mr->response (emplace
             // destroys the old response, releasing any deferred captures
             // here rather than later in ~modded_request). Per-route
             // chain ALSO sees the replaced response, so refresh ctx.
@@ -159,7 +159,7 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr,
             ctx.response = &*mr->response;
         }
     }
-    // TASK-051: per-route chain AFTER the server-wide chain. Same
+    // Per-route chain AFTER the server-wide chain. Same
     // short-circuit semantics (respond_with replaces the response).
     if (route_gate) {
         if (auto sc = rtable->fire_after_handler(ctx,
@@ -171,7 +171,7 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr,
     }
 }
 
-// TASK-050: gated fire of response_sent. Fires immediately AFTER
+// Gated fire of response_sent. Fires immediately AFTER
 // MHD_queue_response and BEFORE MHD_destroy_response so the
 // ctx.response pointer is still backed by live storage in
 // mr->response (which lives until ~modded_request in
@@ -190,7 +190,7 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr,
         rtable->any_hooks(hook_phase::response_sent);
 
     if (!server_gate && !route_gate && !log_access_alias_) return;
-    // mr->response_ is null only if materialize_and_queue_response's
+    // mr->response is null only if materialize_and_queue_response's
     // belt-and-suspenders fallback also failed; fire nothing rather than crash.
     if (!mr->response) return;
 
@@ -210,7 +210,7 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr,
     response_sent_ctx ctx{mr->dhr.get(), &*mr->response,
         mr->response->get_status(), bytes_queued, elapsed};
     fire_response_sent(ctx);
-    // TASK-051: per-route chain AFTER server-wide + its alias slot.
+    // Per-route chain AFTER server-wide + its alias slot.
     // response_sent is observation-only; no short-circuit logic.
     if (route_gate) {
         rtable->fire_response_sent(ctx,
@@ -218,7 +218,7 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr,
     }
 }
 
-// TASK-050: gated fire of request_completed. Fires from
+// Gated fire of request_completed. Fires from
 // webserver_impl::request_completed BEFORE the modded_request is
 // deleted so the ctx pointers remain backed by live storage.
 //
@@ -233,12 +233,12 @@ void webserver_impl::fire_request_completed_gated(
         enum MHD_RequestTerminationCode toe) {
     const bool server_gate = has_hooks_for(hook_phase::request_completed);
 
-    // TASK-051: per-route gate. Unlike after_handler/response_sent, this
+    // Per-route gate. Unlike after_handler/response_sent, this
     // fires from the MHD completion callback -- finalize_answer's owning
     // shared_ptr is gone, so we must lock() the weak_ptr to keep the
     // resource alive while rtable is in use. per_route_table() returns
     // null if the resource was unregistered between dispatch and
-    // completion (action-item contract: skip the per-route chain).
+    // completion (contract: skip the per-route chain).
     //
     // But skip the lock() entirely on the common path: mr->route_has_hook_table_
     // is a snapshot (taken in finalize_answer) of whether the resource
@@ -281,7 +281,7 @@ void webserver_impl::fire_request_completed_gated(
     if (server_gate) {
         fire_request_completed(ctx);
     }
-    // TASK-051: per-route chain fires AFTER the server-wide chain.
+    // Per-route chain fires AFTER the server-wide chain.
     if (per_route_present) {
         rtable->fire_request_completed(ctx,
             [this](std::string_view m) { log_dispatch_error(std::string(m)); });

@@ -20,16 +20,15 @@
 
 // webserver_routes_upsert.cpp -- v2 route-table upsert machinery.
 //
-// Carved out of src/detail/webserver_routes.cpp in TASK-086 to keep both
-// translation units under the project per-file LOC ceiling (FILE_LOC_MAX
-// in scripts/check-file-size.sh). This file holds the detail::webserver_impl
+// Split out of src/detail/webserver_routes.cpp to keep both translation
+// units under the project per-file LOC ceiling (FILE_LOC_MAX in
+// scripts/check-file-size.sh). This file holds the detail::webserver_impl
 // members that build / merge / insert v2 route-table entries (the
 // prepare_or_create_lambda_shim -> commit_handlers_to_shim ->
 // upsert_v2_table_entry_locked_ sequence) plus the anonymous-namespace
 // for_each_requested_method helper they share. webserver_routes.cpp
 // retains the public webserver:: on_*/route/register_ws_resource surface,
-// which reaches these members through impl_->... No behaviour change: the
-// bodies are moved verbatim.
+// which reaches these members through impl_->...
 
 #include <array>
 #include <functional>
@@ -122,6 +121,15 @@ const detail::route_entry* webserver_impl::find_v2_entry_by_path_(
         // Probe the exact terminus at @p key (is_prefix=false); ignore
         // any prefix terminus -- on_*/route never reach this code with
         // a prefix endpoint (family=false at construction).
+        //
+        // Note this feeds the radix tier's request-path find() a
+        // registered PATTERN string. That works for the common case: a
+        // literal "{name}" segment finds no exact child (insert stored
+        // it as the wildcard child) and descends that unconstrained
+        // wildcard child. A constrained "{id|[0-9]+}" segment, however,
+        // fails the constraint regex_match in step_to_child_
+        // (radix_tree.hpp) and is NOT found -- the literal pattern text
+        // does not satisfy its own constraint.
         detail::radix_match<detail::route_entry> rm;
         if (param_and_prefix_routes_.find(key, rm)
                 && rm.entry != nullptr && !rm.is_prefix_match) {
@@ -146,6 +154,12 @@ const detail::route_entry* webserver_impl::find_v2_entry_by_path_(
 // upsert_v2_table_entry_locked_) mutate; holding the lock across the
 // whole prepare->commit->upsert sequence prevents a concurrent registration
 // from racing in between.
+//
+// The returned bool (written /*fresh=*/ below) is true iff the shim was
+// newly constructed because no entry existed at this path. on_methods_
+// receives it as `is_new_entry` and forwards it unchanged as the `fresh`
+// parameter of upsert_v2_table_entry_locked_ -- all three names denote
+// the same flag.
 std::pair<std::shared_ptr<detail::lambda_resource>, bool>
 webserver_impl::prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
                                               method_set methods) {
@@ -153,8 +167,8 @@ webserver_impl::prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
     if (existing == nullptr) {
         return {std::make_shared<detail::lambda_resource>(), /*fresh=*/true};
     }
-    // Existing entry. route_entry::handler is a shared_ptr<http_resource>
-    // (TASK-071 collapsed the prior variant). Dynamic-cast to
+    // Existing entry. route_entry::handler is a
+    // shared_ptr<http_resource>. Dynamic-cast to
     // lambda_resource: if the cast misses, a class-based
     // register_path/register_prefix owns this path and we must throw.
     auto shim = std::dynamic_pointer_cast<detail::lambda_resource>(
@@ -185,7 +199,7 @@ void webserver_impl::commit_handlers_to_shim(detail::lambda_resource& shim,
     // loop below can identify the last one. Using a small inline array
     // avoids a heap allocation in the common case (N <= 9 methods).
     //
-    // Move-into-last-slot optimisation (performance-reviewer-iter1-1):
+    // Move-into-last-slot optimisation:
     // all but the last slot receive a copy; the last slot is populated
     // by moving the handler, avoiding one extra heap allocation when the
     // std::function's capture is too large for the SBO buffer.
@@ -246,7 +260,7 @@ void webserver_impl::reject_terminus_collision(const std::string& key,
 
 void webserver_impl::upsert_v2_radix_route(const std::string& key,
         method_set methods, std::shared_ptr<http_resource> shim) {
-    // TASK-056: refuse to plant an exact terminus on a node that
+    // Refuse to plant an exact terminus on a node that
     // already carries a prefix terminus (or vice versa via the
     // symmetric guard in register_v2_route). Must run BEFORE the
     // read-merge below so a thrown exception leaves the table intact.
@@ -285,7 +299,7 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
         assert(!"unreachable: radix paths go through upsert_v2_radix_route");
         __builtin_unreachable();
     case route_tier_kind::exact:
-        // TASK-056: refuse to plant an exact entry when a prefix entry
+        // Refuse to plant an exact entry when a prefix entry
         // for the same canonical path already lives in the radix tier.
         reject_terminus_collision(idx.get_url_complete(),
                                   /*want_is_prefix=*/false);
@@ -310,6 +324,14 @@ void webserver_impl::update_existing_v2_entry(const std::string& key,
     // and match by shim identity (regex patterns are not repeated
     // keys; pointer identity is the cheapest and most reliable
     // discriminator).
+    //
+    // Precondition: `shim` is the shared_ptr that
+    // prepare_or_create_lambda_shim extracted from this same regex
+    // entry (via find_v2_entry_by_path_) earlier in the SAME
+    // route_table_mutex_ unique_lock window, so the entry cannot have
+    // been removed or its handler replaced in between. The
+    // `rr.entry.handler == shim` identity probe therefore cannot miss:
+    // the pointer stored in the entry is the very pointer we hold.
     auto merge_into = [&](detail::route_entry& target) {
         target.methods = target.methods | methods;
         target.handler = shim;
@@ -333,16 +355,18 @@ void webserver_impl::update_existing_v2_entry(const std::string& key,
 void webserver_impl::upsert_v2_table_entry_locked_(
         const detail::http_endpoint& idx,
         method_set methods, std::shared_ptr<http_resource> shim, bool fresh) {
-    // TASK-067: caller must already hold route_table_mutex_ (unique_lock).
-    // The single-lock window covers the conflict probe (carried out by
+    // Caller must already hold route_table_mutex_ (unique_lock). The
+    // single-lock window covers the conflict probe (carried out by
     // prepare_or_create_lambda_shim via find_v2_entry_by_path_) all the
     // way through the table mutation here, so no concurrent registration
     // can race in between.
     //
-    // TASK-027: mirror into the v2 3-tier table. We store the
-    // lambda_resource shim via the shared_ptr arm so dispatch is
-    // identical to class-resource registration. The methods bitmask
-    // accumulates across calls when fresh==false.
+    // We store the lambda_resource shim via the shared_ptr arm so
+    // dispatch is identical to class-resource registration. The methods
+    // bitmask accumulates across calls when fresh==false. `fresh` is
+    // prepare_or_create_lambda_shim's returned bool (the call site in
+    // on_methods_ names it `is_new_entry`): true iff the shim was newly
+    // constructed because no entry existed at this path.
     const std::string& key = idx.get_url_complete();
     if (!idx.get_url_pars().empty()) {
         upsert_v2_radix_route(key, methods, std::move(shim));

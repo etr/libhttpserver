@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-050 acceptance criterion 1.
+// Contract under test:
 //
 // "An after_handler hook returning hook_action::respond_with(r2) is
 //  observed on the wire; the response from the resource is NOT."

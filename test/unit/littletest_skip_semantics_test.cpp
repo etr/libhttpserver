@@ -1,9 +1,9 @@
 // Copyright 2026 Sebastiano Merlino
 /*
- * TASK-076 Cycle 1: Pin the LT_SKIP / LT_SKIP_IF semantics added to
+ * Pin the LT_SKIP / LT_SKIP_IF semantics added to
  * test/littletest.hpp.
  *
- * Pre-TASK-076 the project simulated a "skip" with `LT_CHECK_EQ(1, 1)`
+ * Previously the project simulated a "skip" with `LT_CHECK_EQ(1, 1)`
  * inside a try/catch: a build that silently lost TLS support would
  * report PASS rather than SKIP. The replacement primitive must:
  *
@@ -23,7 +23,7 @@ LT_BEGIN_SUITE(littletest_skip_semantics_suite)
     void tear_down() {}
 LT_END_SUITE(littletest_skip_semantics_suite)
 
-// Cycle 1.a — LT_SKIP increments the runner's skip counter and halts
+// LT_SKIP increments the runner's skip counter and halts
 // the enclosing test body. LT_SKIP throws skip_unattended so no code
 // after it can execute; the counter-delta assertion is therefore
 // delegated to `skip_counter_nonzero_after_skip_runs` below, which
@@ -33,7 +33,7 @@ LT_BEGIN_AUTO_TEST(littletest_skip_semantics_suite, skip_macro_increments_skip_c
     LT_SKIP("intentional skip — Cycle 1 sentinel");
 LT_END_AUTO_TEST(skip_macro_increments_skip_counter)
 
-// Cycle 1.b — LT_SKIP_IF(false, ...) is a no-op; control flows through.
+// LT_SKIP_IF(false, ...) is a no-op; control flows through.
 LT_BEGIN_AUTO_TEST(littletest_skip_semantics_suite, skip_if_false_does_not_skip)
     int before = littletest::auto_test_runner.get_skips();
     LT_SKIP_IF(false, "should not fire");
@@ -41,13 +41,13 @@ LT_BEGIN_AUTO_TEST(littletest_skip_semantics_suite, skip_if_false_does_not_skip)
     LT_CHECK_EQ(after, before);
 LT_END_AUTO_TEST(skip_if_false_does_not_skip)
 
-// Cycle 1.c — LT_SKIP_IF(true, ...) increments the counter (delegates
+// LT_SKIP_IF(true, ...) increments the counter (delegates
 // to LT_SKIP) and halts the enclosing test body, same as LT_SKIP.
 LT_BEGIN_AUTO_TEST(littletest_skip_semantics_suite, skip_if_true_delegates_to_skip)
     LT_SKIP_IF(true, "intentional — Cycle 1.c direct exercise");
 LT_END_AUTO_TEST(skip_if_true_delegates_to_skip)
 
-// Cycle 1.c (continued) — We measure the post-state of the above by
+// We measure the post-state of the above by
 // reading get_skips() in a fresh sibling test that observes the
 // cumulative counter set by the prior tests' skips.
 //
@@ -59,7 +59,7 @@ LT_END_AUTO_TEST(skip_if_true_delegates_to_skip)
 // skip_if_true_delegates_to_skip having already run is a stable,
 // intentional invariant, not accidental ordering.
 LT_BEGIN_AUTO_TEST(littletest_skip_semantics_suite, skip_counter_nonzero_after_skip_runs)
-    // After Cycle 1.a (LT_SKIP) and Cycle 1.c (LT_SKIP_IF(true, ...))
+    // After the LT_SKIP and LT_SKIP_IF(true, ...) tests
     // ran, the runner's skip counter must be >= 2. We can't reset
     // between tests without touching the runner, so this asserts the
     // cumulative invariant.

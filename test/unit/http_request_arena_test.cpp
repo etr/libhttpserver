@@ -8,15 +8,15 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-016: per-connection arena for http_request_impl.
+// Per-connection arena for http_request_impl.
 //
 // Two cycles in this TU:
 //   1. arena_release_resets_bump_pointer  -- structural anchor: a
 //      connection_state owns a std::pmr::monotonic_buffer_resource whose
 //      release() rewinds the bump pointer so a second allocation lands at
 //      the same address as the first.
-//   2. warm_path_zero_upstream_allocs     -- the headline acceptance
-//      criterion: an http_request_impl constructed against an arena (with a
+//   2. warm_path_zero_upstream_allocs     -- the headline
+//      contract: an http_request_impl constructed against an arena (with a
 //      generously-sized initial buffer) does NOT touch the upstream resource
 //      on the warm path -- after the first request grew the arena, the
 //      second request's upstream alloc count stays flat.
@@ -68,7 +68,7 @@ LT_END_SUITE(http_request_arena_suite)
 //
 //     Note: impl_address_reuse_after_release (test 3) extends this contract
 //     to http_request_impl construction, so the split between these two
-//     tests is intentional rather than redundant. (test-quality-reviewer-iter1-5)
+//     tests is intentional rather than redundant.
 LT_BEGIN_AUTO_TEST(http_request_arena_suite, arena_release_resets_bump_pointer)
     httpserver::detail::connection_state cs;
 
@@ -105,7 +105,7 @@ LT_BEGIN_AUTO_TEST(http_request_arena_suite, warm_path_zero_upstream_allocs)
     // small for the cold cycle, the cold cycle will spill to upstream but
     // baseline will be non-zero, and the warm-path assertion would become
     // vacuous. The warm_path_zero_upstream_allocs_with_containers test (7)
-    // asserts baseline == 0 there to guard against this. (test-quality-iter1-6)
+    // asserts baseline == 0 there to guard against this.
     {
         impl_alloc_t alloc(&arena);
         auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
@@ -126,9 +126,9 @@ LT_END_AUTO_TEST(warm_path_zero_upstream_allocs)
 
 // (3) Companion to (1): allocating an http_request_impl, releasing the
 //     arena, and allocating a second http_request_impl produces the same
-//     address. This is the strict statement the TASK-016 acceptance
-//     criterion asks for ("MHD_RequestTerminationCode callback resets the
-//     arena -- verified by a test that observes arena memory reuse").
+//     address. This is the strict statement of the contract: the
+//     MHD_RequestTerminationCode callback resets the arena -- verified
+//     by observing arena memory reuse.
 LT_BEGIN_AUTO_TEST(http_request_arena_suite, impl_address_reuse_after_release)
     alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
     std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
@@ -157,7 +157,6 @@ LT_END_AUTO_TEST(impl_address_reuse_after_release)
 //     insert additional entries into the map. This prevents a DoS where
 //     a crafted request with thousands of unique GET arguments exhausts
 //     the per-connection arena and the heap upstream.
-//     (security-reviewer-iter1-2)
 LT_BEGIN_AUTO_TEST(http_request_arena_suite, build_request_args_respects_max_args_count)
     using httpserver::detail::http_request_impl;
     using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
@@ -210,7 +209,7 @@ LT_BEGIN_AUTO_TEST(http_request_arena_suite, build_request_args_respects_max_arg
     // Named constants make the byte arithmetic self-documenting.
     // "key" (3) + "val" (3) = 6 bytes; "key2" (4) + "val2" (4) = 8 bytes.
     // A limit of MAX_BYTES=10 accepts the first pair (6<=10) and rejects
-    // the second (6+8=14>10). (code-simplifier-iter1-29)
+    // the second (6+8=14>10).
     constexpr std::size_t MAX_BYTES = 10;  // accepts "key"+"val" (6), rejects +"key2"+"val2" (14)
 
     httpserver::detail::arguments_accumulator aa;
@@ -237,7 +236,6 @@ LT_END_AUTO_TEST(build_request_args_respects_max_args_bytes)
 //      releasing the arena bump pointer. This prevents credentials written
 //      by a previous request from remaining readable in the reused buffer
 //      memory until overwritten by the next request's population.
-//      (security-reviewer-iter1-3)
 LT_BEGIN_AUTO_TEST(http_request_arena_suite, reset_arena_clears_initial_buffer)
     httpserver::detail::connection_state cs;
 
@@ -261,7 +259,6 @@ LT_BEGIN_AUTO_TEST(http_request_arena_suite, reset_arena_clears_initial_buffer)
     cs.reset_arena();
 
     // After reset, the bytes at that location must be zero.
-    // (test-quality-reviewer-iter1-4: use std::all_of for a cleaner assertion)
     LT_CHECK(std::all_of(alloc_ptr, alloc_ptr + sentinel_size,
                          [](std::byte b) { return b == std::byte{0}; }));
 
@@ -275,13 +272,12 @@ LT_END_AUTO_TEST(reset_arena_clears_initial_buffer)
 // (5) Populate the PMR-aware lazy caches (querystring, requestor_ip,
 //     unescaped_args, path_pieces) inside an http_request_impl and verify
 //     that the warm-path (second request after arena release) does not
-//     spill to the upstream resource. This closes the gap flagged by
-//     performance-reviewer-iter1-5: the previous warm_path_zero_upstream_allocs
-//     test only exercised construction with a null connection (no container
-//     population), so it did not validate the acceptance criterion for a
-//     request that actually populates the arena-backed containers.
+//     spill to the upstream resource. This closes a coverage gap: the
+//     warm_path_zero_upstream_allocs test only exercises construction
+//     with a null connection (no container population), so it does not
+//     validate the zero-upstream-allocs contract for a request that
+//     actually populates the arena-backed containers.
 //
-//     code-quality-reviewer-iter1-3 / spec-alignment-checker-iter1-7:
 //     The baseline is asserted to be zero to confirm the cold cycle itself
 //     fit within the 8 KiB initial buffer (no spill to upstream). If the
 //     buffer is ever too small, the cold-cycle spill would be silently
@@ -330,7 +326,7 @@ LT_BEGIN_AUTO_TEST(http_request_arena_suite, warm_path_zero_upstream_allocs_with
     // hold all cold-cycle allocations. If this fails, the buffer is too small
     // and the warm-path assertion below would be vacuous (the "baseline" would
     // absorb cold-cycle spills and the warm path would appear zero-delta even
-    // if it also spills). (code-quality-reviewer-iter1-3)
+    // if it also spills).
     LT_CHECK_EQ(baseline, std::size_t{0});
 
     // Warm cycle: reuses the arena's initial buffer -- upstream must stay flat.
@@ -351,7 +347,6 @@ LT_END_AUTO_TEST(warm_path_zero_upstream_allocs_with_containers)
 //     bump-pointer rewind property; this test verifies the ordering contract
 //     between ~http_request_impl (step 1) and reset_arena() (step 2) by
 //     running them in the same order request_completed does.
-//     (code-quality-reviewer-iter1-2 / test-quality-reviewer-iter1-1)
 LT_BEGIN_AUTO_TEST(http_request_arena_suite, request_completed_trampoline_contract)
     using httpserver::detail::http_request_impl;
     using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;

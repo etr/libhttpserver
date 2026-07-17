@@ -2,8 +2,8 @@
 
 This document records the v1 baseline measurements that drive the
 two PRD §3.6 numeric acceptance criteria for libhttpserver v2.0. It
-also documents the CI wiring for the DR-008 concurrency/deadlock stress
-gates (see "CI wiring — DR-008 stress gates" below):
+also documents the CI wiring for the concurrency/deadlock stress
+gates (see "CI wiring — stress gates" below):
 
 | PRD requirement | Criterion | Verified by |
 |---|---|---|
@@ -35,11 +35,11 @@ versions change materially.
 | `sizeof(std::map<std::string,bool>)` | 24 bytes | 48 bytes | `v1_baseline/measure_v1_sizes.cpp` |
 | `get_headers()` median ns/call (16 headers) | ~768 ns (committed: 760 ns, conservative) | ~667 ns (committed: 640 ns, conservative) | `v1_baseline/measure_v1_get_headers.cpp` |
 
-`V1_GET_HEADERS_NS_PER_CALL` is now selected per-stdlib (TASK-084),
+`V1_GET_HEADERS_NS_PER_CALL` is now selected per-stdlib,
 exactly like the sizeof constants: `v1_baseline/v1_constants.hpp` picks
 `760.0` on libc++ and `640.0` on libstdc++ based on the detected C++
 standard library, so the `≥10×` acceptance gate compares v2 against a
-real per-stdlib baseline on both macOS and Linux. Before TASK-084 the
+real per-stdlib baseline on both macOS and Linux. Previously the
 libc++ literal (760 ns) was reused unchanged on libstdc++/Linux.
 
 Each committed value is the rounded **lower** end of its platform's
@@ -51,7 +51,7 @@ see the table above for both platform values.
 
 **Measurement-host caveat (libstdc++ 640 ns figure):** a native x86-64
 Linux host — the architecture verify-build.yml's libstdc++ CI lane
-actually runs on — was not reachable at TASK-084 measurement time. The
+actually runs on — was not reachable at measurement time. The
 committed 640 ns value was instead measured on a native **aarch64** Linux
 container (running on the Apple-silicon maintainer host, no emulation);
 an emulated x86-64 run was also taken but discarded as a basis for the
@@ -72,7 +72,7 @@ Concretely: on the maintainer reference host (libc++), `make bench`
 printed `bench_get_headers v1=760.000ns v2=3.293ns ratio=230.76x` on
 `feature/v2.0` HEAD = `c71b0e8`.
 
-On a libstdc++ build (g++-14, Ubuntu 24.04) used to verify the TASK-084
+On a libstdc++ build (g++-14, Ubuntu 24.04) used to verify the
 per-stdlib baseline, `make bench` printed
 `bench_get_headers v1=640.000ns v2=2.777ns ratio=230.43x` — the `≥10×`
 gate passes against the re-measured libstdc++ baseline with the same
@@ -146,8 +146,8 @@ destroy) without conflating it with MHD network noise.
   <= sizeof(member)). It accounts for the new `method_set` field's own
   size plus the worst-case alignment padding it could force; it is not
   an exact count. The `sizeof(void*) * 2` term covers the
-  `shared_ptr<detail::resource_hook_table>` hook_table_ member added in
-  TASK-051. See `test/bench_sizeof_http_resource.cpp` for the full
+  `shared_ptr<detail::resource_hook_table>` hook_table_ member.
+  See `test/bench_sizeof_http_resource.cpp` for the full
   per-platform derivation.
 
 - A second `static_assert` requires `sizeof(http_resource) <=
@@ -160,7 +160,7 @@ destroy) without conflating it with MHD network noise.
 
 ### Why not the literal task formulation
 
-TASK-039's action-item phrasing is:
+The literal formulation would be:
 
 ```
 static_assert(sizeof(http_resource)
@@ -191,7 +191,7 @@ per-segment child container, so per-op insert cost will surface any
 algorithmic regression (e.g. a future refactor that drops back to O(n)
 sibling scan).
 
-The gate encodes the PRD §3.6 / TASK-056 "no dispatch latency spikes
+The gate encodes the PRD §3.6 "no dispatch latency spikes
 > 10× baseline" criterion as a deterministic ratio assertion against
 the warmup-window median.
 
@@ -200,7 +200,7 @@ the warmup-window median.
 | Parameter | Value | Rationale |
 |---|---|---|
 | Statistic | p95 of overall samples vs warmup-window median (first quarter of insertion-order samples) | p99 too sensitive to OS preemption on shared CI |
-| Threshold ratio | < 20× warmup median | TASK-080 noise-floor study (see below) |
+| Threshold ratio | < 20× warmup median | noise-floor study (see below) |
 | Baseline floor clamp | warmup_median = max(actual, 1 µs) | Prevents degenerate gate when timer quantises |
 
 The warmup window (first quarter of merged samples) is an approximation —
@@ -236,7 +236,7 @@ p99 is still printed in the `[STATS]` diagnostic line for forensic use.
 
 ### Why 20×, not 10×
 
-The TASK-080 stabilisation stack reduces but does NOT eliminate the
+The stabilisation stack reduces but does NOT eliminate the
 noise floor. The dominant residual contributor is **legitimate
 contention on `route_table_mutex_`**, not OS noise: 4 writer threads
 serialise on a single std::mutex around the radix-tree insert, and the
@@ -244,13 +244,13 @@ top 5% of samples are precisely the lock-wait queue tail.
 
 | Sweep | Worst observed p95/warmup_median ratio | Notes |
 |---|---|---|
-| TASK-080 measurement, Apple Silicon (M-series), `-O3 -DNDEBUG`, `HTTPSERVER_STRESS_REPEATS=10`, no pinning | 13.4× | Quiet laptop, no other tenants |
-| Pre-TASK-080 baseline (with `samples_mtx` in hot path) | similar p95, larger p99 spread | Per-thread buffers tighten p99 more than p95 |
+| Measurement, Apple Silicon (M-series), `-O3 -DNDEBUG`, `HTTPSERVER_STRESS_REPEATS=10`, no pinning | 13.4× | Quiet laptop, no other tenants |
+| Pre-stabilisation baseline (with `samples_mtx` in hot path) | similar p95, larger p99 spread | Per-thread buffers tighten p99 more than p95 |
 
 10× is therefore genuinely infeasible without rewriting the
-registration locking strategy (out of scope for TASK-080). 20× gives
+registration locking strategy (out of scope here). 20× gives
 ~50% headroom over the worst observed local round and is still **5×
-tighter than the pre-TASK-080 gate of 100× p99** — restoring real
+tighter than the pre-stabilisation gate of 100× p99** — restoring real
 regression bite against algorithmic regressions (an accidental O(n)
 traversal at 15k items would push p95 to >100× the baseline).
 
@@ -278,11 +278,11 @@ HTTPSERVER_STRESS_SECONDS=15 HTTPSERVER_STRESS_REPEATS=20 \
 
 ### Acceptance criterion verification — 50-run stability
 
-The TASK-080 acceptance criterion "test has not flaked in the last 50
+The acceptance criterion "test has not flaked in the last 50
 CI runs across the matrix" cannot be enforced at PR-time (a PR has 1
 run per lane, not 50). **This criterion was therefore formally DEFERRED
-at merge** — it is tracked as the unchecked verification item in
-`specs/tasks/M7-v2-cleanup/TASK-080.md` and is satisfied only once 50
+at merge** — it is tracked as an unchecked post-merge verification item
+and is satisfied only once 50
 post-merge `feature/v2.0` CI runs have passed without a flake of this
 test. The proxy used at merge:
 
@@ -291,7 +291,7 @@ test. The proxy used at merge:
    13.4× against the 20× gate (gate margin: ~50%).
 2. Post-merge monitoring window: any flake of this test on
    `feature/v2.0` CI within the first week of merge is grounds for
-   re-opening TASK-080 and re-running the noise-floor sweep on the
+   re-opening the noise-floor investigation and re-running the sweep on the
    flaking lane.
 
 Known characterisation gap: the 13.4× worst observed ratio comes from
@@ -304,12 +304,12 @@ If a CI flake surfaces post-merge, capture the `[STATS]` line from the
 failing job logs, then re-run locally on the same lane shape with
 `HTTPSERVER_STRESS_REPEATS=50` to characterise the new noise floor.
 
-## CI wiring — DR-008 stress gates (TASK-092)
+## CI wiring — stress gates
 
-Two DR-008 thread-safety contract tests live in `check_PROGRAMS` (so a
+Two thread-safety contract tests live in `check_PROGRAMS` (so a
 plain `make check` runs each once) but their concurrency/deadlock
 contracts benefit from a deliberate, repeatable, env-gated invocation on
-the CI matrix. TASK-092 wired both into `.github/workflows/verify-build.yml`
+the CI matrix. Both are wired into `.github/workflows/verify-build.yml`
 via two convenience targets in `test/Makefile.am`.
 
 ### `route_table_concurrency` — TSan lane
@@ -334,7 +334,7 @@ via two convenience targets in `test/Makefile.am`.
 
 ### stop()-from-handler deadlock contract — baseline Linux gcc lane
 
-- **What it pins:** the DR-008 negative case — calling `stop()` from a
+- **What it pins:** the negative case — calling `stop()` from a
   request-handler thread makes libmicrohttpd self-join and, on the CI MHD
   version, abort with "Failed to join a thread." (a silent deadlock on
   other versions). The test forks a child to contain the abort; a
@@ -411,8 +411,7 @@ See [`test/v1_baseline/README.md`](v1_baseline/README.md).
 - **Noise sensitivity:** running bench on every contributor laptop
   (or every CI runner under variable background load) would produce
   flaky CI. Release-readiness is gated on `make bench` succeeding
-  once on a quiet release-mode host. The release runbook
-  (TASK-040+) calls it.
+  once on a quiet release-mode host. The release runbook calls it.
 - **Platform-gated bench (`bench_warm_path`):** unlike
   `bench_hook_overhead` and `bench_route_lookup` (which carry no
   compile-time platform gate), `bench_warm_path.cpp`'s baselines
@@ -420,7 +419,7 @@ See [`test/v1_baseline/README.md`](v1_baseline/README.md).
   / `#elif defined(__linux__)` / `#elif defined(_WIN32)`, with a hard
   `#error` on any other platform. A `make bench` on, e.g., FreeBSD or a
   musl-libc container will fail to *compile* `bench_warm_path` until a
-  baseline arm is added for that platform (see TASK-084 in
+  baseline arm is added for that platform (see
   `bench_baseline.hpp`'s header comment for the refresh procedure).
 
 ## Known noise sources / mitigations

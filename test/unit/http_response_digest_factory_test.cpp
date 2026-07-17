@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-062 unit test: RFC-7616 Digest auth factory `http_response::unauthorized(digest_challenge)`.
+// Unit test: RFC-7616 Digest auth factory `http_response::unauthorized(digest_challenge)`.
 //
 // Pins the public-observable contract of the new `digest_challenge`
 // overload of `http_response::unauthorized`:
@@ -36,7 +36,7 @@
 //   test/integ/digest_challenge_format_test.cpp
 // which asserts on the actual WWW-Authenticate header emitted by MHD.
 // Keeping internal-struct assertions out of unit tests avoids coupling to
-// the current storage shape (TASK-062 test-quality-reviewer iter1-3).
+// the current storage shape.
 //
 // The end-to-end byte-format assertions for the WWW-Authenticate
 // challenge produced on the wire live in the new integ test
@@ -138,11 +138,10 @@ LT_END_AUTO_TEST(digest_challenge_does_not_set_www_authenticate_header)
 // The previous tests in this section reached into the private
 // detail::digest_challenge_body params struct via the SBO friend hook and
 // a concrete-subclass cast (body->get_params().algorithm, .opaque, .domain).
-// That couples the unit tests to the internal storage shape.  Per the
-// test-quality-reviewer finding (TASK-062 iter1-3), the authoritative
-// place to verify algorithm, opaque, and domain values is the wire-format
-// integration test (digest_challenge_format_test.cpp), which asserts on
-// the actual WWW-Authenticate header emitted by MHD.
+// That couples the unit tests to the internal storage shape.  The
+// authoritative place to verify algorithm, opaque, and domain values is
+// the wire-format integration test (digest_challenge_format_test.cpp),
+// which asserts on the actual WWW-Authenticate header emitted by MHD.
 //
 // Here we pin only what is observable without internal access:
 //   * the factory produces body_kind::digest_challenge regardless of

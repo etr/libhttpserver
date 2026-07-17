@@ -18,10 +18,9 @@
      USA
 */
 
-// TASK-048: error-page helpers carved out of detail/webserver_dispatch.cpp
-// to keep that TU under the per-file LOC ceiling (FILE_LOC_MAX in
-// scripts/check-file-size.sh) once the route_resolved and before_handler
-// firing sites landed.
+// Error-page helpers, split out of detail/webserver_dispatch.cpp to
+// keep that TU under the per-file LOC ceiling (FILE_LOC_MAX in
+// scripts/check-file-size.sh).
 //
 // Five small functions live here: the three synth-response helpers
 // (not_found_page, method_not_allowed_page, internal_error_page), the
@@ -29,8 +28,7 @@
 // double-fault-safe wrapper around the user internal_error_handler
 // (run_internal_error_handler_safely). They are pure const helpers off
 // webserver_impl and share no state with the rest of the dispatch TU
-// beyond `parent->*` user handlers and `mr->dhr`. Splitting them out is
-// a mechanical refactor with no behaviour change.
+// beyond `parent->*` user handlers and `mr->dhr`.
 
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
@@ -71,7 +69,7 @@ http_response webserver_impl::internal_error_page(
     detail::modded_request* mr,
     std::string_view msg,
     bool force_our) const {
-    // TASK-031 / DR-009 §5.2 point 4: the double-fault fallback. Used
+    // The double-fault fallback. Used
     // when the user-supplied internal_error_handler itself threw or
     // when the belt-and-suspenders site after
     // get_raw_response_with_fallback fires. The body is intentionally
@@ -80,11 +78,11 @@ http_response webserver_impl::internal_error_page(
         return http_response::empty()
             .with_status(http_utils::http_internal_server_error);
     }
-    // §5.2 point 2/3: invoke the user handler with the originating message.
+    // Invoke the user handler with the originating message.
     if (parent->internal_error_handler != nullptr) {
         return parent->internal_error_handler(*mr->dhr, msg);
     }
-    // TASK-055 / DR-009 Revision 1: the default body is the fixed string
+    // The default body is the fixed string
     // "Internal Server Error" to avoid CWE-209 information disclosure of
     // e.what() text (which routinely embeds file paths, SQL fragments,
     // internal identifiers, attacker-influenced input). The originating
@@ -105,10 +103,10 @@ void webserver_impl::log_dispatch_error(std::string_view msg) const noexcept {
     if (parent->log_error == nullptr) {
         return;
     }
-    // DR-009 Revision 1 (TASK-055): msg is forwarded VERBATIM regardless
+    // msg is forwarded VERBATIM regardless
     // of create_webserver::expose_exception_messages. The error log is
     // the canonical destination for the verbatim exception text; only
-    // the HTTP response body path was sanitized by the revision.
+    // the HTTP response body path is sanitized.
     //
     // Framework contract (CWE-532): msg may contain e.what() text from
     // a handler exception, which could include sensitive data (DB connection
@@ -133,7 +131,7 @@ webserver_impl::run_internal_error_handler_safely(
     try {
         return internal_error_page(mr, msg, /*force_our=*/false);
     } catch (...) {
-        // §5.2 point 4: the user handler itself threw. Log generically
+        // The user handler itself threw. Log generically
         // and return an empty-body 500. No exception escapes from here.
         log_dispatch_error("internal_error_handler threw; "
                            "sending hardcoded empty-body 500");

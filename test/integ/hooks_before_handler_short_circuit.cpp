@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-048 acceptance criterion 2.
+// Contract under test:
 //
 // "New integ test hooks_before_handler_short_circuit_replaces_dispatch: a
 //  before_handler hook returning hook_action::respond_with(r) is observed
@@ -145,7 +145,7 @@ LT_BEGIN_AUTO_TEST(hooks_before_handler_short_circuit_suite,
     LT_CHECK_EQ(resp_body, std::string("PRIVATE-DATA"));
     LT_CHECK_EQ(handler_calls.load(), static_cast<std::size_t>(1));
     // Verify the firing site populates ctx.method and ctx.resource correctly
-    // for a GET request on a registered route (TASK-048 review finding 14).
+    // for a GET request on a registered route.
     LT_CHECK_EQ(ctx_method.load(),
                 static_cast<std::uint8_t>(http_method::get));
     LT_CHECK(ctx_resource_non_null.load());

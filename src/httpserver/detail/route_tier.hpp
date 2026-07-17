@@ -57,12 +57,9 @@ namespace detail {
 // them before invoking this helper.
 //
 // Inline so both webserver_register.cpp and webserver_routes.cpp can call
-// it without picking up a TU boundary; previously a static helper in an
-// anonymous namespace inside webserver.cpp, lifted here when the file was
-// decomposed.
-// 'pattern' names the regex tier — avoids the trailing underscore that was
-// needed to escape the reserved token 'regex'. The label is self-describing:
-// routes in this tier match by compiled regex pattern. (finding #4)
+// it without picking up a TU boundary.
+// 'pattern' names the regex tier; the label is self-describing:
+// routes in this tier match by compiled regex pattern.
 enum class route_tier_kind { exact, radix, pattern };
 
 struct route_tier_result {
@@ -80,10 +77,15 @@ inline route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
 
     if (idx.is_regex_compiled()) {
         // Compile the normalized pattern once and run the self-match
-        // check. If the literal url_complete matches its own regex, the
-        // pattern is trivially ^/literal$ and the exact hash tier is
-        // faster and correct. Otherwise the path has meaningful regex
-        // metacharacters and belongs in the regex tier.
+        // check: does the literal url_complete text match its own
+        // compiled regex? If yes the route is stored in the exact hash
+        // tier keyed by that literal string. NOTE: self-matching does
+        // NOT prove the pattern is metacharacter-free -- e.g. "/a.c"
+        // self-matches because '.' matches the literal '.'. Such a
+        // pattern is classified exact and from then on matches ONLY
+        // its literal text, not the wider regex language; only
+        // patterns that fail the self-match (e.g. "/a[0-9]") reach the
+        // regex tier and keep full regex matching.
         // Guard std::regex construction (CWE-248): a malformed pattern
         // throws std::regex_error. Convert to std::invalid_argument so
         // callers get a catchable typed exception at registration time.

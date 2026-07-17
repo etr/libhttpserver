@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-026: generic webserver::route(method, path, handler) and
+// Generic webserver::route(method, path, handler) and
 // webserver::route(method_set, path, handler).
 //
 // route() is the table-driven escape hatch for registering a lambda
@@ -430,7 +430,7 @@ LT_BEGIN_AUTO_TEST(webserver_route_suite,
     LT_CHECK(threw);
 LT_END_AUTO_TEST(route_empty_handler_throws_invalid_argument_method_set)
 
-// Single-method route(): DELETE method serves correctly (finding 7 coverage
+// Single-method route(): DELETE method serves correctly (coverage
 // gap: only GET and POST were tested before; runtime dispatch exercised
 // for methods beyond GET/POST).
 LT_BEGIN_AUTO_TEST(webserver_route_suite, route_delete_serves_delete_request)
@@ -447,7 +447,7 @@ LT_BEGIN_AUTO_TEST(webserver_route_suite, route_delete_serves_delete_request)
     ws.stop();
 LT_END_AUTO_TEST(route_delete_serves_delete_request)
 
-// Duplicate-registration conflict check is method-agnostic (finding 9):
+// Duplicate-registration conflict check is method-agnostic:
 // registering POST /d twice throws just as GET /d twice would.
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_duplicate_method_path_throws_for_post)
@@ -468,7 +468,7 @@ LT_BEGIN_AUTO_TEST(webserver_route_suite,
 LT_END_AUTO_TEST(route_duplicate_method_path_throws_for_post)
 
 // route() with root path "/" on a normal (non-single_resource) server
-// registers and serves correctly (finding 30 gap).
+// registers and serves correctly.
 LT_BEGIN_AUTO_TEST(webserver_route_suite, route_root_path_serves_get_request)
     webserver ws{create_webserver(PORT + 17)};
     ws.route(http_method::get, "/", [](const http_request&) {
@@ -488,7 +488,7 @@ LT_END_AUTO_TEST(route_root_path_serves_get_request)
 // rejected by on_methods_. method_set::empty() masks against
 // valid_method_mask(), so this set is reported empty and on_methods_
 // throws std::invalid_argument with the documented message.
-// (Originally finding 29: previously the empty() guard did NOT catch a
+// (Previously the empty() guard did NOT catch a
 // count_-only set; tightened so the registration cannot silently install
 // a route with no method slots.)
 LT_BEGIN_AUTO_TEST(webserver_route_suite,

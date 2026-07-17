@@ -25,7 +25,7 @@
 #ifndef SRC_HTTPSERVER_COOKIE_HPP_
 #define SRC_HTTPSERVER_COOKIE_HPP_
 
-// TASK-064: structured cookie value type. Replaces the v2 string-blob
+// Structured cookie value type. Replaces the v2 string-blob
 // `http_response::with_cookie(name, value)` surface (now deprecated) with
 // a typed value carrying name, value, domain, path, expires, max-age,
 // secure, http-only, and same-site attributes. Renders to a single

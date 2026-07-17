@@ -33,7 +33,7 @@
  * @file hook_phase.hpp
  * @brief Enumerates the eleven lifecycle phases at which user hooks fire.
  *
- * TASK-045 / DR-012 / §4.10 / PRD-HOOK-REQ-001..002. Storage and firing
+ * Storage and firing
  * semantics live in detail/webserver_impl.hpp; per-phase callable
  * signatures live in hook_context.hpp and the matching
  * webserver::add_hook / http_resource::add_hook overloads.
@@ -53,8 +53,6 @@ namespace httpserver {
  * `response_sent`, `request_completed`) are also valid arguments to
  * `http_resource::add_hook` for per-route registration. The other six
  * are server-wide only.
- *
- * See `specs/architecture/04-components/hooks.md` §4.10 and DR-012.
  */
 enum class hook_phase : std::uint8_t {
     connection_opened,

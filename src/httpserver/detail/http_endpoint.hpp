@@ -18,11 +18,10 @@
      USA
 */
 
-// ADR-002 / TASK-014: PIMPL split removed the transitive include of
-// http_endpoint.hpp from webserver.hpp. The dual-mode guard
-// (_HTTPSERVER_HPP_INSIDE_ OR HTTPSERVER_COMPILATION) is tightened to
-// HTTPSERVER_COMPILATION-only per ADR-002 §Consequences which states this
-// gate must be tightened once the PIMPL split lands.
+// The PIMPL split removed the transitive include of http_endpoint.hpp
+// from webserver.hpp, so the include guard below is
+// HTTPSERVER_COMPILATION-only: this header is internal and never
+// reachable from the public umbrella headers.
 #if !defined(HTTPSERVER_COMPILATION)
 #error "httpserver/detail/http_endpoint.hpp is internal; only include it when compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
 #endif
@@ -144,7 +143,7 @@ class http_endpoint {
       *                "/path/to/res/" is automatically associated to resource "A". Default is false.
       * @param registration boolean that indicates to the system if this is an endpoint that need to be registered to a webserver
       *                     or it is simply an endpoint to be used for comparisons. Default is false.
-      * @param use_regex boolean that indicates if regexes are checked or not. Default is true.
+      * @param use_regex boolean that indicates if regexes are checked or not. Default is false.
      **/
      http_endpoint(const std::string& url,
              bool family = false,
@@ -153,12 +152,25 @@ class http_endpoint {
 
  private:
      /**
-      * The complete url extracted
+      * The canonicalized pattern text. The constructor sets it to the
+      * url argument (lower-cased when CASE_INSENSITIVE is defined),
+      * then strips a single trailing '/' and prepends a leading '/'
+      * if absent — so it always begins with '/' and a bare "/" stays
+      * "/". Parameter segments are kept verbatim ("{name}" or
+      * "{name|regex}"). This is the canonical per-route key text.
      **/
      std::string url_complete;
 
      /**
-      * The url standardized in order to use standard comparisons or regexes
+      * The regex source string built from the pattern. The constructor
+      * seeds it with "^/" when use_regex is set ("/" otherwise), then
+      * appends per '/'-segment: literal segments verbatim, joined by
+      * '/' (a FIRST segment starting with '^' replaces the seed so the
+      * anchor is kept verbatim); parameter segments contribute the
+      * user regex from "{name|regex}", or "([^\/]+)" for a bare
+      * "{name}". When use_regex is set, compile_regex_url() appends a
+      * trailing '$' and compiles this text into re_url_normalized.
+      * For non-registration endpoints every part is appended verbatim.
      **/
      std::string url_normalized;
 

@@ -8,7 +8,7 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-045: API shape + runtime semantics for the hook bus skeleton.
+// API shape + runtime semantics for the hook bus skeleton.
 //
 // Compile-time:
 //   - hook_phase is an enum with count_ == 11.
@@ -67,8 +67,8 @@ static_assert(std::is_nothrow_move_constructible_v<hook_handle>,
 static_assert(std::is_nothrow_move_assignable_v<hook_handle>,
               "hook_handle must be nothrow move-assignable");
 
-// D11 — ABI size pin so future growth is reviewed explicitly.
-// TASK-051 bumped this from 32 to 48 to make room for the per-route
+// ABI size pin so future growth is reviewed explicitly.
+// The budget was bumped from 32 to 48 to make room for the per-route
 // path's weak_ptr<detail::resource_hook_table> member. Layout (libc++):
 //   impl_       (8) + slot_id_ (8) + phase_ (1) + armed_ (1) + pad (6)
 //   + table_weak_ (16)
@@ -87,7 +87,7 @@ static_assert(std::is_same_v<
 // Negative compile gate: a callable whose signature does not match
 // ANY of the eleven add_hook overloads must NOT be invocable as
 // add_hook. This pins the "wrong signature fails to compile"
-// acceptance criterion via SFINAE rather than a should-fail TU.
+// requirement via SFINAE rather than a should-fail TU.
 //
 // Note on design: the SFINAE gate tests that callables with the wrong
 // TYPE are rejected at compile time. A callable with the RIGHT signature
@@ -275,14 +275,13 @@ LT_BEGIN_AUTO_TEST(hook_api_shape_suite, default_constructed_handle_is_inert)
     // Two successful remove() calls + absence of crash demonstrate inert state.
 LT_END_AUTO_TEST(default_constructed_handle_is_inert)
 
-// Runtime throw paths in register_hook_impl. (TASK-045 review, finding #11.)
+// Runtime throw paths in register_hook_impl.
 //
 // Note: wrong-phase+right-signature triggers a runtime throw (the phase
 // mismatch is detected inside register_hook_impl, not at compile time).
 // Wrong-signature callables are rejected at compile time via the SFINAE
 // gate above. The SFINAE gate covers compile-time rejection; these two
-// tests cover the runtime guards. See spec comment in hook_api_shape_test.cpp
-// finding #29.
+// tests cover the runtime guards.
 LT_BEGIN_AUTO_TEST(hook_api_shape_suite, add_hook_throws_on_phase_mismatch)
     webserver ws = make_ws();
     // The connection_opened overload expects hook_phase::connection_opened
@@ -301,7 +300,7 @@ LT_END_AUTO_TEST(add_hook_throws_on_empty_callable)
 
 // Move-assignment must remove the target's existing registration before
 // taking over the source's. Validates the remove()-before-take-over logic
-// in hook_handle::operator=. (TASK-045 review, finding #14.)
+// in hook_handle::operator=.
 LT_BEGIN_AUTO_TEST(hook_api_shape_suite, move_assign_removes_target_registration)
     webserver ws = make_ws();
     auto* impl = httpserver::webserver_test_access::impl(ws);
@@ -340,7 +339,7 @@ LT_END_AUTO_TEST_ENV()
 // from the exact names of the per-phase vector members. A rename or
 // structural reorganisation of the vectors only requires updating the
 // single switch in webserver_impl::phase_hook_count; this test remains
-// correct without modification. (TASK-045 review, finding #4.)
+// correct without modification.
 namespace {
 
 std::size_t phase_size(webserver_impl* impl, hook_phase p) {

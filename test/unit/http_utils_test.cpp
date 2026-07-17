@@ -31,7 +31,7 @@
 #endif
 
 #include <sys/stat.h>
-#include <unistd.h>  // TASK-020: unlink (was reachable transitively via httpserver/http_utils.hpp -> microhttpd.h)
+#include <unistd.h>  // unlink (was reachable transitively via httpserver/http_utils.hpp -> microhttpd.h)
 // Note: the hard-coded integer values for start_method_T, digest_algorithm,
 // and digest_auth_result are pinned to the upstream MHD macros via
 // static_assert blocks in src/http_utils.cpp (unconditional start_method_T
@@ -950,7 +950,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_wildcard_weight)
     LT_CHECK_EQ(ip1.weight() > ip2.weight(), true);
 LT_END_AUTO_TEST(ip_representation_wildcard_weight)
 
-// ---- sanitize_upload_filename (finding test-quality-reviewer-iter1-1) -------
+// ---- sanitize_upload_filename -----------------------------------------------
 //
 // sanitize_upload_filename is a pure public helper that extracts the basename
 // from an upload filename, rejecting path-traversal components ('.', '..').
@@ -1021,7 +1021,7 @@ LT_END_AUTO_TEST(sanitize_upload_filename_mixed_separators)
 // like "foo.txt\x00.php" is passed to std::ofstream::open() whose c_str()
 // call truncates at the embedded null, creating the file at the truncated
 // location rather than the full std::string path. Reject such names by
-// returning "". (security finding #12)
+// returning "".
 LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_null_byte_returns_empty)
     std::string with_null("foo.txt");
     with_null += '\0';

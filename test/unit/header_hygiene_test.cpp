@@ -18,11 +18,11 @@
      USA
 */
 
-// Header-hygiene sentinel for TASK-007:
+// Header-hygiene sentinel:
 //
-// PRD-HDR-REQ-001..003 demand that the public umbrella header
-// <httpserver.hpp> not transitively pull in libmicrohttpd, pthread,
-// gnutls, or BSD-socket internals. This translation unit includes ONLY
+// The public umbrella header <httpserver.hpp> must not transitively
+// pull in libmicrohttpd, pthread, gnutls, or BSD-socket internals.
+// This translation unit includes ONLY
 // the umbrella, then uses the well-known include-guard macros that
 // each forbidden header defines on every supported platform to detect
 // transitive leakage.
@@ -42,7 +42,7 @@
 //      so M2-M5 progress is observable.
 //   3. When the umbrella is clean and this exits 0, Automake reports
 //      XPASS (a hard error by default) -- which is the explicit signal
-//      for TASK-020 to remove the XFAIL_TESTS marker.
+//      to remove the XFAIL_TESTS marker.
 //
 // Guard-macro mapping (verified on glibc, musl, macOS/BSD, MSYS2/MINGW64):
 //
@@ -57,7 +57,7 @@
 // red states during M2-M5 -- the leaks must be removed in production
 // code, not here.
 //
-// TASK-081 pthread-detector removal: a previous revision included guards
+// pthread-detector removal: a previous revision included guards
 // for <pthread.h> (_PTHREAD_H / _PTHREAD_H_ / _WINPTHREADS_H), conditional
 // on the consumer's STL not transitively dragging it in. Investigation
 // confirmed that the libhttpserver public surface uses STL container
@@ -100,7 +100,7 @@ int main() {
     ++leaks;
 #endif
 
-// TASK-081: the <pthread.h> detector was removed. The libhttpserver
+// The <pthread.h> detector was removed. The libhttpserver
 // public surface uses STL container headers, and BOTH mainstream STLs
 // (libc++ AND libstdc++ in thread-enabled mode) unconditionally drag
 // <pthread.h> in from those headers. The detector could not be

@@ -25,9 +25,9 @@
 #ifndef SRC_HTTPSERVER_HTTP_REQUEST_HPP_
 #define SRC_HTTPSERVER_HTTP_REQUEST_HPP_
 
-// TASK-015 / TASK-019: <microhttpd.h> and <gnutls/gnutls.h> intentionally
+// <microhttpd.h> and <gnutls/gnutls.h> intentionally
 // do NOT appear here. Backend-coupled state lives behind
-// detail/http_request_impl.hpp. After TASK-019 the public surface no
+// detail/http_request_impl.hpp. The public surface no
 // longer mentions any GnuTLS type: the raw session-handle accessor that
 // previously returned the gnutls session is removed, replaced by
 // high-level cert accessors (has_tls_session / has_client_certificate /
@@ -71,7 +71,7 @@ namespace detail {
 struct modded_request;
 class webserver_impl;
 class http_request_impl;
-// TASK-016: custom deleter for http_request_impl. Used by the
+// Custom deleter for http_request_impl. Used by the
 // std::unique_ptr<http_request_impl, http_request_impl_deleter> below
 // so the destructor path Just Works for both heap- and arena-allocated
 // impls. Definition lives out-of-line in src/http_request.cpp; this
@@ -90,7 +90,7 @@ struct http_request_impl_deleter {
  * Class representing an abstraction for an Http Request. It is used from
  * classes using these APIs to receive information through the HTTP protocol.
  *
- * ### string_view lifetime contract (TASK-016)
+ * ### string_view lifetime contract
  *
  * Several getter methods return `std::string_view` rather than `std::string`
  * for zero-copy access to request data that lives in a per-connection arena.
@@ -112,9 +112,9 @@ struct http_request_impl_deleter {
  * Getters affected: get_arg_flat(), get_args_flat(), get_querystring(),
  * get_user(), get_pass(), get_digested_user(), get_header(), get_footer(),
  * get_cookie(), get_requestor().
- * (security-reviewer-iter1-1, CWE-416 Use After Free; Item 22.)
+ * (CWE-416 Use After Free.)
  *
- * ### Container reference lifetime contract (TASK-017)
+ * ### Container reference lifetime contract
  *
  * The container getters `get_headers()`, `get_footers()`, `get_cookies()`,
  * `get_args()`, `get_path_pieces()`, and `get_files()` all return a
@@ -133,7 +133,7 @@ struct http_request_impl_deleter {
  * get_cookies / get_args / get_path_pieces lazily populates a per-request
  * cache; subsequent calls are O(1) and return the same reference.
  *
- * ### Thread-safety (Item 21)
+ * ### Thread-safety
  *
  * `http_request` instances are **not thread-safe**. The lazy-fill booleans
  * (`args_populated`, `headers_cache_built_`, etc.) are plain (non-atomic)
@@ -228,8 +228,9 @@ class http_request {
       *       is only valid for the lifetime of the request object (typically
       *       the duration of the handler invocation). Copy into std::string
       *       to extend the lifetime.
-      * @note The querystring is assembled eagerly at construction on the live
-      *       MHD path, so the public reader is `noexcept`.
+      * @note The querystring is assembled lazily on the first call and
+      *       cached; the reader is `noexcept` (an allocation failure during
+      *       assembly yields an empty view rather than throwing).
      **/
      std::string_view get_querystring() const noexcept;
 
@@ -276,7 +277,7 @@ class http_request {
      http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper);
 
  public:
-     // TASK-068: internal-only test accessor. Returns the underlying
+     // Internal-only test accessor. Returns the underlying
      // MHD_Connection* the request was built against (the same pointer
      // passed to the internal constructor above). Used exclusively by
      // test/integ/connection_state_body_residue_test.cpp to peek the
@@ -324,7 +325,7 @@ class http_request {
      // pointer in src/httpserver/detail/http_request_impl.hpp. The
      // dtor is out-of-line in http_request.cpp so the unique_ptr can
      // see the complete impl type.
-     // TASK-016: the deleter is custom because the impl can be allocated
+     // The deleter is custom because the impl can be allocated
      // either on the heap (default-resource fallback / test path) or on
      // a per-connection arena (live request path). The deleter dispatches
      // to the right reclamation strategy based on a function pointer set
@@ -413,22 +414,22 @@ class http_request {
 
      void set_file_cleanup_callback(file_cleanup_callback_ptr callback);
 
-     // TASK-057: set the redaction-bypass bit for diagnostic streaming.
+     // Set the redaction-bypass bit for diagnostic streaming.
      // Plumbed from webserver::expose_credentials_in_logs at dispatch
      // time and from create_test_request::build() for unit tests.
      void set_expose_credentials_in_logs(bool v);
 
      friend class webserver;
-     friend class detail::webserver_impl;  // TASK-014: PIMPL dispatch path
+     friend class detail::webserver_impl;  // PIMPL dispatch path
      friend struct detail::modded_request;
-     friend class create_test_request;    // TASK-015: test builder accesses impl_
+     friend class create_test_request;    // test builder accesses impl_
 };
 
 /**
  * Stream-insert a human-readable dump of @p r into @p os for diagnostic
  * logging.
  *
- * @section redaction Redaction policy (TASK-057, OWASP A09:2021 / CWE-312 / CWE-532)
+ * @section redaction Redaction policy (OWASP A09:2021 / CWE-312 / CWE-532)
  * By default the following fields are emitted as the fixed token
  * `"<redacted>"` instead of their plaintext values:
  *   - The Basic-auth password (`pass:"<redacted>"`)
@@ -447,7 +448,7 @@ class http_request {
  * @section opt_in Restoring the verbose v1 form
  * Call `create_webserver::expose_credentials_in_logs(true)` on the
  * builder used to construct the parent @ref webserver. This restores
- * the pre-TASK-057 plaintext-everywhere behaviour for every
+ * the v1 plaintext-everywhere behaviour for every
  * @ref http_request the webserver dispatches.
  *
  * @warning `expose_credentials_in_logs(true)` is DEVELOPMENT-ONLY.

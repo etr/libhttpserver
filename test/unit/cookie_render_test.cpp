@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-064 Cycles 2-6: fluent setter shape, setter validation, RFC 6265
+// Fluent setter shape, setter validation, RFC 6265
 // §4.1 rendering, §5.4 parsing, and the round-trip pinning tests for
 // httpserver::cookie. Pure CPU test -- no MHD.
 
@@ -40,7 +40,7 @@ LT_BEGIN_SUITE(cookie_render_suite)
     void tear_down() {}
 LT_END_SUITE(cookie_render_suite)
 
-// ---------------- Cycle 2: fluent setter ref-qualifier shape ----------------
+// ---------------- fluent setter ref-qualifier shape ----------------
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_returns_lvalue_ref_on_lvalue)
     cookie c;
@@ -76,7 +76,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, fluent_chain_round_trip_getters)
     LT_CHECK_EQ(c.expires().value(), static_cast<std::int64_t>(784111777));
 LT_END_AUTO_TEST(fluent_chain_round_trip_getters)
 
-// ---------------- Cycle 3: setter validation ----------------
+// ---------------- setter validation ----------------
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_rejects_crlf)
     bool threw = false;
@@ -190,7 +190,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_domain_rejects_semicolon)
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_domain_rejects_semicolon)
 
-// ---------------- Cycle 4: to_set_cookie_header() rendering ----------------
+// ---------------- to_set_cookie_header() rendering ----------------
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, render_minimal_name_value)
     LT_CHECK_EQ(cookie{}.with_name("sid").with_value("abc")
@@ -363,7 +363,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_accepts_empty_string)
     LT_CHECK_EQ(threw, false);
 LT_END_AUTO_TEST(with_name_accepts_empty_string)
 
-// ---------------- Cycle 5: parse_cookie_header() ----------------
+// ---------------- parse_cookie_header() ----------------
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, parse_single_name_value)
     auto v = cookie::parse_cookie_header("sid=abc");
@@ -444,7 +444,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, parse_does_not_unescape)
     LT_CHECK_EQ(v[0].value(), std::string("b%20c"));
 LT_END_AUTO_TEST(parse_does_not_unescape)
 
-// ---------------- Cycle 6: Round-trip ----------------
+// ---------------- Round-trip ----------------
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, roundtrip_rfc6265_example_4_1)
     // RFC 6265 §4.1 example:
@@ -479,7 +479,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, roundtrip_first_token_is_name_value)
     LT_CHECK_EQ(token, std::string("sid=abc"));
 LT_END_AUTO_TEST(roundtrip_first_token_is_name_value)
 
-// ---------------- Cycle 7: render-time injection guard (TASK-064 / security-reviewer-iter2-1) ----------------
+// ---------------- Render-time injection guard ----------------
 
 // parse_cookie_header() deliberately bypasses validators, so a cookie
 // object returned by it may carry a name containing bytes forbidden
@@ -544,7 +544,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, render_guard_rejects_space_in_parsed_nam
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(render_guard_rejects_space_in_parsed_name)
 
-// ---------------- Cycle 7: comma rejection in validate_attr_param (security-reviewer-iter2-2) ----------------
+// ---------------- Comma rejection in validate_attr_param ----------------
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_domain_rejects_comma)
     // HTTP/1.0 legacy parsers split Set-Cookie on commas, so a Domain
@@ -566,7 +566,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_path_rejects_comma)
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_path_rejects_comma)
 
-// ---------------- Cycle 8: render-time value_ guard (security-reviewer-iter3-1) ----------------
+// ---------------- Render-time value_ guard ----------------
 // parse_cookie_header() stores value_ raw (bypassing validate_value()).
 // to_set_cookie_header() must detect forbidden bytes in value_ at render
 // time and throw, matching the existing name_ guard (CWE-113 defence-in-depth).
@@ -633,7 +633,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_value_rejects_semicolon_setter_path
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_value_rejects_semicolon_setter_path)
 
-// ---------------- Cycle 8: same_site=None + secure=true no-double-emit (test-quality-iter3-3) ----------------
+// ---------------- same_site=None + secure=true no-double-emit ----------------
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, same_site_none_with_explicit_secure_emits_single_secure_token)
     // SameSite=None auto-coerces Secure=true (browser requirement).

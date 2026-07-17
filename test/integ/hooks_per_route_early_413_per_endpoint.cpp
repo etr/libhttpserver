@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-051 acceptance criterion 2:
+// Contract under test:
 //
 // "New integ test hooks_per_route_early_413_per_endpoint: per-route
 //  before_handler hook on /upload-small rejects bodies > 1KB with 413;

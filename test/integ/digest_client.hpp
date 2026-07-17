@@ -21,7 +21,7 @@
 #ifndef TEST_INTEG_DIGEST_CLIENT_HPP_
 #define TEST_INTEG_DIGEST_CLIENT_HPP_
 
-// TASK-079: header-only test-side RFC 7616 Digest client helper.
+// Header-only test-side RFC 7616 Digest client helper.
 //
 // Why it exists
 // -------------

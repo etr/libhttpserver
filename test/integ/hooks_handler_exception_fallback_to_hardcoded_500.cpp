@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-049 acceptance criterion 4 / DR-009 §5.2 point 4 backstop.
+// Backstop of the handler error-propagation contract:
 //
 // "The hardcoded empty-body-500 fallback still fires when every hook in
 //  the chain (including the internal_error_handler alias) either throws
@@ -60,7 +60,7 @@ class throwing_resource : public httpserver::http_resource {
     }
 };
 
-// log_capture is defined in log_capture.hpp (finding #39).
+// log_capture is defined in log_capture.hpp.
 
 }  // namespace
 

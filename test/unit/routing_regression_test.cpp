@@ -18,14 +18,14 @@
      USA
 */
 
-// TASK-028: v2.0 routing-semantics regression gate. Walks every routing
+// v2.0 routing-semantics regression gate. Walks every routing
 // pattern in the v1 test corpus (taxonomy enumerated in
 // test/REGRESSION.md) through the public webserver registration surface
 // and asserts the v2 3-tier table (probed via webserver_impl::lookup_v2)
 // resolves each pattern to the right tier, the right captures, and the
 // right method_set. Today the v2 table is shadow-populated alongside the
-// v1 maps and is not yet on the dispatch path (TASK-036 cuts dispatch
-// over). This TU is the only thing pinning v2-lookup semantics ahead of
+// v1 maps and is not yet on the dispatch path (the dispatch cutover
+// lands separately). This TU is the only thing pinning v2-lookup semantics ahead of
 // that cutover, so a failure here is a release-blocker per AR-003.
 //
 // Each LT_BEGIN_AUTO_TEST mirrors one row of the taxonomy table in
@@ -140,7 +140,7 @@ LT_END_AUTO_TEST(exact_path_normalization_aliases)
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    parameterized_single_segment_captures)
     // Mirrors basic_suite::regex_matching_arg via the on_get lambda
-    // surface (TASK-025). The route is GET-only, so methods should
+    // surface. The route is GET-only, so methods should
     // contain GET and NOT contain POST. The radix tier carries the
     // capture for {id}.
     ht::webserver ws{ht::create_webserver(8080)
@@ -323,13 +323,13 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
 LT_END_AUTO_TEST(prefix_register_then_unregister_then_lookup_misses)
 
 // ---------------------------------------------------------------------
-// Prefix-vs-exact terminus collision (TASK-056).
+// Prefix-vs-exact terminus collision.
 //
 // Two registrations on the SAME canonical path that disagree on the
 // prefix/exact dimension cannot coexist in the v2 table: the
 // route-cache key (method, path) cannot distinguish the two, and
 // lookup_v2 would silently shadow one of them in tier-priority order.
-// The contract introduced by TASK-056 is: the SECOND registration
+// The collision-detection contract is: the SECOND registration
 // throws std::invalid_argument at registration time and the original
 // entry is left intact (atomicity).
 //
@@ -491,7 +491,7 @@ LT_END_AUTO_TEST(parameterized_prefix_after_parameterized_exact_throws_collision
 // ---------------------------------------------------------------------
 // Method-mismatched semantics (taxonomy row: method-mismatched).
 // The method_set bitmask is what dispatch uses for the 405 + Allow
-// decision after TASK-036 cuts dispatch over.
+// decision once dispatch cuts over to the v2 table.
 // ---------------------------------------------------------------------
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
@@ -565,7 +565,7 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // literal "foo" (exact child), so the tree descends there first and
     // never tries the wildcard root branch required by the second
     // pattern. Structural precedence → first-registered wins here.
-    // TASK-071: route_entry::handler is now a bare shared_ptr<http_resource>
+    // route_entry::handler is now a bare shared_ptr<http_resource>
     // (the variant arm was collapsed); read it directly.
     LT_CHECK(r.entry.handler != nullptr);
     LT_CHECK(r.entry.handler == first);
@@ -679,18 +679,21 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    second_lookup_same_path_hits_cache_tier)
     ht::webserver ws{ht::create_webserver(8080)
         .start_method(ht::http::http_utils::INTERNAL_SELECT)};
-    ws.register_path("/cached", std::make_shared<noop_resource>());
+    // Use a parameterized (radix) route: the exact tier bypasses the
+    // cache (it is a concurrent shared_lock probe), so only the
+    // genuinely-expensive parameter/regex tiers are memoised.
+    ws.register_path("/cached/{id}", std::make_shared<noop_resource>());
 
-    // First lookup: populates the cache.
+    // First lookup: resolves via the radix tier and populates the cache.
     auto cold = impl_of(ws).lookup_v2(ht::http_method::get,
-                                      std::string("/cached"));
+                                      std::string("/cached/42"));
     LT_CHECK(cold.found);
     // First lookup resolves via a tier other than cache.
     LT_CHECK(cold.tier != ht::detail::webserver_impl::tier_hit::cache);
 
     // Second lookup for the same path: must come from the LRU cache.
     auto warm = impl_of(ws).lookup_v2(ht::http_method::get,
-                                      std::string("/cached"));
+                                      std::string("/cached/42"));
     LT_CHECK(warm.found);
     LT_CHECK(warm.tier == ht::detail::webserver_impl::tier_hit::cache);
 LT_END_AUTO_TEST(second_lookup_same_path_hits_cache_tier)

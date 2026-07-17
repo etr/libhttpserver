@@ -98,7 +98,7 @@ ssize_t test_callback_with_data(shared_ptr<test_data> closure_data, char* buf, s
     }
 }
 
-// TASK-013: v1's deferred_response<T> had a typed callable + initial content
+// v1's deferred_response<T> had a typed callable + initial content
 // prefix. v2's http_response::deferred(producer) is type-erased through
 // std::function and has no initial-content parameter; the lambda below
 // reproduces the v1 prefix-then-callback semantics by emitting the prefix
@@ -232,7 +232,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_empty_content)
 LT_END_AUTO_TEST(deferred_response_empty_content)
 
 // ---------------------------------------------------------------------------
-// TASK-036 acceptance tests: handler return-by-value dispatch cutover.
+// Acceptance tests: handler return-by-value dispatch cutover.
 //
 // AC-1: lambda registered via on_get returning http_response by value
 //       produces 200 with body "hi".
@@ -296,7 +296,7 @@ class by_value_class_resource : public http_resource {
 }  // namespace
 
 LT_BEGIN_AUTO_TEST(deferred_suite, on_get_lambda_returns_value)
-    // AC-1: lambda returns http_response by value (DR-004) and the dispatch
+    // AC-1: lambda returns http_response by value and the dispatch
     // path moves the prvalue into mr->response.
     ws->on_get("/by_value", [](const http_request&) {
         return http_response::string("hi");
@@ -371,20 +371,20 @@ LT_BEGIN_AUTO_TEST(deferred_suite, class_render_get_returns_value)
 LT_END_AUTO_TEST(class_render_get_returns_value)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_completed)
-    // AC-3 / DR-010: the http_response (and its deferred_body's captured
+    // AC-3: the http_response (and its deferred_body's captured
     // producer state) must outlive every MHD trampoline invocation and be
     // destroyed only when request_completed fires. We pin the contract by
     // capturing a shared_ptr<destruction_sentinel> inside the producer's
     // captures, then asserting the sentinel was destroyed after the server
     // is fully drained.
     //
-    // Two-concern note (TASK-036 review #10): this test asserts both
+    // Two-concern note: this test asserts both
     //   (a) body delivery ("okok" / 200) — the liveness gate
     //   (b) the lifetime contract — the load-bearing pin
     // A failed (a) short-circuits (b). That is intentional: (a) acts as a
     // gating precondition — if the dispatch path doesn't deliver bytes
-    // we already know (b) is meaningless. The reviewer recommendation to
-    // split into two tests was weighed against duplicating the sentinel
+    // we already know (b) is meaningless. Splitting into two tests was
+    // weighed against duplicating the sentinel
     // wiring (~40 LOC of producer + condvar plumbing) for the marginal
     // benefit of pinpointing which of the two assertions broke. Test
     // names already encode the primary contract; failure output makes
@@ -392,13 +392,13 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     //
     // Synchronization: sentinel destructor signals destroyed_cv so the test
     // thread wakes immediately rather than spinning. Upper bound is 5 s to
-    // catch a genuine DR-010 regression without hanging the CI suite.
+    // catch a genuine producer-lifetime regression without hanging the CI suite.
     std::atomic<bool> destroyed{false};
     std::atomic<int>  producer_calls{0};
     std::mutex        destroyed_mu;
     std::condition_variable destroyed_cv;
 
-    // Key contract (DR-010): the producer captures must live until
+    // Key contract: the producer captures must live until
     // request_completed. Capture the sentinel in the INNER (producer) lambda
     // only — not the outer on_get lambda — so it is destroyed with
     // deferred_body when ~modded_request fires from request_completed.
@@ -459,7 +459,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     // Wait for the sentinel to be destroyed. request_completed may fire on
     // a worker thread that finishes a hair after stop() returns, so we use
     // a condition variable rather than a busy-poll. 5-second upper bound
-    // catches a genuine DR-010 regression without hanging CI indefinitely.
+    // catches a genuine producer-lifetime regression without hanging CI indefinitely.
     {
         std::unique_lock<std::mutex> lk(destroyed_mu);
         destroyed_cv.wait_for(lk, std::chrono::seconds(5),

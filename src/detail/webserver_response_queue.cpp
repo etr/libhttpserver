@@ -37,14 +37,14 @@ namespace httpserver {
 namespace detail {
 
 // webserver_response_queue.cpp -- response materialization and queueing.
-// Carved out of src/detail/webserver_request.cpp in TASK-086 to keep both
-// translation units under the project per-file LOC ceiling (FILE_LOC_MAX in
-// scripts/check-file-size.sh). Holds the materialize_response /
+// Carved out of src/detail/webserver_request.cpp to keep both
+// translation units under the project per-file LOC ceiling (FILE_LOC_MAX
+// in scripts/check-file-size.sh). Holds the materialize_response /
 // decorate_mhd_response / get_raw_response_with_fallback /
 // queue_response_dispatching_kind / materialize_and_queue_response members
-// (and their anonymous-namespace mhd_digest_args helper). No behaviour
-// change: the bodies are moved verbatim.
-// TASK-013: dispatch helpers replacing the v1 `get_raw_response`,
+// (and their anonymous-namespace mhd_digest_args helper).
+//
+// These are the dispatch helpers replacing the v1 `get_raw_response`,
 // `decorate_response`, and `enqueue_response` virtuals on http_response.
 // Now that http_response is a final value type and the v1 polymorphic
 // subclass hierarchy is gone, the wire-construction logic lives here in
@@ -71,7 +71,7 @@ void webserver_impl::decorate_mhd_response(MHD_Response* response,
     for (const auto& [k, v] : resp.get_footers()) {
         MHD_add_response_footer(response, k.c_str(), v.c_str());
     }
-    // TASK-064: render from the structured cookie list, not from the
+    // Render from the structured cookie list, not from the
     // legacy `cookies_` map. Each entry is rendered via
     // cookie::to_set_cookie_header() so attributes (Domain, Path,
     // Expires, Max-Age, Secure, HttpOnly, SameSite) propagate to the
@@ -85,7 +85,7 @@ void webserver_impl::decorate_mhd_response(MHD_Response* response,
 }
 
 struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modded_request* mr) {
-    // TASK-036 / DR-010: every assignment into mr->response uses
+    // Every assignment into mr->response uses
     // emplace(std::move(...)); the optional owns the value and the
     // deferred-body trampoline keeps a pointer into it for the lifetime
     // of the modded_request.
@@ -101,7 +101,7 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
     try {
         struct MHD_Response* raw = try_materialize();
         if (raw == nullptr) {
-            // TASK-031: no exception was thrown, but the body materializer
+            // No exception was thrown, but the body materializer
             // returned null. Route through the safe internal-error path so
             // a misbehaving user handler can't escape.
             return emplace_and_materialize(run_internal_error_handler_safely(
@@ -133,12 +133,11 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
     }
 }
 
-// TASK-050: validate_websocket_handshake / complete_websocket_upgrade /
-// try_handle_websocket_upgrade moved to src/detail/webserver_websocket.cpp
-// to keep this TU under the FILE_LOC_MAX gate after adding the
-// after_handler / response_sent firing sites.
+// validate_websocket_handshake / complete_websocket_upgrade /
+// try_handle_websocket_upgrade live in src/detail/webserver_websocket.cpp
+// to keep this TU under the FILE_LOC_MAX gate.
 
-// TASK-062: kind-dispatched queueing.
+// Kind-dispatched queueing.
 //
 // For `body_kind::digest_challenge`, delegate to
 // MHD_queue_auth_required_response3 so libmicrohttpd writes the
@@ -181,12 +180,12 @@ mhd_digest_args map_to_mhd_digest_args_(
             algo = MHD_DIGEST_AUTH_MULT_ALGO3_MD5;
             break;
     }
-    // qop="auth" is the only v2.0-supported variant; auth-int is parked
-    // (TASK-062 plan §7). qop_auth == false -> RFC-2069 no-qop.
+    // qop="auth" is the only v2.0-supported variant; auth-int is
+    // parked. qop_auth == false -> RFC-2069 no-qop.
     MHD_DigestAuthMultiQOP qop = p.qop_auth
         ? MHD_DIGEST_AUTH_MULT_QOP_AUTH
         : MHD_DIGEST_AUTH_MULT_QOP_NONE;
-    // Empty user opaque -> substitute per-webserver opaque (plan §2.4).
+    // Empty user opaque -> substitute the per-webserver opaque.
     const char* opaque_cstr =
         p.opaque.empty() ? server_opaque.c_str() : p.opaque.c_str();
     const char* domain_cstr =
@@ -238,7 +237,7 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
         // Belt-and-suspenders: even get_raw_response_with_fallback's
         // own try/catch couldn't produce a response. Force the
         // empty-body 500 fallback so MHD always has something to queue.
-        // DR-009 §5.2 point 4: library logs before sending hardcoded 500.
+        // Contract: the library logs before sending the hardcoded 500.
         log_dispatch_error(
             "materialize_and_queue_response: "
             "get_raw_response_with_fallback returned null; "
@@ -257,7 +256,7 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
     }
     decorate_mhd_response(raw_response, *mr->response);
     int to_ret = queue_response_dispatching_kind(connection, mr, raw_response);
-    // TASK-050: fire response_sent AFTER MHD_queue_response (so the
+    // Fire response_sent AFTER MHD_queue_response (so the
     // status/bytes ctx fields reflect what was actually queued) and
     // BEFORE MHD_destroy_response (so ctx.response is backed by live
     // storage). MHD copies the response data from raw_response during

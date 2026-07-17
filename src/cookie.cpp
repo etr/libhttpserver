@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-064: implementation of the structured cookie value type.
+// Implementation of the structured cookie value type.
 // See src/httpserver/cookie.hpp for the public contract.
 
 #include "httpserver/cookie.hpp"

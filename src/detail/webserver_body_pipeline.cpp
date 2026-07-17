@@ -18,11 +18,10 @@
      USA
 */
 
-// TASK-047 -- The two body-pipeline stages
+// The two body-pipeline stages
 // (requests_answer_first_step / requests_answer_second_step) extracted
 // from webserver_request.cpp to keep that TU under the 500-LOC ceiling
-// after adding the request_received and body_chunk firing sites
-// (matches the TASK-046 split pattern that carved
+// (the same split pattern that carved
 // webserver_callbacks_lifecycle.cpp out of webserver_callbacks.cpp).
 //
 // Also hosts the small anon-ns helper that wraps the body_chunk firing
@@ -67,7 +66,7 @@ namespace detail {
 
 namespace {
 
-// TASK-074: process-wide print-once flag for the SECURITY WARNING
+// Process-wide print-once flag for the SECURITY WARNING
 // emitted at the first webserver::start() that observes the env var.
 // std::atomic<bool> + compare_exchange_strong matches the lock-free
 // atomic style used elsewhere (e.g. g_arena_fallback_count). The
@@ -94,6 +93,11 @@ bool fire_and_maybe_short_circuit_body_chunk(webserver_impl* impl,
     // so it accumulates correctly even when put_processed_data_to_content
     // is false and a post-processor is active (in that case grow_content
     // is skipped, so get_content().size() would stay at 0 for every chunk).
+    //
+    // ctx.is_final is hard-coded false: no production path fires a
+    // final-chunk signal. End-of-body is signalled by MHD's zero-size
+    // upload callback (the *upload_data_size == 0 call that routes to
+    // complete_request), which never reaches this fire site.
     ::httpserver::body_chunk_ctx ctx{
         mr->dhr.get(),
         std::as_bytes(std::span<const char>(upload_data, upload_data_size)),
@@ -119,6 +123,10 @@ void run_post_processor_if_attached(modded_request* mr,
                                     const char* upload_data,
                                     size_t upload_data_size) {
     if (mr->pp == nullptr) return;
+    // Redundant-but-harmless refresh: answer_to_connection already
+    // hoisted mr->ws = parent at request start (and complete_request
+    // relies on that hoist). Kept as belt-and-suspenders; it never
+    // changes the value.
     mr->ws = parent;
     MHD_post_process(mr->pp, upload_data, upload_data_size);
     if (mr->upload_ostrm != nullptr && mr->upload_ostrm->is_open()) {
@@ -128,7 +136,7 @@ void run_post_processor_if_attached(modded_request* mr,
 
 }  // namespace
 
-// TASK-074: free function in namespace detail, declared in
+// Free function in namespace detail, declared in
 // webserver_impl.hpp -- see the Doxygen comment there for the full
 // contract (env var name, accepted-value rule, default-silent
 // guarantee). The check is cached in a function-local static so
@@ -145,7 +153,7 @@ bool debug_dump_request_body_opted_in() {
     return enabled;
 }
 
-// TASK-074: free function in namespace detail, declared in
+// Free function in namespace detail, declared in
 // webserver_impl.hpp. Called from webserver::start() before
 // MHD_start_daemon. Emits a one-shot SECURITY WARNING to stderr when
 // the env-var opt-in is observed, and forwards the same line to the
@@ -190,14 +198,14 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
     // to locate the per-connection arena installed by connection_notify via
     // MHD_CONNECTION_INFO_SOCKET_CONTEXT, then allocates the http_request_impl
     // from that arena. The arena plumbing is therefore implicit at this call
-    // site but explicit within the constructor. (spec-alignment-checker-iter1-2/3)
+    // site but explicit within the constructor.
     mr->dhr.reset(new http_request(connection, parent->unescaper));
     mr->dhr->set_file_cleanup_callback(parent->file_cleanup_callback);
-    // TASK-057: propagate the redaction-bypass bit so operator<< honours
+    // Propagate the redaction-bypass bit so operator<< honours
     // the builder opt-in for every request the webserver dispatches.
     mr->dhr->set_expose_credentials_in_logs(parent->expose_credentials_in_logs);
 
-    // TASK-047 -- request_received hook. Fires after the http_request is
+    // request_received hook. Fires after the http_request is
     // populated but before any body bytes are read (and before any
     // post-processor is created). Mutable ref so a hook may adjust
     // per-request state. Short-circuit: stash the response, mark
@@ -246,7 +254,7 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
         return MHD_YES;
     }
 
-    // TASK-047 -- a prior pre-handler short-circuit (request_received in
+    // A prior pre-handler short-circuit (request_received in
     // first_step, or body_chunk on an earlier chunk) already populated
     // mr->response. Consume the chunk so MHD advances; the next
     // *upload_data_size == 0 callback will route to finalize_answer's
@@ -256,7 +264,7 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
         return MHD_YES;
     }
 
-    // TASK-047 -- body_chunk hook fires per chunk BEFORE the bytes are
+    // body_chunk hook fires per chunk BEFORE the bytes are
     // appended to mr->dhr / fed to MHD_post_process.
     if (has_hooks_for(::httpserver::hook_phase::body_chunk)) {
         if (fire_and_maybe_short_circuit_body_chunk(
@@ -266,14 +274,14 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
         }
     }
 
-    // TASK-074 (was TASK-057): raw request-body dump, opt-in via the
+    // Raw request-body dump, opt-in via the
     // env var LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY. Default behaviour
     // is silent on RELEASE *and* DEBUG builds -- the env var is the
     // only gate, so a debug build accidentally shipped to production
     // still does not leak credentials/PII unless the operator opted
     // in. See docs/debug-env-vars.md for the security warning and
     // the one-shot startup notice that fires when the env var is set.
-    // The operator<< redaction policy (TASK-057) does NOT cover this
+    // The operator<< redaction policy does NOT cover this
     // code path: raw bytes are written verbatim.
     if (debug_dump_request_body_opted_in()) {
         std::cout << "Writing content: ";

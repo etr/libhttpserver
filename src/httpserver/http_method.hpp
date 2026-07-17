@@ -41,8 +41,7 @@ namespace httpserver {
 // `count_` is a sentinel and must remain the last enumerator. Any new
 // method goes immediately before it; to_string()'s switch must also be
 // updated. The 32-bit underlying storage of method_set leaves 23 bits
-// of growth headroom past the 9 standard methods (PRD-REQ-REQ-003,
-// DR-006).
+// of growth headroom past the 9 standard methods.
 enum class http_method : std::uint8_t {
     get,
     head,
@@ -109,7 +108,7 @@ struct method_set {
         return *this;
     }
 
-    // TASK-027: convenience predicate for the route-table writer paths
+    // convenience predicate for the route-table writer paths
     // (on_methods_, route(method_set,...)). True iff no valid-window
     // method bits are set. Masking against valid_method_mask() ensures
     // that a set containing only out-of-window bits (e.g. constructed

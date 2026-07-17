@@ -18,13 +18,13 @@
      USA
 */
 
-// TASK-027: segment-trie for the parameterized + prefix route tier.
+// Segment-trie for the parameterized + prefix route tier.
 //
 // A segment trie avoids dragging in a vendored library (which would
 // conflict with the project's tightly curated source tree and
-// LGPL-2.1 distribution). The architecture spec (§4.7) commits only
-// to the outer three-tier + cache shape; the implementation choice
-// is intentionally left open.
+// LGPL-2.1 distribution). The architecture commits only to the outer
+// three-tier + cache shape; the implementation choice is
+// intentionally left open.
 //
 // Internal header — only reachable when compiling libhttpserver.
 #if !defined(HTTPSERVER_COMPILATION)
@@ -66,7 +66,7 @@ struct radix_match {
 // ambiguous and rejected at registration time.
 template <typename T>
 struct radix_node {
-    // TASK-056: per-segment children are kept in std::map rather than
+    // Per-segment children are kept in std::map rather than
     // std::unordered_map for hash-flooding immunity (CWE-407). URL path
     // segments are attacker-controlled and neither libc++ nor libstdc++
     // seed std::hash<std::string> by default, so std::unordered_map is
@@ -111,8 +111,8 @@ class radix_tree {
     // request path) or `exact_terminus_` (and matches only this path).
     // The radix_tree itself does not look inside `entry` — the caller
     // (webserver_impl) is responsible for keeping the is_prefix argument
-    // consistent with route_entry::is_prefix, which is the §4.7 source
-    // of truth. Replaces an existing terminus of the same kind.
+    // consistent with route_entry::is_prefix, which is the source of
+    // truth. Replaces an existing terminus of the same kind.
     void insert(const std::string& path, T entry, bool is_prefix = false) {
         radix_node<T>* node = root_.get();
         const auto segments = tokenize(path);
@@ -257,7 +257,7 @@ class radix_tree {
     }
 
  public:
-    // TASK-056: probe for a terminus of the specified kind at the EXACT
+    // Probe for a terminus of the specified kind at the EXACT
     // node reached by tokenizing `path` (pattern-equality, not request-
     // path matching). Unlike find(), this does NOT fall back to a
     // prefix ancestor; it DOES descend the wildcard child when the
@@ -265,8 +265,8 @@ class radix_tree {
     // because the caller passes the registered pattern, not a concrete
     // request segment. Returns true iff such a terminus exists.
     //
-    // Designed for the registration-time collision guard added in
-    // TASK-056 (webserver_impl::reject_terminus_collision): when
+    // Designed for the registration-time collision guard
+    // (webserver_impl::reject_terminus_collision): when
     // inserting a NEW exact terminus at /admin we need to refuse if a
     // prefix terminus is already registered at /admin (and vice versa)
     // — silent shadowing would corrupt the (method, path) cache key.
@@ -307,8 +307,7 @@ class radix_tree {
  private:
     static std::vector<std::string> tokenize(const std::string& path) {
         // tokenize_url takes a const std::string&; passing the already-
-        // owned string binds directly, avoiding the std::string{view}
-        // temporary that the previous string_view overload required.
+        // owned string binds directly, with no temporary constructed.
         return ::httpserver::http::http_utils::tokenize_url(path);
     }
 
@@ -318,9 +317,8 @@ class radix_tree {
     // nullptr if any segment failed to match.
     //
     // Templated on Node (radix_node<T> or const radix_node<T>) so the
-    // const-correct mutable / const variants share one descent body --
-    // collapses the previous in-place duplicate descent loops in
-    // has_terminus_at and remove (PMD CPD finding).
+    // const-correct mutable / const callers (has_terminus_at, remove)
+    // share one descent body.
     template <class Node>
     static Node* walk_registered_pattern_(Node* start,
             const std::vector<std::string>& segments) {

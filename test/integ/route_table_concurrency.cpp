@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-027 Cycle I: concurrent registration + lookup stress test for the
+// Concurrent registration + lookup stress test for the
 // v2 3-tier route table. Spawns N writer threads doing register / unregister
 // and M reader threads doing lookup_v2 against disjoint and overlapping
 // paths. Without correct lock discipline (route_table_mutex_ as a writer
@@ -26,14 +26,14 @@
 // always taken AFTER table mutex when both are held), this test will
 // either deadlock or race.
 //
-// **TSan gate (TASK-092: now wired into per-PR CI):**
+// **TSan gate (wired into per-PR CI):**
 // The `build-type: tsan` lane in .github/workflows/verify-build.yml runs
 // this binary RTC_ITERATIONS times via `make -C test
 // check-route-table-concurrency` (time-boxed to <= 2 min), in addition to
 // the single pass the tsan lane's plain `make check` already performs. To
 // reproduce locally, rebuild with
 // `CXXFLAGS="-fsanitize=thread -g -O1" LDFLAGS="-fsanitize=thread"` and run
-// that target. See test/PERFORMANCE.md ("CI wiring — DR-008 stress gates").
+// that target. See test/PERFORMANCE.md ("CI wiring — stress gates").
 
 #include <atomic>
 #include <chrono>
@@ -163,7 +163,7 @@ LT_END_AUTO_TEST(concurrent_register_and_lookup_no_data_race)
 
 // Cycle J: concurrent register/unregister of parameterised paths alongside
 // readers. Exercises the radix tree's wildcard_child_ node allocation and
-// deallocation paths under contention (DR-007 / DR-008). Writers use paths
+// deallocation paths under contention. Writers use paths
 // like /dyn/{id}/wN so the radix tree must allocate and free wildcard nodes
 // concurrently with readers calling lookup_v2 on those same paths.
 LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,

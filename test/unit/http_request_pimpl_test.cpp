@@ -8,9 +8,9 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-015: compile-time guarantees of the http_request PIMPL split.
+// Compile-time guarantees of the http_request PIMPL split.
 //
-// We assert the structural invariants TASK-015 owns:
+// We assert the structural invariants this TU owns:
 //   1. http_request is move-only (copy-deleted, move-defaulted). This
 //      preserves v1 semantics: modded_request holds unique_ptr<http_request>
 //      and reset/move-rebinds it.
@@ -19,15 +19,15 @@
 //      the impl_ unique_ptr remain on the outer. Everything backend-coupled
 //      moved into detail/http_request_impl.hpp.
 //   3. sizeof(http_request) >= sizeof(void*) (the impl pointer must exist).
-//      This is the lower-bound companion that the TASK-014 review record
-//      flagged as missing on webserver_pimpl_test.cpp.
+//      This is the lower-bound companion check that
+//      webserver_pimpl_test.cpp lacks.
 //
 // Note: the literal "no <microhttpd.h>/<gnutls/gnutls.h> in
-// <http_request.hpp>" grep is enforced by the per-task acceptance command
-// (see specs/tasks/M3-request/TASK-015.md). We do *not* repeat that as a
-// runtime or preprocessor assertion here because <httpserver.hpp> is still
-// on the preprocessor side of the umbrella in TASK-015's scope -- scrubbing
-// that path is TASK-020's job (the existing XFAIL_TESTS gate).
+// <http_request.hpp>" guarantee is enforced by a grep in the acceptance
+// checks. We do *not* repeat that as a runtime or preprocessor assertion
+// here because <httpserver.hpp> still reaches those headers through the
+// umbrella include -- scrubbing that path is covered by the existing
+// XFAIL_TESTS gate.
 
 // HTTPSERVER_COMPILATION is supplied by test/Makefile.am AM_CPPFLAGS.
 #include "httpserver/http_request.hpp"
@@ -73,9 +73,9 @@ static_assert(sizeof(httpserver::http_request) <= 24 * sizeof(void*),
 static_assert(sizeof(httpserver::http_request) >= sizeof(void*),
               "http_request must hold at least one pointer (the impl)");
 
-// (4) TASK-017: container getters return `const ContainerType&`.
+// (4) Container getters return `const ContainerType&`.
 //
-//     The acceptance criterion in specs/tasks/M3-request/TASK-017.md mandates:
+//     The acceptance criterion mandates:
 //
 //         static_assert(std::is_lvalue_reference_v<
 //             decltype(std::declval<const http_request&>().get_headers())>);
@@ -134,7 +134,7 @@ static_assert(std::is_same_v<
                                           httpserver::http::file_info>>&>,
               "get_files must return const std::map<...>&");
 
-// TASK-069: pin the http_request_impl construction surface. After v2
+// Pin the http_request_impl construction surface. After v2
 // cutover, the only public constructors are the no-arg default
 // (test-request path, delegates to the three-arg form with nullptr
 // connection and unescaper) and the allocator-aware three-arg form.

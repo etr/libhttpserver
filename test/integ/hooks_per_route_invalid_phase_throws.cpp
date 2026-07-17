@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-051 acceptance criterion 3:
+// Contract under test:
 //
 // "r.add_hook(hook_phase::request_received, ...) throws
 //  std::invalid_argument."

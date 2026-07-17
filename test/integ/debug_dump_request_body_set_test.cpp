@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-074: when LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY is set, the
+// When LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY is set, the
 // server MUST:
 //   - write a one-shot SECURITY WARNING to stderr on the first
 //     webserver::start() call (and only the first, even if multiple

@@ -88,11 +88,10 @@ using httpserver::http::http_utils;
 
 namespace detail {
 
-// TASK-048: error-page helpers (not_found_page, method_not_allowed_page,
+// Error-page helpers (not_found_page, method_not_allowed_page,
 // internal_error_page, log_dispatch_error, run_internal_error_handler_safely)
-// moved to detail/webserver_error_pages.cpp to keep this TU under the
-// 500-LOC ceiling (FILE_LOC_MAX in scripts/check-file-size.sh) once the
-// route_resolved and before_handler firing sites landed.
+// live in detail/webserver_error_pages.cpp to keep this TU under the
+// 500-LOC ceiling (FILE_LOC_MAX in scripts/check-file-size.sh).
 
 void webserver_impl::invalidate_route_cache() {
     // Called by registration callers after any table mutation.
@@ -103,20 +102,23 @@ void webserver_impl::invalidate_route_cache() {
     route_lru_cache.clear();
 }
 
-// TASK-027: 3-tier route lookup. Pipeline:
-//   1. cache lookup (cache mutex only) — return on hit, promoting LRU.
-//   2. on miss, take a shared_lock on route_table_mutex_:
-//      a. exact_routes_ (hash, O(1))
-//      b. param_and_prefix_routes_ (segment-trie)
-//      c. regex_routes_ (linear scan)
-//   3. on hit at any tier, drop the table lock and install into the
-//      cache (lock acquisition order: table BEFORE cache; we never hold
-//      both simultaneously — the table lock is released before the cache
-//      lock is taken).
+// 3-tier route lookup pipeline (lookup_v2, defined below):
+//   1. exact tier — transparent-map probe under a shared route-table
+//      lock. Deliberately bypasses the LRU cache; the rationale lives
+//      at the probe site inside lookup_v2.
+//   2. parameter/regex LRU cache (cache mutex only) — return on hit,
+//      promoting LRU.
+//   3. on miss, take a shared_lock on route_table_mutex_:
+//      a. param_and_prefix_routes_ (segment-trie)
+//      b. regex_routes_ (linear scan)
+//      then drop the table lock and install the result into the cache
+//      (we never hold both locks simultaneously — the table lock is
+//      released before the cache lock is taken).
 //
 // The method-set check (does the entry serve `method`?) lives at the
 // dispatch site, NOT here, because the existing 405 + Allow: header
 // path needs to see the entry even when no method bit matches.
+
 // Canonicalize a lookup path the same way http_endpoint canonicalizes a
 // registration path: strip a trailing '/' (unless the path IS just "/"),
 // prepend '/' if missing. Registration stores keys under url_complete,
@@ -126,7 +128,7 @@ void webserver_impl::invalidate_route_cache() {
 // constructs a non-registration http_endpoint at lookup time and so
 // gets the same normalization for free.
 //
-// TASK-058 step 1: return a string_view so the happy path (input
+// Returns a string_view so the happy path (input
 // already canonical) allocates zero heap memory.  On the rewrite
 // path the canonicalised form is written into the caller-owned
 // @p scratch buffer and a view into that buffer is returned.
@@ -168,7 +170,7 @@ webserver_impl::lookup_result
 webserver_impl::lookup_v2(http_method method, const std::string& path) {
     lookup_result result;
 
-    // TASK-058 step 1: canonicalize_lookup_path returns a string_view
+    // canonicalize_lookup_path returns a string_view
     // into either @p path (already-canonical happy path -- no
     // allocation), the immutable "/" literal (empty-input case), or
     // @p canonicalize_scratch (rewrite case -- single allocation,
@@ -177,10 +179,36 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
     std::string_view lookup_path =
         canonicalize_lookup_path(path, canonicalize_scratch);
 
-    // Step 1: cache. Cache under the canonical key so /foo and /foo/
-    // share an entry. Use find_by_view to avoid copying lookup_path
-    // into a cache_key on every call, including warm-cache hits.
-    // cache_key is only constructed when an insert is needed (miss path).
+    // Step 1: exact tier, probed FIRST and under the route-table shared
+    // lock only. exact_routes_ uses std::less<> (transparent), so the
+    // string_view key needs no std::string allocation, and concurrent
+    // worker threads read it in parallel with zero route_lru_cache
+    // traffic.
+    //
+    // The exact tier deliberately BYPASSES route_lru_cache: fronting an
+    // O(log n) transparent map probe with the cache would put every
+    // request behind the cache's exclusive std::mutex plus an LRU splice
+    // WRITE on each hit -- serialising the hottest dispatch path and
+    // dirtying a shared cache line across the thread pool -- for no
+    // lookup-cost saving. Only the parameter/regex tiers, whose match is
+    // genuinely expensive, are cached below. This matches the v1 dispatch
+    // model, where exact routes were a plain shared_lock map probe and
+    // only regex results were memoised.
+    {
+        std::shared_lock table_lock(route_table_mutex_);
+        auto exact_it = exact_routes_.find(lookup_path);
+        if (exact_it != exact_routes_.end()) {
+            result.found = true;
+            result.tier = tier_hit::exact;
+            result.entry = exact_it->second;
+            // exact tier carries no parameters by definition.
+            return result;
+        }
+    }
+
+    // Step 2: parameter/regex cache. Cache under the canonical key so
+    // /foo and /foo/ share an entry. find_by_view avoids copying
+    // lookup_path into a cache_key on the warm path.
     cache_value cached;
     if (route_lru_cache.find_by_view(method, lookup_path, cached)) {
         result.found = true;
@@ -189,37 +217,24 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         result.captured_params = std::move(cached.captured_params);
         return result;
     }
-    // Construct key by copying lookup_path into the cache_key.  On the
-    // miss path we pay one std::string construction; the warm-cache
-    // path never reaches this line.  All subsequent tier lookups use
-    // key.path, which is the std::string now owned by the key.
-    cache_key key{method, std::string(lookup_path)};
 
-    // Step 2: walk the tiers under a shared lock.
+    // Step 3: cache miss -- walk the parameter/prefix (radix) then regex
+    // tiers under the shared lock. Construct the owning cache_key once
+    // here; the exact-hit and warm-cache paths never reach this line.
+    cache_key key{method, std::string(lookup_path)};
     {
         std::shared_lock table_lock(route_table_mutex_);
 
-        // 2a. Exact tier — single hash probe.
-        auto exact_it = exact_routes_.find(key.path);
-        if (exact_it != exact_routes_.end()) {
+        // Radix tier — segment-trie walk.
+        radix_match<route_entry> rm;
+        if (param_and_prefix_routes_.find(key.path, rm) && rm.entry) {
             result.found = true;
-            result.tier = tier_hit::exact;
-            result.entry = exact_it->second;
-            // exact tier carries no parameters by definition.
+            result.tier = tier_hit::radix;
+            result.entry = *rm.entry;
+            result.captured_params = std::move(rm.captures);
         }
 
-        // 2b. Radix tier — segment-trie walk.
-        if (!result.found) {
-            radix_match<route_entry> rm;
-            if (param_and_prefix_routes_.find(key.path, rm) && rm.entry) {
-                result.found = true;
-                result.tier = tier_hit::radix;
-                result.entry = *rm.entry;
-                result.captured_params = std::move(rm.captures);
-            }
-        }
-
-        // 2c. Regex tier — linear scan over pre-compiled std::regex objects.
+        // Regex tier — linear scan over pre-compiled std::regex objects.
         // Patterns were compiled once at registration time (in register_impl_
         // and on_methods_), so no compilation cost is paid per lookup.
         if (!result.found) {
@@ -234,9 +249,10 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         }
     }  // table_lock released.
 
-    // Step 3: install into cache. Copy (not move) — the caller consumes
-    // `result` after this returns, and a move would leave the shared_ptr
-    // variant arm null (false-negative 404).
+    // Step 4: install radix/regex results into the cache. Copy (not
+    // move) — the caller consumes `result` after this returns, and a
+    // move would leave the shared_ptr variant arm null (false-negative
+    // 404).
     if (result.found) {
         route_lru_cache.insert(
             key, cache_value{result.entry, result.captured_params});
@@ -246,17 +262,14 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
 }
 
 // ----------------------------------------------------------------------
-// v2 lookup-backed resolver (TASK-053).
+// v2 lookup-backed resolver.
 // ----------------------------------------------------------------------
 
-// TASK-053: v2 lookup-backed resolver. Routes finalize_answer through
-// lookup_v2 (the 3-tier v2 table fronted by route_lru_cache) — the v1
-// resolver and its helpers (lookup_route_cache, scan_regex_routes,
-// store_route_cache, apply_extracted_params) were deleted in TASK-053
-// step 3. See header comment in webserver_impl_dispatch.hpp for the
-// full contract.
+// Routes finalize_answer through
+// lookup_v2 (the 3-tier v2 table fronted by route_lru_cache). See
+// header comment in webserver_impl_dispatch.hpp for the full contract.
 //
-// The dispatch path now does:
+// The dispatch path:
 //   lookup_v2() walks route_lru_cache -> exact_routes_ ->
 //       param_and_prefix_routes_ -> regex_routes_, returning a
 //       route_entry whose handler is a shared_ptr<http_resource>
@@ -264,21 +277,17 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
 //       before storing — see prepare_or_create_lambda_shim in
 //       webserver_routes.cpp).
 //
-// TASK-067: single_resource mode used to short-circuit to a direct read
-// of the v1 registered_resources map. With the v1 maps deleted, single
-// resource servers register their handler via register_prefix("")
+// single_resource servers register their handler via register_prefix("")
 // or register_prefix("/") -- both surface as a radix-tier prefix
 // terminus at "/", which lookup_v2 finds on the radix-tier walk. There
 // is no separate fast path because the v2 walk for a single registered
 // prefix is one shared_lock + one empty-map probe + one trivial radix
 // descent: cheap enough that the extra branch was net-negative.
 //
-// TASK-071: route_entry::handler was previously a
-// `std::variant<lambda_handler, shared_ptr<http_resource>>`. The
-// lambda_handler arm was dead code (every writer wrapped lambdas in
-// lambda_resource) and has been removed. The dispatch path reads the
-// shared_ptr directly with a defensive null check that degrades to a
-// 404 miss.
+// route_entry::handler is a plain shared_ptr<http_resource> (every
+// writer wraps lambdas in lambda_resource before storing). The
+// dispatch path reads the shared_ptr directly with a defensive null
+// check that degrades to a 404 miss.
 bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         std::shared_ptr<http_resource>& hrm) {
     // matched_path_template + matched_is_prefix feed the route_resolved
@@ -302,10 +311,9 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     }
     hrm = result.entry.handler;
 
-    // Replay captured URL parameters into the request. This is the v2
-    // equivalent of the v1-era apply_extracted_params (removed in
-    // TASK-053 step 3). Per-name set_arg matches v1 behaviour exactly —
-    // duplicates with later wins, etc.
+    // Replay captured URL parameters into the request. Per-name
+    // set_arg matches v1 behaviour exactly — duplicates with later
+    // wins, etc.
     if (mr->dhr != nullptr) {
         for (const auto& [name, value] : result.captured_params) {
             mr->dhr->set_arg(name, value);
@@ -324,16 +332,16 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
 }
 
 std::string webserver_impl::serialize_allow_methods(method_set allowed) const {
-    // TASK-048 review cleanup (findings 3 & 4): delegate to the shared free
-    // function format_allow_header in detail/method_utils.hpp.  The member
-    // function is retained so existing call sites (dispatch_resource_handler
-    // below) compile unchanged; internally it is now a thin wrapper.
+    // Thin wrapper over detail::format_allow_header (method_utils.hpp).
+    // Production dispatch calls hrm->get_allow_header() directly; this
+    // member survives only as a test seam (bench_warm_path.cpp,
+    // webserver_on_methods_test.cpp).
     return detail::format_allow_header(allowed);
 }
 
 namespace {
 
-// TASK-049: shared body of the two dispatch_resource_handler catch arms.
+// Shared body of the two dispatch_resource_handler catch arms.
 // Either routes the dispatch-thrown exception through the
 // handler_exception hook chain (when any user hooks are registered or
 // the internal_error_handler alias slot is wired) or falls back to the
@@ -343,7 +351,7 @@ void handle_dispatch_exception(
         webserver_impl* impl,
         detail::modded_request* mr,
         std::string_view message) {
-    // TASK-051: per-route handler_exception. weak_ptr was set on mr in
+    // Per-route handler_exception: the weak_ptr was set on mr in
     // finalize_answer before dispatch_resource_handler was called.
     // res keeps the resource alive while rtable is in use (the shared_ptr
     // must not go out of scope before the rtable firing loop finishes).
@@ -358,8 +366,8 @@ void handle_dispatch_exception(
     if (server_chain || per_route) {
         // Capture the live exception_ptr before constructing the ctx so
         // the side-effectful call is separated from the struct literal.
-        // (Finding #24 / code-simplifier: naming the capture makes clear
-        // we are taking a reference to the in-flight exception object.)
+        // (Naming the capture makes clear we are taking a reference to
+        // the in-flight exception object.)
         auto current_exc = std::current_exception();
         handler_exception_ctx ctx{mr->dhr.get(), current_exc, message};
         if (server_chain) {
@@ -369,7 +377,7 @@ void handle_dispatch_exception(
             }
         }
         if (per_route) {
-            // Per-route chain runs AFTER server-wide. Same DR-009 §5.2
+            // Per-route chain runs AFTER server-wide. Same
             // semantics: respond_with() short-circuits the chain.
             if (auto sc = rtable->fire_handler_exception(ctx,
                     [impl](std::string_view m) {
@@ -379,18 +387,16 @@ void handle_dispatch_exception(
                 return;
             }
         }
-        // §5.2 point 4: every hook (and the alias) ran without a
+        // Every hook (and the alias) ran without a
         // response -- emit the hardcoded empty-body 500 directly.
         mr->response.emplace(
             impl->internal_error_page(mr, "", /*force_our=*/true));
         return;
     }
-    // Backwards-compat fast path: no hook chain at all.
-    // Finding #40 (test-quality-reviewer): this path (no hooks, no alias,
-    // handler throws) is covered by the pre-existing integ tests in
-    // test/integ/basic.cpp (response_throws_runtime_error and
-    // response_throws_non_std_exception test groups; see basic.cpp around
-    // the "AC2" acceptance-criteria block). No new test is needed here.
+    // Backwards-compat fast path: no hook chain at all. This path
+    // (no hooks, no alias, handler throws) is covered by the integ
+    // tests in test/integ/basic.cpp (response_throws_runtime_error and
+    // response_throws_non_std_exception test groups).
     mr->response.emplace(
         impl->run_internal_error_handler_safely(mr, message));
 }
@@ -404,8 +410,8 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
             MHD_destroy_post_processor(mr->pp);
             mr->pp = nullptr;
         }
-        // TASK-048: before_handler firing moved to finalize_answer so auth
-        // and method-not-allowed alias hooks run as part of the unified
+        // before_handler fires from finalize_answer so auth and
+        // method-not-allowed alias hooks run as part of the unified
         // before_handler chain before dispatch_resource_handler is called.
         // dispatch_resource_handler is only reached when the hook chain
         // passes through without short-circuiting.
@@ -417,13 +423,13 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
         // here, so this check only runs when method_not_allowed_handler
         // is not set (zero-cost-when-unused for the alias hook).
         if (hrm->is_allowed(mr->method_enum)) {
-            // TASK-036: pointer-to-member dispatch returns http_response
-            // by value (DR-004); the prvalue is moved into the
+            // Pointer-to-member dispatch returns http_response
+            // by value; the prvalue is moved into the
             // per-connection optional anchor. shared_ptr has no
             // operator->*, so call as ((*ptr).*pmf)(...).
             mr->response.emplace(((*hrm).*(mr->callback))(*mr->dhr));
             if (mr->response->get_status() == -1) {
-                // TASK-031: no exception was thrown, but the handler
+                // No exception was thrown, but the handler
                 // returned the default-sentinel response. Route through
                 // the safe internal-error path so a misbehaving user
                 // handler can't escape into libmicrohttpd. (The "null
@@ -434,8 +440,8 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
             }
             return;
         }
-        // Method not allowed: emit the Allow header.  TASK-058 step 3:
-        // read the resource's lazily-cached Allow header value instead
+        // Method not allowed: emit the Allow header.
+        // Read the resource's lazily-cached Allow header value instead
         // of rebuilding the string from the mask on every 405.  The
         // cache lives on http_resource (the same object that owns the
         // mask), regenerates implicitly when the mask differs from the
@@ -447,12 +453,12 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
             mr->response->with_header(http_utils::http_header_allow, header_value);
         }
     } catch (const std::exception& e) {
-        // TASK-031 / DR-009 §5.2 point 2: handler threw std::exception.
-        // TASK-049 routes the exception through the handler_exception
+        // Handler threw std::exception. The exception is routed
+        // through the handler_exception
         // hook chain (with the internal_error_handler alias as the
         // last-position fallback) inside handle_dispatch_exception.
         //
-        // Finding #29 (performance-reviewer): only build the heap string
+        // Perf: only build the heap string
         // when a log_error callback is actually wired; log_dispatch_error
         // also checks this but the concatenation happens at the call site.
         if (parent->log_error) {
@@ -462,7 +468,7 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
         }
         handle_dispatch_exception(this, mr, std::string_view{e.what()});
     } catch (...) {
-        // §5.2 point 3: handler threw non-std::exception. Same flow as
+        // Handler threw non-std::exception. Same flow as
         // the std::exception arm but with the sentinel message.
         log_dispatch_error("dispatch: handler threw unknown exception");
         handle_dispatch_exception(this, mr,

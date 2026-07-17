@@ -25,7 +25,7 @@
 #ifndef SRC_HTTPSERVER_WEBSOCKET_HANDLER_HPP_
 #define SRC_HTTPSERVER_WEBSOCKET_HANDLER_HPP_
 
-// TASK-020 / TASK-034: <microhttpd.h> and <microhttpd_ws.h> are
+// <microhttpd.h> and <microhttpd_ws.h> are
 // deliberately NOT included from this public header. The class below
 // uses two MHD-defined struct types only by pointer (forward-declared
 // at file scope below) and `MHD_socket` (an integer typedef -- `int`
@@ -35,8 +35,8 @@
 // support. A static_assert in src/websocket_handler.cpp pins that
 // invariant where <microhttpd.h> is reachable.
 //
-// TASK-034: the public declarations below are now visible
-// unconditionally (PRD-FLG-REQ-001). Method bodies live in
+// The public declarations below are visible
+// unconditionally. Method bodies live in
 // src/websocket_handler.cpp; on HAVE_WEBSOCKET-off builds the
 // definitions in that TU either throw feature_unavailable or are no-ops
 // (see the file for the per-method policy).
@@ -133,7 +133,7 @@ class websocket_session {
      bool valid;
 
      friend class webserver;
-     friend class detail::webserver_impl;  // TASK-014: PIMPL upgrade path
+     friend class detail::webserver_impl;  // PIMPL upgrade path
 };
 
 /**
@@ -167,11 +167,6 @@ class websocket_handler {
       *                the duration of the call.
       */
      virtual void on_message(websocket_session& session, std::string_view msg) = 0;
-     // TASK-034 incidental cleanup: the previous header had on_binary and
-     // on_ping declared twice (identical signatures, never spotted because
-     // identical-redeclaration is legal). Removing the duplicates lets the
-     // class compile on HAVE_WEBSOCKET-off builds where the header is now
-     // always included via the umbrella.
      /**
       * Invoked when a binary frame is received from the peer.
       *

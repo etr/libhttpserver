@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-047 acceptance criterion 1 (closes #273).
+// Contract under test (closes #273):
 //
 // "A `request_received` hook returning hook_action::respond_with(413) on
 //  Content-Length > 1 MB aborts the upload before any body bytes are

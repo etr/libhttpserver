@@ -132,15 +132,14 @@ void webserver::register_impl_(const std::string& resource,
 
     detail::http_endpoint idx(resource, family, true, regex_checking);
 
-    // TASK-067: v1 maps are gone. Duplicate detection now happens entirely
+    // Duplicate detection happens entirely
     // inside register_v2_route, which takes its own unique_lock on
     // route_table_mutex_ and runs reject_terminus_collision (plus a
     // tier-classification probe for the exact tier) BEFORE any mutation.
     // A duplicate at any tier surfaces as std::invalid_argument with the
-    // table still in its prior state -- no rollback required because no
-    // intermediate v1 write happened.
+    // table still in its prior state -- no rollback required.
     //
-    // TASK-023 ownership contract preserved: when register_v2_route throws,
+    // Ownership contract: when register_v2_route throws,
     // the shared_ptr parameter `res` (and any unique_ptr-derived shared_ptr
     // funnelled through the webserver.hpp inline template shim) is destroyed
     // by exception unwinding, cleanly releasing the resource.
@@ -150,11 +149,10 @@ void webserver::register_impl_(const std::string& resource,
 
 namespace detail {
 
-// TASK-067: helper used by register_v2_route. Probes the v2 tiers for a
+// Helper used by register_v2_route. Probes the v2 tiers for a
 // pre-existing registration at @p idx and throws std::invalid_argument
-// before any mutation if one exists. Pre-TASK-067 the v1 `registered_resources`
-// ordered map was the duplicate-detection oracle (its `.insert(...)`
-// surfaced the dup); with the v1 maps gone, the oracle moves here.
+// before any mutation if one exists. This is the duplicate-detection
+// oracle for registration.
 //
 // Caller must hold route_table_mutex_ (unique_lock). The reject_terminus_
 // collision guard (prefix-vs-exact polarity) is run separately in
@@ -198,7 +196,7 @@ void webserver_impl::reject_duplicate_v2_entry_(
 
 void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
         std::shared_ptr<http_resource> res, bool family) {
-    // TASK-027: mirror a register_path / register_prefix call into the
+    // Place a register_path / register_prefix registration into the
     // v2 3-tier route table. Tier placement via classify_route_tier()
     // (single source-of-truth):
     //   - family=true  -> radix tree (prefix terminus).
@@ -206,13 +204,12 @@ void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
     //   - regex tier   -> regex_routes_ (pre-compiled at registration time).
     //   - exact tier   -> exact_routes_ hash map.
     std::unique_lock table_lock(route_table_mutex_);
-    // TASK-056: guard against prefix-vs-exact terminus collisions on
+    // Guard against prefix-vs-exact terminus collisions on
     // the canonical key. Run BEFORE any mutation so the throw leaves
     // the route table in its prior state.
     reject_terminus_collision(idx.get_url_complete(),
                               /*want_is_prefix=*/family);
-    // TASK-067: same-kind duplicate detection (replaces the v1 maps'
-    // insert-fails-on-dup oracle). Throws BEFORE any mutation so the
+    // Same-kind duplicate detection. Throws BEFORE any mutation so the
     // atomicity contract pinned by basic_suite::duplicate_endpoints
     // holds: a failed registration leaves the table exactly as before.
     reject_duplicate_v2_entry_(idx, family);
@@ -253,7 +250,7 @@ void webserver::register_prefix(const std::string& path,
     register_impl_(path, std::move(res), /*family=*/true);
 }
 
-// TASK-024: erase a single registration of the requested kind (family).
+// Erase a single registration of the requested kind (family).
 // Each kind keeps a distinct v2-table entry (parameterized routes live in
 // the radix tier, regex routes in the regex_routes_ vector, exact routes
 // in the exact_routes_ hash map; prefix routes are radix-tier with
@@ -263,7 +260,7 @@ void webserver::register_prefix(const std::string& path,
 void webserver::unregister_impl_(const string& resource, bool family) {
     detail::http_endpoint he(resource, family, true, regex_checking);
 
-    // TASK-067: mirror the erasure into the v2 3-tier table.
+    // Erase from the v2 3-tier table.
     // Lock ordering: route_table_mutex_ -> route_lru_cache's internal
     // mutex (inside invalidate_route_cache). Table lock released before
     // the LRU cache is cleared, matching register_impl_ / on_methods_.
@@ -298,12 +295,12 @@ void webserver::unregister_prefix(const string& path) {
 }
 
 void webserver::unregister_resource(const string& resource) {
-    // Build the canonical endpoint key once. With the v1 maps gone
-    // (TASK-067), the family flag no longer affects which v2 storage
-    // location holds the entry; the url_complete key is the only sweep key.
+    // Build the canonical endpoint key once. The family flag does not
+    // affect which v2 storage location holds the entry; the
+    // url_complete key is the only sweep key.
     detail::http_endpoint he_exact(resource, /*family=*/false, true, regex_checking);
 
-    // TASK-067: erase into the v2 3-tier table. Hold a single write-lock
+    // Erase from the v2 3-tier table. Hold a single write-lock
     // across all four tier sweeps so no request thread can observe a
     // partially-unregistered state (CWE-367 TOCTOU: a prior register_path
     // AND register_prefix on the same path are both cleared atomically).
@@ -328,13 +325,8 @@ void webserver::unregister_resource(const string& resource) {
     impl_->invalidate_route_cache();
 }
 
-// IP-control API history:
-// TASK-029 collapsed the v1 ban_ip / unban_ip / allow_ip / disallow_ip
-// quartet to a single deny-only pair (block_ip / unblock_ip), leaving the
-// allow list reachable only internally — which made default_policy(REJECT)
-// unusable from the public API.
-//
-// The current API restores a symmetric, consistently-named surface:
+// IP-control API: a symmetric, consistently-named surface (replacing
+// the v1 ban_ip / unban_ip / allow_ip / disallow_ip quartet):
 //   deny_ip / remove_denied_ip   -> the deny list (exception under ACCEPT)
 //   allow_ip / remove_allowed_ip -> the allow list (exception under REJECT;
 //                                   also overrides a deny entry under ACCEPT)

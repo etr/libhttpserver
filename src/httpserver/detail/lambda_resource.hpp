@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-025/TASK-026: dispatch shim used by webserver::on_methods_ to
+// Dispatch shim used by webserver::on_methods_ to
 // slot lambda handlers into the existing v1-shaped route table.
 //
 // The shim is a sub-class of http_resource that holds one slot per
@@ -64,17 +64,15 @@ namespace httpserver {
 namespace detail {
 
 // The per-method slot signature for lambda_resource. Returns
-// http_response by value (DR-004) and takes the request by const
+// http_response by value and takes the request by const
 // reference. std::function is the chosen storage so users can pass any
 // callable (lambda, function pointer, std::bind result, member-function
 // adaptor) without leaking the concrete callable type into the slot
 // array.
 //
-// TASK-071 history: this typedef formerly lived in route_entry.hpp as
-// the lambda arm of `std::variant<lambda_handler, shared_ptr<...>>`. The
-// variant arm was dead code (no writer stored a lambda directly — every
-// on_*/route path funnels through lambda_resource), so it was removed.
-// The typedef relocates here, where its remaining uses are.
+// The typedef lives here, next to its only uses: every on_*/route
+// path funnels through lambda_resource — no other writer stores a
+// lambda handler directly.
 using lambda_handler = std::function<::httpserver::http_response(const ::httpserver::http_request&)>;
 
 // Tiny adapter that wraps a single lambda_handler as an http_resource
@@ -171,11 +169,11 @@ class lambda_resource final : public ::httpserver::http_resource {
                 "Internal Server Error: unregistered method slot invoked")
                 .with_status(500);
         }
-        // TASK-036: lambda_handler returns http_response by value; the
+        // lambda_handler returns http_response by value; the
         // dispatch path in webserver_impl::finalize_answer moves the
         // returned value into modded_request::response — the single
         // anchor that keeps deferred-body producers alive until
-        // request_completed (DR-010, §5.3).
+        // request_completed.
         return slot(r);
     }
 

@@ -8,7 +8,7 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-046 acceptance criterion 2.
+// Contract under test:
 //
 //   "New integ test `hooks_accept_decision_denied`: with the IP deny
 //    list populated and the default policy ACCEPT, an `accept_decision`

@@ -18,8 +18,7 @@
      USA
 */
 
-// TASK-081 cycle 1 — paired on-path companion to
-// webserver_ws_unavailable_test.cpp.
+// Paired on-path companion to webserver_ws_unavailable_test.cpp.
 //
 // webserver_ws_unavailable_test.cpp pins the HAVE_WEBSOCKET-OFF throw-site
 // contract (feature_unavailable naming "websocket" and "HAVE_WEBSOCKET"
@@ -34,7 +33,8 @@
 //      contrast is the point: under HAVE_WEBSOCKET-off the same null
 //      argument trips feature_unavailable (exercised by the unavailable
 //      TU); under HAVE_WEBSOCKET-on it must trip the generic null-guard
-//      from webserver_routes.cpp (mirrors TASK-035 / TASK-023).
+//      from webserver_routes.cpp (the same guard shared by the
+//      smart-pointer register_resource overloads).
 //   3. register_ws_resource(shared_ptr) with a null argument throws
 //      std::invalid_argument from the same null-guard.
 //

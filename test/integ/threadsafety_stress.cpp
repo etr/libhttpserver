@@ -18,23 +18,23 @@
      USA
 */
 
-// TASK-032 + TASK-052 + TASK-094: DR-008 thread-safety contract stress test.
+// Thread-safety contract stress test.
 //
 // Sub-test A — concurrent_register_block_from_handlers_no_data_race
 //   Drives the PUBLIC mutating surface (register_path, unregister_path,
-//   deny_ip, remove_denied_ip) AND, as of TASK-052, the **server-wide**
+//   deny_ip, remove_denied_ip) AND the **server-wide**
 //   lifecycle-hook registration surface (webserver::add_hook +
-//   hook_handle::remove) AND, as of TASK-094, the **per-resource**
+//   hook_handle::remove) AND the **per-resource**
 //   hook bus via http_resource::add_hook on both a small pool of
 //   shared resources (same-slot null-vs-installed timing races in
 //   ensure_table()) and a shared resource whose hook_table_ is
 //   already installed (load-acquire short-circuit branch). 16 curl
 //   clients × N seconds at default port 0 (kernel-assigned).
-//   The hook ops here exercise the server-wide tier AND, with TASK-094,
+//   The hook ops here exercise the server-wide tier AND
 //   the resource (middle) tier of the documented
 //   `route_table_mutex_ → resource hook_table → server-wide hook_table`
 //   lock order under TSan. Standalone per-resource CAS-race coverage
-//   lives in Sub-test D (TASK-094).
+//   lives in Sub-test D.
 //   The TSan-clean rerun is the headline acceptance:
 //   `make clean && CXXFLAGS=-fsanitize=thread … && make check` re-runs
 //   this binary under TSan via the CI matrix entry `build-type: tsan`
@@ -45,14 +45,14 @@
 //   HTTPSERVER_STRESS_SECONDS=N for fast iteration.
 //
 // Sub-test B — stop_from_handler_deadlocks_as_documented
-//   The DR-008 negative case: stop() called from a handler thread
+//   The negative case: stop() called from a handler thread
 //   triggers libmicrohttpd to self-join → on this MHD version, an
 //   abort with "Failed to join a thread."; on others, a silent
 //   deadlock. The test forks a child process to contain the abort
 //   so the parent test binary stays healthy. Either a non-zero child
 //   exit within 5 s or a 5 s timeout (child SIGKILLed by parent)
 //   counts as positive observation of the contract; a zero child exit
-//   would be a regression. TASK-092: now run in per-PR CI on the baseline
+//   would be a regression. Now run in per-PR CI on the baseline
 //   Linux gcc lane via `make -C test check-stop-from-handler`, which sets
 //   HTTPSERVER_RUN_STOP_FROM_HANDLER=1. Local runs remain opt-in — the
 //   sub-test SKIPs unless that env var is set.
@@ -61,10 +61,10 @@
 //   Rebuild with `CXXFLAGS="-fsanitize=thread -g -O1"
 //   LDFLAGS="-fsanitize=thread"` and re-run this binary; expect no
 //   "WARNING: ThreadSanitizer: data race" output. Same pattern as
-//   route_table_concurrency.cpp (TASK-027).
+//   route_table_concurrency.cpp.
 
 // Linux-only: pthread_setaffinity_np for the noise-reduction pin in
-// adversarial_segments_registration_no_latency_spike (TASK-080).
+// adversarial_segments_registration_no_latency_spike.
 // _GNU_SOURCE must be defined before the first system header is included.
 #if defined(__linux__) && !defined(_WIN32)
 #ifndef _GNU_SOURCE
@@ -118,7 +118,7 @@ namespace {
 constexpr int kDynSlots = 8;
 constexpr int kIpRange  = 256;
 // kCasPoolSize: number of shared resources op 6 rotates through so
-// concurrent clients can land on the SAME hook_table_ slot (TASK-094).
+// concurrent clients can land on the SAME hook_table_ slot.
 constexpr int kCasPoolSize = 4;
 constexpr int kExitCodeStopReturned  = 42;  // stop() returned — should not happen
 constexpr int kExitCodeCurlCompleted = 43;  // curl completed — stop() did not block
@@ -137,14 +137,14 @@ struct OpCounters {
     std::atomic<int> unregister_ok{0};
     std::atomic<int> deny_ok{0};
     std::atomic<int> remove_denied_ok{0};
-    std::atomic<int> hook_add_ok{0};     // TASK-052
-    std::atomic<int> hook_remove_ok{0};  // TASK-052
-    std::atomic<int> cas_resource_hook_ok{0};  // TASK-094 op 6: pooled resources (null-vs-installed timing race)
-    std::atomic<int> cas_existing_hook_ok{0};  // TASK-094 op 7: load-acquire short-circuit branch
+    std::atomic<int> hook_add_ok{0};     // server-wide hook add
+    std::atomic<int> hook_remove_ok{0};  // server-wide hook remove
+    std::atomic<int> cas_resource_hook_ok{0};  // op 6: pooled resources (null-vs-installed timing race)
+    std::atomic<int> cas_existing_hook_ok{0};  // op 7: load-acquire short-circuit branch
     std::atomic<int> handler_calls{0};
 };
 
-// TASK-052: hook-handle bag retained across iterations so add/remove
+// Hook-handle bag retained across iterations so add/remove
 // ops race against each other AND against the route-table ops above.
 // Raw pointer (passed to driver_body) to a stack-allocated bag;
 // lifetime is the test body, so no ownership transfer is needed.
@@ -157,7 +157,7 @@ struct HookBag {
 // Minimal resource shared by all sub-tests; where a test needs to
 // re-arm the lazy `hook_table_` CAS in ensure_table(), it simply
 // allocates a fresh stack-local instance whose slot starts null
-// (Sub-test D, TASK-094).
+// (Sub-test D).
 class noop_resource : public ht::http_resource {
  public:
     ht::http_response render_get(
@@ -166,7 +166,7 @@ class noop_resource : public ht::http_resource {
     }
 };
 
-// TASK-052: register an armed hook on a randomly-chosen phase. Each
+// Register an armed hook on a randomly-chosen phase. Each
 // hook overload is a distinct std::function<...> signature, so the
 // phase selection happens at compile time via this switch (the runtime
 // `phase` value is purely the argument to add_hook). Returns an armed
@@ -266,9 +266,9 @@ ht::http_response driver_body(const ht::http_request& req,
     const std::string ip =
         "198.51.100." + std::to_string(i & (kIpRange - 1));
 
-    // Eight ops total: 0..3 are the TASK-032 route-table / ban-list
-    // mutators; 4..5 are TASK-052's webserver-side hook bus churn;
-    // 6..7 are TASK-094's per-resource hook bus churn (op 6 rotates
+    // Eight ops total: 0..3 are the route-table / ban-list
+    // mutators; 4..5 are the webserver-side hook bus churn;
+    // 6..7 are the per-resource hook bus churn (op 6 rotates
     // across a small pool of shared resources so concurrent clients
     // can hit the SAME hook_table_ slot — null early in the run,
     // installed thereafter; op 7 hits the load-acquire short-circuit
@@ -356,7 +356,7 @@ ht::http_response driver_body(const ht::http_request& req,
             break;
         }
         case 6: {
-            // TASK-094: per-resource hook bus on a small pool of
+            // Per-resource hook bus on a small pool of
             // shared resources, rotated by `i`. Because the pool
             // outlives every request, concurrent clients that land
             // on the same still-null slot early in the run race the
@@ -394,7 +394,7 @@ ht::http_response driver_body(const ht::http_request& req,
             break;
         }
         case 7: {
-            // TASK-094: shared resource whose hook_table_ is
+            // Shared resource whose hook_table_ is
             // installed after the first op-7 call. Subsequent calls
             // take the load-acquire short-circuit branch in
             // ensure_table() (`if (existing) return existing;`),
@@ -419,7 +419,7 @@ ht::http_response driver_body(const ht::http_request& req,
 // via HTTPSERVER_STRESS_SECONDS for fast local iteration.
 // Capped at 3600 s to prevent runaway in CI (CWE-1284).
 // NOTE: this single knob budgets wall-clock for BOTH Sub-test A's client
-// loop and Sub-test C's watchdog (TASK-094) — an operator setting a large
+// loop and Sub-test C's watchdog — an operator setting a large
 // value (up to the 3600s cap) should budget for both sub-tests combined.
 int stress_seconds() {
     if (const char* s = std::getenv("HTTPSERVER_STRESS_SECONDS")) {
@@ -435,7 +435,7 @@ int stress_seconds() {
     return 60;
 }
 
-// TASK-080: characterisation knob. When set to N>1, the
+// Characterisation knob. When set to N>1, the
 // adversarial_segments_registration_no_latency_spike sub-test runs its
 // gate computation N times back-to-back, printing one [STATS] line per
 // run. Used to build per-lane CDFs of the p95/median ratio when
@@ -455,7 +455,7 @@ int stress_repeats() {
     return 1;
 }
 
-// TASK-080: Linux-only noise-reduction knob. When HTTPSERVER_STRESS_PIN_CPU
+// Linux-only noise-reduction knob. When HTTPSERVER_STRESS_PIN_CPU
 // is set to a non-negative integer, the four writer threads of the
 // adversarial_segments sub-test are pinned to that CPU via
 // pthread_setaffinity_np. Pinning all writers to the same CPU is
@@ -510,14 +510,14 @@ LT_END_SUITE(threadsafety_stress_suite)
 LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                    concurrent_register_block_from_handlers_no_data_race)
     OpCounters counters;
-    HookBag hooks;  // TASK-052: bag retained for the duration of the test
-    // TASK-094: shared per-resource CAS target for op 7. The first
+    HookBag hooks;  // bag retained for the duration of the test
+    // Shared per-resource CAS target for op 7. The first
     // op-7 call installs the hook_table_ via the contended-null path;
     // every subsequent op-7 call across all client threads takes the
     // load-acquire short-circuit branch in ensure_table(), driving
     // concurrent registration + dispatch on the middle tier.
     noop_resource shared_cas_resource;
-    // TASK-094: op-6 pool. Long-lived shared resources rotated by the
+    // Op-6 pool. Long-lived shared resources rotated by the
     // request's `i`, so concurrent clients can contend on the SAME
     // hook_table_ slot (null-vs-installed depending on relative
     // timing early in the run). See the case-6 comment in driver_body.
@@ -569,8 +569,8 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
 
             while (!stop.load(std::memory_order_relaxed)) {
                 // Eight ops: 0..3 route-table/ban; 4..5 webserver-side
-                // hook bus (TASK-052); 6..7 per-resource hook bus
-                // (TASK-094 — pooled shared-slot churn + load-acquire
+                // hook bus; 6..7 per-resource hook bus
+                // (pooled shared-slot churn + load-acquire
                 // branch).
                 const int op = static_cast<int>(rng() % 8u);
                 const int i = static_cast<int>(rng() & (kIpRange - 1));
@@ -602,18 +602,18 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // Acceptance criterion: 60 s of concurrent register/lookup/block.
     // We don't pin exact counts — the gate is "all eight mutating ops
     // executed at least once without deadlock or crash, and (under the
-    // documented TSan rebuild) no data race fired". TASK-052 adds the
-    // webserver-side hook add/remove pair; TASK-094 adds the per-
-    // resource CAS-driven pair to the same gate.
+    // documented TSan rebuild) no data race fired". The gate also covers
+    // the webserver-side hook add/remove pair and the per-
+    // resource CAS-driven pair.
     LT_CHECK_GT(counters.handler_calls.load(), 0);
-    LT_CHECK_GT(counters.register_ok.load(), 0);    // TASK-032
-    LT_CHECK_GT(counters.unregister_ok.load(), 0);  // TASK-032
-    LT_CHECK_GT(counters.deny_ok.load(), 0);        // TASK-032
-    LT_CHECK_GT(counters.remove_denied_ok.load(), 0);      // TASK-032
-    LT_CHECK_GT(counters.hook_add_ok.load(), 0);     // TASK-052
-    LT_CHECK_GT(counters.hook_remove_ok.load(), 0);  // TASK-052
-    LT_CHECK_GT(counters.cas_resource_hook_ok.load(), 0);  // TASK-094
-    LT_CHECK_GT(counters.cas_existing_hook_ok.load(), 0);  // TASK-094
+    LT_CHECK_GT(counters.register_ok.load(), 0);
+    LT_CHECK_GT(counters.unregister_ok.load(), 0);
+    LT_CHECK_GT(counters.deny_ok.load(), 0);
+    LT_CHECK_GT(counters.remove_denied_ok.load(), 0);
+    LT_CHECK_GT(counters.hook_add_ok.load(), 0);
+    LT_CHECK_GT(counters.hook_remove_ok.load(), 0);
+    LT_CHECK_GT(counters.cas_resource_hook_ok.load(), 0);
+    LT_CHECK_GT(counters.cas_existing_hook_ok.load(), 0);
 
     // Drain the hook bag explicitly before the webserver stops so the
     // hook_handle destructors run while the impl is still alive. (The
@@ -631,7 +631,7 @@ LT_END_AUTO_TEST(concurrent_register_block_from_handlers_no_data_race)
 LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                    stop_from_handler_deadlocks_as_documented)
     // Gate: skip unless explicitly opted in. The deadlock case is by
-    // design (DR-008); the test exists to PIN the documented behaviour
+    // design; the test exists to PIN the documented behaviour
     // and is opt-in because reproducing the deadlock requires _Exit()
     // to escape the wedged process.
     const char* run = std::getenv("HTTPSERVER_RUN_STOP_FROM_HANDLER");
@@ -643,7 +643,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
 
 #ifdef _WIN32
     // fork()/waitpid() are POSIX-only; the wedge cannot be contained in a
-    // child process on Windows. Skip — DR-008 is verified by the POSIX
+    // child process on Windows. Skip — the contract is verified by the POSIX
     // lanes, and Windows is not a release-blocking target for this gate.
     std::cout << "[SKIP] stop_from_handler_deadlocks_as_documented"
                  " — fork()/waitpid() unavailable on Windows\n";
@@ -655,10 +655,10 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // attempt (pthread_join on the current thread returns EDEADLK)
     // and aborts with "Failed to join a thread." A silent deadlock
     // (process still alive after 5 s) is the alternative outcome
-    // DR-008 documents — both qualify as "unsafe; do not do this."
+    // the contract documents — both qualify as "unsafe; do not do this."
     //
     // A `ready` result with a normal-zero exit would be a regression
-    // against DR-008: it would mean stop() returned successfully from
+    // against the contract: it would mean stop() returned successfully from
     // a handler, contradicting the documented contract.
     const pid_t child = fork();
     LT_CHECK(child >= 0);
@@ -677,7 +677,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
 
         ws.on_get("/wedge", [&ws](const ht::http_request&) {
             // Call stop() directly on the handler's MHD worker
-            // thread → DR-008 unsafe path.
+            // thread → the documented unsafe path.
             ws.stop();
             // Below is unreachable. If reached, the contract is
             // broken — exit with a distinctive code so the parent
@@ -716,7 +716,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     }
 
     // Parent: bounded wait on the child. SIGKILL it after 5 s if it
-    // is still running (the silent-deadlock branch of DR-008). Any
+    // is still running (the silent-deadlock branch of the contract). Any
     // outcome OTHER than a zero exit is a positive observation of
     // the contract; a zero exit (or sentinel codes) is a regression.
     int status = 0;
@@ -759,7 +759,6 @@ LT_END_AUTO_TEST(stop_from_handler_deadlocks_as_documented)
 
 // ---------------------------------------------------------------------
 // Sub-test C — adversarial_segments_registration_no_latency_spike
-// (TASK-056).
 //
 // Hammer the registration path with an adversarial corpus of sibling
 // path segments to confirm the radix tree's per-segment children
@@ -782,7 +781,7 @@ LT_END_AUTO_TEST(stop_from_handler_deadlocks_as_documented)
 //     siblings into a deeper sub-tree (each is a distinct radix node
 //     directly under the parent).
 //
-// Latency gate (post-TASK-080 noise-floor study): capture per-op
+// Latency gate (from the noise-floor study): capture per-op
 // insert times in nanoseconds via per-thread sample buffers (no
 // hot-path lock), then assert
 //   p95 < 20 × median_of_first_quarter_of_samples.
@@ -790,7 +789,7 @@ LT_END_AUTO_TEST(stop_from_handler_deadlocks_as_documented)
 // latency spikes > 10× baseline" criterion. We anchor the baseline on
 // the first quarter (warmup at low cardinality) and compare against
 // the tail (high cardinality, worst case for an O(log n) tree).
-// The 20× threshold and p95 statistic come from the TASK-080 sweep
+// The 20× threshold and p95 statistic come from the noise-floor sweep
 // — see `test/PERFORMANCE.md § Methodology — threadsafety_stress
 // adversarial_segments latency gate` and the inline justification at
 // the gate assertion for the full rationale.
@@ -870,7 +869,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
 
         std::atomic<bool> stop{false};
 
-        // TASK-080 stabilisation 2a: per-thread sample buffers. The
+        // Stabilisation: per-thread sample buffers. The
         // previous design pushed each sample into a shared
         // std::vector<int64_t> under a global std::mutex INSIDE the
         // writer loop. Even though the timing window closed BEFORE the
@@ -889,7 +888,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         std::atomic<int> register_collision{0};
 
         auto writer = [&](int tid) {
-            // TASK-080 stabilisation 2b: optional Linux CPU pinning.
+            // Stabilisation: optional Linux CPU pinning.
             // Pinning all writers to the same CPU is correct for THIS
             // test because they contend on route_table_mutex_ (effectively
             // serialised) — single-CPU placement eliminates cross-CPU
@@ -1068,7 +1067,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         // is the canonical signal; later rounds re-measure stability).
         // r.samples counts only successful register_path calls
         // (collisions tracked separately), so it is the right proxy for
-        // the pre-TASK-080 `register_ok.load() > 100` acceptance check.
+        // the earlier `register_ok.load() > 100` acceptance check.
         if (rep == 0) {
             register_ok_first_round = static_cast<int>(r.samples);
         }
@@ -1110,7 +1109,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // what a real per-CI-run gate would see and is the canonical
     // noise-floor characterisation output.
     //
-    // TWO design choices recorded here. Both flowed from the TASK-080
+    // TWO design choices recorded here. Both flowed from the
     // noise-floor study (see test/PERFORMANCE.md § Methodology —
     // threadsafety_stress adversarial_segments latency gate).
     //
@@ -1124,7 +1123,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // 15k items would shift the entire upper quartile (p95 included);
     // a single preemption spike does not.
     //
-    // CHOICE 2 — 20×, not 10×. Even with the TASK-080 stabilisation
+    // CHOICE 2 — 20×, not 10×. Even with the stabilisation
     // stack in place (per-thread sample buffers, optional Linux CPU
     // pinning via HTTPSERVER_STRESS_PIN_CPU), the measured p95/baseline
     // ratio on a quiet Apple Silicon laptop runs 11×–14× across a
@@ -1133,9 +1132,9 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // contend on a single std::mutex around the radix-tree insert, and
     // the top 5% of samples are precisely the lock-wait queue tail.
     // 10× is therefore genuinely infeasible without rewriting the lock
-    // strategy (out of scope for TASK-080). 20× gives ~50% headroom
+    // strategy (out of scope here). 20× gives ~50% headroom
     // over the worst observed local round and is still 5× tighter
-    // than the pre-TASK-080 gate of 100× p99 — restoring real
+    // than the earlier gate of 100× p99 — restoring real
     // regression bite against algorithmic regressions (an O(n)
     // traversal at 15k items would push p95 to >100×).
     //
@@ -1162,7 +1161,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     if (rounds_ran > 0) {
         // Gate on the OVERALL MEDIAN on every platform. The p95 tail is
         // only stabilised when HTTPSERVER_STRESS_PIN_CPU enables the
-        // TASK-080 CPU-pinning stack — and NO CI lane sets that env var,
+        // CPU-pinning stack — and NO CI lane sets that env var,
         // so the tail is unstabilised on all shared runners (Linux
         // included, not just macOS). Observed: p95 ~23× on a gcc-13 Linux
         // run and ~40× on macos-latest while the overall median holds at
@@ -1182,7 +1181,6 @@ LT_END_AUTO_TEST(adversarial_segments_registration_no_latency_spike)
 
 // ---------------------------------------------------------------------
 // Sub-test D — per_resource_add_hook_first_call_cas_no_data_race
-// (TASK-094).
 //
 // Targets the lazy CAS path in `http_resource::ensure_table()`
 // (`src/http_resource.cpp:93-110`) that the M5 hook bus added.
@@ -1214,17 +1212,17 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                    per_resource_add_hook_first_call_cas_no_data_race)
     constexpr int kRepeats = 64;
     constexpr int kThreads = 8;
-    // Post-race mixed add/remove burst tuning knobs (action item 1.c) —
+    // Post-race mixed add/remove burst tuning knobs —
     // grouped here with the other Sub-test D tunables rather than at
     // point-of-use inside the iter loop.
     constexpr int kBurstThreads = 4;
     constexpr int kBurstOpsPerThread = 8;
 
     // Cumulative witnesses across all iterations. The accumulator is
-    // the falsifiable gate for the cycle: it is a lower-bound sentinel
+    // the falsifiable gate for this test: it is a lower-bound sentinel
     // asserting that AT LEAST ONE iteration drove a successful add_hook
     // that installed the table (LT_CHECK_GT(..., 0) below does not
-    // verify a per-iteration invariant). On the cycle-1 RED step the
+    // verify a per-iteration invariant). On the initial RED step the
     // worker threads do not call add_hook, so total_post_race_nonnull
     // stays at 0 and the LT_CHECK_GT fails as designed.
     std::atomic<int> total_post_race_nonnull{0};
@@ -1302,7 +1300,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         start.arrive_and_wait();
         for (auto& th : workers) th.join();
 
-        // Post-race mixed add/remove burst (action item 1.c). Each
+        // Post-race mixed add/remove burst. Each
         // burst hits the now-installed resource_hook_table from
         // multiple threads, exercising concurrent registration +
         // dispatch contention on the middle tier of the lock order.
@@ -1392,7 +1390,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // Falsifiable gate: at least one iteration installed a table (some
     // thread must have driven ensure_table() to completion at least
     // once across all kRepeats iterations) — a lower-bound sentinel,
-    // not a per-iteration invariant. On the cycle-1 RED step this is 0
+    // not a per-iteration invariant. On the initial RED step this is 0
     // — proves the witness mechanism is wired and observably
     // distinguishes install vs no-install.
     LT_CHECK_GT(total_post_race_nonnull.load(), 0);
@@ -1413,11 +1411,11 @@ LT_BEGIN_AUTO_TEST_ENV()
     // Windows-family whole-binary skip — covers both CI subsystems: MINGW64
     // (native, _WIN32) and the MSYS/Cygwin POSIX layer (__CYGWIN__/__MSYS__,
     // where _WIN32 is NOT defined). The registration-stress subtests
-    // rely on POSIX threading/timing behavior — and the DR-008 negative
+    // rely on POSIX threading/timing behavior — and the negative
     // case (stop_from_handler) contains an abort in a forked child via
     // fork()/waitpid(), which do not exist on Windows — so the heavy
     // concurrent-registration harness aborts here under MHD/mingw. The
-    // DR-008 thread-safety contract is exercised (including the TSan
+    // thread-safety contract is exercised (including the TSan
     // rerun) on the POSIX Linux/macOS lanes. Exit 77 is the Automake
     // SKIP code (test-driver treats it as SKIP, not FAIL).
     std::cout << "[SKIP] threadsafety_stress: registration-stress harness "

@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-024: register_path / register_prefix split.
+// register_path / register_prefix split.
 //
 // Goal: prefix-vs-exact matching is now an explicit named choice, not a
 // positional bool flag.
@@ -291,10 +291,10 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     ws.stop();
 LT_END_AUTO_TEST(unregister_resource_alias_handles_both_kinds)
 
-// TASK-056: registering the SAME path as both exact and prefix is no
+// Registering the SAME path as both exact and prefix is no
 // longer permitted (the (method, path) cache key cannot discriminate
 // the two kinds at lookup time, so the second call now throws
-// std::invalid_argument). The pre-TASK-056 version of this test
+// std::invalid_argument). An earlier version of this test
 // double-registered the same /admin path and observed both 200s; that
 // state shape is unreachable on the v2 contract.
 //
@@ -306,7 +306,7 @@ LT_END_AUTO_TEST(unregister_resource_alias_handles_both_kinds)
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    unregister_resource_removes_both_path_and_prefix_registrations)
     webserver ws{create_webserver(PORT + 7)};
-    // Use distinct paths so the new TASK-056 collision guard does not
+    // Use distinct paths so the collision guard does not
     // fire. /alpha is the exact registration; /beta is the prefix
     // registration. unregister_resource must clear EITHER kind.
     ws.register_path("/alpha", std::make_shared<ok_resource>());
@@ -328,7 +328,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     ws.stop();
 LT_END_AUTO_TEST(unregister_resource_removes_both_path_and_prefix_registrations)
 
-// TASK-056: paired sentinel for the new collision-detection contract.
+// Paired sentinel for the collision-detection contract.
 // At the v2 contract level, registering the same path as both exact
 // AND prefix throws std::invalid_argument from the second call. The
 // throw must leave the first registration intact (atomicity).
@@ -354,7 +354,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     ws.stop();
 LT_END_AUTO_TEST(register_path_and_register_prefix_on_same_path_collide)
 
-// ---- normalize_path / should_skip_auth (finding test-quality-reviewer-iter1-2) ---
+// ---- normalize_path / should_skip_auth ----------------------------------
 //
 // apply_normalized_segment and normalize_path live in anonymous namespace in
 // webserver.cpp. The only observable path through them is
@@ -369,8 +369,8 @@ LT_END_AUTO_TEST(register_path_and_register_prefix_on_same_path_collide)
 
 namespace {
 
-// auth_handler_ptr is std::function<std::optional<http_response>(const http_request&)>
-// (TASK-054). Return an engaged optional with a 401 response to block the request.
+// auth_handler_ptr is std::function<std::optional<http_response>(const http_request&)>.
+// Return an engaged optional with a 401 response to block the request.
 std::optional<httpserver::http_response> reject_auth(const httpserver::http_request&) {
     return std::optional<httpserver::http_response>(
         httpserver::http_response::string("blocked").with_status(401));
@@ -461,7 +461,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     ws.stop();
 LT_END_AUTO_TEST(auth_skip_excess_dot_dot_clamps_to_root)
 
-// ---- unique_ptr ownership-transfer runtime tests (finding test-quality-reviewer-iter1-1) ---
+// ---- unique_ptr ownership-transfer runtime tests -------------------------
 //
 // The static_asserts above verify that the unique_ptr overloads exist and
 // return void. These runtime tests verify that ownership is actually
@@ -502,7 +502,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     ws.stop();
 LT_END_AUTO_TEST(register_prefix_unique_ptr_transfers_ownership_and_serves)
 
-// ---- Error-path tests for register_prefix (findings 9 / 32) -------------
+// ---- Error-path tests for register_prefix --------------------------------
 //
 // register_path is tested for null / duplicate in
 // webserver_register_smartptr_test.cpp. The tests below pin the same
@@ -524,11 +524,11 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     LT_CHECK_THROW(ws.register_prefix("/dup", std::make_shared<ok_resource>()));
 LT_END_AUTO_TEST(register_prefix_duplicate_throws)
 
-// ---- Cross-kind selectivity test (finding test-quality-reviewer-iter1-3) ---
+// ---- Cross-kind selectivity test ------------------------------------------
 //
-// TASK-056: same-path exact+prefix coexistence is now forbidden (the
-// collision guard throws on the second registration). The pre-
-// TASK-056 version of this test set up that forbidden state; the
+// Same-path exact+prefix coexistence is now forbidden (the
+// collision guard throws on the second registration). An earlier
+// version of this test set up that forbidden state; the
 // updated test pins the isolation invariant on DISTINCT paths
 // instead — unregister_path on /q must not touch the prefix
 // registration at /q-prefix.
@@ -536,8 +536,8 @@ LT_END_AUTO_TEST(register_prefix_duplicate_throws)
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    unregister_path_leaves_prefix_registration_intact)
     webserver ws{create_webserver(PORT + 17)};
-    // Arrange: distinct exact and prefix paths (TASK-056 forbids the
-    // same path being both kinds).
+    // Arrange: distinct exact and prefix paths (the collision guard
+    // forbids the same path being both kinds).
     ws.register_path("/q", std::make_shared<ok_resource>());
     ws.register_prefix("/qprefix", std::make_shared<ok_resource>());
     ws.start(false);

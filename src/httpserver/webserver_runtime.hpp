@@ -66,7 +66,7 @@
       * @note Handler exceptions are caught on the dispatch path and
       *       routed through `internal_error_handler`; no exception
       *       propagates out of this call.
-      * @see webserver (DR-009 §5.2 / handler error-propagation contract)
+      * @see webserver (handler error-propagation contract)
      **/
      bool run();
 
@@ -78,7 +78,7 @@
       * @note Handler exceptions are caught on the dispatch path and
       *       routed through `internal_error_handler`; no exception
       *       propagates out of this call.
-      * @see webserver (DR-009 §5.2 / handler error-propagation contract)
+      * @see webserver (handler error-propagation contract)
      **/
      bool run_wait(int32_t millisec);
 
@@ -149,7 +149,7 @@
      uint16_t get_bound_port() const;
 
      /**
-      * Reports build-time feature availability (PRD-FLG-REQ-003).
+      * Reports build-time feature availability.
       *
       * The four boolean fields of the returned struct reflect the
       * HAVE_BAUTH / HAVE_DAUTH / HAVE_GNUTLS / HAVE_WEBSOCKET macros at

@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-064 Cycle 9-10: http_request::get_cookies_parsed() shape +
+// http_request::get_cookies_parsed() shape +
 // lifetime + per-request cache stability. Uses create_test_request so
 // no live MHD daemon is needed.
 
@@ -101,9 +101,8 @@ LT_BEGIN_AUTO_TEST(http_request_cookies_parsed_suite,
     // create_test_request() builder path (cookies_parsed_cache_built_
     // is set during build). The live MHD path — where
     // cookies_parsed_cache_built_ is set on the first MHD_get_connection_values
-    // call — is only exercised by integration tests (test/integ/).
-    // See test-quality-reviewer-iter3-4: the live-MHD branch is accepted
-    // as integration-test-only coverage.
+    // call — is only exercised by integration tests (test/integ/);
+    // the live-MHD branch is accepted as integration-test-only coverage.
     http_request req = create_test_request()
         .path("/").method("GET")
         .cookie("sid", "abc")

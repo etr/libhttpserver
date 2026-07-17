@@ -3,11 +3,9 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-048 acceptance criterion 4.
-//
-// "A test verifies the alias is observably an alias: registering
-//  auth_handler(fn) then querying the before_handler hook count
-//  reports +1."
+// Verifies the v1-style handler setters are observably aliases:
+// registering auth_handler(fn) then querying the before_handler hook
+// count reports +1.
 //
 // Implementation: each of the three v1 error/auth setters is, when
 // non-null, an alias for an internally-registered hook at the matching
@@ -63,7 +61,7 @@ LT_BEGIN_AUTO_TEST(hooks_alias_count_suite, baseline_has_no_alias_hooks)
 LT_END_AUTO_TEST(baseline_has_no_alias_hooks)
 
 LT_BEGIN_AUTO_TEST(hooks_alias_count_suite, auth_handler_registers_one_before_handler)
-    // TASK-054: lambda now returns std::optional<http_response>.
+    // The auth lambda returns std::optional<http_response>;
     // std::nullopt is the v2 "allow" sentinel (v1 used a null shared_ptr).
     webserver ws{create_webserver(8205)
         .auth_handler([](const http_request&)

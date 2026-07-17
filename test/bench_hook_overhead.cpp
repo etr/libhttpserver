@@ -17,12 +17,12 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
-// TASK-052: zero-cost-when-unused microbench for the hook bus gate.
+// Zero-cost-when-unused microbench for the hook bus gate.
 //
 // The dispatch hot path consults `impl_->any_hooks_[phase].load(relaxed)`
 // before considering any hook invocation. When no hooks are registered
 // at a phase, every request still pays that one atomic load -- which is
-// the "zero" we benchmark here. PRD-HOOK-REQ-009 / §4.10 demand that
+// the "zero" we benchmark here. The hook-bus contract demands that
 // this gate is effectively free (single relaxed load + branch).
 //
 // This is a microbench: it measures the gate cost directly through the
@@ -45,7 +45,7 @@
 // it differs only by branch-predictor state (the `if` body is taken
 // vs. skipped), not by the load itself.
 //
-// CI gate (TASK-083): a two-tier gate replaces the old absolute-only
+// CI gate: a two-tier gate replaces the old absolute-only
 // ceiling.
 //
 //   * Absolute sanity bound on (a): (a)'s median must stay under a
@@ -56,10 +56,10 @@
 //   * Relative gate on (b): HOOK_BASELINE_NS is measured in-run as
 //     (a)'s median (the no-hooks variant). (b)'s median -- the same
 //     gate load WITH a hook registered -- must stay within
-//     2 * HOOK_BASELINE_NS. This is the TASK-052 acceptance: registering
+//     2 * HOOK_BASELINE_NS. The acceptance criterion: registering
 //     a hook must not even double the per-request gate microcost, which
-//     is the operational meaning of "zero-cost when unused"
-//     (PRD-HOOK-REQ-008). Computing the baseline in-run makes the gate
+//     is the operational meaning of "zero-cost when unused".
+//     Computing the baseline in-run makes the gate
 //     auto-track runner speed instead of hardcoding a constant.
 //
 // On sanitizer builds the per-call cost is inflated 10..50x; the
@@ -98,7 +98,7 @@ namespace {
 // contended RMW); the relative gate below guards the zero-cost claim.
 constexpr double kAbsoluteGateNsCeiling = 50.0;
 
-// Relative-gate multiplier (TASK-052 acceptance): with a hook registered,
+// Relative-gate multiplier: with a hook registered,
 // (b)'s median must not exceed kRelativeGateFactor * HOOK_BASELINE_NS,
 // where HOOK_BASELINE_NS is (a)'s median measured in the same run.
 constexpr double kRelativeGateFactor = 2.0;
@@ -200,7 +200,7 @@ int main() {
         rc = 1;
     }
     // Relative gate on (b): registering a hook must not blow up the gate
-    // microcost (TASK-052 acceptance / PRD-HOOK-REQ-008).
+    // microcost.
     if (median_b > relative_gate_ns) {
         std::printf("FAIL: (b) gate-load median %.3f ns exceeds 2x "
                     "HOOK_BASELINE_NS (= %.3f ns) -- the zero-cost-when-unused "

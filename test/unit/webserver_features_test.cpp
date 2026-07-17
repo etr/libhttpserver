@@ -18,8 +18,7 @@
      USA
 */
 
-// TASK-034 cycle A. Pins the public contract of
-//   httpserver::webserver::features() (PRD-FLG-REQ-003):
+// Pins the public contract of httpserver::webserver::features():
 //   - returns a struct with exactly four `bool` members in the
 //     documented order (basic_auth, digest_auth, tls, websocket);
 //   - the function is noexcept;
@@ -33,7 +32,7 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
-// AC: features struct shape — exactly four bool fields in this order.
+// Contract: features struct shape — exactly four bool fields in this order.
 static_assert(
     std::is_same_v<decltype(httpserver::webserver::features().basic_auth), bool>,
     "features.basic_auth must be bool");
@@ -53,7 +52,7 @@ static_assert(
     std::is_trivially_copyable_v<struct httpserver::webserver::features>,
     "features must be trivially copyable");
 
-// AC: the call is noexcept.
+// Contract: the call is noexcept.
 static_assert(
     noexcept(httpserver::webserver::features()),
     "webserver::features() must be noexcept");
@@ -68,7 +67,7 @@ LT_END_SUITE(webserver_features_suite)
 
 // Compile-time expected values — one #ifdef per flag, declared outside the
 // test body so there is no internal branching inside the test assertion
-// sequence (test-quality-reviewer finding: internal-branching-in-test).
+// sequence.
 #ifdef HAVE_BAUTH
 constexpr bool k_expected_bauth = true;
 #else
@@ -90,7 +89,7 @@ constexpr bool k_expected_ws = true;
 constexpr bool k_expected_ws = false;
 #endif
 
-// AC: each field reflects the HAVE_* that the library was built with.
+// Contract: each field reflects the HAVE_* that the library was built with.
 // The four assertions below are unconditional: each compares the runtime
 // value against its compile-time expected constant so the intent is clear
 // and both true and false branches are visible in every build.

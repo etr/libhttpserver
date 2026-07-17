@@ -8,7 +8,7 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-046 acceptance criterion 3.
+// Contract under test:
 //
 //   "A throwing accept_decision hook does not flip the accept/reject
 //    decision (the connection is still rejected per policy_callback's

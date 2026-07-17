@@ -3,10 +3,9 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-047: compile-time pin for body_chunk_ctx and request_received_ctx.
+// Compile-time pin for body_chunk_ctx and request_received_ctx.
 //
-// TASK-045 landed both contexts; TASK-047 wires their firing sites. The
-// firing sites depend on the exact field shapes (mutable http_request*,
+// The firing sites depend on the exact field shapes (mutable http_request*,
 // std::span<const std::byte> chunk, std::uint64_t offset, bool is_final
 // for body_chunk; mutable http_request* + steady_clock::time_point for
 // request_received). A future refactor that reshapes either struct must

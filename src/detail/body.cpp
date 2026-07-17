@@ -44,8 +44,6 @@ namespace detail {
 // Layout-pinning static_asserts for iovec_entry → MHD_IoVec / struct iovec.
 // These asserts live next to the cast site (iovec_body::materialize below)
 // to catch platform layout drift at compile time rather than at runtime.
-// iovec_response.cpp was removed in TASK-013 (the subclass hierarchy was
-// replaced by http_response value-type factories in TASK-010).
 //
 // The POSIX `struct iovec` asserts are gated on !_WIN32 (no <sys/uio.h> on
 // MSYS2/mingw); the MHD_IoVec asserts run everywhere because that's the
@@ -98,7 +96,7 @@ MHD_Response* empty_body::materialize() {
 MHD_Response* string_body::materialize() {
     // _static variant: accepts const void* directly, no const_cast needed,
     // and documents the same PERSISTENT ownership semantics — the buffer is
-    // owned by *this and outlives the MHD_Response (TASK-009). Requires
+    // owned by *this and outlives the MHD_Response. Requires
     // MHD >= 0x00097701, well below the project minimum 0x01000000.
     return MHD_create_response_from_buffer_static(
         content_.size(),
@@ -109,7 +107,7 @@ MHD_Response* string_body::materialize() {
 // file_body — opens the file and fstat's it at construction so size() is
 // accurate immediately.  materialize() uses fstat's st_size; it never calls
 // lseek(), so the fd's read position remains at 0 when handed to
-// MHD_create_response_from_fd (security-reviewer-iter1-1 / CWE-367).
+// MHD_create_response_from_fd (CWE-367).
 // ---------------------------------------------------------------------------
 file_body::file_body(std::string path) noexcept
     : path_(std::move(path)) {
@@ -128,7 +126,7 @@ file_body::file_body(std::string path) noexcept
     }
 
     // Use fstat's st_size directly — no lseek, no TOCTOU, no fd-position
-    // side-effect (security-reviewer-iter1-1 / performance-reviewer-iter1-4).
+    // side-effect.
     //
     // CWE-190 guard: on 32-bit platforms std::size_t is 32 bits while off_t
     // can be 64 bits; a file larger than 4 GiB would silently truncate via
@@ -234,8 +232,8 @@ MHD_Response* pipe_body::materialize() {
 // ---------------------------------------------------------------------------
 ssize_t deferred_body::trampoline(void* cls, std::uint64_t pos,
                                   char* buf, std::size_t max) {
-    // Guard against null cls or empty producer_ (security-reviewer-iter1-3 /
-    // CWE-476). MHD's callback mechanism does not catch C++ exceptions, so
+    // Guard against null cls or empty producer_ (CWE-476).
+    // MHD's callback mechanism does not catch C++ exceptions, so
     // throwing std::bad_function_call here would call std::terminate().
     // Return MHD_CONTENT_READER_END_WITH_ERROR instead.
     auto* self = static_cast<deferred_body*>(cls);
@@ -248,13 +246,13 @@ ssize_t deferred_body::trampoline(void* cls, std::uint64_t pos,
 MHD_Response* deferred_body::materialize() {
     // Block size 1024 mirrors v1 deferred_response::get_raw_response_helper.
     // Free-callback is nullptr because *this owns producer_ and outlives the
-    // MHD_Response (TASK-009 enforces this via http_response's lifetime).
+    // MHD_Response (http_response's lifetime enforces this).
     return MHD_create_response_from_callback(
         MHD_SIZE_UNKNOWN, 1024, &deferred_body::trampoline, this, nullptr);
 }
 
 // ---------------------------------------------------------------------------
-// digest_challenge_body — TASK-062 / RFC 7616.
+// digest_challenge_body — RFC 7616 Digest auth challenge.
 //
 // Returns a body-only MHD_Response carrying the "access denied" payload.
 // The WWW-Authenticate header itself is NOT attached here -- the dispatch

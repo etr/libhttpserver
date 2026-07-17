@@ -8,12 +8,12 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-065: RFC 5952 §4 canonicalization for peer_address::to_string()
-// over IPv6 inputs. Pre-TASK-065 the IPv6 branch printed all eight
-// 16-bit groups uncompressed (e.g. "2001:db8:0:0:0:0:0:1"); this test
-// pins the §4.2.2 examples, the §4.3 "single zero MUST NOT collapse"
-// rule, the §4.2.3 first-occurrence tie-break, and the §5 IPv4-mapped
-// dotted-quad form. The IPv4 branch (unchanged by TASK-065) is also
+// RFC 5952 §4 canonicalization for peer_address::to_string() over IPv6
+// inputs. Previously the IPv6 branch printed all eight 16-bit groups
+// uncompressed (e.g. "2001:db8:0:0:0:0:0:1"); this test pins the §4.2.2
+// examples, the §4.3 "single zero MUST NOT collapse" rule, the §4.2.3
+// first-occurrence tie-break, and the §5 IPv4-mapped dotted-quad form.
+// The IPv4 branch (untouched by the IPv6 canonicalization work) is also
 // regression-pinned so a future tweak to the canonicalizer cannot
 // regress the v4 path.
 //
@@ -138,7 +138,7 @@ LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_ipv4_mapped_dotted_quad
     LT_CHECK_EQ(p.to_string(), std::string{"::ffff:255.255.255.255"});
 LT_END_AUTO_TEST(rfc5952_ipv4_mapped_dotted_quad_max)
 
-// Regression: IPv4 path stays unchanged (acceptance criterion).
+// Regression: IPv4 path stays unchanged.
 LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, ipv4_path_unchanged)
     auto p = make_v4(127, 0, 0, 1);
     LT_CHECK_EQ(p.to_string(), std::string{"127.0.0.1"});

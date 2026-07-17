@@ -121,7 +121,7 @@ bool http_request_impl::has_tls_session() const {
 }
 
 gnutls_session_t http_request_impl::get_tls_session() const {
-    // TASK-019: the test-request path (connection_ == nullptr) has no
+    // The test-request path (connection_ == nullptr) has no
     // live MHD connection to query; return null so callers fall back
     // to the no-cert sentinels rather than UB-dereferencing in MHD.
     if (connection_ == nullptr) {
@@ -141,7 +141,7 @@ bool http_request_impl::has_client_certificate() const {
         return false;
     }
 
-    // TASK-019: even when the test-request flag advertises a TLS
+    // Even when the test-request flag advertises a TLS
     // session, there is no live MHD connection from which to extract
     // peer certs. Bail out before calling into GnuTLS so the public
     // accessors honour the "no live cert means false / empty / -1"
@@ -191,7 +191,7 @@ std::string extract_x509_common_name(gnutls_x509_crt_t cert) {
 
 // SHA-256 produces 32 bytes (256 bits). Named constant avoids the magic
 // number in the fingerprint buffer declaration and in the hex-length
-// computation below. (code-quality-reviewer / code-simplifier items)
+// computation below.
 static constexpr size_t SHA256_DIGEST_BYTES = 32;
 
 std::string extract_x509_fingerprint_sha256(gnutls_x509_crt_t cert) {
@@ -229,7 +229,6 @@ void http_request_impl::populate_all_cert_fields() const {
     // no-TLS-session case (returns nullptr for both). A separate
     // has_tls_session() call is redundant; calling get_tls_session()
     // once is sufficient and halves the MHD_get_connection_info calls.
-    // (code-quality-reviewer / code-simplifier / performance-reviewer items)
     gnutls_session_t session = get_tls_session();
 
     scoped_x509_cert cert;

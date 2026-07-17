@@ -3,7 +3,7 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-// TASK-050 acceptance criterion 3.
+// Contract under test:
 //
 // "A response_sent hook sees status == 200, bytes_queued == body.size(),
 //  elapsed > 0."

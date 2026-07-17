@@ -24,7 +24,7 @@ the following change on the build host:
 - Compiler vendor (affects `std::map` layout via stdlib choice)
 
 Both the sizeof constants and `V1_GET_HEADERS_NS_PER_CALL` are selected
-per-stdlib (TASK-084), so each has a libc++ branch and a libstdc++ branch
+per-stdlib, so each has a libc++ branch and a libstdc++ branch
 — re-measure and update only the branch for the stdlib you are on.
 
 A re-measurement is a one-commit change: update the relevant constants
@@ -80,7 +80,7 @@ This TU stubs `MHD_get_connection_values` itself; it does not need
 the v1 library link or a running daemon. It does need
 `microhttpd.h` for the type declarations.
 
-`V1_GET_HEADERS_NS_PER_CALL` is selected **per-stdlib** (TASK-084), so
+`V1_GET_HEADERS_NS_PER_CALL` is selected **per-stdlib**, so
 re-measure it on the stdlib whose constant you are updating; the two
 values live behind `#if defined(__GLIBCXX__)` / `#elif
 defined(_LIBCPP_VERSION)` branches in `v1_constants.hpp`.

@@ -164,10 +164,19 @@ bool http_endpoint::operator <(const http_endpoint& b) const {
 bool http_endpoint::match(const http_endpoint& url) const {
     if (!reg_compiled) throw std::invalid_argument("Cannot run match. Regex suppressed.");
 
+    // Family (prefix) rule: a family endpoint matches when the FIRST N
+    // request segments match the registered pattern, where N is the
+    // pattern's own segment count (url_pieces.size()). A request with
+    // fewer segments than the pattern can never satisfy that prefix
+    // rule, so it falls through to plain full-string matching below
+    // (which also handles every non-family endpoint).
     if (!family_url || url.url_pieces.size() < url_pieces.size()) {
         return regex_match(url.url_complete, re_url_normalized);
     }
 
+    // Rebuild the request path truncated to the pattern's first N
+    // segments in `nn`, so the prefix can be regex-matched against
+    // re_url_normalized (which matches whole strings, not prefixes).
     string nn = "/";
     bool first = true;
     for (unsigned int i = 0; i < url_pieces.size(); i++) {

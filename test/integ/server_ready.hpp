@@ -6,13 +6,13 @@
 #ifndef TEST_INTEG_SERVER_READY_HPP_
 #define TEST_INTEG_SERVER_READY_HPP_
 
-// TASK-075: shared server-ready wait helper for the hooks_* integ tests.
+// Shared server-ready wait helper for the hooks_* integ tests.
 //
 // Replaces the legacy `std::this_thread::sleep_for(50ms)` pattern that
 // raced with MHD_start_daemon on loaded CI runners and produced
 // intermittent CURLE_COULDNT_CONNECT failures.
 //
-// Design notes (see specs/tasks/M7-v2-cleanup/TASK-075.md):
+// Design notes:
 //
 //   * The probe uses CURLOPT_CONNECT_ONLY — i.e. no HTTP request line is
 //     ever sent. The kernel completes the TCP three-way handshake and
@@ -42,7 +42,7 @@
 //     handshake before MHD's policy_callback runs, so the probe still
 //     returns OK.
 //
-//   * The 3000 ms deadline matches the original value in TASK-049 and
+//   * The 3000 ms deadline matches the original hooks-test value and
 //     gives slow CI lanes (TSan, valgrind) generous headroom. Override
 //     by passing an explicit `deadline` argument.
 //

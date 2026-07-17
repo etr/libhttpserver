@@ -17,19 +17,18 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
-// TASK-053 -- v2 dispatch performance acceptance harness.
+// v2 dispatch performance acceptance harness.
 //
-// After step 3 of TASK-053 cut `resolve_resource_for_request` over to
+// After the dispatch cutover moved `resolve_resource_for_request` over to
 // `lookup_v2()` and removed the v1 fallback, the dispatch hot path is
 // the cache -> exact -> radix -> regex pipeline plus the per-call LRU
-// promotion. The deferred-backlog plan (TASK-053 §"Step 4 -- Bench")
-// fixes two ceilings on that pipeline:
+// promotion. Two ceilings are fixed on that pipeline:
 //
 //   (a) cache_warm_ns ceiling  -- 200 ns / lookup (median, cache hit)
 //   (b) radix_pure_ns ceiling  -- 5 us / lookup for 8-segment paths
 //                                 (median, cache cold -- radix only)
 //
-// TASK-083 separates the two measurements cleanly. Previously (b)
+// The two measurements are now separated cleanly. Previously (b)
 // rotated through only 16 paths, all of which fit inside the 256-entry
 // LRU after the first round, so (b) actually measured a cache-warm +
 // radix MIX rather than pure radix-tier latency. The new (b) drives a
@@ -72,7 +71,7 @@ namespace hs = httpserver;
 
 namespace {
 
-// Ceilings from the TASK-053 deferred-backlog plan, step 4.
+// Committed dispatch-latency ceilings (see file header).
 constexpr double kCacheHitNsCeiling = 200.0;     // ns/lookup, median
 constexpr double kRadixUsCeiling    = 5.0;       // us/lookup, median
 constexpr double kRadixNsCeiling    = kRadixUsCeiling * 1000.0;

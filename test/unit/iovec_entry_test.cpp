@@ -80,8 +80,8 @@ LT_END_AUTO_TEST(brace_init_assigns_members)
 
 // Reinterpret-cast bridge from a contiguous range of iovec_entry to
 // POSIX struct iovec. This is the cast the library performs when feeding
-// libmicrohttpd, and what TASK-010 will rely on when it lands the
-// std::span<const iovec_entry> factory.
+// libmicrohttpd, and what the planned
+// std::span<const iovec_entry> factory will rely on.
 //
 // reason: MSYS2/mingw does not ship <sys/uio.h>; POSIX struct iovec has
 // no Windows equivalent. The MHD_IoVec bridge test below covers the

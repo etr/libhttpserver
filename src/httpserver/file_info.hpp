@@ -54,7 +54,7 @@ class file_info {
      void grow_file_size(size_t additional_file_size);
 
      friend class httpserver::webserver;
-     friend class httpserver::detail::webserver_impl;  // TASK-014
+     friend class httpserver::detail::webserver_impl;
 };
 
 }  // namespace http

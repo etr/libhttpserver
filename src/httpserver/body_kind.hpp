@@ -31,12 +31,12 @@ namespace httpserver {
 
 // Tag identifying which subclass of detail::body a given http_response is
 // currently holding. Consumers reach this through http_response::kind()
-// (TASK-011) and should never have to name detail::body directly — the
+// and should never have to name detail::body directly — the
 // enum is the only consumer-visible part of the body hierarchy.
 //
 // `empty` is enumerator 0 so a value-initialised body_kind{} matches the
-// "no body" state, which is what TASK-009's default-constructed
-// http_response will report.
+// "no body" state, which is what a default-constructed
+// http_response reports.
 //
 // Underlying type is pinned to std::uint8_t so that future additions
 // stay within a single byte and do not silently grow http_response. The
@@ -50,7 +50,7 @@ enum class body_kind : std::uint8_t {
     iovec,
     pipe,
     deferred,
-    // TASK-062: RFC-7616 Digest auth challenge body. The body is a body-only
+    // RFC-7616 Digest auth challenge body. The body is a body-only
     // MHD_Response (the "access denied" payload); the WWW-Authenticate header
     // with nonce/opaque/qop/algorithm parameters is attached by the dispatch
     // path via MHD_queue_auth_required_response3 rather than by the body's
