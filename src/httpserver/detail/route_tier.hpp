@@ -58,13 +58,14 @@ namespace detail {
 //
 // Inline so both webserver_register.cpp and webserver_routes.cpp can call
 // it without picking up a TU boundary.
-// 'pattern' names the regex tier; the label is self-describing:
-// routes in this tier match by compiled regex pattern.
-enum class route_tier_kind { exact, radix, pattern };
+// 'regex' names the regex tier; routes in this tier match by compiled
+// regex pattern (as opposed to the exact hash tier and the radix
+// parameterized-path tier).
+enum class route_tier_kind { exact, radix, regex };
 
 struct route_tier_result {
     route_tier_kind kind = route_tier_kind::exact;
-    std::optional<std::regex> re;  // populated iff kind == pattern
+    std::optional<std::regex> re;  // populated iff kind == regex
 };
 
 inline route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
@@ -102,7 +103,7 @@ inline route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
         if (std::regex_match(idx.get_url_complete(), re)) {
             res.kind = route_tier_kind::exact;
         } else {
-            res.kind = route_tier_kind::pattern;
+            res.kind = route_tier_kind::regex;
             res.re   = std::move(re);
         }
         return res;

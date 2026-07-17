@@ -306,7 +306,7 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
         exact_routes_.emplace(idx.get_url_complete(),
                               make_non_prefix_entry(methods, std::move(shim)));
         break;
-    case route_tier_kind::pattern:
+    case route_tier_kind::regex:
         // Regex-tier routes do not conflict with prefix routes because
         // a literal pattern with regex metacharacters is its own key
         // (it never matches as a prefix lookup target).

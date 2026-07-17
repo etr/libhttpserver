@@ -186,7 +186,7 @@ void webserver_impl::reject_duplicate_v2_entry_(
             throw_duplicate_registration(key);
         }
         break;
-    case route_tier_kind::pattern:
+    case route_tier_kind::regex:
         for (const auto& rr : regex_routes_) {
             if (rr.url_complete == key) throw_duplicate_registration(key);
         }
@@ -228,7 +228,7 @@ void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
         param_and_prefix_routes_.insert(idx.get_url_complete(), std::move(entry),
                                         /*is_prefix=*/false);
         break;
-    case route_tier_kind::pattern:
+    case route_tier_kind::regex:
         regex_routes_.push_back(
             {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
         break;
