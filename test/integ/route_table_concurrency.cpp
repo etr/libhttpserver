@@ -78,8 +78,8 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
     std::atomic<int> writer_ops{0};
     std::atomic<int> reader_ops{0};
 
-    constexpr int kWriters = 4;
-    constexpr int kReaders = 16;
+    const int kWriters = stress_threads(4);
+    const int kReaders = stress_threads(16);
 
     std::vector<std::thread> threads;
     threads.reserve(kWriters + kReaders);
@@ -127,8 +127,7 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
     // valgrind/TSan overhead. Using an operation count avoids fixed
     // wall-clock sleeps that inflate on loaded CI boxes.
     constexpr int kOpThreshold = 10000;
-    auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    auto deadline = std::chrono::steady_clock::now() + stress_window();
     while ((writer_ops.load() < kOpThreshold || reader_ops.load() < kOpThreshold)
            && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -173,8 +172,8 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
     std::atomic<int> writer_ops{0};
     std::atomic<int> reader_ops{0};
 
-    constexpr int kWriters = 4;
-    constexpr int kReaders = 8;
+    const int kWriters = stress_threads(4);
+    const int kReaders = stress_threads(8);
 
     std::vector<std::thread> threads;
     threads.reserve(kWriters + kReaders);
@@ -223,8 +222,7 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
     }
 
     // Same baseline + valgrind-tolerant extension as Cycle I above.
-    auto deadline2 =
-        std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    auto deadline2 = std::chrono::steady_clock::now() + stress_window();
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     while ((writer_ops.load() == 0 || reader_ops.load() == 0)
            && std::chrono::steady_clock::now() < deadline2) {

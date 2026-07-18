@@ -88,8 +88,8 @@ LT_BEGIN_AUTO_TEST(ws_registry_concurrency_suite,
     std::atomic<int> writer_ops{0};
     std::atomic<int> reader_ops{0};
 
-    constexpr int kWriters = 4;
-    constexpr int kReaders = 16;
+    const int kWriters = stress_threads(4);
+    const int kReaders = stress_threads(16);
 
     std::vector<std::thread> threads;
     threads.reserve(kWriters + kReaders);
@@ -130,12 +130,12 @@ LT_BEGIN_AUTO_TEST(ws_registry_concurrency_suite,
     }
 
     // Run until enough operations have been observed by both roles, or
-    // until a wall-clock safety ceiling (30s) to survive valgrind/TSan
-    // overhead. Mirrors route_table_concurrency.cpp's threshold-based
-    // stop condition (avoids a fixed wall-clock sleep).
+    // until stress_window() elapses (30s native/TSan; 3s under valgrind so
+    // the helgrind/drd happens-before engine fits the CI budget). Mirrors
+    // route_table_concurrency.cpp's threshold-based stop condition (avoids a
+    // fixed wall-clock sleep).
     constexpr int kOpThreshold = 10000;
-    auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    auto deadline = std::chrono::steady_clock::now() + stress_window();
     while ((writer_ops.load() < kOpThreshold || reader_ops.load() < kOpThreshold)
            && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

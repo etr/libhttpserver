@@ -188,8 +188,12 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr,
     auto* rtable = resource != nullptr ? resource->hook_table_raw_() : nullptr;
     const bool route_gate = rtable != nullptr &&
         rtable->any_hooks(hook_phase::response_sent);
+    // Whether any user hook (server-wide or per-route) will observe this
+    // firing. Distinct from the log_access alias slot, which fires
+    // regardless but never reads ctx.elapsed (see the elapsed gate below).
+    const bool user_gate = server_gate || route_gate;
 
-    if (!server_gate && !route_gate && !hooks_.has_log_access_alias()) return;
+    if (!user_gate && !hooks_.has_log_access_alias()) return;
     // mr->response is null only if materialize_and_queue_response's
     // belt-and-suspenders fallback also failed; fire nothing rather than crash.
     if (!mr->response) return;
@@ -203,7 +207,7 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr,
     // slot fires, to avoid a gratuitous clock syscall on the common path.
     // NOTE: the alias body MUST NOT read ctx.elapsed; any future change
     // that needs elapsed in the alias must also remove this optimisation.
-    const auto elapsed = (server_gate || route_gate)
+    const auto elapsed = user_gate
         ? std::chrono::duration_cast<std::chrono::nanoseconds>(
               std::chrono::steady_clock::now() - mr->start_time)
         : std::chrono::nanoseconds::zero();

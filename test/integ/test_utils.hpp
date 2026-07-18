@@ -21,6 +21,7 @@
 #ifndef TEST_INTEG_TEST_UTILS_HPP_
 #define TEST_INTEG_TEST_UTILS_HPP_
 
+#include <chrono>
 #include <cstdlib>
 
 // Shared helpers for the integration test suite.
@@ -33,6 +34,27 @@
 // (route_table_concurrency.cpp, ws_registry_concurrency.cpp) use this to
 // relax ONLY their liveness assertions, never the race/crash gate.
 inline bool under_valgrind() { return std::getenv("VALGRIND") != nullptr; }
+
+// Concurrency-stress sizing knobs (route_table_concurrency.cpp,
+// ws_registry_concurrency.cpp). helgrind/drd track a happens-before
+// relation over every lock and atomic across every pair of threads, so the
+// native-size stress (up to 20 threads hammering a single shared_mutex for a
+// 30 s real-time window) makes the tool's internal segment/vector-clock
+// state grow superlinearly -- enough to blow the 90-minute CI budget (the
+// drd lane was observed hanging inside route_table_concurrency, producing no
+// output for 88 minutes). memcheck, which tracks no thread ordering, runs the
+// same binary in ~60 s. A race detector needs only a short window of genuine
+// concurrency to flag a missing-synchronisation access, so shrink BOTH the
+// per-role thread fan-out and the run window sharply under valgrind. The
+// native and TSan lanes (VALGRIND unset) keep the full-size stress.
+inline std::chrono::seconds stress_window() {
+    return under_valgrind() ? std::chrono::seconds(3)
+                            : std::chrono::seconds(30);
+}
+inline int stress_threads(int full_native) {
+    return under_valgrind() ? (full_native < 3 ? full_native : 3)
+                            : full_native;
+}
 //
 // Historical note: this header previously exposed `as_shared(http_resource&)`,
 // a thin wrapper that returned a std::shared_ptr<http_resource> with a no-op

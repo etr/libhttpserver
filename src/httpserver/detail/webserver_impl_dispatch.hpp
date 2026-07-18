@@ -319,12 +319,12 @@ bool resolve_resource_for_request(modded_request* mr,
 // header. On handler-throw, routes through the safe internal-error
 // path.
 void dispatch_resource_handler(modded_request* mr,
-        const std::shared_ptr<::httpserver::http_resource>& hrm);
+        const std::shared_ptr<::httpserver::http_resource>& hrm);  // NOLINT(build/include_what_you_use)
 
 // Serialize an allowed-method set into the comma-separated value
 // expected by the HTTP `Allow:` header. Enum-declaration order:
 // GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH.
-std::string serialize_allow_methods(method_set allowed) const;
+std::string serialize_allow_methods(method_set allowed) const;  // NOLINT(build/include_what_you_use)
 
 // Final stage of finalize_answer: build an MHD_Response from
 // mr->response, decorate it, queue it on the connection. Handles
