@@ -77,6 +77,7 @@
 #include "httpserver/detail/hook_dispatcher.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/ip_access_control.hpp"
+#include "httpserver/detail/response_materializer.hpp"
 #include "httpserver/detail/route_table.hpp"
 #include "httpserver/detail/ws_registry.hpp"
 
@@ -171,17 +172,19 @@ class webserver_impl {
     // destroy).
     daemon_lifecycle daemon_;
 
-#ifdef HAVE_DAUTH
     // Per-webserver-instance `opaque` value handed to
     // MHD_queue_auth_required_response3 when the user's
     // digest_challenge factory leaves the field empty. Generated once
     // at construction from std::random_device (16 bytes hex-encoded ->
-    // 32 chars). Single-writer-at-construction, lock-free read on the
-    // dispatch hot path: same posture as handler_exception_alias_ /
-    // log_access_alias_ below. RFC 7616 §5.10: opaque is an identifier,
-    // not a secret nor a replay token; reuse is allowed.
+    // 32 chars), but ONLY on HAVE_DAUTH builds (the ctor-body assignment
+    // is gated). Declared unconditionally -- an always-empty std::string
+    // on non-DAUTH builds -- so response_materializer can bind a plain
+    // `const std::string&` reference without HAVE_DAUTH in its signature
+    // (DR-014); the empty value is never read since the digest queueing
+    // branch is itself HAVE_DAUTH-gated. Single-writer-at-construction,
+    // lock-free read on the dispatch hot path. RFC 7616 §5.10: opaque is
+    // an identifier, not a secret nor a replay token; reuse is allowed.
     std::string digest_opaque_;
-#endif  // HAVE_DAUTH
 
     // v2 3-tier route table + LRU cache collaborator. Owns
     // route_table_mutex_, the three tiers (exact_routes_,
@@ -282,6 +285,13 @@ class webserver_impl {
     // (the state) and parent->config (only to reach log_dispatch_error).
     // The webserver_impl fire_* / fire_*_gated methods forward here.
     hook_dispatcher hooks_dispatch_;
+
+    // Behavior service (DR-014 §4.11): http_response -> MHD_Response wire
+    // construction, decoration, kind-dispatched queueing, response_sent
+    // firing, and the belt-and-suspenders fallback chain. Holds errors_ +
+    // hooks_dispatch_ + digest_opaque_ + parent->config. The webserver_impl
+    // materialize_and_queue_response method forwards here.
+    response_materializer response_mat_;
 
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class

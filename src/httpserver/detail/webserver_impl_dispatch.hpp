@@ -335,24 +335,12 @@ std::string serialize_allow_methods(method_set allowed) const;  // NOLINT(build/
 // forwarded to fire_response_sent_gated so it can reach the per-route
 // hook table without a weak_ptr lock(). Borrowed for the duration of the
 // call from finalize_answer's owning shared_ptr.
+// Forwards to the response_materializer behavior service (DR-014 §4.11),
+// which owns the get_raw_response_with_fallback / queue_response_dispatching_kind
+// / materialize_response / decorate_mhd_response internals.
 MHD_Result materialize_and_queue_response(MHD_Connection* connection,
                                           modded_request* mr,
                                           ::httpserver::http_resource* resource);
-
-// Kind-dispatched MHD queue entry-point.  For
-// body_kind::digest_challenge, branches into the auth-required
-// queueing API (MHD_queue_auth_required_response3) so libmicrohttpd
-// writes the authoritative RFC-7616 WWW-Authenticate header with our
-// opaque, libmicrohttpd's HMAC-keyed nonce, and the user-supplied
-// algorithm/qop bits.  Every other body kind goes through the
-// standard MHD_queue_response path.
-//
-// Returns the raw MHD status (int rather than MHD_Result so the
-// MHD_Result alias upcast happens at the call site, matching the
-// existing materialize_and_queue_response shape).
-int queue_response_dispatching_kind(MHD_Connection* connection,
-                                    modded_request* mr,
-                                    MHD_Response* raw_response);
 
 // on_*/route registration POLICY. The v2 conflict probe + table mutation
 // live in route_table (routes_.find_v2_entry_by_path_ /
@@ -408,11 +396,6 @@ static void resolve_method_callback(const char* method, modded_request* mr);
 
 MHD_Result complete_request(MHD_Connection* connection, modded_request* mr,
                             const char* version, const char* method);
-struct MHD_Response* get_raw_response_with_fallback(modded_request* mr);
-
-static struct MHD_Response* materialize_response(::httpserver::http_response* resp);
-static void decorate_mhd_response(struct MHD_Response* response,
-                                  const ::httpserver::http_response& resp);
 
 // MHD trampolines registered with libmicrohttpd. Closure pointer is
 // `this` (webserver_impl*) for answer_to_connection, otherwise the
