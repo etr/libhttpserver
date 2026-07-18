@@ -37,7 +37,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <cstdlib>
 #include <memory>
 #include <string>
 #include <thread>
@@ -46,18 +45,9 @@
 #include "./httpserver.hpp"
 #include "./httpserver/detail/webserver_impl.hpp"
 #include "./littletest.hpp"
+#include "./test_utils.hpp"
 
 namespace ht = httpserver;
-
-namespace {
-// The check-valgrind-* lanes run with VALGRIND=valgrind in the environment
-// (set by the Automake TESTS_ENVIRONMENT). Under valgrind every thread is
-// serialised onto one core, so the writer threads can starve the readers for
-// the entire window — a scheduler artifact, not a lock-discipline bug
-// (Memcheck/Helgrind/DRD report 0 errors on the access pattern itself). Detect
-// it so we relax ONLY the reader-liveness assertion, never the race/crash gate.
-bool under_valgrind() { return std::getenv("VALGRIND") != nullptr; }
-}  // namespace
 
 class noop_resource : public ht::http_resource {
  public:

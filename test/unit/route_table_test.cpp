@@ -33,6 +33,8 @@
 #include "./httpserver/detail/segment_trie.hpp"
 #include "./httpserver/detail/route_cache.hpp"
 #include "./httpserver/detail/route_entry.hpp"
+#include "./httpserver/detail/route_table.hpp"
+#include "./httpserver/detail/http_endpoint.hpp"
 #include "./littletest.hpp"
 
 namespace ht = httpserver;
@@ -50,6 +52,17 @@ struct test_entry {
     int sentinel = 0;
     ht::method_set methods{};
     bool is_prefix = false;
+};
+
+// Minimal concrete http_resource for the route_table class-level tests
+// below (register_v2_route needs a real shared_ptr<http_resource>
+// payload, not the null-handler sentinel test_entry/make_entry use for
+// the trie/cache primitive tests above).
+class noop_route_resource : public ht::http_resource {
+ public:
+    ht::http_response render_get(const ht::http_request&) override {
+        return ht::http_response::string("ok");
+    }
 };
 
 static htd::route_entry make_entry(
@@ -359,6 +372,135 @@ LT_BEGIN_AUTO_TEST(route_table_suite, cache_find_by_view_promotes_to_front)
     LT_CHECK(cache.find({ht::http_method::get, "/c"}, probe));
     LT_CHECK(cache.find({ht::http_method::get, "/d"}, probe));
 LT_END_AUTO_TEST(cache_find_by_view_promotes_to_front)
+
+// ----- Class-level route_table tests --------------------------------------
+//
+// Everything above drives the underlying primitives (segment_trie /
+// route_cache) directly. The route_table class itself -- its
+// register_v2_route / lookup_v2 orchestration, the table-before-cache
+// lock discipline documented on lock_for_write(), and the duplicate/
+// collision-rejection logic -- was previously only exercised indirectly
+// through webserver_impl's lookup_v2/invalidate_route_cache forwarders
+// (routing_regression_test.cpp, route_table_concurrency.cpp). These
+// tests construct httpserver::detail::route_table directly.
+
+LT_BEGIN_AUTO_TEST(route_table_suite,
+                   route_table_register_exact_then_lookup_v2_hits)
+    htd::route_table rt;
+    htd::http_endpoint idx("/exact/path", /*family=*/false,
+                           /*registration=*/true, /*use_regex=*/false);
+    rt.register_v2_route(idx, std::make_shared<noop_route_resource>(),
+                         /*family=*/false);
+
+    auto result = rt.lookup_v2(ht::http_method::get, "/exact/path");
+    LT_CHECK(result.found);
+    LT_CHECK(result.tier == htd::route_table::tier_hit::exact);
+    LT_CHECK(result.captured_params.empty());
+LT_END_AUTO_TEST(route_table_register_exact_then_lookup_v2_hits)
+
+LT_BEGIN_AUTO_TEST(route_table_suite,
+                   route_table_register_parameterized_then_lookup_v2_captures)
+    htd::route_table rt;
+    htd::http_endpoint idx("/users/{id}", /*family=*/false,
+                           /*registration=*/true, /*use_regex=*/false);
+    rt.register_v2_route(idx, std::make_shared<noop_route_resource>(),
+                         /*family=*/false);
+
+    auto result = rt.lookup_v2(ht::http_method::get, "/users/42");
+    LT_CHECK(result.found);
+    LT_CHECK(result.tier == htd::route_table::tier_hit::radix);
+    LT_CHECK_EQ(result.captured_params.size(), static_cast<std::size_t>(1));
+    LT_CHECK_EQ(result.captured_params[0].first, std::string("id"));
+    LT_CHECK_EQ(result.captured_params[0].second, std::string("42"));
+LT_END_AUTO_TEST(route_table_register_parameterized_then_lookup_v2_captures)
+
+LT_BEGIN_AUTO_TEST(route_table_suite, route_table_lookup_v2_miss_reports_none)
+    htd::route_table rt;
+    auto result = rt.lookup_v2(ht::http_method::get, "/never/registered");
+    LT_CHECK(!result.found);
+    LT_CHECK(result.tier == htd::route_table::tier_hit::none);
+LT_END_AUTO_TEST(route_table_lookup_v2_miss_reports_none)
+
+// register_v2_route's documented atomicity contract: a same-kind
+// duplicate registration throws BEFORE any mutation, and the throw
+// happens on the SAME call (reject_duplicate_v2_entry_ runs inside the
+// single unique_lock window register_v2_route takes internally).
+LT_BEGIN_AUTO_TEST(route_table_suite,
+                   route_table_register_duplicate_exact_throws)
+    htd::route_table rt;
+    htd::http_endpoint idx("/dup", /*family=*/false,
+                           /*registration=*/true, /*use_regex=*/false);
+    rt.register_v2_route(idx, std::make_shared<noop_route_resource>(),
+                         /*family=*/false);
+
+    bool threw = false;
+    try {
+        rt.register_v2_route(idx, std::make_shared<noop_route_resource>(),
+                             /*family=*/false);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+
+    // The original registration must survive the rejected duplicate.
+    auto result = rt.lookup_v2(ht::http_method::get, "/dup");
+    LT_CHECK(result.found);
+LT_END_AUTO_TEST(route_table_register_duplicate_exact_throws)
+
+// The (method, path) cache key cannot discriminate an exact terminus
+// from a prefix terminus at the same canonical path, so registering a
+// prefix (family=true) at a path already holding an exact route (or
+// vice versa) must throw -- reject_terminus_collision, invoked from
+// register_v2_route before any mutation.
+LT_BEGIN_AUTO_TEST(route_table_suite,
+                   route_table_register_prefix_over_exact_throws_collision)
+    htd::route_table rt;
+    htd::http_endpoint exact_idx("/static", /*family=*/false,
+                                 /*registration=*/true, /*use_regex=*/false);
+    rt.register_v2_route(exact_idx, std::make_shared<noop_route_resource>(),
+                         /*family=*/false);
+
+    htd::http_endpoint prefix_idx("/static", /*family=*/true,
+                                  /*registration=*/true, /*use_regex=*/false);
+    bool threw = false;
+    try {
+        rt.register_v2_route(prefix_idx, std::make_shared<noop_route_resource>(),
+                             /*family=*/true);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+LT_END_AUTO_TEST(route_table_register_prefix_over_exact_throws_collision)
+
+// lock_for_write() + the "locked" primitives (find_v2_entry_by_path_ /
+// upsert_v2_table_entry_locked_) pin the class's documented
+// caller-orchestrated sequence: webserver_impl's on_*/route path holds
+// this lock across "probe -> shim-create -> commit -> upsert" so the
+// two are atomic against concurrent registration/dispatch. This test
+// drives that sequence directly and then -- critically -- checks that
+// lookup_v2 (a fully independent shared-lock acquisition) succeeds once
+// the scoped lock is released. If lock_for_write()'s unique_lock were
+// ever leaked past its scope, this would deadlock instead of returning.
+LT_BEGIN_AUTO_TEST(route_table_suite,
+                   route_table_lock_for_write_probe_then_upsert_then_lookup)
+    htd::route_table rt;
+    htd::http_endpoint idx("/orchestrated", /*family=*/false,
+                           /*registration=*/true, /*use_regex=*/false);
+    {
+        auto lock = rt.lock_for_write();
+        const htd::route_entry* existing = rt.find_v2_entry_by_path_(idx);
+        LT_CHECK(existing == nullptr);
+
+        auto shim = std::make_shared<noop_route_resource>();
+        rt.upsert_v2_table_entry_locked_(
+            idx, ht::method_set{}.set(ht::http_method::get), shim,
+            /*fresh=*/true);
+    }  // lock released here.
+
+    auto result = rt.lookup_v2(ht::http_method::get, "/orchestrated");
+    LT_CHECK(result.found);
+    LT_CHECK(result.tier == htd::route_table::tier_hit::exact);
+LT_END_AUTO_TEST(route_table_lock_for_write_probe_then_upsert_then_lookup)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

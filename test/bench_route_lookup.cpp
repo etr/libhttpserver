@@ -189,7 +189,7 @@ int main() {
     static_assert(kNumPaths <= 9999,
                   "buf[64] in make_radix_paths is sized for at most "
                   "4-digit path indices");
-    static_assert(kNumPaths > hs::detail::webserver_impl::ROUTE_CACHE_MAX_SIZE,
+    static_assert(kNumPaths > hs::detail::route_table::ROUTE_CACHE_MAX_SIZE,
                   "kNumPaths must exceed ROUTE_CACHE_MAX_SIZE so the LRU is "
                   "guaranteed to evict every iteration (radix_pure must "
                   "measure a cold cache)");

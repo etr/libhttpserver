@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ip_access_control ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_denied hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set debug_dump_request_body_zero littletest_skip_semantics digest_client_self_test unescaper_func
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ip_access_control ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency hook_bus ws_registry ws_registry_concurrency daemon_lifecycle routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_denied hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set debug_dump_request_body_zero littletest_skip_semantics digest_client_self_test unescaper_func
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -301,9 +301,13 @@ webserver_route_SOURCES = unit/webserver_route_test.cpp
 
 # route_table: TASK-027. Unit tests for the bespoke segment-trie
 # (detail::segment_trie<route_entry>) and the LRU route cache
-# (detail::route_cache). Exercises insert/find/remove on exact,
-# parameterized and prefix routes; cache key equality (method-distinct),
-# LRU eviction order, hit-promotion, and clear(). Default LDADD
+# (detail::route_cache), PLUS class-level tests that construct
+# detail::route_table directly (register_v2_route / lookup_v2 /
+# lock_for_write + the locked probe/upsert primitives) added when the
+# route_table collaborator was extracted from webserver_impl (commit
+# 21296ac) -- pinning the table-before-cache lock discipline and the
+# duplicate/collision-rejection logic at the class boundary rather than
+# only through webserver_impl's forwarders. Default LDADD
 # (libhttpserver + curl) is sufficient.
 route_table_SOURCES = unit/route_table_test.cpp
 
@@ -328,6 +332,48 @@ lookup_pipeline_LDADD = $(LDADD) -lmicrohttpd
 # microhttpd-typed members.
 route_table_concurrency_SOURCES = integ/route_table_concurrency.cpp
 route_table_concurrency_LDADD = $(LDADD) -lmicrohttpd
+
+# hook_bus: extracted-collaborator unit test (commit 1f9a82e). Constructs
+# detail::hook_bus directly (no running webserver) and drives
+# add()/remove()/has_hooks_for()/phase_hook_count(), the phase-mismatch
+# and empty-callable registration throws, the any_hooks_ advisory-gate
+# arm/clear invariant, the two alias slots (handler_exception_alias_ DOES
+# arm the gate; log_access_alias_ does NOT), and the fire_* helpers'
+# try/catch-into-log_fn containment. Previously only reachable indirectly
+# through webserver's add_hook/hook_handle API. Default LDADD
+# (libhttpserver + curl) is sufficient -- hook_bus never touches MHD.
+hook_bus_SOURCES = unit/hook_bus_test.cpp
+
+# ws_registry: extracted-collaborator unit test (commit b596fc8).
+# Constructs detail::ws_registry directly and drives
+# try_register/unregister/find/empty, the duplicate-key rejection (false
+# return, original registration untouched), the no-op unregister of an
+# unknown key, and the find()-returns-a-copy lifetime contract. Default
+# LDADD (libhttpserver + curl) is sufficient -- ws_registry never
+# dereferences websocket_handler, so it needs no MHD/websocket backend.
+ws_registry_SOURCES = unit/ws_registry_test.cpp
+
+# ws_registry_concurrency: concurrency stress companion to ws_registry,
+# mirroring route_table_concurrency.cpp's pattern (4 writers + 16
+# readers hammering try_register/unregister/find/empty). ws_registry's
+# class comment documents its mutex as independent of every other
+# cluster's; unlike route_table and hook_bus, it previously had zero
+# concurrency verification anywhere in the suite (threadsafety_stress.cpp
+# has no register_ws_resource/unregister_ws_resource op). Needs no MHD
+# daemon -- ws_registry is self-contained, so default LDADD suffices.
+ws_registry_concurrency_SOURCES = integ/ws_registry_concurrency.cpp
+
+# daemon_lifecycle: extracted-collaborator unit test (commit e6af49f).
+# Reaches the daemon_lifecycle every httpserver::webserver already owns
+# (impl_->daemon_) via webserver_test_access and drives
+# compose_transport_flags/compose_runtime_flags/compose_start_flags and
+# build_mhd_option_array's per-flag composition directly -- no MHD daemon
+# is ever started. Previously only reachable indirectly through a
+# running daemon via the integ-level start/stop tests. Needs
+# -lmicrohttpd because webserver's PIMPL impl carries microhttpd-typed
+# members (same rationale as lookup_pipeline / route_table_concurrency).
+daemon_lifecycle_SOURCES = unit/daemon_lifecycle_test.cpp
+daemon_lifecycle_LDADD = $(LDADD) -lmicrohttpd
 
 # threadsafety_stress: TASK-032. DR-008 multi-thread contract gate.
 # Spawns 16 curl clients hitting an on_get handler that re-enters the

@@ -21,7 +21,18 @@
 #ifndef TEST_INTEG_TEST_UTILS_HPP_
 #define TEST_INTEG_TEST_UTILS_HPP_
 
+#include <cstdlib>
+
 // Shared helpers for the integration test suite.
+//
+// under_valgrind(): the check-valgrind-* lanes run with VALGRIND=valgrind in
+// the environment (set by the Automake TESTS_ENVIRONMENT). Under valgrind
+// every thread is serialised onto one core, so writer/reader threads can
+// starve each other for the entire window of a concurrency stress test -- a
+// scheduler artifact, not a lock-discipline bug. Concurrency stress tests
+// (route_table_concurrency.cpp, ws_registry_concurrency.cpp) use this to
+// relax ONLY their liveness assertions, never the race/crash gate.
+inline bool under_valgrind() { return std::getenv("VALGRIND") != nullptr; }
 //
 // Historical note: this header previously exposed `as_shared(http_resource&)`,
 // a thin wrapper that returned a std::shared_ptr<http_resource> with a no-op
