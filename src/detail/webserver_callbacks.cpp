@@ -110,7 +110,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
         // answer_to_connection never ran (e.g., very early MHD failures),
         // mr->ws may be null; skip the fire site in that degenerate case.
         if (mr->ws != nullptr && mr->ws->impl_ != nullptr) {
-            mr->ws->impl_->fire_request_completed_gated(mr, toe);
+            mr->ws->impl_->hooks_dispatch_.fire_request_completed_gated(mr, toe);
         }
     }
 

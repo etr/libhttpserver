@@ -181,7 +181,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             // registered: a single relaxed atomic load + branch.
             if (hooks_armed(::httpserver::hook_phase::connection_opened)) {
                 ::httpserver::connection_open_ctx ctx{resolve_peer()};
-                ws_impl->fire_connection_opened(ctx);
+                ws_impl->hooks_dispatch_.fire_connection_opened(ctx);
             }
             break;
         }
@@ -192,7 +192,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             // ordering choice is safe regardless and pins the contract.
             if (hooks_armed(::httpserver::hook_phase::connection_closed)) {
                 ::httpserver::connection_close_ctx ctx{resolve_peer()};
-                ws_impl->fire_connection_closed(ctx);
+                ws_impl->hooks_dispatch_.fire_connection_closed(ctx);
             }
             // MHD ordering guarantee: NOTIFY_COMPLETED fires before
             // NOTIFY_CLOSED for the same connection. By the time we reach
@@ -238,7 +238,7 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
     if (is_phase_armed(impl, ::httpserver::hook_phase::accept_decision)) {
         ::httpserver::accept_ctx ctx{
             make_peer_address(addr), accepted, reason};
-        impl->fire_accept_decision(ctx);
+        impl->hooks_dispatch_.fire_accept_decision(ctx);
     }
 
     return decision;
