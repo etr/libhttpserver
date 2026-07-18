@@ -101,7 +101,7 @@ struct segment_trie_node {
 // same tree backs both parameterized exact and prefix registrations.
 //
 // Concurrency: this type is NOT internally synchronized. The owning
-// webserver_impl protects all three tier structures (exact_routes_,
+// detail::route_table protects all three tier structures (exact_routes_,
 // param_and_prefix_routes_, regex_routes_) with a single std::shared_mutex.
 template <typename T>
 class segment_trie {
@@ -268,7 +268,7 @@ class segment_trie {
     // request segment. Returns true iff such a terminus exists.
     //
     // Designed for the registration-time collision guard
-    // (webserver_impl::reject_terminus_collision): when
+    // (route_table::reject_terminus_collision): when
     // inserting a NEW exact terminus at /admin we need to refuse if a
     // prefix terminus is already registered at /admin (and vice versa)
     // — silent shadowing would corrupt the (method, path) cache key.

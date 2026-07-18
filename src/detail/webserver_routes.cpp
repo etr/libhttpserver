@@ -152,16 +152,17 @@ void webserver::on_methods_(method_set methods,
         // upsert throw (e.g. reject_terminus_collision) leaves the
         // local shim unreferenced and discarded -- no rollback required
         // since the table itself was never touched.
-        std::unique_lock table_lock(impl_->route_table_mutex_);
+        auto table_lock = impl_->routes_.lock_for_write();
         // is_new_entry is the bool prepare_or_create_lambda_shim
         // returns as /*fresh=*/ and upsert_v2_table_entry_locked_
         // receives as `fresh` -- the same flag under three names.
         auto [shim, is_new_entry] =
             impl_->prepare_or_create_lambda_shim(idx, methods);
         impl_->commit_handlers_to_shim(*shim, methods, std::move(handler));
-        impl_->upsert_v2_table_entry_locked_(idx, methods, shim, is_new_entry);
+        impl_->routes_.upsert_v2_table_entry_locked_(idx, methods, shim,
+                                                     is_new_entry);
     }
-    impl_->invalidate_route_cache();
+    impl_->routes_.invalidate_route_cache();
 }
 
 // The seven named forwarders below are the only place that maps the

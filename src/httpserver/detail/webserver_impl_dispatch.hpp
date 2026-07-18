@@ -263,7 +263,6 @@ bool fire_before_handler_gated(
     run_internal_error_handler_safely(modded_request* mr,
                                       std::string_view msg) const;
 bool should_skip_auth(std::string_view path) const;
-void invalidate_route_cache();
 
 // Helpers for webserver::start(). Each appends a logical subset of
 // libmicrohttpd's option array, or composes a logical subset of the
@@ -365,17 +364,14 @@ int queue_response_dispatching_kind(MHD_Connection* connection,
                                     modded_request* mr,
                                     MHD_Response* raw_response);
 
-// Helpers carved out of webserver::on_methods_ to stay under the
-// cyclomatic-complexity bar. The orchestrator on_methods_ retains
-// input validation and the public ordering; everything that mutates
-// the v2 3-tier route table lives here.
+// on_*/route registration POLICY. The v2 conflict probe + table mutation
+// live in route_table (routes_.find_v2_entry_by_path_ /
+// routes_.upsert_v2_table_entry_locked_); these two helpers own only the
+// lambda_resource shim lifecycle (create-or-reuse + slot writes). The
+// orchestrator (webserver::on_methods_) holds routes_.lock_for_write()
+// across the whole prepare -> commit -> upsert sequence so the probe and
+// the mutation are atomic against concurrent registrations.
 //
-// Caller must hold route_table_mutex_ (unique_lock) for
-// the whole prepare_or_create_lambda_shim -> commit_handlers_to_shim
-// -> upsert_v2_table_entry_locked_ sequence so the v2 conflict probe
-// and the table mutation are atomic against concurrent registrations.
-const detail::route_entry* find_v2_entry_by_path_(
-        const detail::http_endpoint& idx) const noexcept;
 // Returns {shim, is_fresh}: is_fresh is true when a brand-new
 // lambda_resource shim was created (no entry previously existed at
 // this path), false when an existing shim was reused.
@@ -386,32 +382,6 @@ void commit_handlers_to_shim(detail::lambda_resource& shim,
                              method_set methods,
                              std::function<::httpserver::http_response(
                                  const ::httpserver::http_request&)> handler);
-void upsert_v2_table_entry_locked_(const detail::http_endpoint& idx,
-                                   method_set methods,
-                                   std::shared_ptr<::httpserver::http_resource> shim,
-                                   bool fresh);
-void upsert_v2_radix_route(const std::string& key,
-                           method_set methods,
-                           std::shared_ptr<::httpserver::http_resource> shim);
-// Throw std::invalid_argument if registering a v2 entry of
-// the opposite prefix/exact kind at `key` would silently shadow an
-// existing entry. Must be called BEFORE any mutation of the route
-// table so atomicity holds. Caller holds route_table_mutex_.
-void reject_terminus_collision(const std::string& key, bool want_is_prefix);
-// Throw std::invalid_argument if a same-kind v2 entry already
-// exists at the canonical key. Caller must hold
-// route_table_mutex_ (unique_lock); the probe runs before any mutation
-// so the atomicity contract holds.
-void reject_duplicate_v2_entry_(const detail::http_endpoint& idx, bool family);
-void insert_fresh_v2_entry(const detail::http_endpoint& idx,
-                           method_set methods,
-                           std::shared_ptr<::httpserver::http_resource> shim);
-// This file is included inside the webserver_impl class body; transitive
-// includes are owned by the parent webserver_impl.hpp -- the
-// std::string / std::shared_ptr uses below need no header carried here.
-void update_existing_v2_entry(const std::string& key,  // NOLINT(build/include_what_you_use)
-                              method_set methods,
-                              std::shared_ptr<::httpserver::http_resource> shim);  // NOLINT(build/include_what_you_use)
 
 // Helpers carved out of post_iterator. The MHD post-iterator
 // trampoline is a static MHD callback; the orchestrator below
@@ -438,15 +408,6 @@ MHD_Result process_file_upload(modded_request* mr,
                                const char* transfer_encoding,
                                const char* data,
                                size_t size) const;
-
-// Mirror a register_path / register_prefix call into the v2 3-tier
-// route table. Distinct from upsert_v2_table_entry (which is the
-// on_*/route path with methods merging): this is a one-shot insert
-// with method_set::set_all() and no merge. Takes route_table_mutex_
-// internally.
-void register_v2_route(const detail::http_endpoint& idx,
-                       std::shared_ptr<::httpserver::http_resource> res,  // NOLINT(build/include_what_you_use)
-                       bool family);
 
 // Map a wire-string HTTP method to mr->callback (pointer-to-member
 // dispatch), mr->method_enum (for is_allowed checks), and mr->has_body

@@ -71,7 +71,6 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
 #include "httpserver/detail/body.hpp"
-#include "httpserver/detail/route_tier.hpp"
 
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
@@ -89,10 +88,6 @@ namespace httpserver {
 using httpserver::http::http_utils;
 using httpserver::http::ip_representation;
 using httpserver::http::base_unescaper;
-
-using detail::classify_route_tier;
-using detail::route_tier_kind;
-using detail::route_tier_result;
 
 
 // ----- Resource registration --------------------------------------------
@@ -143,102 +138,9 @@ void webserver::register_impl_(const std::string& resource,
     // the shared_ptr parameter `res` (and any unique_ptr-derived shared_ptr
     // funnelled through the webserver.hpp inline template shim) is destroyed
     // by exception unwinding, cleanly releasing the resource.
-    impl_->register_v2_route(idx, std::move(res), family);
-    impl_->invalidate_route_cache();
+    impl_->routes_.register_v2_route(idx, std::move(res), family);
+    impl_->routes_.invalidate_route_cache();
 }
-
-namespace detail {
-
-// Helper used by register_v2_route. Probes the v2 tiers for a
-// pre-existing registration at @p idx and throws std::invalid_argument
-// before any mutation if one exists. This is the duplicate-detection
-// oracle for registration.
-//
-// Caller must hold route_table_mutex_ (unique_lock). The reject_terminus_
-// collision guard (prefix-vs-exact polarity) is run separately in
-// register_v2_route.
-namespace {
-[[noreturn]] void throw_duplicate_registration(const std::string& key) {
-    throw std::invalid_argument(
-        "A resource is already registered at this path: '" + key + "'");
-}
-}  // namespace
-
-void webserver_impl::reject_duplicate_v2_entry_(
-        const detail::http_endpoint& idx, bool family) {
-    const std::string& key = idx.get_url_complete();
-    if (family) {
-        if (param_and_prefix_routes_.has_terminus_at(key, /*is_prefix=*/true)) {
-            throw_duplicate_registration(key);
-        }
-        return;
-    }
-    auto pre_tier = classify_route_tier(idx);
-    switch (pre_tier.kind) {
-    case route_tier_kind::exact:
-        if (exact_routes_.find(key) != exact_routes_.end()) {
-            throw_duplicate_registration(key);
-        }
-        break;
-    case route_tier_kind::radix:
-        if (param_and_prefix_routes_.has_terminus_at(
-                key, /*is_prefix=*/false)) {
-            throw_duplicate_registration(key);
-        }
-        break;
-    case route_tier_kind::regex:
-        for (const auto& rr : regex_routes_) {
-            if (rr.url_complete == key) throw_duplicate_registration(key);
-        }
-        break;
-    }
-}
-
-void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
-        std::shared_ptr<http_resource> res, bool family) {
-    // Place a register_path / register_prefix registration into the
-    // v2 3-tier route table. Tier placement via classify_route_tier()
-    // (single source-of-truth):
-    //   - family=true  -> segment trie (prefix terminus).
-    //   - radix tier   -> segment trie (exact terminus, wildcard nodes).
-    //   - regex tier   -> regex_routes_ (pre-compiled at registration time).
-    //   - exact tier   -> exact_routes_ hash map.
-    std::unique_lock table_lock(route_table_mutex_);
-    // Guard against prefix-vs-exact terminus collisions on
-    // the canonical key. Run BEFORE any mutation so the throw leaves
-    // the route table in its prior state.
-    reject_terminus_collision(idx.get_url_complete(),
-                              /*want_is_prefix=*/family);
-    // Same-kind duplicate detection. Throws BEFORE any mutation so the
-    // atomicity contract pinned by basic_suite::duplicate_endpoints
-    // holds: a failed registration leaves the table exactly as before.
-    reject_duplicate_v2_entry_(idx, family);
-    detail::route_entry entry;
-    entry.methods = method_set{}.set_all();
-    entry.handler = std::move(res);
-    entry.is_prefix = family;
-    if (family) {
-        param_and_prefix_routes_.insert(idx.get_url_complete(), std::move(entry),
-                                        /*is_prefix=*/true);
-        return;
-    }
-    auto tier = classify_route_tier(idx);
-    switch (tier.kind) {
-    case route_tier_kind::radix:
-        param_and_prefix_routes_.insert(idx.get_url_complete(), std::move(entry),
-                                        /*is_prefix=*/false);
-        break;
-    case route_tier_kind::regex:
-        regex_routes_.push_back(
-            {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
-        break;
-    case route_tier_kind::exact:
-        exact_routes_.emplace(idx.get_url_complete(), std::move(entry));
-        break;
-    }
-}
-
-}  // namespace detail
 
 void webserver::register_path(const std::string& path,
                               std::shared_ptr<http_resource> res) {
@@ -265,25 +167,25 @@ void webserver::unregister_impl_(const string& resource, bool family) {
     // mutex (inside invalidate_route_cache). Table lock released before
     // the LRU cache is cleared, matching register_impl_ / on_methods_.
     {
-        std::unique_lock table_lock(impl_->route_table_mutex_);
+        auto table_lock = impl_->routes_.lock_for_write();
         const std::string& key = he.get_url_complete();
         if (family) {
-            impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
+            impl_->routes_.param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
         } else if (!he.get_url_pars().empty()) {
-            impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
+            impl_->routes_.param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
         } else {
             // Erase from exact tier; also sweep regex tier (url_complete key).
-            impl_->exact_routes_.erase(key);
-            impl_->regex_routes_.erase(
-                std::remove_if(impl_->regex_routes_.begin(),
-                               impl_->regex_routes_.end(),
-                               [&key](const detail::webserver_impl::regex_route& rr) {
+            impl_->routes_.exact_routes_.erase(key);
+            impl_->routes_.regex_routes_.erase(
+                std::remove_if(impl_->routes_.regex_routes_.begin(),
+                               impl_->routes_.regex_routes_.end(),
+                               [&key](const detail::route_table::regex_route& rr) {
                                    return rr.url_complete == key;
                                }),
-                impl_->regex_routes_.end());
+                impl_->routes_.regex_routes_.end());
         }
     }
-    impl_->invalidate_route_cache();
+    impl_->routes_.invalidate_route_cache();
 }
 
 void webserver::unregister_path(const string& path) {
@@ -305,24 +207,24 @@ void webserver::unregister_resource(const string& resource) {
     // partially-unregistered state (CWE-367 TOCTOU: a prior register_path
     // AND register_prefix on the same path are both cleared atomically).
     {
-        std::unique_lock table_lock(impl_->route_table_mutex_);
+        auto table_lock = impl_->routes_.lock_for_write();
         const std::string& key = he_exact.get_url_complete();
-        impl_->exact_routes_.erase(key);
-        impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
-        impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
+        impl_->routes_.exact_routes_.erase(key);
+        impl_->routes_.param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
+        impl_->routes_.param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
         // Also sweep the regex tier by url_complete.
-        impl_->regex_routes_.erase(
-            std::remove_if(impl_->regex_routes_.begin(),
-                           impl_->regex_routes_.end(),
-                           [&key](const detail::webserver_impl::regex_route& rr) {
+        impl_->routes_.regex_routes_.erase(
+            std::remove_if(impl_->routes_.regex_routes_.begin(),
+                           impl_->routes_.regex_routes_.end(),
+                           [&key](const detail::route_table::regex_route& rr) {
                                return rr.url_complete == key;
                            }),
-            impl_->regex_routes_.end());
+            impl_->routes_.regex_routes_.end());
     }
     // Delegate cache clearing to invalidate_route_cache() matching the
     // pattern used by register_impl_ and on_methods_ (table lock released
     // before cache is cleared).
-    impl_->invalidate_route_cache();
+    impl_->routes_.invalidate_route_cache();
 }
 
 // IP-control API: a symmetric, consistently-named surface (replacing

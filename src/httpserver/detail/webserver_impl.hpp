@@ -74,9 +74,7 @@
 #include "httpserver/detail/hook_bus.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/ip_access_control.hpp"
-#include "httpserver/detail/segment_trie.hpp"
-#include "httpserver/detail/route_cache.hpp"
-#include "httpserver/detail/route_entry.hpp"
+#include "httpserver/detail/route_table.hpp"
 #include "httpserver/detail/ws_registry.hpp"
 
 #if MHD_VERSION < 0x00097002
@@ -192,79 +190,32 @@ class webserver_impl {
     std::string digest_opaque_;
 #endif  // HAVE_DAUTH
 
-    // LRU cache size: 256 entries.
-    static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
+    // v2 3-tier route table + LRU cache collaborator. Owns
+    // route_table_mutex_, the three tiers (exact_routes_,
+    // param_and_prefix_routes_, regex_routes_) and route_lru_cache. The
+    // dispatch hot path resolves through it (resolve_resource_for_request
+    // -> routes_.lookup_v2); on_*/route + register/unregister mutate it
+    // (register_v2_route / the lock_for_write() + upsert primitives). The
+    // lambda_resource shim-creation POLICY for on_*/route stays on this
+    // class (prepare_or_create_lambda_shim / commit_handlers_to_shim); the
+    // orchestration holds routes_.lock_for_write() across the probe +
+    // mutation. Its mutex is independent of every other cluster's; no call
+    // site holds two of them at once.
+    route_table routes_;
 
-    // --- v2 3-tier route table -------------------------------------------
+    // tier_hit / lookup_result moved into route_table; these aliases keep
+    // the many white-box tests that name webserver_impl::tier_hit /
+    // ::lookup_result compiling unchanged.
+    using tier_hit = route_table::tier_hit;
+    using lookup_result = route_table::lookup_result;
 
-    // The 3-tier route table is fronted by `route_lru_cache`.
-    // Tier walk order and rationale live in lookup_v2's implementation
-    // comment (src/detail/webserver_dispatch.cpp); not duplicated here.
-    //
-    // **Lock order.** When both locks must be held, route_table_mutex_
-    // is acquired BEFORE the cache's internal mutex. The lookup
-    // pipeline never holds both at once: it takes a brief shared_lock
-    // on the table to walk the tiers, releases it, then promotes/inserts
-    // into the LRU cache. Registration takes a unique_lock on the table,
-    // releases it, then clears the cache.
-    //
-    // **CWE-407 hash-flooding immunity.** exact_routes_ uses std::map
-    // (not std::unordered_map) so the keyed lookup on the dispatch hot
-    // path is hash-free. Same posture as the segment-trie per-segment
-    // child container. std::less<> enables transparent
-    // string_view lookup without constructing a temporary std::string.
-    std::shared_mutex route_table_mutex_;
-    std::map<std::string, route_entry, std::less<>> exact_routes_;
-    segment_trie<route_entry> param_and_prefix_routes_;
-    // Pre-compiled regex objects: a vector of (compiled std::regex,
-    // route_entry) pairs so that lookup_v2
-    // calls std::regex_match on an already-compiled object without paying
-    // the compilation cost on every cache miss. Compiled at registration
-    // time in register_impl_ / on_methods_ when idx.is_regex_compiled()
-    // is true, the path has no {name} wildcard segments (url_pars empty),
-    // and the literal url_complete does NOT match its own compiled regex
-    // (i.e., the path has meaningful regex metacharacters).
-    //
-    // url_complete is stored alongside the compiled regex to support
-    // O(n) removal in unregister_impl_ without a second map.
-    struct regex_route {
-        std::string url_complete;
-        std::regex compiled_re;
-        route_entry entry;
-    };
-    std::vector<regex_route> regex_routes_;
-
-    // LRU front-end for the route table.
-    route_cache route_lru_cache{ROUTE_CACHE_MAX_SIZE};
-
-    // tier_hit identifies which tier of the v2 route table answered a
-    // lookup. Returned alongside the route_entry copy from lookup_v2()
-    // so the dispatch site (and tests) can pin the lookup pipeline.
-    enum class tier_hit {
-        none,
-        cache,
-        exact,
-        radix,
-        regex
-    };
-
-    struct lookup_result {
-        bool found = false;
-        tier_hit tier = tier_hit::none;
-        route_entry entry{};
-        std::vector<std::pair<std::string, std::string>> captured_params;
-    };
-
-    // Walk the v2 route table for (method, path) per the lookup pipeline
-    // documented above. Returns lookup_result; populates `tier` even on
-    // miss (tier_hit::none) so callers can branch deterministically.
-    //
-    // NOTE: lookup_v2 is the only dispatch path --
-    // resolve_resource_for_request() calls it exclusively, and the
-    // 3-tier table is the single routing surface. Lambda/class conflict
-    // detection probes the same tiers (find_v2_entry_by_path_);
-    // WebSocket dispatch resolves handlers through the separate ws_ registry.
-    lookup_result lookup_v2(http_method method, const std::string& path);
+    // Thin forwarders to the collaborator so the dispatch call sites and
+    // the white-box tests read `lookup_v2(...)` / `invalidate_route_cache()`
+    // on webserver_impl unchanged.
+    lookup_result lookup_v2(http_method method, const std::string& path) {
+        return routes_.lookup_v2(method, path);
+    }
+    void invalidate_route_cache() { routes_.invalidate_route_cache(); }
 
     // Lifecycle hook bus. Owns the eleven server-wide phase vectors, the
     // shared registration mutex, the advisory any_hooks_ gate array, and
