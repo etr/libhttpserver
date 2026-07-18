@@ -2,7 +2,7 @@
 
 **Responsibility:** Library entry point. Owns the libmicrohttpd daemon, the route table, the IP block list, the connection arena pool. Provides start/stop, route registration (lambda + class forms), `block_ip`/`unblock_ip`, `features()`.
 
-**Implementation:** PIMPL via `std::unique_ptr<webserver_impl>`. Public header `<httpserver/webserver.hpp>` includes only `<httpserver/create_webserver.hpp>` and standard library, never `<microhttpd.h>` or `<pthread.h>`. `webserver_impl` (in `src/httpserver/detail/webserver_impl.hpp`) holds the `MHD_Daemon*`, the route-table data structures, per-connection arena state, and synchronization primitives.
+**Implementation:** PIMPL via `std::unique_ptr<webserver_impl>`. Public header `<httpserver/webserver.hpp>` includes only `<httpserver/create_webserver.hpp>` and standard library, never `<microhttpd.h>` or `<pthread.h>`. `webserver_impl` (in `src/httpserver/detail/webserver_impl.hpp`) is a **composition root** (DR-014): it does not itself hold the daemon handle, route tiers, or synchronization primitives — those live behind *state collaborators* (`daemon_lifecycle`, `route_table`, `hook_bus`, `ip_access_control`, `ws_registry`, each owning its own mutex + data) — and it does not itself carry the request-processing logic — that lives in *behavior services* (`request_pipeline`, `request_dispatcher`, `response_materializer`, `error_pages`, `hook_dispatcher`, `upload_pipeline`, `websocket_upgrader`, `connection_callbacks`; see §4.11). `webserver_impl` constructs and wires both kinds, holds the `parent` back-pointer for the few members that need the owning `webserver*`, and exposes the static libmicrohttpd trampolines that forward into the services.
 
 **Interfaces:**
 - Exposes (from PRD §3.4 and §3.7):
