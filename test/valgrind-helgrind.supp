@@ -251,6 +251,75 @@
    fun:*resourceD*Ev
 }
 
+# --- test-fixture handler state written by an MHD worker, synced to main ------
+# via the HTTP round-trip (approx-history publication false positive) ----------
+# NOT libhttpserver races (DR-008). Each entry is a TEST resource whose render_*
+# handler runs on an MHD worker thread and writes fixture-owned state that the
+# main thread created before start()/register_path and inspects only AFTER
+# curl_easy_perform() returns:
+#   * print_request_resource / print_response_resource -> a std::stringstream
+#     that lives on the main thread's stack (basic.cpp), written via
+#     httpserver::operator<<(ostream&, http_request/http_response) inside the
+#     handler and read back with ss.str() after the request completes;
+#   * print_file_upload_resource -> a std::string member of the resource itself
+#     (content = req.get_content(), file_upload.cpp);
+#   * deferred's test_callback -> a file-scope `counter` incremented by the
+#     deferred-body producer on the worker and reset by the main thread between
+#     tests (deferred.cpp).
+# The happens-before flows through the route-table shared_mutex at registration
+# and then the HTTP socket round-trip. Helgrind runs with --history-level=approx
+# on this lane and cannot observe the socket edge, so it reports a benign race
+# between the worker write and the main-thread construction/reset; each test is
+# single-request (littletest runs sequentially), so there is no real concurrent
+# access. TSan and DRD, which are precise, are green on all three. Anchored on
+# the exact TEST-fixture handler symbol -- never a libhttpserver locking frame --
+# so a genuine library race stays unsuppressed. (DR-014 split dispatch into its
+# own TUs; the changed inlining lifted these write frames above the pre-existing
+# per-symbol entries, so they are re-anchored on the fixture symbol here.)
+{
+   test-fixture-print-request-into-shared-stringstream
+   Helgrind:Race
+   ...
+   fun:*print_request_resource*render_get*
+}
+{
+   test-fixture-print-response-into-shared-stringstream
+   Helgrind:Race
+   ...
+   fun:*print_response_resource*render_get*
+}
+{
+   test-fixture-file-upload-render-member-write
+   Helgrind:Race
+   ...
+   fun:*print_file_upload_resource*render_post*
+}
+{
+   test-fixture-deferred-counter-callback
+   Helgrind:Race
+   fun:test_callback*
+}
+
+# --- benign lazy cache: http_resource `Allow:` header snapshot ---------------
+# http_resource::get_allow_header() lazily builds and caches the `Allow:` header
+# under the resource's OWN std::shared_mutex (cached_allow_mutex_): the warm path
+# takes a shared lock and only READS the cache; the cold path takes an exclusive
+# (unique) lock and is the ONLY writer of cached_allow_mask_ / cached_allow_valid_
+# / cached_allow_header_ (double-checked). Every access to those fields is
+# mutex-guarded, so worker-vs-worker is fully synchronised; the only unsynchronised
+# touch is the constructor's default member-init on the main thread, which
+# happens-before the resource is published to the workers through the route-table
+# shared_mutex at register_path(). Helgrind's approx history drops that publication
+# edge and reports the worker's LOCKED write as racing the main-thread construction.
+# Same benign class as get_allowed_methods / method_set above; TSan (precise) is
+# green. Named on the exact symbol, never a daemon-level locking frame, so DR-008
+# is unaffected.
+{
+   lhs-get-allow-header-lazy-cache
+   Helgrind:Race
+   fun:*get_allow_header*
+}
+
 # --- libp11-kit atexit/dl_fini mutex teardown (third-party) ------------------
 # gnutls pulls in libp11-kit (PKCS#11); its cleanup runs from _dl_fini() at
 # process exit and calls pthread_mutex_destroy() on an object Helgrind rejects
