@@ -290,7 +290,7 @@ http_response http_response::unauthorized(digest_challenge challenge) {
     return r;
 }
 #else  // !HAVE_DAUTH
-// The declaration in http_response_factories.hpp is
+// The declaration in http_response.hpp is
 // unconditional, so a HAVE_DAUTH-off build must still define this overload
 // rather than leave it as a link error. Throw feature_unavailable instead
 // of constructing a response.

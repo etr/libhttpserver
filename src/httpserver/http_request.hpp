@@ -147,13 +147,191 @@ class http_request {
  public:
      static const char EMPTY[];
 
-     // Basic auth, TLS/client-cert, and digest-auth member declarations
-     // live in a sibling header to keep this class definition under the
-     // project per-file LOC ceiling. The inner gate forces the header
-     // to be included only from within this class body.
-#define SRC_HTTPSERVER_HTTP_REQUEST_HPP_INSIDE_CLASS_
-#include "httpserver/http_request_auth.hpp"
-#undef SRC_HTTPSERVER_HTTP_REQUEST_HPP_INSIDE_CLASS_
+     // -------------------------------------------------------------------
+     // Basic-auth credentials. The string_view returns alias arena-backed
+     // storage that lives for the handler call frame only — see the
+     // class-level lifetime contract in http_request.hpp.
+     //
+     // Contract: every public symbol declared here is
+     // unconditional. http_request_auth.cpp returns documented sentinels
+     // (empty std::string_view for the BAUTH getters / get_digested_user;
+     // digest_auth_result::WRONG_HEADER for the two check_digest_auth
+     // overloads) on HAVE_BAUTH-off / HAVE_DAUTH-off builds. Any future
+     // addition to this header must preserve that property.
+     // -------------------------------------------------------------------
+
+     /**
+      * Method used to get the username eventually passed through basic authentication.
+      * @return string representation of the username.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
+      * @note Declared unconditionally.
+      *       When HAVE_BAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel.
+     **/
+     std::string_view get_user() const;
+
+     /**
+      * Method used to get the username extracted from a digest authentication.
+      * @return the username.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
+      * @note Declared unconditionally.
+      *       When HAVE_DAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel.
+     **/
+     std::string_view get_digested_user() const;
+
+     /**
+      * Method used to get the password eventually passed through basic authentication.
+      * @return string representation of the password.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
+      * @note Declared unconditionally.
+      *       When HAVE_BAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel.
+     **/
+     std::string_view get_pass() const;
+
+     // -------------------------------------------------------------------
+     // High-level GnuTLS accessors. Declared unconditionally
+     // (no build-flag preprocessor gate) so the public surface is
+     // identical in TLS-enabled and TLS-disabled builds. When the
+     // library is built without GnuTLS the implementations return
+     // empty / false / -1 sentinels without throwing.
+     // -------------------------------------------------------------------
+
+     /**
+      * Method used to check whether the request was carried over a TLS
+      * session.
+      * @return true when a live TLS session is present, false otherwise
+      *         (including when HAVE_GNUTLS is disabled at build time).
+      **/
+     bool has_tls_session() const noexcept;
+
+     /**
+      * Method used to check whether the peer presented a client
+      * certificate over the TLS session.
+      * @return true when a peer certificate is available, false
+      *         otherwise (including when HAVE_GNUTLS is disabled at
+      *         build time).
+      **/
+     bool has_client_certificate() const noexcept;
+
+     /**
+      * Subject Distinguished Name from the client certificate.
+      * @return string_view over the cached subject DN; empty when no
+      *         peer cert is present or HAVE_GNUTLS is disabled.
+      * @note The returned view aliases storage owned by this
+      *       http_request and is only valid for the lifetime of the
+      *       request object (typically the handler invocation). Copy
+      *       into std::string to extend the lifetime.
+      **/
+     std::string_view get_client_cert_dn() const;
+
+     /**
+      * Issuer Distinguished Name from the client certificate.
+      * @return string_view over the cached issuer DN; empty when no
+      *         peer cert is present or HAVE_GNUTLS is disabled.
+      * @note Same lifetime contract as get_client_cert_dn().
+      **/
+     std::string_view get_client_cert_issuer_dn() const;
+
+     /**
+      * Common Name (CN) from the client certificate subject.
+      * @return string_view over the cached CN; empty when no peer cert
+      *         is present, the cert subject has no CN attribute, or
+      *         HAVE_GNUTLS is disabled.
+      * @note Multi-CN subjects: only the first CN is reported.
+      * @note Same lifetime contract as get_client_cert_dn().
+      **/
+     std::string_view get_client_cert_cn() const;
+
+     /**
+      * SHA-256 fingerprint of the client certificate (hex-encoded).
+      * @return string_view over the lowercase hex-encoded SHA-256
+      *         fingerprint (64 hex chars); empty when no peer cert is
+      *         present or HAVE_GNUTLS is disabled.
+      * @note Same lifetime contract as get_client_cert_dn().
+      **/
+     std::string_view get_client_cert_fingerprint_sha256() const;
+
+     /**
+      * Whether the peer certificate chain validated successfully against
+      * the configured trust anchors.
+      * @return true on successful validation, false otherwise (including
+      *         when no cert was presented or HAVE_GNUTLS is disabled).
+      **/
+     bool is_client_cert_verified() const noexcept;
+
+     /**
+      * Activation time (`Not Before`) of the client certificate, in
+      * seconds since the UNIX epoch.
+      * @return seconds-since-epoch as a 64-bit signed integer; -1 when
+      *         no peer cert is present or HAVE_GNUTLS is disabled.
+      **/
+     std::int64_t get_client_cert_not_before() const noexcept;
+
+     /**
+      * Expiration time (`Not After`) of the client certificate, in
+      * seconds since the UNIX epoch.
+      * @return seconds-since-epoch as a 64-bit signed integer; -1 when
+      *         no peer cert is present or HAVE_GNUTLS is disabled.
+      **/
+     std::int64_t get_client_cert_not_after() const noexcept;
+
+     // -------------------------------------------------------------------
+     // Digest-auth verification entrypoints. Same contract: the
+     // declarations are unconditional; the implementations return the
+     // WRONG_HEADER sentinel when the library is built without HAVE_DAUTH.
+     // -------------------------------------------------------------------
+
+     /**
+      * Digest-authenticate the current request against (@p realm, @p password).
+      *
+      * Declared unconditionally. When the
+      * library was built without HAVE_DAUTH the implementation returns
+      * the sentinel `digest_auth_result::WRONG_HEADER` without touching MHD.
+      *
+      * @param realm         protection realm advertised in the WWW-Authenticate header.
+      * @param password      cleartext password to verify against.
+      * @param nonce_timeout nonce lifetime in seconds (0 = backend default).
+      * @param max_nc        max accepted nonce-count value (0 = backend default).
+      * @param algo          digest hash algorithm; defaults to SHA-256.
+      * @return one of the @ref httpserver::http::http_utils::digest_auth_result values.
+      **/
+     http::http_utils::digest_auth_result check_digest_auth(
+         const std::string& realm,
+         const std::string& password,
+         unsigned int nonce_timeout = 0,
+         uint32_t max_nc = 0,
+         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
+
+     /**
+      * Digest-authenticate using a pre-computed user digest (no cleartext password).
+      *
+      * Variant of @ref check_digest_auth that takes a raw H(A1) digest
+      * instead of a cleartext password. Same feature-flag behaviour:
+      * declared unconditionally; returns
+      * `digest_auth_result::WRONG_HEADER` on HAVE_DAUTH-off builds.
+      *
+      * @param realm          protection realm advertised in the WWW-Authenticate header.
+      * @param userdigest     pre-computed digest of the username/realm/password.
+      * @param userdigest_size size of @p userdigest in bytes.
+      * @param nonce_timeout  nonce lifetime in seconds (0 = backend default).
+      * @param max_nc         max accepted nonce-count value (0 = backend default).
+      * @param algo           digest hash algorithm; defaults to SHA-256.
+      * @return one of the @ref httpserver::http::http_utils::digest_auth_result values.
+     **/
+     // This file is included inside the http_request class body; transitive
+     // <string> lives in the parent http_request.hpp.
+     http::http_utils::digest_auth_result check_digest_auth_digest(
+         const std::string& realm,  // NOLINT(build/include_what_you_use)
+         const void* userdigest,
+         size_t userdigest_size,
+         unsigned int nonce_timeout = 0,
+         uint32_t max_nc = 0,
+         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
 
      /**
       * Method used to get the path requested.
@@ -193,13 +371,157 @@ class http_request {
          return method;
      }
 
-     // Container and single-key data accessors live in a sibling header
-     // to keep this class definition under the project per-file LOC
-     // ceiling. The inner gate forces the header to be included only
-     // from within this class body.
-#define SRC_HTTPSERVER_HTTP_REQUEST_HPP_INSIDE_CLASS_
-#include "httpserver/http_request_getters.hpp"
-#undef SRC_HTTPSERVER_HTTP_REQUEST_HPP_INSIDE_CLASS_
+     // Container and single-key data accessors.
+
+     /**
+      * Method used to get all headers passed with the request.
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all headers. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (CWE-672)
+     **/
+     [[nodiscard]] const http::header_view_map& get_headers() const;
+
+     /**
+      * Method used to get all footers passed with the request.
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all footers. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (CWE-672)
+     **/
+     [[nodiscard]] const http::header_view_map& get_footers() const;
+
+     /**
+      * Method used to get all cookies passed with the request.
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all cookies. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (CWE-672)
+     **/
+     [[nodiscard]] const http::header_view_map& get_cookies() const;
+
+     /**
+      * Structured cookie accessor. Returns the in-order list
+      * of cookies parsed from the request's `Cookie:` header per RFC
+      * 6265 §5.4. Each entry carries `name` and `value`; request
+      * cookies do not carry attributes per the spec, so domain/path/
+      * etc. are left default-constructed.
+      *
+      * Lifetime: the returned reference and the strings it holds remain
+      * valid until the http_request is destroyed (typically when the
+      * handler returns). Backed by a per-request lazy cache (arena
+      * pattern): the first call parses the Cookie header
+      * and builds the vector; subsequent calls are O(1) and reuse the
+      * same buffer.
+      *
+      * Byte-transparent: no percent-decoding is performed. Callers that
+      * need decoded values must decode themselves.
+     **/
+     [[nodiscard]] const std::vector<cookie>& get_cookies_parsed() const;  // NOLINT(build/include_what_you_use)
+
+     /**
+      * Method used to get all args passed with the request.
+      * @return a const reference to the args map. The reference (and the
+      *         string_view keys/values it holds) remain valid until the
+      *         http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (CWE-672)
+     **/
+     [[nodiscard]] const http::arg_view_map& get_args() const;
+
+     /**
+      * Method used to get all args passed with the request. If any key has multiple
+      * values, one value is chosen and returned (the first).
+      * @return a const reference to a cached "first value per key" view map.
+      *         The reference (and the string_view keys/values it holds) remain
+      *         valid until the http_request is destroyed.
+      * @note The returned views carry the same CWE-416 dangling risk as
+      *       get_arg_flat() and the other affected getters listed in the class-level
+      *       string_view lifetime contract block above. Copy to std::string if a
+      *       longer lifetime is required.
+      * @note Returns const& backed by a lazily-populated
+      *       cache, so repeat calls are O(1) and zero-allocating.
+     **/
+     [[nodiscard]] const std::map<std::string_view, std::string_view, http::arg_comparator>& get_args_flat() const;
+
+     /**
+      * Method to get or create a file info struct in the map if the provided filename is already in the map
+      * return the exiting file info struct, otherwise create one in the map and return it.
+      * @param key the multipart form field name (top-level map key).
+      * @param upload_file_name the file name the user uploaded (identifier for the inner map entry).
+      * @result a http::file_info
+     **/
+     http::file_info& get_or_create_file_info(const std::string& key, const std::string& upload_file_name);
+
+     /**
+      * Method used to get all files passed with the request.
+      * @return a const reference to a map<std::string, map<std::string,
+      *         http::file_info>> containing all files. The reference
+      *         remains valid until the http_request is destroyed.
+      * @note Copying the returned map copies file metadata only (paths,
+      *       sizes, MIME types). The actual on-disk temporary files are
+      *       NOT copied; they remain subject to cleanup when the
+      *       http_request destructor runs unless the file_cleanup_callback
+      *       suppresses deletion.
+      *       (CWE-672)
+     **/
+     [[nodiscard]] const std::map<std::string, std::map<std::string, http::file_info>>& get_files() const noexcept;  // NOLINT(build/include_what_you_use)
+
+     /**
+      * Method used to get a specific header passed with the request.
+      * @param key the specific header to get the value from
+      * @return the value of the header.
+      * @note The returned view is only valid within the handler's call frame.
+     **/
+     std::string_view get_header(std::string_view key) const;
+
+     /**
+      * Method used to get a specific cookie passed with the request.
+      * @param key the specific cookie to get the value from
+      * @return the value of the cookie.
+      * @note The returned view is only valid within the handler's call frame.
+     **/
+     std::string_view get_cookie(std::string_view key) const;
+
+     /**
+      * Method used to get a specific footer passed with the request.
+      * @param key the specific footer to get the value from
+      * @return the value of the footer.
+      * @note The returned view is only valid within the handler's call frame.
+     **/
+     std::string_view get_footer(std::string_view key) const;
+
+     /**
+      * Method used to get a specific argument passed with the request.
+      * @param key the specific argument to get the value from
+      * @return the value(s) of the arg.
+      * @note The `std::string_view` values inside the returned `http_arg_value`
+      *       alias the request's arena storage and carry the same lifetime
+      *       restriction as the standalone view accessors: do not store them
+      *       past the handler invocation.
+     **/
+     http_arg_value get_arg(std::string_view key) const;
+
+     /**
+      * Method used to get a specific argument passed with the request.
+      * If the arg key has more than one value, only one is returned.
+      * @param key the specific argument to get the value from
+      * @return the value of the arg.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
+     **/
+     [[nodiscard]] std::string_view get_arg_flat(std::string_view key) const;
 
      /**
       * Method used to get the content of the request.

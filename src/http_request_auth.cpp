@@ -21,9 +21,7 @@
 // http_request public-API forwarders for the auth/credentials surface:
 // get_user / get_pass / get_digested_user, check_digest_auth /
 // check_digest_auth_digest, and the high-level TLS / client-certificate
-// accessors. The declarations live in httpserver/http_request_auth.hpp
-// (included by httpserver/http_request.hpp via the in-class-body
-// include pattern).
+// accessors. The declarations live in httpserver/http_request.hpp.
 
 #include "httpserver/http_request.hpp"
 
