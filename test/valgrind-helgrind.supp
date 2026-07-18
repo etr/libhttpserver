@@ -297,7 +297,7 @@
 {
    test-fixture-deferred-counter-callback
    Helgrind:Race
-   fun:test_callback*
+   fun:*test_callback*
 }
 
 # --- benign lazy cache: http_resource `Allow:` header snapshot ---------------
