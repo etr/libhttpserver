@@ -47,6 +47,7 @@
 #include <optional>
 
 #include "httpserver/hook_context.hpp"
+#include "httpserver/hook_phase.hpp"
 #include "httpserver/http_response.hpp"
 
 #if MHD_VERSION < 0x00097002
@@ -73,6 +74,10 @@ class hook_dispatcher {
     hook_dispatcher(hook_dispatcher&&) = delete;
     hook_dispatcher& operator=(hook_dispatcher&&) = delete;
     ~hook_dispatcher() = default;
+
+    // ---- query forwarders to the underlying hook_bus (dispatch gating) ---
+    bool has_hooks_for(hook_phase p) const noexcept;
+    bool has_handler_exception_alias() const noexcept;
 
     // ---- eleven per-phase forwarders (bind the logger, delegate to bus) --
     void fire_connection_opened(const connection_open_ctx& ctx) noexcept;

@@ -77,6 +77,7 @@
 #include "httpserver/detail/hook_dispatcher.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/ip_access_control.hpp"
+#include "httpserver/detail/request_dispatcher.hpp"
 #include "httpserver/detail/response_materializer.hpp"
 #include "httpserver/detail/route_table.hpp"
 #include "httpserver/detail/upload_pipeline.hpp"
@@ -295,6 +296,14 @@ class webserver_impl {
     // Holds only parent->config. The post_iterator MHD trampoline forwards
     // here (impl_->upload_.iterate_file / upload_pipeline::handle_post_form_arg).
     upload_pipeline upload_;
+
+    // Behavior service (DR-014 §4.11): the routing + auth + handler-invocation
+    // stage (finalize_answer / resolve_resource_for_request /
+    // dispatch_resource_handler). Declared last: it references routes_,
+    // hooks_dispatch_, errors_, response_mat_, ws_upgrader_ (HAVE_WEBSOCKET)
+    // and parent->config, so it must be constructed after all of them.
+    // complete_request hands off to dispatcher_.finalize_answer.
+    request_dispatcher dispatcher_;
 
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class

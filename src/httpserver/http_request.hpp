@@ -71,6 +71,7 @@ namespace detail {
 struct modded_request;
 class webserver_impl;
 class upload_pipeline;  // DR-014 §4.11: owns file-upload arg/stream writes
+class request_dispatcher;  // DR-014 §4.11: replays captured route params
 class http_request_impl;
 // Custom deleter for http_request_impl. Used by the
 // std::unique_ptr<http_request_impl, http_request_impl_deleter> below
@@ -745,6 +746,7 @@ class http_request {
      friend class webserver;
      friend class detail::webserver_impl;  // PIMPL dispatch path
      friend class detail::upload_pipeline;  // DR-014 §4.11 upload arg writes
+     friend class detail::request_dispatcher;  // DR-014 §4.11 route-param replay
      friend struct detail::modded_request;
      friend class create_test_request;    // test builder accesses impl_
 };

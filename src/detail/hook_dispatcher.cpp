@@ -52,6 +52,14 @@
 namespace httpserver {
 namespace detail {
 
+bool hook_dispatcher::has_hooks_for(hook_phase p) const noexcept {
+    return hooks_.has_hooks_for(p);
+}
+
+bool hook_dispatcher::has_handler_exception_alias() const noexcept {
+    return hooks_.has_handler_exception_alias();
+}
+
 namespace {
 
 // Fetch the per-route hook table (if any) from the request's

@@ -195,7 +195,12 @@ webserver_impl::webserver_impl(webserver* parent, MHD_socket bind_socket_val)
 #endif  // HAVE_WEBSOCKET
       errors_(parent->config), hooks_dispatch_(hooks_, parent->config),
       response_mat_(errors_, hooks_dispatch_, digest_opaque_, parent->config),
-      upload_(parent->config) {
+      upload_(parent->config),
+      dispatcher_(routes_, hooks_dispatch_, errors_, response_mat_,
+#ifdef HAVE_WEBSOCKET
+                  ws_upgrader_,
+#endif  // HAVE_WEBSOCKET
+                  parent->config) {
     // Guard against null parent: the dispatch helpers (not_found_page,
     // method_not_allowed_page, internal_error_page, etc.) read the const
     // config bag on `parent` and will dereference this pointer on every

@@ -253,7 +253,7 @@ void fire_request_completed_gated(modded_request* mr,
 // the call site in finalize_answer).
 bool fire_before_handler_gated(
     modded_request* mr,
-    const std::shared_ptr<::httpserver::http_resource>& hrm);
+    const std::shared_ptr<::httpserver::http_resource>& hrm);  // NOLINT(build/include_what_you_use)
 
 // Invoke the user-supplied internal_error_handler safely.
 // On success, returns the response it produced. If the user handler
@@ -276,40 +276,11 @@ MHD_Result requests_answer_second_step(MHD_Connection* connection,
 // The wire-string `method` parameter was dropped because finalize_answer
 // now consults mr->method_enum (set once by answer_to_connection) for
 // the is_allowed check.
-MHD_Result finalize_answer(MHD_Connection* connection, modded_request* mr);
-
-// Sub-helpers carved out of finalize_answer to keep each function
-// under the cyclomatic-complexity bar. The orchestrator delegates,
-// in order, to the websocket-upgrade probe, the resource lookup,
-// the auth short-circuit, the dispatch path, and the response
-// materialiser.
-// Forwards to the websocket_upgrader behavior service (DR-014 §4.11) on
-// HAVE_WEBSOCKET builds; a no-op returning nullopt otherwise. The handshake
-// validation, upgrade completion, and frame loop live in that service.
-std::optional<MHD_Result> try_handle_websocket_upgrade(MHD_Connection* connection,
-                                                       modded_request* mr);
-
-// Locate the resource serving @p mr by consulting lookup_v2
-// (cache -> exact -> radix -> regex). Returns true and sets @p hrm on
-// hit (also populates URL parameter captures on @p mr->request via
-// set_arg, and sets mr->matched_path_template + matched_is_prefix when
-// any hook in the route_resolved / before_handler phases is registered);
-// false otherwise.
-//
-// single_resource mode has no dedicated short-circuit: its
-// register_prefix("/") registration lives in the radix tier and is
-// resolved by the same lookup_v2 walk used for every other request.
-//
-// This entry point is the only dispatch-side route resolver.
-bool resolve_resource_for_request(modded_request* mr,
-        std::shared_ptr<::httpserver::http_resource>& hrm);
-
-// Invoke the resource handler bound to @p mr, populating
-// mr->response. On is_allowed=false, queues a 405 with an Allow
-// header. On handler-throw, routes through the safe internal-error
-// path.
-void dispatch_resource_handler(modded_request* mr,
-        const std::shared_ptr<::httpserver::http_resource>& hrm);  // NOLINT(build/include_what_you_use)
+// finalize_answer, resolve_resource_for_request, dispatch_resource_handler,
+// and the websocket-upgrade probe (try_handle_websocket_upgrade) moved to the
+// request_dispatcher / websocket_upgrader behavior services (DR-014 §4.11).
+// complete_request (below) hands off to impl_->dispatcher_.finalize_answer,
+// which drives them.
 
 // Serialize an allowed-method set into the comma-separated value
 // expected by the HTTP `Allow:` header. Enum-declaration order:

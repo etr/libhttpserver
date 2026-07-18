@@ -260,123 +260,11 @@ bool webserver_impl::should_skip_auth(std::string_view path) const {
 // live in detail/webserver_body_pipeline.cpp to keep this TU under the
 // 500-LOC ceiling (FILE_LOC_MAX in scripts/check-file-size.sh).
 
-static void fire_route_resolved_gated(webserver_impl* impl,
-                                      detail::modded_request* mr,
-                                      bool found,
-                                      const std::shared_ptr<http_resource>& hrm) {
-    if (!impl->has_hooks_for(hook_phase::route_resolved)) {
-        return;
-    }
-    std::optional<route_descriptor> desc;
-    if (found && hrm) {
-        desc = route_descriptor{
-            /*path_template=*/std::string_view{mr->matched_path_template},
-            /*methods=*/hrm->get_allowed_methods(),
-            /*is_prefix=*/mr->matched_is_prefix};
-    }
-    route_resolved_ctx ctx{
-        /*request=*/mr->request.get(),
-        /*matched=*/std::move(desc),
-        /*resource=*/hrm ? hrm.get() : nullptr};
-    impl->fire_route_resolved(ctx);
-}
-
-MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
-                                           struct detail::modded_request* mr) {
-    if (auto ws_result = try_handle_websocket_upgrade(connection, mr)) {
-        return *ws_result;
-    }
-
-    // A pre-handler short-circuit hook (request_received or
-    // body_chunk) already populated mr->response. Skip route lookup,
-    // auth, and handler dispatch -- go straight to the response queue.
-    // NOTE: after_handler is NOT fired on this path (no handler ran);
-    // response_sent fires unconditionally in materialize_and_queue_response.
-    if (mr->skip_handler) {
-        // No resource was resolved on this path -- pass nullptr.
-        return materialize_and_queue_response(connection, mr, nullptr);
-    }
-
-    // Hold a shared_ptr copy across dispatch. If a concurrent
-    // unregister_resource erases the route mid-call, the resource stays
-    // alive until our local shared_ptr drops at the end of
-    // finalize_answer.
-    std::shared_ptr<http_resource> hrm;
-    bool found = resolve_resource_for_request(mr, hrm);
-
-    // Capture the resolved resource on the request so the
-    // tail-end firing helpers (fire_response_sent_gated /
-    // fire_request_completed_gated) can fire the per-route hook chain
-    // after the server-wide one. weak_ptr does not keep the resource
-    // alive; the local `hrm` shared_ptr does that for the duration of
-    // finalize_answer, after which mr->response no longer references
-    // the resource directly.
-    if (found) {
-        // Snapshot whether this resource carries a per-route hook table,
-        // so fire_request_completed_gated (which fires after this
-        // shared_ptr is gone) can gate its weak_ptr lock() on the common
-        // zero-per-route-hook path. Same acquire barrier as
-        // fire_before_handler_gated relies on (hrm came from
-        // resolve_resource_for_request under the route-table shared_lock).
-        mr->route_has_hook_table_ = (hrm->hook_table_raw_() != nullptr);
-
-        // Only stamp the weak_ptr when a later out-of-scope consumer can
-        // actually use it: fire_request_completed_gated fires from the MHD
-        // completion callback (after the owning shared_ptr is gone) and
-        // needs it iff this resource has a per-route hook table OR a
-        // server-wide request_completed hook is registered. The in-scope
-        // tail helpers (after_handler / response_sent) take the live hrm
-        // directly, and handle_dispatch_exception's per-route lookup
-        // degrades to a null lock() exactly when route_has_hook_table_ is
-        // false (no per-route table exists to find), so nothing is lost by
-        // skipping the stamp there. Gating this drops 2 control-block
-        // atomics (weak-count increment + decrement) per matched request
-        // on the overwhelmingly common zero-hook path -- the shared
-        // cache-line traffic commit 9af15a1 set out to remove.
-        if (mr->route_has_hook_table_ ||
-                has_hooks_for(hook_phase::request_completed)) {
-            mr->resource_weak_ = hrm;
-        }
-    }
-
-    fire_route_resolved_gated(this, mr, found, hrm);
-
-    // Fire before_handler from finalize_answer (not
-    // from inside dispatch_resource_handler). This ensures auth and
-    // method-not-allowed alias hooks run as part of the unified
-    // before_handler chain, with the auth alias as the first hook
-    // (registered in install_default_alias_hooks_). Per-route firing is
-    // included by the helper (see fire_before_handler_gated). If either
-    // chain short-circuited, mr->response is already populated and we
-    // route straight to materialize.
-    if (found && fire_before_handler_gated(mr, hrm)) {
-        // NOTE: after_handler was NOT fired on this path (before_handler
-        // short-circuit); response_sent fires unconditionally in
-        // materialize_and_queue_response below.
-        return materialize_and_queue_response(connection, mr, hrm.get());
-    }
-
-    if (found) {
-        dispatch_resource_handler(mr, hrm);
-    } else if (!mr->response) {
-        mr->response.emplace(not_found_page(mr));
-    }
-
-    // after_handler fires between handler return (or 404
-    // synthesis) and materialize_and_queue_response. The
-    // phase is conceptually a "post-handler" phase, so the
-    // mr->skip_handler early-exit branch above bypasses it -- a
-    // pre-handler short-circuit means no handler ran. Whether to fire
-    // on the 404 path (synthesised not_found_page) is a documented
-    // design choice: we fire because the dispatch site has produced a
-    // response and the contract is "fires between response readiness
-    // and queue", and that gives users a uniform observation point.
-    // hrm is null on the 404 path (found == false); fire_after_handler_gated
-    // and materialize_and_queue_response both tolerate a null resource.
-    fire_after_handler_gated(mr, hrm.get());
-
-    return materialize_and_queue_response(connection, mr, hrm.get());
-}
+// finalize_answer, resolve_resource_for_request, dispatch_resource_handler,
+// and the fire_route_resolved_gated helper moved to the request_dispatcher
+// behavior service (detail/request_dispatcher.cpp, DR-014 §4.11).
+// complete_request (the request_pipeline's terminal step) hands off to it
+// via impl_->dispatcher_.
 
 MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method) {
     // mr->ws is pre-populated in answer_to_connection (hoisted there for
@@ -385,7 +273,7 @@ MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct d
     mr->request->set_method(method);
     mr->request->set_version(version);
 
-    return finalize_answer(connection, mr);
+    return dispatcher_.finalize_answer(connection, mr);
 }
 
 void webserver_impl::resolve_method_callback(const char* method,
