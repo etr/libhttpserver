@@ -248,10 +248,7 @@ void webserver::register_ws_resource(const std::string& resource,
         throw std::invalid_argument("The websocket_handler pointer cannot be null");
     }
     std::string url_key = http_utils::standardize_url(resource);
-    std::unique_lock lock(impl_->registered_ws_handlers_mutex_);
-    auto result = impl_->registered_ws_handlers.emplace(std::move(url_key),
-                                                        std::move(handler));
-    if (!result.second) {
+    if (!impl_->ws_.try_register(std::move(url_key), std::move(handler))) {
         // v1's operator[]-based insert silently overwrote; v2.0
         // surfaces the collision by throwing.
         throw std::invalid_argument(
@@ -268,8 +265,7 @@ void webserver::register_ws_resource(const std::string& resource,
 
 void webserver::unregister_ws_resource(const std::string& resource) {
 #ifdef HAVE_WEBSOCKET
-    std::unique_lock lock(impl_->registered_ws_handlers_mutex_);
-    impl_->registered_ws_handlers.erase(http_utils::standardize_url(resource));
+    impl_->ws_.unregister(http_utils::standardize_url(resource));
 #else
     (void)resource;
     throw feature_unavailable("websocket", "HAVE_WEBSOCKET");

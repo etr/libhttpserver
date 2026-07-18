@@ -76,6 +76,7 @@
 #include "httpserver/detail/segment_trie.hpp"
 #include "httpserver/detail/route_cache.hpp"
 #include "httpserver/detail/route_entry.hpp"
+#include "httpserver/detail/ws_registry.hpp"
 
 #if MHD_VERSION < 0x00097002
 typedef int MHD_Result;
@@ -261,7 +262,7 @@ class webserver_impl {
     // resolve_resource_for_request() calls it exclusively, and the
     // 3-tier table is the single routing surface. Lambda/class conflict
     // detection probes the same tiers (find_v2_entry_by_path_);
-    // WebSocket dispatch uses a dedicated registered_ws_handlers_mutex_.
+    // WebSocket dispatch resolves handlers through the separate ws_ registry.
     lookup_result lookup_v2(http_method method, const std::string& path);
 
     // Lifecycle hook bus.
@@ -380,19 +381,14 @@ class webserver_impl {
     ip_access_control acl_;
 
 #ifdef HAVE_WEBSOCKET
-    // shared_ptr storage. The dispatch path
-    // (complete_websocket_upgrade) takes a shared_ptr copy under the
-    // shared lock that keeps the handler alive across an MHD upgrade
-    // callback, even if unregister_ws_resource races to drop the
-    // registration mid-upgrade. The webserver always holds one reference
-    // until the slot is erased.
-    //
-    // Lock: registered_ws_handlers_mutex_ guards this map exclusively,
-    // independent of the HTTP route_table_mutex_; no call site ever
-    // holds both mutexes simultaneously.
-    std::shared_mutex registered_ws_handlers_mutex_;
-    std::map<std::string, std::shared_ptr<::httpserver::websocket_handler>>
-        registered_ws_handlers;
+    // WebSocket handler registry (URL -> handler map + its mutex) lives
+    // behind this collaborator. register/unregister_ws_resource mutate it;
+    // complete_websocket_upgrade resolves a handler via find() (taking a
+    // shared_ptr copy that keeps the handler alive across the MHD upgrade
+    // callback even if unregister races mid-upgrade); start() consults
+    // empty() for MHD_ALLOW_UPGRADE. Its mutex is independent of every
+    // other cluster's; no call site holds two of them at once.
+    ws_registry ws_;
 
     struct ws_upgrade_data {
         webserver_impl* impl;

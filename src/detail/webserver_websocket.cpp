@@ -209,16 +209,13 @@ std::optional<MHD_Result>
 webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
                                            detail::modded_request* mr,
                                            const char* ws_key) {
-    std::shared_lock lock(registered_ws_handlers_mutex_);
-    auto ws_it = registered_ws_handlers.find(mr->standardized_url);
-    if (ws_it == registered_ws_handlers.end()) {
+    // find() returns a shared_ptr copy taken under the registry's read lock,
+    // so the handler is kept alive across the MHD upgrade callback even if
+    // unregister_ws_resource erases the slot mid-upgrade.
+    std::shared_ptr<websocket_handler> handler_sp = ws_.find(mr->standardized_url);
+    if (!handler_sp) {
         return std::nullopt;
     }
-    // Take a shared_ptr copy under the shared lock so the
-    // handler is kept alive across the MHD upgrade callback even if
-    // unregister_ws_resource erases the slot mid-upgrade.
-    std::shared_ptr<websocket_handler> handler_sp = ws_it->second;
-    lock.unlock();
 
     // CWE-401: RAII guard so data is freed if MHD_create_response_for_upgrade
     // returns null. Ownership is transferred to MHD (via release()) only after

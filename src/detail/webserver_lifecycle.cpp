@@ -271,7 +271,7 @@ int webserver_impl::compose_runtime_flags() const {
     if (parent->config.turbo) flags |= MHD_USE_TURBO;
     if (parent->config.suppress_date_header) flags |= MHD_USE_SUPPRESS_DATE_NO_CLOCK;
 #ifdef HAVE_WEBSOCKET
-    if (!registered_ws_handlers.empty()) flags |= MHD_ALLOW_UPGRADE;
+    if (!ws_.empty()) flags |= MHD_ALLOW_UPGRADE;
 #endif  // HAVE_WEBSOCKET
     return flags;
 }
