@@ -225,16 +225,12 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
     std::optional<std::string_view> reason{};
 
     if (ws->config.ip_access_control_enabled) {
-        bool is_denied = false;
-        bool is_allowed = false;
-        {
-            std::shared_lock deny_lock(impl->deny_list_mutex);
-            std::shared_lock allow_lock(impl->allow_list_mutex);
-            is_denied = impl->deny_list.count(ip_representation(addr));
-            is_allowed = impl->allow_list.count(ip_representation(addr));
-        }  // release deny/allow locks before firing the user hook
+        // Consistent deny/allow snapshot under the acl's own locks, released
+        // before the user hook fires.
+        const auto membership = impl->acl_.classify(ip_representation(addr));
         std::tie(accepted, reason) =
-            classify_decision(ws->config.default_policy, is_denied, is_allowed);
+            classify_decision(ws->config.default_policy,
+                              membership.denied, membership.allowed);
     }
 
     const MHD_Result decision = accepted ? MHD_YES : MHD_NO;

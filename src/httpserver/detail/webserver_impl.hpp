@@ -72,6 +72,7 @@
 #include "httpserver/hook_phase.hpp"
 #include "httpserver/detail/connection_state.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
+#include "httpserver/detail/ip_access_control.hpp"
 #include "httpserver/detail/segment_trie.hpp"
 #include "httpserver/detail/route_cache.hpp"
 #include "httpserver/detail/route_entry.hpp"
@@ -372,11 +373,11 @@ class webserver_impl {
     std::vector<phase_entry<void(const ::httpserver::connection_close_ctx&)>>
         hooks_connection_closed_;
 
-    std::shared_mutex deny_list_mutex;
-    std::set<http::ip_representation> deny_list;
-
-    std::shared_mutex allow_list_mutex;
-    std::set<http::ip_representation> allow_list;
+    // IP allow/deny access control (deny/allow sets + their mutexes) lives
+    // behind this collaborator. policy_callback consults it via classify();
+    // webserver::{deny,allow,remove_denied,remove_allowed}_ip mutate it. No
+    // other state cluster on webserver_impl shares these mutexes.
+    ip_access_control acl_;
 
 #ifdef HAVE_WEBSOCKET
     // shared_ptr storage. The dispatch path
