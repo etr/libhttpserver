@@ -261,20 +261,12 @@ bool webserver_impl::should_skip_auth(std::string_view path) const {
 // 500-LOC ceiling (FILE_LOC_MAX in scripts/check-file-size.sh).
 
 // finalize_answer, resolve_resource_for_request, dispatch_resource_handler,
-// and the fire_route_resolved_gated helper moved to the request_dispatcher
-// behavior service (detail/request_dispatcher.cpp, DR-014 §4.11).
-// complete_request (the request_pipeline's terminal step) hands off to it
-// via impl_->dispatcher_.
-
-MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method) {
-    // mr->ws is pre-populated in answer_to_connection (hoisted there for
-    // early-path request_completed coverage); no need to set it again here.
-    mr->request->set_path(mr->standardized_url);
-    mr->request->set_method(method);
-    mr->request->set_version(version);
-
-    return dispatcher_.finalize_answer(connection, mr);
-}
+// and fire_route_resolved_gated moved to the request_dispatcher behavior
+// service; requests_answer_first_step / requests_answer_second_step /
+// complete_request moved to the request_pipeline behavior service (both
+// DR-014 §4.11). answer_to_connection (below) stays a webserver_impl static
+// MHD trampoline: it does the per-request setup (start_time, standardized_url,
+// method callback) and forwards into impl_->pipeline_.
 
 void webserver_impl::resolve_method_callback(const char* method,
                                               detail::modded_request* mr) {
@@ -327,8 +319,8 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     auto* impl = static_cast<webserver_impl*>(cls);
 
     if (mr->request) {
-        return impl->requests_answer_second_step(connection, method, version,
-                                                  upload_data, upload_data_size, mr);
+        return impl->pipeline_.requests_answer_second_step(connection, method,
+            version, upload_data, upload_data_size, mr);
     }
 
     const MHD_ConnectionInfo* conninfo =
@@ -373,7 +365,7 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     // log_access is now a response_sent alias (see webserver_aliases.cpp).
     resolve_method_callback(method, mr);
 
-    return impl->requests_answer_first_step(connection, mr);
+    return impl->pipeline_.requests_answer_first_step(connection, mr);
 }
 
 }  // namespace detail

@@ -269,18 +269,13 @@ bool should_skip_auth(std::string_view path) const;
 // the daemon_lifecycle collaborator (src/detail/daemon_lifecycle.cpp),
 // reached through impl_->daemon_.
 
-MHD_Result requests_answer_first_step(MHD_Connection* connection, modded_request* mr);
-MHD_Result requests_answer_second_step(MHD_Connection* connection,
-        const char* method, const char* version, const char* upload_data,
-        size_t* upload_data_size, modded_request* mr);
-// The wire-string `method` parameter was dropped because finalize_answer
-// now consults mr->method_enum (set once by answer_to_connection) for
-// the is_allowed check.
-// finalize_answer, resolve_resource_for_request, dispatch_resource_handler,
-// and the websocket-upgrade probe (try_handle_websocket_upgrade) moved to the
-// request_dispatcher / websocket_upgrader behavior services (DR-014 §4.11).
-// complete_request (below) hands off to impl_->dispatcher_.finalize_answer,
-// which drives them.
+// The request-processing behavior moved to the DR-014 §4.11 services:
+// requests_answer_first_step / requests_answer_second_step / complete_request
+// -> request_pipeline (impl_->pipeline_); finalize_answer /
+// resolve_resource_for_request / dispatch_resource_handler ->
+// request_dispatcher (impl_->dispatcher_); the websocket-upgrade probe ->
+// websocket_upgrader (impl_->ws_upgrader_). answer_to_connection (below)
+// forwards into pipeline_.
 
 // Serialize an allowed-method set into the comma-separated value
 // expected by the HTTP `Allow:` header. Enum-declaration order:
@@ -335,9 +330,6 @@ void commit_handlers_to_shim(detail::lambda_resource& shim,
 // Unrecognised methods leave the defaults in place; finalize_answer
 // then routes through the 405 path.
 static void resolve_method_callback(const char* method, modded_request* mr);
-
-MHD_Result complete_request(MHD_Connection* connection, modded_request* mr,
-                            const char* version, const char* method);
 
 // MHD trampolines registered with libmicrohttpd. Closure pointer is
 // `this` (webserver_impl*) for answer_to_connection, otherwise the
