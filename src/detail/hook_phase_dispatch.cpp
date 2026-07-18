@@ -18,114 +18,83 @@
      USA
 */
 
-// hook_phase_dispatch.cpp -- the detail::webserver_impl::fire_* forwarder
-// family. The actual per-phase firing logic (snapshot-under-shared_lock,
-// try/catch containment, short-circuit, alias tails) lives in
-// detail::hook_bus (src/detail/hook_bus.cpp). Each forwarder here binds
-// webserver_impl::log_dispatch_error as the bus's per-call error logger,
-// so every existing `impl->fire_X(ctx)` call site (in
-// webserver_callbacks_lifecycle.cpp, webserver_body_pipeline.cpp,
-// webserver_dispatch.cpp, and the gated wrappers in
-// webserver_hook_firing.cpp) stays unchanged.
-//
-// The logger lambda is constructed per call: it captures a single `this`
-// pointer, so it rides the std::function small-buffer with no heap
-// allocation, and these forwarders only run once a phase gate is open
-// (hooks registered) -- never on the zero-hook hot path. The same lambda
-// is inlined in the gated wrappers (webserver_hook_firing.cpp), so the
-// repetition matches house style rather than hiding behind a helper.
+// Thin webserver_impl forwarders into the hook_dispatcher behavior service
+// (DR-014 §4.11). The real per-phase firing logic (logger binding +
+// snapshot-under-lock delegation to hook_bus) moved to
+// detail/hook_dispatcher.cpp. These keep the existing impl->fire_X(ctx)
+// call sites (webserver_body_pipeline.cpp, webserver_callbacks_lifecycle.cpp,
+// webserver_dispatch.cpp, and the gated wrappers) compiling unchanged during
+// the migration; removed in the final slim step.
 
 #include <optional>
-#include <string>
-#include <string_view>
 
 #include "httpserver/hook_action.hpp"
-#include "httpserver/http_response.hpp"
-
 #include "httpserver/hook_context.hpp"
+#include "httpserver/http_response.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
 
 namespace httpserver {
+namespace detail {
 
-// ---- lifecycle (void, observation) ---------------------------------------
-
-void detail::webserver_impl::fire_connection_opened(
+void webserver_impl::fire_connection_opened(
     const ::httpserver::connection_open_ctx& ctx) noexcept {
-    hooks_.fire_connection_opened(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    hooks_dispatch_.fire_connection_opened(ctx);
 }
 
-void detail::webserver_impl::fire_accept_decision(
+void webserver_impl::fire_accept_decision(
     const ::httpserver::accept_ctx& ctx) noexcept {
-    hooks_.fire_accept_decision(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    hooks_dispatch_.fire_accept_decision(ctx);
 }
 
-void detail::webserver_impl::fire_connection_closed(
+void webserver_impl::fire_connection_closed(
     const ::httpserver::connection_close_ctx& ctx) noexcept {
-    hooks_.fire_connection_closed(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    hooks_dispatch_.fire_connection_closed(ctx);
 }
 
-// ---- pre-handler short-circuit -------------------------------------------
-
 std::optional<::httpserver::http_response>
-detail::webserver_impl::fire_request_received(
+webserver_impl::fire_request_received(
     ::httpserver::request_received_ctx& ctx) noexcept {
-    return hooks_.fire_request_received(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    return hooks_dispatch_.fire_request_received(ctx);
 }
 
 std::optional<::httpserver::http_response>
-detail::webserver_impl::fire_body_chunk(
+webserver_impl::fire_body_chunk(
     ::httpserver::body_chunk_ctx& ctx) noexcept {
-    return hooks_.fire_body_chunk(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    return hooks_dispatch_.fire_body_chunk(ctx);
 }
 
-// ---- route_resolved + before_handler -------------------------------------
-
-void detail::webserver_impl::fire_route_resolved(
+void webserver_impl::fire_route_resolved(
     const ::httpserver::route_resolved_ctx& ctx) noexcept {
-    hooks_.fire_route_resolved(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    hooks_dispatch_.fire_route_resolved(ctx);
 }
 
 std::optional<::httpserver::http_response>
-detail::webserver_impl::fire_before_handler(
+webserver_impl::fire_before_handler(
     ::httpserver::before_handler_ctx& ctx) noexcept {
-    return hooks_.fire_before_handler(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    return hooks_dispatch_.fire_before_handler(ctx);
 }
 
-// ---- handler_exception (alias tail lives in hook_bus) --------------------
-
 std::optional<::httpserver::http_response>
-detail::webserver_impl::fire_handler_exception(
+webserver_impl::fire_handler_exception(
     const ::httpserver::handler_exception_ctx& ctx) noexcept {
-    return hooks_.fire_handler_exception(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    return hooks_dispatch_.fire_handler_exception(ctx);
 }
-
-// ---- post-handler --------------------------------------------------------
 
 std::optional<::httpserver::http_response>
-detail::webserver_impl::fire_after_handler(
+webserver_impl::fire_after_handler(
     ::httpserver::after_handler_ctx& ctx) noexcept {
-    return hooks_.fire_after_handler(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    return hooks_dispatch_.fire_after_handler(ctx);
 }
 
-void detail::webserver_impl::fire_response_sent(
+void webserver_impl::fire_response_sent(
     const ::httpserver::response_sent_ctx& ctx) noexcept {
-    hooks_.fire_response_sent(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    hooks_dispatch_.fire_response_sent(ctx);
 }
 
-void detail::webserver_impl::fire_request_completed(
+void webserver_impl::fire_request_completed(
     const ::httpserver::request_completed_ctx& ctx) noexcept {
-    hooks_.fire_request_completed(ctx,
-        [this](std::string_view m) { log_dispatch_error(std::string(m)); });
+    hooks_dispatch_.fire_request_completed(ctx);
 }
 
+}  // namespace detail
 }  // namespace httpserver

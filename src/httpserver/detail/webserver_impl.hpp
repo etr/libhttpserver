@@ -74,6 +74,7 @@
 #include "httpserver/detail/daemon_lifecycle.hpp"
 #include "httpserver/detail/error_pages.hpp"
 #include "httpserver/detail/hook_bus.hpp"
+#include "httpserver/detail/hook_dispatcher.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/ip_access_control.hpp"
 #include "httpserver/detail/route_table.hpp"
@@ -275,6 +276,12 @@ class webserver_impl {
     // at construction) and mr->request. The webserver_impl error-page
     // methods (not_found_page / internal_error_page / ...) forward here.
     error_pages errors_;
+
+    // Behavior service (DR-014 §4.11): dispatch-time hook firing. Owns the
+    // eleven per-phase forwarders + the four gated helpers; holds hooks_
+    // (the state) and parent->config (only to reach log_dispatch_error).
+    // The webserver_impl fire_* / fire_*_gated methods forward here.
+    hook_dispatcher hooks_dispatch_;
 
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class

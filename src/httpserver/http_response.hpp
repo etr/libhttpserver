@@ -55,7 +55,14 @@ namespace detail { class body; }
 // helpers need direct access to materialise wire responses without
 // widening the public API.
 class webserver;
-namespace detail { class webserver_impl; }
+namespace detail {
+class webserver_impl;
+// DR-014 §4.11: the wire-construction and response_sent-firing logic moved
+// off webserver_impl into these behavior services, which therefore need the
+// same body_ access the god-object had.
+class response_materializer;
+class hook_dispatcher;
+}  // namespace detail
 
 /**
  * RFC-7616 Digest auth challenge parameters.
@@ -538,8 +545,12 @@ class http_response final {
 
      // body_ is private; detail::webserver_impl dispatch helpers need
      // direct access to materialise wire responses and fire the
-     // response_sent hook (body_->size()).
+     // response_sent hook (body_->size()). Post DR-014 that logic lives in
+     // the response_materializer (materialise/queue) and hook_dispatcher
+     // (response_sent bytes) behavior services, which need the same access.
      friend class detail::webserver_impl;
+     friend class detail::response_materializer;
+     friend class detail::hook_dispatcher;
 };
 
 std::ostream &operator<<(std::ostream &os, const http_response &r);
