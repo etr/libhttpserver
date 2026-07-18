@@ -11,11 +11,11 @@
 | `request_received` | `webserver_body_pipeline.cpp:requests_answer_first_step` — post header-parse, pre body-read | **yes** | no (route not yet known) |
 | `body_chunk` | `webserver_body_pipeline.cpp:requests_answer_second_step` — per chunk | **yes** | no |
 | `route_resolved` | `webserver_request.cpp:fire_route_resolved_gated` — called from `webserver_request.cpp:finalize_answer`, after lookup | no | n/a (boundary phase) |
-| `before_handler` | `webserver_finalize.cpp:fire_before_handler_gated` — called from `webserver_request.cpp:finalize_answer`, before dispatch | **yes** | yes |
+| `before_handler` | `webserver_hook_firing.cpp:fire_before_handler_gated` — called from `webserver_request.cpp:finalize_answer`, before dispatch | **yes** | yes |
 | `handler_exception` | `webserver_dispatch.cpp:dispatch_resource_handler` — each catch arm | **yes** (maps exception to response) | yes |
-| `after_handler` | `webserver_finalize.cpp:fire_after_handler_gated` — called from `webserver_request.cpp:finalize_answer` | **yes** (replaces response) | yes |
-| `response_sent` | `webserver_finalize.cpp:fire_response_sent_gated` — called from `webserver_request.cpp:materialize_and_queue_response`, post `MHD_queue_response` | no | yes |
-| `request_completed` | `webserver_finalize.cpp:fire_request_completed_gated` — called from `webserver_callbacks.cpp:request_completed`, NOTIFY_COMPLETED | no | yes |
+| `after_handler` | `webserver_hook_firing.cpp:fire_after_handler_gated` — called from `webserver_request.cpp:finalize_answer` | **yes** (replaces response) | yes |
+| `response_sent` | `webserver_hook_firing.cpp:fire_response_sent_gated` — called from `webserver_request.cpp:materialize_and_queue_response`, post `MHD_queue_response` | no | yes |
+| `request_completed` | `webserver_hook_firing.cpp:fire_request_completed_gated` — called from `webserver_callbacks.cpp:request_completed`, NOTIFY_COMPLETED | no | yes |
 | `connection_closed` | `detail/webserver_callbacks_lifecycle.cpp:connection_notify` — NOTIFY_CLOSED | no | no |
 
 **Implementation.** Each phase has its own `std::vector<std::function<...>>` in `webserver_impl`, guarded by a single `std::shared_mutex hook_table_mutex_`. A per-phase `std::atomic<bool> any_hooks_[hook_phase::count_]` flag short-circuits the dispatch site to a relaxed atomic load and a compare-with-zero when no subscribers exist — the only hook-related cost on the hot request path for a server with zero hooks registered.

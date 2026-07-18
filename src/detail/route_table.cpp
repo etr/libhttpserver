@@ -28,6 +28,7 @@
 
 #include "httpserver/detail/route_table.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <memory>
 #include <mutex>
@@ -523,6 +524,21 @@ void route_table::register_v2_route(const http_endpoint& idx,
         exact_routes_.emplace(idx.get_url_complete(), std::move(entry));
         break;
     }
+}
+
+void route_table::erase_exact_and_regex_locked_(const std::string& key) {
+    exact_routes_.erase(key);
+    regex_routes_.erase(
+        std::remove_if(regex_routes_.begin(), regex_routes_.end(),
+                       [&key](const regex_route& rr) {
+                           return rr.url_complete == key;
+                       }),
+        regex_routes_.end());
+}
+
+void route_table::remove_param_prefix_locked_(const std::string& key,
+                                              bool is_prefix) {
+    param_and_prefix_routes_.remove(key, is_prefix);
 }
 
 }  // namespace detail

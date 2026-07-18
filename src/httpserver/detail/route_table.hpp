@@ -181,6 +181,19 @@ class route_table {
                            std::shared_ptr<http_resource> res,
                            bool family);
 
+    // Erase @p key from the exact tier and sweep it from the regex tier
+    // (every regex_route whose url_complete == key). These two tiers are
+    // always cleared together on an exact-shaped unregister, so the sweep
+    // lives here in one place rather than being open-coded at each call
+    // site. Caller must hold route_table_mutex_ (unique_lock).
+    void erase_exact_and_regex_locked_(const std::string& key);
+
+    // Remove @p key from the param/prefix trie tier. @p is_prefix selects
+    // the prefix terminus (register_prefix) vs the parameterized terminus
+    // (register_path with :params). Caller must hold route_table_mutex_
+    // (unique_lock).
+    void remove_param_prefix_locked_(const std::string& key, bool is_prefix);
+
     // --- Route-table state -----------------------------------------------
     // One shared_mutex covering the three tiers. Writes (registration)
     // are rare; reads (dispatch lookups) take shared ownership briefly.

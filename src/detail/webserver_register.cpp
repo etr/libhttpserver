@@ -43,13 +43,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
-#include <algorithm>
 #include <cstring>
 #include <iosfwd>
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <regex>
 #include <set>
 #include <shared_mutex>
 #include <stdexcept>
@@ -170,19 +168,12 @@ void webserver::unregister_impl_(const string& resource, bool family) {
         auto table_lock = impl_->routes_.lock_for_write();
         const std::string& key = he.get_url_complete();
         if (family) {
-            impl_->routes_.param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
+            impl_->routes_.remove_param_prefix_locked_(key, /*is_prefix=*/true);
         } else if (!he.get_url_pars().empty()) {
-            impl_->routes_.param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
+            impl_->routes_.remove_param_prefix_locked_(key, /*is_prefix=*/false);
         } else {
             // Erase from exact tier; also sweep regex tier (url_complete key).
-            impl_->routes_.exact_routes_.erase(key);
-            impl_->routes_.regex_routes_.erase(
-                std::remove_if(impl_->routes_.regex_routes_.begin(),
-                               impl_->routes_.regex_routes_.end(),
-                               [&key](const detail::route_table::regex_route& rr) {
-                                   return rr.url_complete == key;
-                               }),
-                impl_->routes_.regex_routes_.end());
+            impl_->routes_.erase_exact_and_regex_locked_(key);
         }
     }
     impl_->routes_.invalidate_route_cache();
@@ -209,17 +200,11 @@ void webserver::unregister_resource(const string& resource) {
     {
         auto table_lock = impl_->routes_.lock_for_write();
         const std::string& key = he_exact.get_url_complete();
-        impl_->routes_.exact_routes_.erase(key);
-        impl_->routes_.param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
-        impl_->routes_.param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
-        // Also sweep the regex tier by url_complete.
-        impl_->routes_.regex_routes_.erase(
-            std::remove_if(impl_->routes_.regex_routes_.begin(),
-                           impl_->routes_.regex_routes_.end(),
-                           [&key](const detail::route_table::regex_route& rr) {
-                               return rr.url_complete == key;
-                           }),
-            impl_->routes_.regex_routes_.end());
+        // Sweep every tier the key could occupy so a prior register_path AND
+        // register_prefix on the same path are both cleared atomically.
+        impl_->routes_.erase_exact_and_regex_locked_(key);
+        impl_->routes_.remove_param_prefix_locked_(key, /*is_prefix=*/false);
+        impl_->routes_.remove_param_prefix_locked_(key, /*is_prefix=*/true);
     }
     // Delegate cache clearing to invalidate_route_cache() matching the
     // pattern used by register_impl_ and on_methods_ (table lock released

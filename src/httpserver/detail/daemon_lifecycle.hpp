@@ -103,6 +103,15 @@ class daemon_lifecycle {
     // a TSan-flagged data race in the ws_start_stop integ test.
     std::atomic<struct MHD_Daemon*> daemon{nullptr};
 
+    // Acquire-load the published daemon handle, or nullptr when the daemon
+    // is not currently started. Single home for the acquire-semantics
+    // contract documented on `daemon` above, so webserver's run/info
+    // accessors (webserver_lifecycle.cpp) don't each repeat the load + the
+    // memory_order argument.
+    struct MHD_Daemon* handle() const noexcept {
+        return daemon.load(std::memory_order_acquire);
+    }
+
     // MHD_socket (int on POSIX, SOCKET on Windows) for a caller-supplied
     // pre-bound socket passed via create_webserver().bind_socket().
     // MHD_INVALID_SOCKET is the sentinel meaning "no pre-bound socket".
