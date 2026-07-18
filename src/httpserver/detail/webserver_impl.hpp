@@ -72,6 +72,7 @@
 #include "httpserver/hook_phase.hpp"
 #include "httpserver/detail/connection_state.hpp"
 #include "httpserver/detail/daemon_lifecycle.hpp"
+#include "httpserver/detail/error_pages.hpp"
 #include "httpserver/detail/hook_bus.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/ip_access_control.hpp"
@@ -268,6 +269,12 @@ class webserver_impl {
             ::httpserver::hook_phase p) const noexcept {
         return hooks_.phase_hook_count(p);
     }
+
+    // Behavior service (DR-014 §4.11): synthesises 404/405/500 responses.
+    // A leaf — reads only the const config bag (via parent->config, bound
+    // at construction) and mr->request. The webserver_impl error-page
+    // methods (not_found_page / internal_error_page / ...) forward here.
+    error_pages errors_;
 
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class

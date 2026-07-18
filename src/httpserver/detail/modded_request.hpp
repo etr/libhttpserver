@@ -42,6 +42,13 @@
 
 namespace httpserver {
 
+// modded_request forms a pointer-to-member on http_resource (the dispatch
+// `callback` slot) and a std::weak_ptr<http_resource>; both need only a
+// forward declaration. Declaring it here keeps this header self-contained
+// so every dispatch-pipeline TU (DR-014) can include it directly without
+// first pulling <httpserver/http_resource.hpp>.
+class http_resource;
+
 namespace detail {
 
 // modded_request adapts the raw MHD connection data into the

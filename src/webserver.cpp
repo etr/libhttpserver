@@ -187,14 +187,19 @@ static std::string generate_random_hex_opaque_() {
 #endif  // HAVE_DAUTH
 
 webserver_impl::webserver_impl(webserver* parent, MHD_socket bind_socket_val)
-    : parent(parent), daemon_(this, bind_socket_val) {
+    : parent(parent), daemon_(this, bind_socket_val),
+      errors_(parent->config) {
     // Guard against null parent: the dispatch helpers (not_found_page,
     // method_not_allowed_page, internal_error_page, etc.) read the const
     // config bag on `parent` and will dereference this pointer on every
     // request. The only valid call site is webserver::webserver, which
     // always passes `this` — a non-null pointer to the owning webserver.
     // (daemon_ was already constructed with owner=this above; it stores the
-    // pointer but never dereferences parent config until start().)
+    // pointer but never dereferences parent config until start(). The
+    // config-reading behavior services below -- errors_ and the ones added
+    // in later DR-014 steps -- DO bind parent->config in this init list, so
+    // a non-null parent is a hard construction precondition; the sole caller
+    // webserver::webserver satisfies it by passing `this`.)
     if (parent == nullptr) {
         throw std::invalid_argument(
             "webserver_impl requires a non-null owning webserver pointer");
