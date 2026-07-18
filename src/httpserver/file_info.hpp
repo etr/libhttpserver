@@ -29,7 +29,7 @@
 
 namespace httpserver {
 class webserver;
-namespace detail { class webserver_impl; }
+namespace detail { class webserver_impl; class upload_pipeline; }
 
 namespace http {
 
@@ -55,6 +55,7 @@ class file_info {
 
      friend class httpserver::webserver;
      friend class httpserver::detail::webserver_impl;
+     friend class httpserver::detail::upload_pipeline;
 };
 
 }  // namespace http

@@ -79,6 +79,7 @@
 #include "httpserver/detail/ip_access_control.hpp"
 #include "httpserver/detail/response_materializer.hpp"
 #include "httpserver/detail/route_table.hpp"
+#include "httpserver/detail/upload_pipeline.hpp"
 #include "httpserver/detail/ws_registry.hpp"
 
 #if MHD_VERSION < 0x00097002
@@ -292,6 +293,11 @@ class webserver_impl {
     // hooks_dispatch_ + digest_opaque_ + parent->config. The webserver_impl
     // materialize_and_queue_response method forwards here.
     response_materializer response_mat_;
+
+    // Behavior service (DR-014 §4.11): multipart / file-upload handling.
+    // Holds only parent->config. The post_iterator MHD trampoline forwards
+    // here (impl_->upload_.iterate_file / upload_pipeline::handle_post_form_arg).
+    upload_pipeline upload_;
 
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class

@@ -361,31 +361,12 @@ void commit_handlers_to_shim(detail::lambda_resource& shim,
                              std::function<::httpserver::http_response(
                                  const ::httpserver::http_request&)> handler);
 
-// Helpers carved out of post_iterator. The MHD post-iterator
-// trampoline is a static MHD callback; the orchestrator below
-// (process_file_upload) is an instance method because it reads the
-// const config bag on parent (file_upload_target,
-// generate_random_filename_on_upload, file_upload_dir).
-static MHD_Result handle_post_form_arg(modded_request* mr,
-                                       const char* key,
-                                       const char* data,
-                                       size_t size,
-                                       uint64_t off);
-bool setup_new_upload_file_info(::httpserver::http::file_info& file,
-                                const char* filename,
-                                const char* content_type,
-                                const char* transfer_encoding) const;
-static void manage_upload_stream(modded_request* mr,
-                                 const char* filename,
-                                 const char* key,
-                                 ::httpserver::http::file_info& file);
-MHD_Result process_file_upload(modded_request* mr,
-                               const char* key,
-                               const char* filename,
-                               const char* content_type,
-                               const char* transfer_encoding,
-                               const char* data,
-                               size_t size) const;
+// The multipart / file-upload handling (handle_post_form_arg,
+// setup_new_upload_file_info, manage_upload_stream, process_file_upload,
+// and the post_iterator file branch) lives in the upload_pipeline behavior
+// service (DR-014 §4.11), reached through impl_->upload_. The post_iterator
+// static MHD trampoline below stays here (its address is registered with
+// MHD_create_post_processor) and forwards into that service.
 
 // Map a wire-string HTTP method to mr->callback (pointer-to-member
 // dispatch), mr->method_enum (for is_allowed checks), and mr->has_body

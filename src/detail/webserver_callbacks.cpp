@@ -65,6 +65,7 @@
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
 #include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/upload_pipeline.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
@@ -362,94 +363,14 @@ size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char
     return std::char_traits<char>::length(s);
 }
 
-MHD_Result webserver_impl::handle_post_form_arg(detail::modded_request* mr,
-        const char* key, const char* data, size_t size, uint64_t off) {
-    // MHD may invoke the post iterator with a null key on a continuation
-    // chunk (off > 0): the field name was supplied on the first call and
-    // is not repeated. With no field name there is nothing to store the
-    // value under, so silently accept the chunk (MHD_YES tells MHD to
-    // continue; MHD_NO would abort the whole request). Guarding here also
-    // stops the raw pointer from reaching std::string, which throws
-    // std::logic_error on null and aborts the process via std::terminate
-    // because the throw escapes a C callback. See issue #375 (same class
-    // of bug as the null-uri fix in uri_log, issue #371).
-    if (key == nullptr) {
-        return MHD_YES;
-    }
-    // No file: set the arg key/value and return. A non-zero @p off
-    // means MHD is feeding us a continuation chunk of a previously-
-    // started value, so append rather than replace.
-    if (off > 0) {
-        mr->request->grow_last_arg(key, std::string(data, size));
-    } else {
-        mr->request->set_arg(key, std::string(data, size));
-    }
-    return MHD_YES;
-}
-
-bool webserver_impl::setup_new_upload_file_info(http::file_info& file,
-        const char* filename, const char* content_type,
-        const char* transfer_encoding) const {
-    // First chunk for this (key, filename) pair: choose the on-disk
-    // destination path (random if generate_random_filename_on_upload,
-    // otherwise sanitize the client-supplied filename) and prime the
-    // file_info with content_type / transfer_encoding when MHD gave
-    // them to us.
-    if (parent->config.generate_random_filename_on_upload) {
-        file.set_file_system_file_name(
-            http_utils::generate_random_upload_filename(parent->config.file_upload_dir));
-    } else {
-        std::string safe_name = http_utils::sanitize_upload_filename(filename);
-        if (safe_name.empty()) return false;
-        file.set_file_system_file_name(parent->config.file_upload_dir + "/" + safe_name);
-    }
-    // Avoid appending to a leftover file from a previous request.
-    unlink(file.get_file_system_file_name().c_str());
-    if (content_type != nullptr) file.set_content_type(content_type);
-    if (transfer_encoding != nullptr) file.set_transfer_encoding(transfer_encoding);
-    return true;
-}
-
-void webserver_impl::manage_upload_stream(detail::modded_request* mr,
-        const char* filename, const char* key, http::file_info& file) {
-    // If MHD switches us to a different (filename, key) pair, close the
-    // previous output stream. The four-way OR covers fresh state (both
-    // tracking strings empty) and either coordinate changing.
-    if (mr->upload_filename.empty()
-            || mr->upload_key.empty()
-            || strcmp(filename, mr->upload_filename.c_str()) != 0
-            || strcmp(key, mr->upload_key.c_str()) != 0) {
-        if (mr->upload_ostrm != nullptr) mr->upload_ostrm->close();
-    }
-    // Open a stream when we don't already have one (first chunk, or
-    // just-closed above).
-    if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
-        mr->upload_key = key;
-        mr->upload_filename = filename;
-        mr->upload_ostrm = std::make_unique<std::ofstream>();
-        mr->upload_ostrm->open(file.get_file_system_file_name(),
-                               std::ios::binary | std::ios::app);
-    }
-}
-
-MHD_Result webserver_impl::process_file_upload(detail::modded_request* mr,
-        const char* key, const char* filename, const char* content_type,
-        const char* transfer_encoding, const char* data, size_t size) const {
-    http::file_info& file = mr->request->get_or_create_file_info(key, filename);
-    if (file.get_file_system_file_name().empty()) {
-        if (!setup_new_upload_file_info(file, filename, content_type, transfer_encoding)) {
-            return MHD_NO;
-        }
-    }
-    manage_upload_stream(mr, filename, key, file);
-    if (size > 0) {
-        mr->upload_ostrm->write(data, size);
-        if (!mr->upload_ostrm->good()) return MHD_NO;
-    }
-    file.grow_file_size(size);
-    return MHD_YES;
-}
-
+// MHD post-iterator trampoline. Registered with MHD_create_post_processor
+// (webserver_body_pipeline.cpp); its address is taken, so it stays a static
+// webserver_impl member. The upload logic moved to the upload_pipeline
+// behavior service (DR-014 §4.11). The no-file form-arg branch uses the
+// static upload_pipeline::handle_post_form_arg so it is reachable without an
+// owning webserver (post_iterator_null_key_test feeds a null-ws
+// modded_request); the file branch routes through the owning webserver's
+// upload_ instance.
 MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *key, const char *filename, const char *content_type,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
@@ -458,23 +379,10 @@ MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
     auto* mr = static_cast<detail::modded_request*>(cls);
 
     if (!filename) {
-        return handle_post_form_arg(mr, key, data, size, off);
+        return upload_pipeline::handle_post_form_arg(mr, key, data, size, off);
     }
-
-    try {
-        if (mr->ws->config.file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-            mr->request->set_arg_flat(key,
-                std::string(mr->request->get_arg(key)) + std::string(data, size));
-        }
-        if (*filename != '\0' && mr->ws->config.file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
-            MHD_Result r = mr->ws->impl_->process_file_upload(
-                mr, key, filename, content_type, transfer_encoding, data, size);
-            if (r != MHD_YES) return r;
-        }
-        return MHD_YES;
-    } catch (const http::generateFilenameException&) {
-        return MHD_NO;
-    }
+    return mr->ws->impl_->upload_.iterate_file(
+        mr, key, filename, content_type, transfer_encoding, data, size);
 }
 
 }  // namespace detail
