@@ -80,6 +80,7 @@
 #include "httpserver/detail/response_materializer.hpp"
 #include "httpserver/detail/route_table.hpp"
 #include "httpserver/detail/upload_pipeline.hpp"
+#include "httpserver/detail/websocket_upgrader.hpp"
 #include "httpserver/detail/ws_registry.hpp"
 
 #if MHD_VERSION < 0x00097002
@@ -248,15 +249,11 @@ class webserver_impl {
     // other cluster's; no call site holds two of them at once.
     ws_registry ws_;
 
-    struct ws_upgrade_data {
-        webserver_impl* impl;
-        std::shared_ptr<::httpserver::websocket_handler> handler;
-    };
-
-    static void upgrade_handler(void *cls, struct MHD_Connection* connection,
-                                void *req_cls, const char *extra_in,
-                                size_t extra_in_size, MHD_socket sock,
-                                struct MHD_UpgradeResponseHandle *urh);
+    // Behavior service (DR-014 §4.11): RFC-6455 upgrade handshake + the
+    // per-connection frame receive loop. Holds ws_ (the handler registry).
+    // The webserver_impl try_handle_websocket_upgrade method forwards here.
+    // Gated with ws_ since both require HAVE_WEBSOCKET.
+    websocket_upgrader ws_upgrader_;
 #endif  // HAVE_WEBSOCKET
 
 #if defined(HAVE_GNUTLS) && defined(MHD_OPTION_HTTPS_CERT_CALLBACK)

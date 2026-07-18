@@ -283,21 +283,11 @@ MHD_Result finalize_answer(MHD_Connection* connection, modded_request* mr);
 // in order, to the websocket-upgrade probe, the resource lookup,
 // the auth short-circuit, the dispatch path, and the response
 // materialiser.
+// Forwards to the websocket_upgrader behavior service (DR-014 §4.11) on
+// HAVE_WEBSOCKET builds; a no-op returning nullopt otherwise. The handshake
+// validation, upgrade completion, and frame loop live in that service.
 std::optional<MHD_Result> try_handle_websocket_upgrade(MHD_Connection* connection,
                                                        modded_request* mr);
-#ifdef HAVE_WEBSOCKET
-// Returns the validated Sec-WebSocket-Key on a well-formed RFC 6455
-// handshake; nullopt if any required header is missing or malformed.
-std::optional<const char*> validate_websocket_handshake(MHD_Connection* connection);
-
-// Finish the upgrade once the handshake is validated. Returns the
-// MHD_queue_response result if the upgrade was queued; nullopt if
-// no handler is registered at this URL or the upgrade response
-// could not be created (caller falls through to normal dispatch).
-std::optional<MHD_Result> complete_websocket_upgrade(MHD_Connection* connection,
-                                                     modded_request* mr,
-                                                     const char* ws_key);
-#endif  // HAVE_WEBSOCKET
 
 // Locate the resource serving @p mr by consulting lookup_v2
 // (cache -> exact -> radix -> regex). Returns true and sets @p hrm on
