@@ -4,6 +4,18 @@
 
 **Implementation:** PIMPL via `std::unique_ptr<http_request_impl>` (with a custom deleter that supports both heap and arena lifetimes). The impl is **arena-allocated** from a `std::pmr::monotonic_buffer_resource` that lives on the connection (one arena per MHD connection, reset between requests on the same keep-alive connection). The arena also backs the impl's owned strings and lazy-cache containers where practical, eliminating per-request `malloc` on the hot path. *[Historical note: the PIMPL boundary was introduced in TASK-015 using `std::make_unique` as a temporary heap allocation; the per-connection arena plumbing was wired in TASK-016, completing the DR-003b Option 2 decision.]*
 
+**Implementation structure (`http_request_impl`).** The backing impl is a *single* class (`detail::http_request_impl`, `src/httpserver/detail/http_request_impl.hpp`) that owns ~40 data members spanning five concerns; unlike `webserver_impl` (DR-014) it is deliberately **not** decomposed into sub-collaborators — it is handled as one arena-allocated unit and the DR-003b per-connection PMR allocation makes any collaborator split a distinct, deferred problem. It *is* file-split by concern so contributors and tooling can navigate it; the map:
+
+| Concern | Members (representative) | Definition file |
+|---|---|---|
+| Backend handles | `connection_` (MHD), `unescaper_`, `files_` | `detail/http_request_impl.cpp` |
+| Lazy-cache farm | args / headers / footers / cookies / querystring / path-pieces caches + their `*_built_` guard bools + `get_cookies_parsed` vector | `detail/http_request_impl.cpp` (core), `detail/http_request_impl_args.cpp` (GET/POST arg parsing + arena unescape) |
+| Test-request local storage | `headers_local` / `footers_local` / `cookies_local` (used only by `create_test_request`) | `detail/http_request_impl.cpp` |
+| Auth credentials | Basic user/pass, Digest username, `check_digest_auth` family | `http_request_auth.cpp` (`HAVE_BAUTH` / `HAVE_DAUTH`) |
+| GnuTLS client-cert cache | `gnutls_session_t` handle + the ~8 extracted cert fields (DN, issuer, CN, fingerprint, validity, verified) | `detail/http_request_impl_tls.cpp` (`HAVE_GNUTLS`) |
+
+All four `.cpp` files operate on the same one `http_request_impl` object; there are no sub-collaborator types (contrast the webserver's `daemon_` / `routes_` / `hooks_`). A future collaborator extraction (e.g. `cert_cache`, `lazy_arg_cache`, `auth_credentials`) is a possible follow-on but is out of scope for v2.0 (DR-014 "Scope boundaries").
+
 **Interfaces:**
 - Exposes (from PRD §3.6):
   - `get_path()`, `get_method()`, `get_version()`, `get_content()`, `get_querystring()` returning `string_view`
