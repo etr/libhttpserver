@@ -98,7 +98,10 @@ void install_internal_error_alias(
         detail::webserver_impl* impl,
         internal_error_handler_t user_handler) {
     if (user_handler == nullptr) return;
-    impl->handler_exception_alias_ =
+    // set_handler_exception_alias also arms any_hooks_[handler_exception]
+    // so the gate stays the canonical zero-cost fast-check regardless of
+    // whether hooks are in the vector or only in the alias slot.
+    impl->hooks_.set_handler_exception_alias(
         [user_handler = std::move(user_handler)](
                 const handler_exception_ctx& ctx) -> hook_action {
             // mr->request is always non-null at the call site in
@@ -110,12 +113,7 @@ void install_internal_error_alias(
             if (ctx.request == nullptr) return hook_action::pass();
             return hook_action::respond_with(
                 user_handler(*ctx.request, ctx.message));
-        };
-    // Set the any_hooks_ gate so it remains the canonical zero-cost fast-
-    // check for handler_exception, regardless of whether hooks are in the
-    // vector or only in the alias slot.
-    impl->any_hooks_[static_cast<std::size_t>(hook_phase::handler_exception)]
-        .store(true, std::memory_order_release);
+        });
 }
 
 // SECURITY (CWE-117): sanitize a string_view for use in an access-log line.
@@ -139,7 +137,7 @@ void install_log_access_alias(
         detail::webserver_impl* impl,
         log_access_ptr user_logger) {
     if (user_logger == nullptr) return;
-    impl->log_access_alias_ =
+    impl->hooks_.set_log_access_alias(
         [user_logger = std::move(user_logger)](
                 const response_sent_ctx& ctx) {
         if (ctx.request == nullptr) return;
@@ -158,7 +156,7 @@ void install_log_access_alias(
         line += " METHOD: ";
         append_sanitized(line, method);
         user_logger(line);
-    };
+    });
 }
 
 }  // namespace

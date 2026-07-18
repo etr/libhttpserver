@@ -107,7 +107,7 @@ double measure_gate_cost(hs::webserver& ws, std::size_t outer, std::size_t inner
     auto* impl = hs::webserver_test_access::impl(ws);
     constexpr std::size_t kPhaseIdx =
         static_cast<std::size_t>(hs::hook_phase::response_sent);
-    auto& gate = impl->any_hooks_[kPhaseIdx];
+    auto& gate = impl->hooks_.any_hooks_[kPhaseIdx];
 
     // measure_median_ns's default 10 000-iteration warmup primes the
     // branch predictor. The true thermal / instruction-cache warmup

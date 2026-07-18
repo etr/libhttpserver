@@ -66,7 +66,7 @@ namespace detail {
 class resource_hook_table {
  public:
     // Slot entry: monotonically increasing id + the callable. Mirrors
-    // webserver_impl::phase_entry<Sig> but lives in this class so the
+    // hook_bus::phase_entry<Sig> but lives in this class so the
     // public umbrella stays free of <functional>/<vector> transitives.
     template <class Sig>
     struct entry {

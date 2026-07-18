@@ -189,7 +189,7 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr,
     const bool route_gate = rtable != nullptr &&
         rtable->any_hooks(hook_phase::response_sent);
 
-    if (!server_gate && !route_gate && !log_access_alias_) return;
+    if (!server_gate && !route_gate && !hooks_.has_log_access_alias()) return;
     // mr->response is null only if materialize_and_queue_response's
     // belt-and-suspenders fallback also failed; fire nothing rather than crash.
     if (!mr->response) return;

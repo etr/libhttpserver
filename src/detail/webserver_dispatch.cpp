@@ -361,7 +361,7 @@ void handle_dispatch_exception(
         rtable->any_hooks(hook_phase::handler_exception);
     const bool server_chain =
         impl->has_hooks_for(hook_phase::handler_exception) ||
-        impl->handler_exception_alias_;
+        impl->hooks_.has_handler_exception_alias();
 
     if (server_chain || per_route) {
         // Capture the live exception_ptr before constructing the ctx so

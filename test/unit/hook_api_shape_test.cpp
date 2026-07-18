@@ -142,7 +142,7 @@ webserver make_ws() {
 // is keyed by phase, so we centralise the switch here.
 std::size_t phase_size(webserver_impl* impl, hook_phase p);
 bool any_hook(webserver_impl* impl, hook_phase p) {
-    return impl->any_hooks_[static_cast<std::size_t>(p)].load(
+    return impl->hooks_.any_hooks_[static_cast<std::size_t>(p)].load(
         std::memory_order_acquire);
 }
 

@@ -122,9 +122,7 @@ classify_decision(int default_policy, bool is_denied, bool is_allowed) {
 // add is acceptable; the hook simply fires on the next event.
 inline bool is_phase_armed(const detail::webserver_impl* impl,
                            ::httpserver::hook_phase p) noexcept {
-    return impl != nullptr &&
-           impl->any_hooks_[static_cast<std::size_t>(p)]
-               .load(std::memory_order_relaxed);
+    return impl != nullptr && impl->has_hooks_for(p);
 }
 
 }  // namespace

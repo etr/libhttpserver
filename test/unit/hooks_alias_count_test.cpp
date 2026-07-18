@@ -39,12 +39,12 @@ namespace {
 
 std::size_t before_handler_count(webserver& ws) {
     auto* impl = httpserver::webserver_test_access::impl(ws);
-    return impl->hooks_before_handler_.size();
+    return impl->hooks_.hooks_before_handler_.size();
 }
 
 std::size_t route_resolved_count(webserver& ws) {
     auto* impl = httpserver::webserver_test_access::impl(ws);
-    return impl->hooks_route_resolved_.size();
+    return impl->hooks_.hooks_route_resolved_.size();
 }
 
 }  // namespace

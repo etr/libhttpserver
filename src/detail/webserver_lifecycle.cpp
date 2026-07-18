@@ -121,7 +121,7 @@ void webserver_impl::add_base_mhd_options(std::vector<MHD_OptionItem>& iov) cons
     // to the MHD_Connection's lifetime; request_completed reuses the
     // arena across keep-alive request boundaries via arena_.release().
     // The closure pointer is the owning webserver* so the callback can
-    // reach impl_->any_hooks_ / fire_connection_opened /
+    // reach impl_->hooks_ (has_hooks_for) / fire_connection_opened /
     // fire_connection_closed.
     iov.push_back(make_option(MHD_OPTION_NOTIFY_CONNECTION,
                               (intptr_t) &webserver_impl::connection_notify, parent));

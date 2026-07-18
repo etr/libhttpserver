@@ -71,6 +71,7 @@
 #include "httpserver/hook_context.hpp"
 #include "httpserver/hook_phase.hpp"
 #include "httpserver/detail/connection_state.hpp"
+#include "httpserver/detail/hook_bus.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/ip_access_control.hpp"
 #include "httpserver/detail/segment_trie.hpp"
@@ -265,114 +266,23 @@ class webserver_impl {
     // WebSocket dispatch resolves handlers through the separate ws_ registry.
     lookup_result lookup_v2(http_method method, const std::string& path);
 
-    // Lifecycle hook bus.
-    //
-    // Per-phase callable storage. Each phase has its own
-    // std::vector<phase_entry<Sig>> because phase signatures differ
-    // (some return void, some return hook_action; ctx types differ).
-    // Concurrency:
-    //   - `hook_table_mutex_` is a shared_mutex covering ALL eleven
-    //     phase vectors. Writers (add_hook, hook_handle::remove) take
-    //     a unique_lock; firing sites take a shared_lock to snapshot a
-    //     phase vector before iterating.
-    //   - `any_hooks_[i]` is an ADVISORY short-circuit gate so that a
-    //     phase with no registrations costs one atomic load on the
-    //     dispatch hot path:
-    //       if (has_hooks_for(phase)) {   // relaxed load
-    //           std::shared_lock lk(hook_table_mutex_); /* snapshot */ }
-    //     The relaxed load is sufficient because no reader ever touches
-    //     a phase vector without first acquiring hook_table_mutex_; the
-    //     mutex, not the atomic, provides the happens-before for the
-    //     vector contents. The gate may be momentarily stale in either
-    //     direction and both races are benign: a stale false skips
-    //     hooks whose registration ran concurrently with the firing,
-    //     and a stale true costs one shared_lock acquisition that finds
-    //     the vector empty. The gate is set on first registration of a
-    //     phase and cleared when the phase's vector drops to empty,
-    //     always under the unique_lock (the release ordering on those
-    //     stores is redundant with the mutex unlock; it carries no
-    //     extra guarantee).
-    //   - `next_slot_id_` is a monotonic 64-bit counter. It is never
-    //     reused, so a hook_handle whose slot has already been erased
-    //     simply finds no match in remove() -- the idempotent no-op
-    //     path. 64 bits is unboundedly large in practice (centuries
-    //     at any realistic registration rate).
-    template <class Sig>
-    struct phase_entry {
-        std::uint64_t slot_id;
-        std::function<Sig> fn;
-    };
+    // Lifecycle hook bus. Owns the eleven server-wide phase vectors, the
+    // shared registration mutex, the advisory any_hooks_ gate array, and
+    // the handler_exception / log_access alias slots. webserver::add_hook
+    // registers into it (hooks_.add); hook_handle::remove erases
+    // (hooks_.remove); the fire_* / has_hooks_for / phase_hook_count
+    // forwarders below delegate to it, binding log_dispatch_error as the
+    // per-call error logger. Its mutex is independent of every other
+    // cluster's; no call site holds two of them at once.
+    hook_bus hooks_;
 
-    std::shared_mutex hook_table_mutex_;
-    std::atomic<std::uint64_t> next_slot_id_{1};
-    std::array<std::atomic<bool>,
-               static_cast<std::size_t>(hook_phase::count_)> any_hooks_{};
-
-    // Returns true iff at least one hook is registered for phase @p p.
-    // Relaxed load is sufficient -- see the any_hooks_ contract above.
-    // Encapsulates the cast so call sites read as
-    // `has_hooks_for(hook_phase::X)` instead of the raw index expression.
+    // Thin forwarder to the collaborator (see hook_bus::has_hooks_for).
+    // Kept on webserver_impl so the many gate-check call sites and the
+    // webserver_test_access bridge read `has_hooks_for(hook_phase::X)`
+    // unchanged.
     bool has_hooks_for(::httpserver::hook_phase p) const noexcept {
-        return any_hooks_[static_cast<std::size_t>(p)].load(
-            std::memory_order_relaxed);
+        return hooks_.has_hooks_for(p);
     }
-
-    std::vector<phase_entry<void(const ::httpserver::connection_open_ctx&)>>
-        hooks_connection_opened_;
-    std::vector<phase_entry<void(const ::httpserver::accept_ctx&)>>
-        hooks_accept_decision_;
-    std::vector<phase_entry<::httpserver::hook_action(
-            ::httpserver::request_received_ctx&)>>
-        hooks_request_received_;
-    std::vector<phase_entry<::httpserver::hook_action(
-            ::httpserver::body_chunk_ctx&)>>
-        hooks_body_chunk_;
-    std::vector<phase_entry<void(const ::httpserver::route_resolved_ctx&)>>
-        hooks_route_resolved_;
-    std::vector<phase_entry<::httpserver::hook_action(
-            ::httpserver::before_handler_ctx&)>>
-        hooks_before_handler_;
-    std::vector<phase_entry<::httpserver::hook_action(
-            const ::httpserver::handler_exception_ctx&)>>
-        hooks_handler_exception_;
-    // internal_error_handler alias slot. Last-position fallback in the
-    // handler_exception chain. Distinct from hooks_handler_exception_
-    // because it must fire AFTER all user hooks -- the opposite of the
-    // functional first-position aliases which run before user hooks. By
-    // sitting in a dedicated slot rather than the vector, the alias never
-    // contends for ordering when a user does add_hook(handler_exception, ...).
-    //
-    // Lifetime: written exactly once during install_default_alias_hooks_()
-    // at webserver construction, before start() is called -- the daemon is
-    // not yet running, so no synchronisation is required for the write.
-    // Read on the dispatch hot path from fire_handler_exception with no
-    // lock. Slot is immutable after construction; the reader path
-    // requires no synchronisation.
-    std::function<::httpserver::hook_action(
-            const ::httpserver::handler_exception_ctx&)>
-        handler_exception_alias_;
-    std::vector<phase_entry<::httpserver::hook_action(
-            ::httpserver::after_handler_ctx&)>>
-        hooks_after_handler_;
-    std::vector<phase_entry<void(const ::httpserver::response_sent_ctx&)>>
-        hooks_response_sent_;
-    // log_access alias slot. Mirrors handler_exception_alias_:
-    // single-writer-at-construction, read on the dispatch hot
-    // path from fire_response_sent without a lock. webserver's ctor wires
-    // this slot from create_webserver().log_access(fn) if the user
-    // supplied a non-null callable.
-    //
-    // The slot fires AFTER user-added response_sent hooks so user hooks
-    // observe the response before the legacy access logger formats it.
-    //
-    // Slot is immutable after construction; the reader path requires no
-    // synchronisation.
-    std::function<void(const ::httpserver::response_sent_ctx&)>
-        log_access_alias_;
-    std::vector<phase_entry<void(const ::httpserver::request_completed_ctx&)>>
-        hooks_request_completed_;
-    std::vector<phase_entry<void(const ::httpserver::connection_close_ctx&)>>
-        hooks_connection_closed_;
 
     // IP allow/deny access control (deny/allow sets + their mutexes) lives
     // behind this collaborator. policy_callback consults it via classify();
@@ -407,64 +317,16 @@ class webserver_impl {
     mutable std::shared_mutex sni_credentials_mutex;
 #endif  // HAVE_GNUTLS && MHD_OPTION_HTTPS_CERT_CALLBACK
 
-    // Single accessor for the per-phase vector size.
-    // Exposes the per-phase registration count through one switch rather
-    // than requiring callers (e.g., test code) to name individual per-phase
-    // vector members. The HTTPSERVER_COMPILATION friend bridge in
-    // webserver.hpp (webserver_test_access) gives test TUs access to impl*.
+    // Per-phase registration count. Thin forwarder to the collaborator
+    // (see hook_bus::phase_hook_count). Kept on webserver_impl so the
+    // HTTPSERVER_COMPILATION friend bridge in webserver.hpp
+    // (webserver_test_access) reaches it as impl->phase_hook_count(p)
+    // unchanged.
     [[nodiscard]] std::size_t phase_hook_count(
             ::httpserver::hook_phase p) const noexcept {
-        // Split the per-phase fanout in two so each helper stays under the
-        // project-wide CCN gate. Lifecycle-side phases (start through
-        // route_resolved) route through phase_hook_count_lifecycle_;
-        // handler-side phases (before_handler onwards) route through
-        // phase_hook_count_handler_.
-        if (static_cast<int>(p) <=
-                static_cast<int>(::httpserver::hook_phase::route_resolved)) {
-            return phase_hook_count_lifecycle_(p);
-        }
-        return phase_hook_count_handler_(p);
+        return hooks_.phase_hook_count(p);
     }
 
- private:
-    [[nodiscard]] std::size_t phase_hook_count_lifecycle_(
-            ::httpserver::hook_phase p) const noexcept {
-        switch (p) {
-        case ::httpserver::hook_phase::connection_opened:
-            return hooks_connection_opened_.size();
-        case ::httpserver::hook_phase::accept_decision:
-            return hooks_accept_decision_.size();
-        case ::httpserver::hook_phase::request_received:
-            return hooks_request_received_.size();
-        case ::httpserver::hook_phase::body_chunk:
-            return hooks_body_chunk_.size();
-        case ::httpserver::hook_phase::route_resolved:
-            return hooks_route_resolved_.size();
-        default:
-            return 0;
-        }
-    }
-    [[nodiscard]] std::size_t phase_hook_count_handler_(
-            ::httpserver::hook_phase p) const noexcept {
-        switch (p) {
-        case ::httpserver::hook_phase::before_handler:
-            return hooks_before_handler_.size();
-        case ::httpserver::hook_phase::handler_exception:
-            return hooks_handler_exception_.size();
-        case ::httpserver::hook_phase::after_handler:
-            return hooks_after_handler_.size();
-        case ::httpserver::hook_phase::response_sent:
-            return hooks_response_sent_.size();
-        case ::httpserver::hook_phase::request_completed:
-            return hooks_request_completed_.size();
-        case ::httpserver::hook_phase::connection_closed:
-            return hooks_connection_closed_.size();
-        default:
-            return 0;
-        }
-    }
-
- public:
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class
     // definition under the project per-file LOC ceiling. The inner gate

@@ -101,89 +101,6 @@ static void remove_per_route(std::weak_ptr<detail::resource_hook_table>& weak,
     }
 }
 
-namespace {
-
-// erase_slot_for_phase: route the (impl, phase, slot_id) tuple to the
-// correctly-typed per-phase vector and invoke `erase_and_reset` (a generic
-// lambda) on it. Split out of hook_handle::remove so the parent function
-// stays under the project-wide CCN gate; the per-phase typed dispatch is
-// intrinsically one-arm-per-phase so the CCN cost lives here instead.
-// The dispatch is split into two helpers (`_lifecycle` / `_handler`) so
-// each helper stays inside the CCN ceiling. The helper names mirror the
-// enum ranges (phase <= route_resolved vs the rest), not true
-// lifecycle-vs-handler semantics -- e.g. connection_closed lands in the
-// `_handler_` helper.
-
-template <class EraseFn>
-void erase_slot_for_lifecycle_phase_(detail::webserver_impl* impl,
-                                     hook_phase phase,
-                                     const EraseFn& erase_and_reset) {
-    switch (phase) {
-    case hook_phase::connection_opened:
-        erase_and_reset(impl->hooks_connection_opened_); break;
-    case hook_phase::accept_decision:
-        erase_and_reset(impl->hooks_accept_decision_); break;
-    case hook_phase::request_received:
-        erase_and_reset(impl->hooks_request_received_); break;
-    case hook_phase::body_chunk:
-        erase_and_reset(impl->hooks_body_chunk_); break;
-    case hook_phase::route_resolved:
-        erase_and_reset(impl->hooks_route_resolved_); break;
-    default:
-        break;
-    }
-}
-
-template <class EraseFn>
-void erase_slot_for_handler_phase_(detail::webserver_impl* impl,
-                                   hook_phase phase,
-                                   const EraseFn& erase_and_reset) {
-    switch (phase) {
-    case hook_phase::before_handler:
-        erase_and_reset(impl->hooks_before_handler_); break;
-    case hook_phase::handler_exception:
-        // The alias slot (handler_exception_alias_) is immutable after
-        // construction, so remove() only touches the
-        // user vector here. install_internal_error_alias()
-        // (src/detail/webserver_aliases.cpp) is the place that sets
-        // any_hooks_[handler_exception] = true at construction time when
-        // only the alias is wired (no user hooks yet), so the gate stays
-        // the single source of truth even before any add_hook() call.
-        // erase_and_reset (below, in hook_handle::remove()) re-checks
-        // handler_exception_alias_ before clearing any_hooks_ on an
-        // empty user vector, so the gate correctly remains true for as
-        // long as the alias is still wired.
-        erase_and_reset(impl->hooks_handler_exception_); break;
-    case hook_phase::after_handler:
-        erase_and_reset(impl->hooks_after_handler_); break;
-    case hook_phase::response_sent:
-        erase_and_reset(impl->hooks_response_sent_); break;
-    case hook_phase::request_completed:
-        erase_and_reset(impl->hooks_request_completed_); break;
-    case hook_phase::connection_closed:
-        erase_and_reset(impl->hooks_connection_closed_); break;
-    default:
-        break;
-    }
-}
-
-template <class EraseFn>
-void erase_slot_for_phase(detail::webserver_impl* impl,
-                          hook_phase phase,
-                          const EraseFn& erase_and_reset) {
-    // The switch arms in the helpers below cannot collapse into a table
-    // lookup because each phase vector is a differently-typed
-    // phase_entry<Sig>.
-    if (static_cast<int>(phase) <=
-            static_cast<int>(hook_phase::route_resolved)) {
-        erase_slot_for_lifecycle_phase_(impl, phase, erase_and_reset);
-        return;
-    }
-    erase_slot_for_handler_phase_(impl, phase, erase_and_reset);
-}
-
-}  // namespace
-
 void hook_handle::remove() noexcept {
     if (!armed_) {
         return;
@@ -199,56 +116,20 @@ void hook_handle::remove() noexcept {
         remove_per_route(table_weak_, phase, id);
         return;
     }
-    // Snapshot the source state and disarm BEFORE doing the erase, so
-    // any exception from the lambda's destructor (very unlikely, but
-    // remove() is declared noexcept and std::terminate is the
-    // observable outcome anyway) does not leave the handle in a
-    // half-removed state.
+    // Snapshot the source state and disarm BEFORE delegating the erase,
+    // so any exception (very unlikely, but remove() is declared noexcept
+    // and std::terminate is the observable outcome anyway) does not leave
+    // the handle in a half-removed state. hook_bus::remove is the single
+    // owner of the erase-and-gate-clear logic (scan the phase vector,
+    // erase, clear the any_hooks_ gate if the vector empties -- but not
+    // out from under a still-wired alias slot).
     auto* impl = impl_;
     const auto phase = phase_;
     const auto id = slot_id_;
     armed_ = false;
     impl_ = nullptr;
 
-    std::unique_lock lock(impl->hook_table_mutex_);
-
-    // Linear scan for the matching slot. Phase vectors are tiny in
-    // practice (single-digit hook counts). A not-found result is the
-    // idempotent no-op case: the slot was already erased by an earlier
-    // remove() or never inserted (defensive).
-    // erase_and_reset: linear scan for the slot, erase if found, and
-    // clear the any_hooks_ gate if the vector becomes empty. Phase
-    // vectors are tiny in practice (single-digit hook counts), so
-    // linear scan is the right shape here.
-    auto erase_and_reset = [id, impl, phase](auto& vec) {
-        for (auto it = vec.begin(); it != vec.end(); ++it) {
-            if (it->slot_id == id) {
-                vec.erase(it);
-                if (vec.empty()) {
-                    // Don't clear the gate out from under a still-wired
-                    // alias slot: handler_exception_alias_ / log_access_
-                    // alias_ are the "still has a hook" signal for their
-                    // phases even after the last user-vector entry is
-                    // removed. Both slots are write-once at webserver
-                    // construction and immutable thereafter, so
-                    // reading them here under
-                    // hook_table_mutex_ needs no extra synchronization.
-                    const bool alias_still_wired =
-                        (phase == hook_phase::handler_exception &&
-                         impl->handler_exception_alias_) ||
-                        (phase == hook_phase::response_sent &&
-                         impl->log_access_alias_);
-                    if (!alias_still_wired) {
-                        impl->any_hooks_[static_cast<std::size_t>(phase)]
-                            .store(false, std::memory_order_release);
-                    }
-                }
-                return;
-            }
-        }
-    };
-
-    erase_slot_for_phase(impl, phase, erase_and_reset);
+    impl->hooks_.remove(phase, id);
 }
 
 hook_handle hook_handle::detach() && noexcept {

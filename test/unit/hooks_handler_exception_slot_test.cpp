@@ -67,8 +67,8 @@ LT_BEGIN_AUTO_TEST(hooks_handler_exception_slot_suite,
                    baseline_no_alias_slot_empty_and_vector_empty)
     webserver ws{create_webserver(0)};
     auto* impl = impl_of(ws);
-    LT_CHECK(!impl->handler_exception_alias_);
-    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+    LT_CHECK(!impl->hooks_.handler_exception_alias_);
+    LT_CHECK_EQ(impl->hooks_.hooks_handler_exception_.size(),
                 static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(baseline_no_alias_slot_empty_and_vector_empty)
 
@@ -81,11 +81,11 @@ LT_BEGIN_AUTO_TEST(hooks_handler_exception_slot_suite,
     webserver ws{create_webserver(0)
         .internal_error_handler(handler)};
     auto* impl = impl_of(ws);
-    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
+    LT_CHECK(static_cast<bool>(impl->hooks_.handler_exception_alias_));
     // The alias must NOT push an entry into the user vector -- this is
     // the design contract distinguishing handler_exception from the
     // v1 aliases.
-    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+    LT_CHECK_EQ(impl->hooks_.hooks_handler_exception_.size(),
                 static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(internal_error_handler_populates_alias_slot_not_vector)
 
@@ -99,8 +99,8 @@ LT_BEGIN_AUTO_TEST(hooks_handler_exception_slot_suite,
         .internal_error_handler(handler)};
     auto* impl = impl_of(ws);
 
-    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
-    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+    LT_CHECK(static_cast<bool>(impl->hooks_.handler_exception_alias_));
+    LT_CHECK_EQ(impl->hooks_.hooks_handler_exception_.size(),
                 static_cast<std::size_t>(0));
 
     auto h = ws.add_hook(hook_phase::handler_exception,
@@ -110,8 +110,8 @@ LT_BEGIN_AUTO_TEST(hooks_handler_exception_slot_suite,
             }));
 
     // The user vector grew by 1; the alias slot is still set independently.
-    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
-    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+    LT_CHECK(static_cast<bool>(impl->hooks_.handler_exception_alias_));
+    LT_CHECK_EQ(impl->hooks_.hooks_handler_exception_.size(),
                 static_cast<std::size_t>(1));
 LT_END_AUTO_TEST(user_add_hook_grows_vector_alias_slot_untouched)
 

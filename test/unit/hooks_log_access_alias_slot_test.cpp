@@ -71,8 +71,8 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
                    baseline_no_alias_slot_empty_and_vector_empty)
     webserver ws{create_webserver(8244)};
     auto* impl = impl_of(ws);
-    LT_CHECK(!impl->log_access_alias_);
-    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
+    LT_CHECK(!impl->hooks_.log_access_alias_);
+    LT_CHECK_EQ(impl->hooks_.hooks_response_sent_.size(),
                 static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(baseline_no_alias_slot_empty_and_vector_empty)
 
@@ -82,9 +82,9 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     webserver ws{create_webserver(8244)
         .log_access(logger)};
     auto* impl = impl_of(ws);
-    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
+    LT_CHECK(static_cast<bool>(impl->hooks_.log_access_alias_));
     // The alias must NOT push an entry into the user vector.
-    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
+    LT_CHECK_EQ(impl->hooks_.hooks_response_sent_.size(),
                 static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(log_access_populates_alias_slot_not_vector)
 
@@ -104,7 +104,7 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     };
     webserver ws{create_webserver(8244).log_access(logger)};
     auto* impl = impl_of(ws);
-    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
+    LT_CHECK(static_cast<bool>(impl->hooks_.log_access_alias_));
 
     // Build a synthetic request with a newline injected in the path.
     http_request raw_req =
@@ -112,7 +112,7 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
 
     response_sent_ctx ctx{};
     ctx.request = &raw_req;
-    impl->log_access_alias_(ctx);
+    impl->hooks_.log_access_alias_(ctx);
 
     // The logged line must not contain any control characters.
     bool has_ctrl = std::any_of(captured.begin(), captured.end(),
@@ -133,14 +133,14 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     };
     webserver ws{create_webserver(8244).log_access(logger)};
     auto* impl = impl_of(ws);
-    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
+    LT_CHECK(static_cast<bool>(impl->hooks_.log_access_alias_));
 
     http_request raw_req =
         create_test_request().path("/hello").method("GET\r\nX-Injected: yes").build();
 
     response_sent_ctx ctx{};
     ctx.request = &raw_req;
-    impl->log_access_alias_(ctx);
+    impl->hooks_.log_access_alias_(ctx);
 
     bool has_ctrl = std::any_of(captured.begin(), captured.end(),
         [](unsigned char c) { return c < 0x20 || c == 0x7f; });
@@ -160,8 +160,8 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     auto* impl = impl_of(ws);
 
     // (a) Construction wires the slot exactly once.
-    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
-    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
+    LT_CHECK(static_cast<bool>(impl->hooks_.log_access_alias_));
+    LT_CHECK_EQ(impl->hooks_.hooks_response_sent_.size(),
                 static_cast<std::size_t>(0));
 
     // (b) Adding a user response_sent hook grows the vector but leaves
@@ -173,15 +173,15 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
             [&user_hook_calls](const response_sent_ctx&) {
                 ++user_hook_calls;
             }));
-    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
-    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
+    LT_CHECK(static_cast<bool>(impl->hooks_.log_access_alias_));
+    LT_CHECK_EQ(impl->hooks_.hooks_response_sent_.size(),
                 static_cast<std::size_t>(1));
 
     // (c) Removing the user hook leaves the alias slot untouched -- the
     // slot is not under user control via the hook bus.
     h.remove();
-    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
-    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
+    LT_CHECK(static_cast<bool>(impl->hooks_.log_access_alias_));
+    LT_CHECK_EQ(impl->hooks_.hooks_response_sent_.size(),
                 static_cast<std::size_t>(0));
 
     // (d) Direct invocation still reaches the construction-time callable.
@@ -189,7 +189,7 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
         create_test_request().path("/a").method("GET").build();
     response_sent_ctx ctx{};
     ctx.request = &req;
-    impl->log_access_alias_(ctx);
+    impl->hooks_.log_access_alias_(ctx);
     LT_CHECK_EQ(direct_calls, 1);
     LT_CHECK_EQ(user_hook_calls, 0);
 LT_END_AUTO_TEST(log_access_alias_is_immutable_after_construction)
@@ -211,8 +211,8 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     auto* impl = impl_of(ws);
 
     // (a) Construction wires the alias slot exactly once.
-    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
-    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+    LT_CHECK(static_cast<bool>(impl->hooks_.handler_exception_alias_));
+    LT_CHECK_EQ(impl->hooks_.hooks_handler_exception_.size(),
                 static_cast<std::size_t>(0));
 
     // (b) User add_hook(handler_exception, ...) grows the vector; alias
@@ -223,15 +223,15 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
             [](const httpserver::handler_exception_ctx&) {
                 return httpserver::hook_action::pass();
             }));
-    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
-    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+    LT_CHECK(static_cast<bool>(impl->hooks_.handler_exception_alias_));
+    LT_CHECK_EQ(impl->hooks_.hooks_handler_exception_.size(),
                 static_cast<std::size_t>(1));
 
     // (c) Removing the user hook does not clear the alias slot -- the
     // slot is not under user control via the hook bus.
     h.remove();
-    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
-    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+    LT_CHECK(static_cast<bool>(impl->hooks_.handler_exception_alias_));
+    LT_CHECK_EQ(impl->hooks_.hooks_handler_exception_.size(),
                 static_cast<std::size_t>(0));
 
     // (d) Direct invocation still reaches the construction-time callable.
@@ -239,7 +239,7 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
         create_test_request().path("/a").method("GET").build();
     httpserver::handler_exception_ctx ctx{};
     ctx.request = &req;
-    impl->handler_exception_alias_(ctx);
+    impl->hooks_.handler_exception_alias_(ctx);
     LT_CHECK_EQ(handler_calls, 1);
 LT_END_AUTO_TEST(handler_exception_alias_is_immutable_after_construction)
 
