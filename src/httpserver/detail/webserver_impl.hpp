@@ -71,6 +71,7 @@
 #include "httpserver/hook_context.hpp"
 #include "httpserver/hook_phase.hpp"
 #include "httpserver/detail/connection_state.hpp"
+#include "httpserver/detail/daemon_lifecycle.hpp"
 #include "httpserver/detail/hook_bus.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/ip_access_control.hpp"
@@ -157,26 +158,16 @@ class webserver_impl {
     // Set in the constructor to the owning webserver.
     webserver* parent = nullptr;
 
-    // Atomic so start() publishes the daemon pointer (and the immutable
-    // MHD daemon struct it points at, including the ephemeral bind port set
-    // before publication) with release semantics, and get_bound_port() et al.
-    // read it with acquire. This lets the ephemeral port be read safely from
-    // another thread while a blocking start() runs on a worker thread; fixes
-    // a TSan-flagged data race in the ws_start_stop integ test.
-    std::atomic<struct MHD_Daemon*> daemon{nullptr};
-    // MHD_socket (int on POSIX, SOCKET on Windows) for a caller-supplied
-    // pre-bound socket passed via create_webserver().bind_socket().
-    // MHD_INVALID_SOCKET (-1 on POSIX, INVALID_SOCKET on Windows) is the
-    // sentinel meaning "no pre-bound socket was provided".
-    MHD_socket bind_socket = MHD_INVALID_SOCKET;
-
-    pthread_mutex_t mutexwait;
-    pthread_cond_t  mutexcond;
-
-    // Atomic to allow lock-free reads in stop()/is_running() concurrent
-    // with the mutex-guarded writes in start()/stop(). TSan-flagged in the
-    // ws_start_stop integ test (start on worker thread, stop on main).
-    std::atomic<bool> running{false};
+    // MHD daemon handle + start/stop threading state + the daemon-
+    // construction builders (MHD option array + start-flag composers) live
+    // behind this collaborator. webserver::start/stop/is_running/
+    // get_bound_port/run/... (webserver_lifecycle.cpp) drive it via
+    // impl_->daemon_.{daemon,running,mutexwait,mutexcond,bind_socket} and
+    // daemon_.build_mhd_option_array / compose_start_flags. Constructed with
+    // a back-pointer to this impl so the builders can read parent config +
+    // the ws registry. Its pthread primitives are RAII (ctor init / dtor
+    // destroy).
+    daemon_lifecycle daemon_;
 
 #ifdef HAVE_DAUTH
     // Per-webserver-instance `opaque` value handed to

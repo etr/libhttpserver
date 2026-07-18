@@ -187,27 +187,24 @@ static std::string generate_random_hex_opaque_() {
 #endif  // HAVE_DAUTH
 
 webserver_impl::webserver_impl(webserver* parent, MHD_socket bind_socket_val)
-    : parent(parent), bind_socket(bind_socket_val) {
+    : parent(parent), daemon_(this, bind_socket_val) {
     // Guard against null parent: the dispatch helpers (not_found_page,
     // method_not_allowed_page, internal_error_page, etc.) read the const
     // config bag on `parent` and will dereference this pointer on every
     // request. The only valid call site is webserver::webserver, which
     // always passes `this` — a non-null pointer to the owning webserver.
+    // (daemon_ was already constructed with owner=this above; it stores the
+    // pointer but never dereferences parent config until start().)
     if (parent == nullptr) {
         throw std::invalid_argument(
             "webserver_impl requires a non-null owning webserver pointer");
     }
-    pthread_mutex_init(&mutexwait, nullptr);
-    pthread_cond_init(&mutexcond, nullptr);
 #ifdef HAVE_DAUTH
     digest_opaque_ = generate_random_hex_opaque_();
 #endif  // HAVE_DAUTH
 }
 
 webserver_impl::~webserver_impl() {
-    pthread_mutex_destroy(&mutexwait);
-    pthread_cond_destroy(&mutexcond);
-
 #if defined(HAVE_GNUTLS) && defined(MHD_OPTION_HTTPS_CERT_CALLBACK)
     // Clean up cached SNI credentials
     for (auto& [name, creds] : sni_credentials_cache) {

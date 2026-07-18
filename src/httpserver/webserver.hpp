@@ -73,6 +73,7 @@ class websocket_handler;
 namespace detail {
 struct modded_request;
 class webserver_impl;
+class daemon_lifecycle;
 class http_endpoint;
 }  // namespace detail
 }  // namespace httpserver
@@ -375,6 +376,10 @@ class webserver {
      // is preferable to introducing a long list of trivial public getters
      // that cross the PIMPL boundary in both directions.
      friend class detail::webserver_impl;
+     // daemon_lifecycle (the extracted MHD daemon-construction collaborator)
+     // reads the same const config bag when building the option array and
+     // start flags, so it needs the same friendship as webserver_impl.
+     friend class detail::daemon_lifecycle;
      friend class http_response;
 #if defined(HTTPSERVER_COMPILATION)
      // Test-only hook so unit tests in test/unit/ can poke
