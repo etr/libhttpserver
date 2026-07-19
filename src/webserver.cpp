@@ -52,7 +52,6 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <random>           // std::random_device for digest opaque
 #include <regex>
 #include <set>
 #include <shared_mutex>
@@ -149,90 +148,10 @@ static void ignore_sigpipe() {
 #endif
 }
 
-namespace detail {
-
-// ----- webserver_impl construction / destruction -------------------------
-
-// Seed `digest_opaque_` with 16 random bytes from
-// std::random_device, hex-encoded -> 32-char string. RFC 7616 §5.10:
-// opaque is an identifier, not a secret -- std::random_device gives the
-// "unpredictable enough that clients cannot guess server state"
-// property the RFC requires; the strong nonce HMAC keying is owned by
-// libmicrohttpd (MHD_OPTION_DIGEST_AUTH_RANDOM seed on the create_webserver).
-//
-// Note: std::random_device's fallback behaviour when no hardware/OS entropy
-// source is available is implementation-defined -- it may fall back to a
-// deterministic PRNG on some platforms/standard libraries. That does not
-// weaken security here: the RFC 7616 opaque is an identifier (not a
-// secret), and the anti-guessing guarantee for digest auth comes from
-// libmicrohttpd's HMAC-keyed nonce (MHD_OPTION_DIGEST_AUTH_RANDOM), not
-// from this value.
-#ifdef HAVE_DAUTH
-static std::string generate_random_hex_opaque_() {
-    std::random_device rd;
-    static constexpr char kHex[] = "0123456789abcdef";
-    std::string out;
-    out.reserve(32);
-    for (int i = 0; i < 8; ++i) {
-        uint32_t sample = static_cast<uint32_t>(rd());
-        // Pack 4 bytes -> 8 hex chars per std::random_device sample.
-        for (int b = 0; b < 4; ++b) {
-            uint32_t octet = (sample >> (b * 8)) & 0xFFu;
-            out.push_back(kHex[(octet >> 4) & 0xFu]);
-            out.push_back(kHex[octet & 0xFu]);
-        }
-    }
-    return out;
-}
-#endif  // HAVE_DAUTH
-
-webserver_impl::webserver_impl(webserver* parent, MHD_socket bind_socket_val)
-    : parent(parent), daemon_(this, bind_socket_val),
-#ifdef HAVE_WEBSOCKET
-      // Declared with ws_ (before the services block), so it must be
-      // initialised before errors_ here to satisfy -Wreorder.
-      ws_upgrader_(ws_),
-#endif  // HAVE_WEBSOCKET
-      errors_(parent->config), hooks_dispatch_(hooks_, parent->config),
-      response_mat_(errors_, hooks_dispatch_, digest_opaque_, parent->config),
-      upload_(parent->config),
-      dispatcher_(routes_, hooks_dispatch_, errors_, response_mat_,
-#ifdef HAVE_WEBSOCKET
-                  ws_upgrader_,
-#endif  // HAVE_WEBSOCKET
-                  parent->config),
-      pipeline_(hooks_dispatch_, dispatcher_, parent->config) {
-    // Guard against null parent: the dispatch helpers (not_found_page,
-    // method_not_allowed_page, internal_error_page, etc.) read the const
-    // config bag on `parent` and will dereference this pointer on every
-    // request. The only valid call site is webserver::webserver, which
-    // always passes `this` — a non-null pointer to the owning webserver.
-    // (daemon_ was already constructed with owner=this above; it stores the
-    // pointer but never dereferences parent config until start(). The
-    // config-reading behavior services below -- errors_ and the ones added
-    // in later DR-014 steps -- DO bind parent->config in this init list, so
-    // a non-null parent is a hard construction precondition; the sole caller
-    // webserver::webserver satisfies it by passing `this`.)
-    if (parent == nullptr) {
-        throw std::invalid_argument(
-            "webserver_impl requires a non-null owning webserver pointer");
-    }
-#ifdef HAVE_DAUTH
-    digest_opaque_ = generate_random_hex_opaque_();
-#endif  // HAVE_DAUTH
-}
-
-webserver_impl::~webserver_impl() {
-#if defined(HAVE_GNUTLS) && defined(MHD_OPTION_HTTPS_CERT_CALLBACK)
-    // Clean up cached SNI credentials
-    for (auto& [name, creds] : sni_credentials_cache) {
-        gnutls_certificate_free_credentials(creds);
-    }
-    sni_credentials_cache.clear();
-#endif  // HAVE_GNUTLS && MHD_OPTION_HTTPS_CERT_CALLBACK
-}
-
-}  // namespace detail
+// webserver_impl construction / destruction and the small non-trampoline
+// webserver_impl member glue (serialize_allow_methods, the on_*/route
+// lambda-shim helpers) live in src/detail/webserver_impl.cpp. This TU holds
+// only the public webserver:: façade core.
 
 // ----- webserver construction / destruction ------------------------------
 
