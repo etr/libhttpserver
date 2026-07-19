@@ -27,7 +27,7 @@
 //   * CR/LF/NUL in realm/opaque/domain throw std::invalid_argument
 //     (header-injection guard, mirrors the Basic-side validation);
 //   * the new digest_challenge_response_body subclass fits the 64-byte SBO
-//     budget (pinned by the static_assert in detail/body.hpp, mirrored
+//     budget (pinned by the static_assert in detail/response_body.hpp, mirrored
 //     in-test to catch a future ABI drift early).
 //
 // The unit tests do NOT reach into detail::digest_challenge_response_body via the
@@ -51,7 +51,7 @@
 #include <utility>
 
 #include "./httpserver.hpp"                 // public umbrella
-#include "httpserver/detail/body.hpp"       // private detail::response_body (test-only)
+#include "httpserver/detail/response_body.hpp"       // private detail::response_body (test-only)
 #include "./littletest.hpp"
 
 using httpserver::body_kind;

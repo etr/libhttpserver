@@ -38,7 +38,7 @@
 #include <utility>
 #include <vector>
 
-#include "httpserver/detail/body.hpp"   // complete type for body_->~response_body()
+#include "httpserver/detail/response_body.hpp"   // complete type for body_->~response_body()
 #include "httpserver/detail/http_field_validation.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/iovec_entry.hpp"
@@ -73,7 +73,7 @@ static_assert(alignof(http_response) >= 16,
 // discriminator impossible to get out of sync. Both helpers are
 // noexcept: destroy_body relies on body subclass dtors being
 // noexcept, adopt_body_from relies on the noexcept move_into() virtual
-// (statically asserted per-subclass in detail/body.hpp).
+// (statically asserted per-subclass in detail/response_body.hpp).
 //
 // Members are private; they live as out-of-line member functions so
 // they have access without an extra friend declaration.
@@ -133,7 +133,7 @@ http_response::~http_response() {
 // noexcept because every member's move is noexcept (header_map is a
 // std::map, std::map move is noexcept; std::byte[64] is trivially
 // movable; per-subclass body move ctors are noexcept by static_assert in
-// detail/body.hpp).
+// detail/response_body.hpp).
 // -----------------------------------------------------------------------
 http_response::http_response(http_response&& other) noexcept
     : status_code_(other.status_code_),

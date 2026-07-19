@@ -37,7 +37,7 @@
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
-#include "httpserver/detail/body.hpp"
+#include "httpserver/detail/response_body.hpp"
 #include "httpserver/detail/dispatch_util.hpp"
 #include "httpserver/detail/error_pages.hpp"
 #include "httpserver/detail/hook_dispatcher.hpp"

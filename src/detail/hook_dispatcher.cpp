@@ -43,7 +43,7 @@
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
-#include "httpserver/detail/body.hpp"
+#include "httpserver/detail/response_body.hpp"
 #include "httpserver/detail/dispatch_util.hpp"
 #include "httpserver/detail/hook_bus.hpp"
 #include "httpserver/detail/connection_context.hpp"

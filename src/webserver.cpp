@@ -81,7 +81,7 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
-#include "httpserver/detail/body.hpp"
+#include "httpserver/detail/response_body.hpp"
 #include "httpserver/constants.hpp"
 #include "httpserver/hook_action.hpp"
 #include "httpserver/hook_context.hpp"

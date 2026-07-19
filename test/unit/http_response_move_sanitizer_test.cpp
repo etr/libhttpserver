@@ -41,7 +41,7 @@
 // move cases would be caught by the sanitizer runtimes there.
 //
 // This TU is built with -DHTTPSERVER_COMPILATION so it can include
-// httpserver/detail/body.hpp (to subclass `body`) and use the
+// httpserver/detail/response_body.hpp (to subclass `body`) and use the
 // http_response_sbo_test_access friend hook (the same hook the SBO test
 // uses).
 
@@ -55,7 +55,7 @@
 #include <utility>
 
 #include "./httpserver.hpp"
-#include "httpserver/detail/body.hpp"
+#include "httpserver/detail/response_body.hpp"
 #include "./littletest.hpp"
 
 // This TU intentionally exercises the deprecated string-blob
@@ -96,7 +96,7 @@ using SBO = httpserver::http_response_sbo_test_access;
 // Synthetic body kind > 64 B forcing the heap-fallback path.
 //
 // No production body subclass currently exceeds the 64-byte SBO budget
-// (see static_asserts in detail/body.hpp). This subclass deliberately
+// (see static_asserts in detail/response_body.hpp). This subclass deliberately
 // carries a 128-byte aligned payload so that sizeof(fat_body) > 64,
 // matching the size predicate emplace_body<T> uses to choose the heap
 // branch. Inserted into a response via the friend hook (the existing
@@ -520,7 +520,7 @@ LT_END_AUTO_TEST(moved_from_is_reassignable)
 // -----------------------------------------------------------------------
 // file_response_body move-ctor under sanitizers.
 //
-// file_response_body has a hand-written move ctor (detail/body.hpp:182) that
+// file_response_body has a hand-written move ctor (detail/response_body.hpp:182) that
 // transfers fd ownership and flips materialized_ to suppress double-close
 // in the source's destructor. ASan would flag a use-after-close (or a
 // double-close abort from glibc) if either side mishandled the fd. The

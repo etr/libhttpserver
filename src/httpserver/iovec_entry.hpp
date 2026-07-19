@@ -36,13 +36,13 @@ namespace httpserver {
 // Layout is pinned to match POSIX `struct iovec` and libmicrohttpd's
 // `MHD_IoVec` so the dispatch path can `reinterpret_cast` a contiguous
 // array of iovec_entry into either C type at zero copy. The pinning
-// asserts live next to the cast site in `src/detail/body.cpp`
+// asserts live next to the cast site in `src/detail/response_body.cpp`
 // (iovec_response_body::materialize).
 //
 // `base` is `const void*` because libhttpserver never writes through
 // these buffers on the response path.
 //
-// Both fields are accessed from src/http_response.cpp and src/detail/body.cpp
+// Both fields are accessed from src/http_response.cpp and src/detail/response_body.cpp
 // (offsetof layout pinning + iovec construction); cppcheck analyses each TU
 // in isolation and cannot see the uses, so unusedStructMember is suppressed
 // per-member below.

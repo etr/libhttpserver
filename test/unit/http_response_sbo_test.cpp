@@ -27,7 +27,7 @@
 // caught on every build, even if no runtime test references them.
 //
 // This TU is built with -DHTTPSERVER_COMPILATION so it can reach the
-// internal detail::response_body hierarchy directly — same exemption the body_test
+// internal detail::response_body hierarchy directly — same exemption the response_body_test
 // uses. From a consumer's perspective these layouts are opaque.
 //
 // All access to http_response's private SBO state goes through
@@ -45,7 +45,7 @@
 #include <utility>
 
 #include "./httpserver.hpp"                  // public umbrella
-#include "httpserver/detail/body.hpp"        // private hierarchy
+#include "httpserver/detail/response_body.hpp"        // private hierarchy
 #include "./littletest.hpp"
 
 // This TU intentionally exercises the deprecated string-blob

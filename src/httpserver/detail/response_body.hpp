@@ -28,11 +28,11 @@
 //
 // Header-hygiene contract: only library .cpp files (and build-tree unit
 // tests compiled with -DHTTPSERVER_COMPILATION) may include this file.
-#ifndef SRC_HTTPSERVER_DETAIL_BODY_HPP_
-#define SRC_HTTPSERVER_DETAIL_BODY_HPP_
+#ifndef SRC_HTTPSERVER_DETAIL_RESPONSE_BODY_HPP_
+#define SRC_HTTPSERVER_DETAIL_RESPONSE_BODY_HPP_
 
 #ifndef HTTPSERVER_COMPILATION
-#error "detail/body.hpp is internal; build with -DHTTPSERVER_COMPILATION."
+#error "detail/response_body.hpp is internal; build with -DHTTPSERVER_COMPILATION."
 #endif
 
 #include <microhttpd.h>
@@ -490,4 +490,4 @@ static_assert(std::is_nothrow_move_constructible_v<digest_challenge_response_bod
 }  // namespace detail
 
 }  // namespace httpserver
-#endif  // SRC_HTTPSERVER_DETAIL_BODY_HPP_
+#endif  // SRC_HTTPSERVER_DETAIL_RESPONSE_BODY_HPP_

@@ -136,7 +136,7 @@ The skip sites in `test/unit/` predate the `check-skip-rationales.sh` lint
 parity, but the lint does NOT enforce a `// reason:` comment on these
 blocks.
 
-### `body_test.cpp` — pipe_response_body POSIX-pipe tests (lines 263, 277)
+### `response_body_test.cpp` — pipe_response_body POSIX-pipe tests (lines 263, 277)
 
 - **Symptom**: the two pipe_response_body tests (`pipe_body_kind_and_materialize`,
   `pipe_body_destructor_closes_fd_when_not_materialized`) call POSIX
@@ -157,7 +157,7 @@ blocks.
   every platform, so the Windows gap is a defence-in-depth coverage
   loss rather than a contract gap.
 
-### `body_test.cpp` — file_response_body destructor test (line 198)
+### `response_body_test.cpp` — file_response_body destructor test (line 198)
 
 - **Symptom**: `file_body_destructor_closes_fd_when_not_materialized`
   uses POSIX `::open()` / `::close()` and inspects `errno == EBADF`.
@@ -175,7 +175,7 @@ blocks.
 
 - **Symptom**: `pipe_factory_kind` calls POSIX `::pipe()` to feed
   `http_response::pipe(int)`.
-- **Root cause**: same as body_test pipe_response_body — pipe creation is
+- **Root cause**: same as response_body_test pipe_response_body — pipe creation is
   platform-specific, so `pipe_factory_kind` stays gated behind
   `#ifndef _WIN32`. The factory's signature pin (the `static_assert`
   that `http_response::pipe` takes exactly one `int` argument, plus
@@ -183,7 +183,7 @@ blocks.
   no platform dependency and has been hoisted out of the `#ifndef
   _WIN32` block to file scope, so it now compiles and runs on every
   CI lane, including Windows.
-- **Restoration plan**: same follow-up as body_test pipe_response_body for the
+- **Restoration plan**: same follow-up as response_body_test pipe_response_body for the
   remaining runtime `pipe_factory_kind` test. Until then, the
   Linux/macOS CI lanes cover the runtime factory behaviour and the
   Windows lanes do not; the compile-time signature contract is now

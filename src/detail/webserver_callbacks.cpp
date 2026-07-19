@@ -76,7 +76,7 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
-#include "httpserver/detail/body.hpp"
+#include "httpserver/detail/response_body.hpp"
 #include "httpserver/detail/connection_state.hpp"
 #include "httpserver/detail/path_normalize.hpp"
 #include "httpserver/detail/resource_hook_table.hpp"

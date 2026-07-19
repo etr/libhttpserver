@@ -32,7 +32,7 @@
 //     unauthorized() status + WWW-Authenticate header contract.
 //
 // The TU is built with -DHTTPSERVER_COMPILATION (set by the test
-// AM_CPPFLAGS) so it can include httpserver/detail/body.hpp directly,
+// AM_CPPFLAGS) so it can include httpserver/detail/response_body.hpp directly,
 // matching http_response_sbo_test.cpp's pattern.
 //
 // Header hygiene note: this TU does NOT include <sys/uio.h>.
@@ -57,7 +57,7 @@
 #include <utility>
 
 #include "./httpserver.hpp"                 // public umbrella
-#include "httpserver/detail/body.hpp"       // private detail::response_body (test-only)
+#include "httpserver/detail/response_body.hpp"       // private detail::response_body (test-only)
 #include "./littletest.hpp"
 
 using httpserver::body_kind;
@@ -146,7 +146,7 @@ LT_END_AUTO_TEST(string_factory_overridden_content_type)
 // file() — opens at construction, missing path doesn't throw.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_factories_suite, file_factory_existing)
-    // test_content lives in test/ — same fixture body_test uses.
+    // test_content lives in test/ — same fixture response_body_test uses.
     auto r = http_response::file("test_content");
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::file));
@@ -250,7 +250,7 @@ LT_END_AUTO_TEST(pipe_factory_signature_is_single_arg)
 // -----------------------------------------------------------------------
 // pipe() — owns the fd, destructor closes it when not materialized.
 // reason: Windows uses _pipe()/CreatePipe() rather than POSIX ::pipe();
-// MSYS2/mingw does not ship POSIX ::pipe(). See body_test.cpp for the
+// MSYS2/mingw does not ship POSIX ::pipe(). See response_body_test.cpp for the
 // same gate rationale. Gap tracked in test/PORTABILITY.md.
 // -----------------------------------------------------------------------
 #ifndef _WIN32
@@ -273,7 +273,7 @@ LT_END_AUTO_TEST(pipe_factory_kind)
 #endif  // !_WIN32
 
 // -----------------------------------------------------------------------
-// deferred() — type-erased producer; sentinel test mirrors body_test.
+// deferred() — type-erased producer; sentinel test mirrors response_body_test.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_factories_suite, deferred_factory_kind)
     auto r = http_response::deferred(

@@ -18,7 +18,7 @@
      USA
 */
 
-#include "httpserver/detail/body.hpp"
+#include "httpserver/detail/response_body.hpp"
 
 #include <fcntl.h>
 #include <microhttpd.h>

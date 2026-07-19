@@ -37,7 +37,7 @@
 #include <utility>
 #include <vector>
 
-#include "httpserver/detail/body.hpp"   // complete type for body_->~response_body()
+#include "httpserver/detail/response_body.hpp"   // complete type for body_->~response_body()
 #include "httpserver/detail/http_field_validation.hpp"
 #include "httpserver/feature_unavailable.hpp"
 #include "httpserver/http_utils.hpp"
@@ -63,7 +63,7 @@ namespace httpserver {
 // Defined out-of-line in this TU because every factory in this file
 // instantiates it (so no separate-TU instantiation is needed) and the
 // template body needs the complete type detail::response_body. Per-T size+align
-// guards duplicate the SBO budget asserts in detail/body.hpp so an
+// guards duplicate the SBO budget asserts in detail/response_body.hpp so an
 // over-sized future body subclass fails to compile at the factory site
 // rather than silently triggering the heap fallback.
 // -----------------------------------------------------------------------

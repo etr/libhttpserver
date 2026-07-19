@@ -21,7 +21,7 @@
 // Unit tests for the internal detail::response_body hierarchy and the public
 // body_kind enum. This TU is a build-tree test and is allowed
 // to include both the public umbrella (for body_kind) and the private
-// detail/body.hpp directly (for the subclasses) — header-hygiene from
+// detail/response_body.hpp directly (for the subclasses) — header-hygiene from
 // the consumer perspective is asserted separately by header_hygiene_*.
 
 #include <fcntl.h>          // O_RDONLY
@@ -40,7 +40,7 @@
 #include <vector>
 
 #include "./httpserver.hpp"                 // public umbrella → body_kind
-#include "httpserver/detail/body.hpp"       // private hierarchy
+#include "httpserver/detail/response_body.hpp"       // private hierarchy
 #include "./littletest.hpp"
 
 // -----------------------------------------------------------------------
@@ -72,7 +72,7 @@ static_assert(std::has_virtual_destructor_v<httpserver::detail::response_body>,
 
 // -----------------------------------------------------------------------
 // Step 3 — per-subclass SBO budget + base relationship.
-// Mirrored asserts: identical lines also live in detail/body.hpp; placing
+// Mirrored asserts: identical lines also live in detail/response_body.hpp; placing
 // them here gives a second failure site if the header drifts.
 // -----------------------------------------------------------------------
 static_assert(sizeof(httpserver::detail::empty_response_body) <= 64,
@@ -353,7 +353,7 @@ LT_END_AUTO_TEST(deferred_body_trampoline_null_cls_returns_error)
 
 // Companion to the null-cls case above: pins the other half of the
 // `!self || !self->producer_` guard in deferred_response_body::trampoline
-// (src/detail/body.cpp). A move-constructed-from deferred_response_body has a
+// (src/detail/response_body.cpp). A move-constructed-from deferred_response_body has a
 // non-null `self` but an empty producer_, so trampoline must still return
 // MHD_CONTENT_READER_END_WITH_ERROR rather than invoking an empty
 // std::function (which would throw std::bad_function_call and terminate

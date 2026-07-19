@@ -24,7 +24,7 @@
 
 #include "./httpserver.hpp"
 #include "httpserver/create_test_request.hpp"
-#include "httpserver/detail/body.hpp"
+#include "httpserver/detail/response_body.hpp"
 #include "./littletest.hpp"
 
 using httpserver::create_test_request;
