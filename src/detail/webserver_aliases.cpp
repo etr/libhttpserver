@@ -64,6 +64,7 @@
 #include <utility>
 
 #include "httpserver/create_webserver.hpp"
+#include "httpserver/detail/dispatch_util.hpp"
 #include "httpserver/detail/method_utils.hpp"
 #include "httpserver/hook_action.hpp"
 #include "httpserver/hook_context.hpp"
@@ -244,12 +245,12 @@ void webserver::install_auth_alias_() {
                 try {
                     rejection = ws_ptr->config.auth_handler(*ctx.request);
                 } catch (const std::exception& e) {
-                    impl_ptr->log_dispatch_error(
+                    detail::log_dispatch_error(ws_ptr->config,
                         std::string("auth_handler threw: ").append(e.what())
                             .append("; failing closed with 500"));
                     auth_threw = true;
                 } catch (...) {
-                    impl_ptr->log_dispatch_error(
+                    detail::log_dispatch_error(ws_ptr->config,
                         "auth_handler threw unknown exception; "
                         "failing closed with 500");
                     auth_threw = true;

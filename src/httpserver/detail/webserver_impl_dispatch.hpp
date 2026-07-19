@@ -42,28 +42,11 @@
 
 // The 404/405/500 synthesis (not_found_page / method_not_allowed_page /
 // internal_error_page / run_internal_error_handler_safely) moved to the
-// error_pages behavior service (DR-014 §4.11); its webserver_impl forwarders
-// were removed once every caller became a service holding error_pages&
-// directly. Only log_dispatch_error survives below, still called from the v1
-// alias hooks (webserver_aliases.cpp).
-
-// Log @p msg via parent->config.log_error if a logger is configured.
-// Swallows any exception thrown by the logger -- dispatch must never
-// re-enter the catch from inside its own catch. Marked noexcept because
-// the outer catch(...) absorbs any bad_alloc from std::string(msg)
-// construction, so no exception can escape.
-//
-// @p msg is forwarded to the user
-// log_error callback UNCHANGED, regardless of
-// create_webserver::expose_exception_messages. The error log is the
-// canonical destination for verbatim exception text in v2; the HTTP
-// response body is the path that was sanitized. Handlers that may
-// throw exceptions containing sensitive data (DB connection strings,
-// credentials, attacker-influenced input) SHOULD catch and sanitize
-// the exception's what() before re-throwing if those values must not
-// appear in the server log either. See also @ref
-// internal_error_handler_t @security block in create_webserver.hpp.
-void log_dispatch_error(std::string_view msg) const noexcept;
+// error_pages behavior service (DR-014 §4.11), and the log_dispatch_error
+// member forwarder was removed once its last callers (the v1 alias hooks in
+// webserver_aliases.cpp) began calling the detail::log_dispatch_error free
+// function (dispatch_util.hpp, over the config bag) directly. No
+// webserver_impl error-page or log forwarder survives.
 
 // The lifecycle hook-firing helpers (the eleven per-phase fire_* and the
 // four gated fire_*_gated helpers) moved to the hook_dispatcher behavior
