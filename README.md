@@ -51,6 +51,11 @@ section. It is comprehensive but not exhaustive — the headers under
 [`examples/`](examples/) tree contains a runnable demonstration of every
 feature.
 
+For a visual mental model, see
+[`docs/architecture/`](docs/architecture/): a **class, relationship &
+filesystem map** and a **request lifecycle & routing flow** diagram
+(Mermaid inline on GitHub, plus richer self-contained HTML pages).
+
 The shortest possible server looks like this:
 
 ```cpp

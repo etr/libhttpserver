@@ -32,6 +32,11 @@
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
+> Visual companions to this section live in
+> [`docs/architecture/`](../../docs/architecture/): a class/relationship/filesystem
+> map and a request-lifecycle/routing-flow diagram (Mermaid + self-contained HTML),
+> reflecting the DR-014 composition-root decomposition.
+
 ### 3.2 Component summary
 
 | Component | Responsibility | Implementation |
