@@ -10,8 +10,9 @@
 # Scanned extensions: .cpp, .hpp (matches cpplint's --extensions=cpp,hpp
 # and the v2.0 source convention; no .h / .cc in src/).
 #
-# Metric: source lines of code (SLOC) — physical lines with blank lines
-# and comment-only lines excluded. A dependency-free awk pass strips C/C++
+# Metric: source lines of code (SLOC) — physical lines with blank lines,
+# comment-only lines, and single-character lines (a lone `{`, `}`, `(`,
+# `)`, or `;`) excluded. A dependency-free awk pass strips C/C++
 # comments (`//` to end-of-line and `/* ... */` spans, including
 # multi-line) and blank lines, then counts what remains. The stripper is
 # string-literal aware so a `//` or `/*` inside a quoted string cannot make
@@ -65,7 +66,11 @@ count_sloc() {
             out = out c; i++
         }
         gsub(/[ \t\r]/, "", out)
-        if (out != "") count++
+        # Exclude lines that reduce to a single character — a lone brace,
+        # paren, bracket, or semicolon (`{`, `}`, `(`, `)`, `;`). These are
+        # pure scaffolding: they carry no logic and their count is an
+        # artifact of brace style, not of how much a file actually does.
+        if (length(out) > 1) count++
     }
     END { print count + 0 }
     ' "$1"
