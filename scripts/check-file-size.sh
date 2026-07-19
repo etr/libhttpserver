@@ -21,8 +21,10 @@
 # documentation the project invests in. The per-function complexity gate
 # already covers semantic density.
 #
-# Threshold knob:
-#   FILE_LOC_MAX  maximum SLOC (code lines) per file (default below)
+# Threshold knobs:
+#   FILE_LOC_MAX    maximum SLOC (code lines) per file (default below)
+#   FACADE_LOC_MAX  higher, still-bounded limit for the named façade/adapter
+#                   carve-out (see FACADE_ALLOWLIST below)
 #
 # Long-term target: 500 lines, matching the per-module ceiling used by
 # the sibling project under ../artistai (radon SLOC) and the natural
@@ -38,9 +40,24 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # via the environment to test against a tighter bar locally.
 FILE_LOC_MAX="${FILE_LOC_MAX:-500}"
 
+# Carve-out (DR-014 "one class, many files" discussion): the webserver public
+# façade and its MHD C-ABI trampoline adapter are a single class's surface that
+# is inherently wide and cannot be split further without arbitrary API-area
+# fragmentation. Rather than scatter one class across many small files just to
+# satisfy the line ceiling, these named files are held to a higher -- but still
+# bounded -- limit. This is a deliberate, visible exception (logged below and
+# enforced against FACADE_LOC_MAX), NOT a blanket exemption: growth past that
+# bound still fails the gate and forces a real look.
+FACADE_LOC_MAX="${FACADE_LOC_MAX:-600}"
+FACADE_ALLOWLIST=(
+    "src/webserver.cpp"                   # the entire webserver public API
+    "src/detail/webserver_callbacks.cpp"  # the MHD C-ABI trampoline adapter
+)
+
 cd "$REPO_ROOT"
 
 echo "check-file-size: scanning src/ with FILE_LOC_MAX=$FILE_LOC_MAX (SLOC; comments and blank lines excluded)"
+echo "check-file-size: façade/adapter carve-out at FACADE_LOC_MAX=$FACADE_LOC_MAX -> ${FACADE_ALLOWLIST[*]}"
 
 # count_sloc FILE — echo the count of source lines (comment- and blank-only
 # lines removed). A small state machine tracks block-comment and string
@@ -81,8 +98,12 @@ violations=0
 # whitespace, even though src/ today is plain ASCII.
 while IFS= read -r -d '' file; do
     lines=$(count_sloc "$file")
-    if [ "$lines" -gt "$FILE_LOC_MAX" ]; then
-        echo "  $file: $lines SLOC (max $FILE_LOC_MAX)" >&2
+    max="$FILE_LOC_MAX"
+    for exempt in "${FACADE_ALLOWLIST[@]}"; do
+        if [ "$file" = "$exempt" ]; then max="$FACADE_LOC_MAX"; break; fi
+    done
+    if [ "$lines" -gt "$max" ]; then
+        echo "  $file: $lines SLOC (max $max)" >&2
         violations=$((violations + 1))
     fi
 done < <(find src -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0)
@@ -93,4 +114,4 @@ if [ "$violations" -gt 0 ]; then
     exit 1
 fi
 
-echo "check-file-size: PASS — no file exceeds $FILE_LOC_MAX lines"
+echo "check-file-size: PASS — all files within limits (FILE_LOC_MAX=$FILE_LOC_MAX; carve-out FACADE_LOC_MAX=$FACADE_LOC_MAX)"
