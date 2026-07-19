@@ -106,12 +106,12 @@ void commit_handlers_to_shim(detail::lambda_resource& shim,
 // static MHD trampoline below stays here (its address is registered with
 // MHD_create_post_processor) and forwards into that service.
 
-// Map a wire-string HTTP method to mr->callback (pointer-to-member
-// dispatch), mr->method_enum (for is_allowed checks), and mr->has_body
+// Map a wire-string HTTP method to conn->callback (pointer-to-member
+// dispatch), conn->method_enum (for is_allowed checks), and conn->has_body
 // (for the body-buffering branch in requests_answer_first_step).
 // Unrecognised methods leave the defaults in place; finalize_answer
 // then routes through the 405 path.
-static void resolve_method_callback(const char* method, modded_request* mr);
+static void resolve_method_callback(const char* method, connection_context* conn);
 
 // MHD trampolines registered with libmicrohttpd. Closure pointer is
 // `this` (webserver_impl*) for answer_to_connection, otherwise the

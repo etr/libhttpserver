@@ -81,7 +81,7 @@
 # (_M_release, _M_weak_release, _M_dispose, ~_Sp_counted_base), so match the
 # whole _Sp_counted_base family rather than a single method -- otherwise each
 # timing-dependent valgrind run hits a different frame (observed: the MHD worker
-# dropping the last resource ref in modded_request::~modded_request during
+# dropping the last resource ref in connection_context::~connection_context during
 # request_completed while the main thread unregisters). Pure libstdc++ frame; a
 # real libhttpserver locking race surfaces a libhttpserver top frame. TSan is
 # green on the same tests.

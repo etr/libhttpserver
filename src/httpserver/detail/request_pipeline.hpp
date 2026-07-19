@@ -54,7 +54,7 @@ struct webserver_config;
 
 namespace detail {
 
-struct modded_request;
+struct connection_context;
 class hook_dispatcher;
 class request_dispatcher;
 
@@ -74,7 +74,7 @@ class request_pipeline {
     // fire request_received (short-circuits to skip_handler), and create the
     // post-processor for form/multipart bodies.
     MHD_Result requests_answer_first_step(MHD_Connection* connection,
-                                          modded_request* mr);
+                                          connection_context* conn);
 
     // Subsequent MHD callbacks: on a zero-size chunk hand off to
     // complete_request; otherwise fire body_chunk (short-circuit), optionally
@@ -85,12 +85,12 @@ class request_pipeline {
                                            const char* version,
                                            const char* upload_data,
                                            size_t* upload_data_size,
-                                           modded_request* mr);
+                                           connection_context* conn);
 
  private:
     // Stamp the request path/method/version and hand off to the dispatcher's
     // finalize_answer. Called by second_step on the end-of-body signal.
-    MHD_Result complete_request(MHD_Connection* connection, modded_request* mr,
+    MHD_Result complete_request(MHD_Connection* connection, connection_context* conn,
                                 const char* version, const char* method);
 
     hook_dispatcher& hooks_;

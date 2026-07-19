@@ -68,7 +68,7 @@ struct MHD_Connection;
 namespace httpserver {
 
 namespace detail {
-struct modded_request;
+struct connection_context;
 class webserver_impl;
 class upload_pipeline;  // DR-014 §4.11: owns file-upload arg/stream writes
 class request_dispatcher;  // DR-014 §4.11: replays captured route params
@@ -749,7 +749,7 @@ class http_request {
      friend class detail::upload_pipeline;  // DR-014 §4.11 upload arg writes
      friend class detail::request_dispatcher;  // DR-014 §4.11 route-param replay
      friend class detail::request_pipeline;  // DR-014 §4.11 request construction
-     friend struct detail::modded_request;
+     friend struct detail::connection_context;
      friend class create_test_request;    // test builder accesses impl_
 };
 

@@ -33,7 +33,7 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/detail/dispatch_util.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 
 namespace httpserver {
 
@@ -41,23 +41,23 @@ using httpserver::http::http_utils;
 
 namespace detail {
 
-http_response error_pages::not_found_page(modded_request* mr) const {
+http_response error_pages::not_found_page(connection_context* conn) const {
     if (config_.not_found_handler != nullptr) {
-        return config_.not_found_handler(*mr->request);
+        return config_.not_found_handler(*conn->request);
     }
     return http_response::string(std::string{constants::NOT_FOUND_ERROR})
         .with_status(http_utils::http_not_found);
 }
 
-http_response error_pages::method_not_allowed_page(modded_request* mr) const {
+http_response error_pages::method_not_allowed_page(connection_context* conn) const {
     if (config_.method_not_allowed_handler != nullptr) {
-        return config_.method_not_allowed_handler(*mr->request);
+        return config_.method_not_allowed_handler(*conn->request);
     }
     return http_response::string(std::string{constants::METHOD_ERROR})
         .with_status(http_utils::http_method_not_allowed);
 }
 
-http_response error_pages::internal_error_page(modded_request* mr,
+http_response error_pages::internal_error_page(connection_context* conn,
                                                std::string_view msg,
                                                bool force_our) const {
     // The double-fault fallback. Used when the user-supplied
@@ -70,7 +70,7 @@ http_response error_pages::internal_error_page(modded_request* mr,
     }
     // Invoke the user handler with the originating message.
     if (config_.internal_error_handler != nullptr) {
-        return config_.internal_error_handler(*mr->request, msg);
+        return config_.internal_error_handler(*conn->request, msg);
     }
     // The default body is the fixed string "Internal Server Error" to
     // avoid CWE-209 information disclosure of e.what() text (which
@@ -90,17 +90,17 @@ http_response error_pages::internal_error_page(modded_request* mr,
 }
 
 http_response error_pages::run_internal_error_handler_safely(
-    modded_request* mr,
+    connection_context* conn,
     std::string_view msg) const {
     try {
-        return internal_error_page(mr, msg, /*force_our=*/false);
+        return internal_error_page(conn, msg, /*force_our=*/false);
     } catch (...) {
         // The user handler itself threw. Log generically and return an
         // empty-body 500. No exception escapes from here.
         log_dispatch_error(config_,
                            "internal_error_handler threw; "
                            "sending hardcoded empty-body 500");
-        return internal_error_page(mr, "", /*force_our=*/true);
+        return internal_error_page(conn, "", /*force_our=*/true);
     }
 }
 

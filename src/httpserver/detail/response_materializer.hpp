@@ -19,7 +19,7 @@
 */
 
 // response_materializer -- behavior service (DR-014, §4.11) that turns the
-// staged http_response in mr->response into an MHD_Response, decorates it
+// staged http_response in conn->response into an MHD_Response, decorates it
 // with headers/footers/cookies, queues it on the connection (via the plain
 // or the RFC-7616 digest-challenge MHD path), fires the response_sent hook,
 // and destroys the MHD handle. Owns the belt-and-suspenders fallback chain
@@ -50,7 +50,7 @@ class http_resource;
 
 namespace detail {
 
-struct modded_request;
+struct connection_context;
 class error_pages;
 class hook_dispatcher;
 
@@ -69,25 +69,25 @@ class response_materializer {
     response_materializer& operator=(response_materializer&&) = delete;
     ~response_materializer() = default;
 
-    // Final stage of the request: materialise mr->response, decorate, queue,
+    // Final stage of the request: materialise conn->response, decorate, queue,
     // fire response_sent, destroy the MHD handle. @p resource is the resolved
     // resource (nullptr when none) forwarded to the response_sent gate so it
     // reaches the per-route hook table without a weak_ptr lock().
     MHD_Result materialize_and_queue_response(MHD_Connection* connection,
-                                              modded_request* mr,
+                                              connection_context* conn,
                                               http_resource* resource);
 
  private:
-    // Materialise mr->response into a raw MHD_Response, routing any
+    // Materialise conn->response into a raw MHD_Response, routing any
     // null/throw through the safe error paths (error_pages). Returns the raw
     // MHD handle, or nullptr only if every fallback also failed.
-    struct MHD_Response* get_raw_response_with_fallback(modded_request* mr);
+    struct MHD_Response* get_raw_response_with_fallback(connection_context* conn);
 
     // Kind-dispatched queueing: body_kind::digest_challenge goes through
     // MHD_queue_auth_required_response3 (RFC-7616), everything else through
     // MHD_queue_response. Returns the raw MHD status as int.
     int queue_response_dispatching_kind(MHD_Connection* connection,
-                                        modded_request* mr,
+                                        connection_context* conn,
                                         MHD_Response* raw_response);
 
     // Ask the response's body to produce a fresh headerless MHD_Response.

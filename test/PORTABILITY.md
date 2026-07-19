@@ -136,46 +136,46 @@ The skip sites in `test/unit/` predate the `check-skip-rationales.sh` lint
 parity, but the lint does NOT enforce a `// reason:` comment on these
 blocks.
 
-### `body_test.cpp` — pipe_body POSIX-pipe tests (lines 263, 277)
+### `body_test.cpp` — pipe_response_body POSIX-pipe tests (lines 263, 277)
 
-- **Symptom**: the two pipe_body tests (`pipe_body_kind_and_materialize`,
+- **Symptom**: the two pipe_response_body tests (`pipe_body_kind_and_materialize`,
   `pipe_body_destructor_closes_fd_when_not_materialized`) call POSIX
   `::pipe()` directly. MSYS2/MinGW64 does not ship POSIX `::pipe()`;
   the Windows equivalent is `_pipe()` from `<io.h>` or
   `CreatePipe()` from `<windows.h>`, with different fd semantics.
-- **Root cause**: the `pipe_body` class itself is portable (it owns and
+- **Root cause**: the `pipe_response_body` class itself is portable (it owns and
   closes an fd; `MHD_create_response_from_pipe` is wired the same way
   on every MHD build), but the tests need to *create* a pipe to feed
   the constructor, and pipe creation is platform-specific.
 - **Restoration plan**: a future follow-up could swap `::pipe()` for
   `_pipe(fds, 4096, _O_BINARY)` from `<io.h>` under an `#ifdef _WIN32`
   branch (mingw-w64 ships `<io.h>` with `_pipe`/`_close`). The Linux
-  and macOS CI lanes currently exercise the pipe_body code path; the
+  and macOS CI lanes currently exercise the pipe_response_body code path; the
   Windows MSYS lanes do not. The class's fd lifecycle and
   destructor-closes-fd contract are still verified on Linux/macOS, and
   the production `MHD_create_response_from_pipe` call is the same on
   every platform, so the Windows gap is a defence-in-depth coverage
   loss rather than a contract gap.
 
-### `body_test.cpp` — file_body destructor test (line 198)
+### `body_test.cpp` — file_response_body destructor test (line 198)
 
 - **Symptom**: `file_body_destructor_closes_fd_when_not_materialized`
   uses POSIX `::open()` / `::close()` and inspects `errno == EBADF`.
-- **Root cause**: the file_body class itself is portable (the
+- **Root cause**: the file_response_body class itself is portable (the
   constructor uses `::open` via libmicrohttpd's headers on every
   platform), but the anchor-fd technique (open / close / re-open to
   obtain a known fd slot) is POSIX-shaped.
 - **Restoration plan**: a future follow-up could use `_open` / `_close`
   from `<io.h>` on Windows for an equivalent anchor-fd test. The
-  destructor-closes-fd contract for file_body is still verified on
+  destructor-closes-fd contract for file_response_body is still verified on
   Linux/macOS lanes; the Windows gap is the same defence-in-depth
-  loss as for pipe_body above.
+  loss as for pipe_response_body above.
 
 ### `http_response_factories_test.cpp` — pipe() factory tests (lines 256–273)
 
 - **Symptom**: `pipe_factory_kind` calls POSIX `::pipe()` to feed
   `http_response::pipe(int)`.
-- **Root cause**: same as body_test pipe_body — pipe creation is
+- **Root cause**: same as body_test pipe_response_body — pipe creation is
   platform-specific, so `pipe_factory_kind` stays gated behind
   `#ifndef _WIN32`. The factory's signature pin (the `static_assert`
   that `http_response::pipe` takes exactly one `int` argument, plus
@@ -183,7 +183,7 @@ blocks.
   no platform dependency and has been hoisted out of the `#ifndef
   _WIN32` block to file scope, so it now compiles and runs on every
   CI lane, including Windows.
-- **Restoration plan**: same follow-up as body_test pipe_body for the
+- **Restoration plan**: same follow-up as body_test pipe_response_body for the
   remaining runtime `pipe_factory_kind` test. Until then, the
   Linux/macOS CI lanes cover the runtime factory behaviour and the
   Windows lanes do not; the compile-time signature contract is now

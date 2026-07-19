@@ -21,7 +21,7 @@
 #include <string>
 
 #include "./httpserver.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
 
 #include "./littletest.hpp"
@@ -54,9 +54,9 @@ LT_BEGIN_AUTO_TEST(uri_log_suite, null_uri_does_not_throw)
     LT_CHECK_NOTHROW(raw = uri_log(nullptr, nullptr, nullptr));
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
-    LT_CHECK_EQ(mr->complete_uri, std::string(""));
-    delete mr;
+    auto* conn = static_cast<httpserver::detail::connection_context*>(raw);
+    LT_CHECK_EQ(conn->complete_uri, std::string(""));
+    delete conn;
 LT_END_AUTO_TEST(null_uri_does_not_throw)
 
 // Sanity check that the happy path still records the URI as before.
@@ -65,9 +65,9 @@ LT_BEGIN_AUTO_TEST(uri_log_suite, valid_uri_is_stored)
     void* raw = uri_log(nullptr, uri, nullptr);
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
-    LT_CHECK_EQ(mr->complete_uri, std::string(uri));
-    delete mr;
+    auto* conn = static_cast<httpserver::detail::connection_context*>(raw);
+    LT_CHECK_EQ(conn->complete_uri, std::string(uri));
+    delete conn;
 LT_END_AUTO_TEST(valid_uri_is_stored)
 
 // Empty (but non-null) URI should be stored verbatim - this is the same
@@ -77,9 +77,9 @@ LT_BEGIN_AUTO_TEST(uri_log_suite, empty_uri_is_stored)
     void* raw = uri_log(nullptr, "", nullptr);
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
-    LT_CHECK_EQ(mr->complete_uri, std::string(""));
-    delete mr;
+    auto* conn = static_cast<httpserver::detail::connection_context*>(raw);
+    LT_CHECK_EQ(conn->complete_uri, std::string(""));
+    delete conn;
 LT_END_AUTO_TEST(empty_uri_is_stored)
 
 LT_BEGIN_AUTO_TEST_ENV()

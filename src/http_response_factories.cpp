@@ -37,7 +37,7 @@
 #include <utility>
 #include <vector>
 
-#include "httpserver/detail/body.hpp"   // complete type for body_->~body()
+#include "httpserver/detail/body.hpp"   // complete type for body_->~response_body()
 #include "httpserver/detail/http_field_validation.hpp"
 #include "httpserver/feature_unavailable.hpp"
 #include "httpserver/http_utils.hpp"
@@ -62,15 +62,15 @@ namespace httpserver {
 //
 // Defined out-of-line in this TU because every factory in this file
 // instantiates it (so no separate-TU instantiation is needed) and the
-// template body needs the complete type detail::body. Per-T size+align
+// template body needs the complete type detail::response_body. Per-T size+align
 // guards duplicate the SBO budget asserts in detail/body.hpp so an
 // over-sized future body subclass fails to compile at the factory site
 // rather than silently triggering the heap fallback.
 // -----------------------------------------------------------------------
 template <typename T, typename... Args>
 void http_response::emplace_body(body_kind k, Args&&... args) {
-    static_assert(std::is_base_of_v<detail::body, T>,
-                  "emplace_body: T must derive from detail::body");
+    static_assert(std::is_base_of_v<detail::response_body, T>,
+                  "emplace_body: T must derive from detail::response_body");
     assert(body_ == nullptr &&
            "emplace_body: body slot already populated");
     if constexpr (sizeof(T) <= body_buf_size && alignof(T) <= 16) {
@@ -97,7 +97,7 @@ void http_response::emplace_body(body_kind k, Args&&... args) {
 // Static factories. Each factory:
 //   1. constructs a default http_response (status_code_ = -1, no body),
 //   2. sets the status code and any per-kind headers,
-//   3. emplaces the appropriate detail::body subclass via emplace_body.
+//   3. emplaces the appropriate detail::response_body subclass via emplace_body.
 //
 // The status-code defaults match v1: 200 for content-bearing bodies,
 // 204 for empty(), 401 for unauthorized().
@@ -106,18 +106,18 @@ void http_response::emplace_body(body_kind k, Args&&... args) {
 http_response http_response::empty(int mhd_flags) {
     http_response r;
     r.status_code_ = http::http_utils::http_no_content;  // 204
-    r.emplace_body<detail::empty_body>(body_kind::empty, mhd_flags);
+    r.emplace_body<detail::empty_response_body>(body_kind::empty, mhd_flags);
     return r;
 }
 
-http_response http_response::string(std::string body,
+http_response http_response::string(std::string response_body,
                                     std::string content_type) {
     http_response r;
     r.status_code_ = http::http_utils::http_ok;          // 200
     r.with_header(http::http_utils::http_header_content_type,
                   std::move(content_type));
-    r.emplace_body<detail::string_body>(body_kind::string,
-                                        std::move(body));
+    r.emplace_body<detail::string_response_body>(body_kind::string,
+                                        std::move(response_body));
     return r;
 }
 
@@ -128,25 +128,25 @@ http_response http_response::file(std::string path) {
     // with .with_header("Content-Type", "...") in the chain.
     r.with_header(http::http_utils::http_header_content_type,
                   http::http_utils::application_octet_stream);
-    r.emplace_body<detail::file_body>(body_kind::file, std::move(path));
+    r.emplace_body<detail::file_response_body>(body_kind::file, std::move(path));
     return r;
 }
 
 http_response http_response::iovec(std::span<const iovec_entry> entries) {
     // Deep-copy into the body's owned vector so the caller's span need
     // not outlive the response. The buffers each entry's `base` points
-    // at remain BORROWED — see detail::iovec_body's lifetime contract.
+    // at remain BORROWED — see detail::iovec_response_body's lifetime contract.
     std::vector<iovec_entry> v(entries.begin(), entries.end());
     http_response r;
     r.status_code_ = http::http_utils::http_ok;
-    r.emplace_body<detail::iovec_body>(body_kind::iovec, std::move(v));
+    r.emplace_body<detail::iovec_response_body>(body_kind::iovec, std::move(v));
     return r;
 }
 
 http_response http_response::pipe(int fd) {
     http_response r;
     r.status_code_ = http::http_utils::http_ok;
-    r.emplace_body<detail::pipe_body>(body_kind::pipe, fd);
+    r.emplace_body<detail::pipe_response_body>(body_kind::pipe, fd);
     return r;
 }
 
@@ -154,14 +154,14 @@ http_response http_response::deferred(
         std::function<ssize_t(std::uint64_t, char*, std::size_t)> producer) {
     http_response r;
     r.status_code_ = http::http_utils::http_ok;
-    r.emplace_body<detail::deferred_body>(body_kind::deferred,
+    r.emplace_body<detail::deferred_response_body>(body_kind::deferred,
                                           std::move(producer));
     return r;
 }
 
 http_response http_response::unauthorized(std::string_view scheme,
                                           std::string_view realm,
-                                          std::string body) {
+                                          std::string response_body) {
     // Security: reject scheme or realm values containing CR, LF, or NUL.
     // Any of these characters can be used to inject additional HTTP headers
     // into the WWW-Authenticate response header (CWE-113). This is always a
@@ -219,12 +219,12 @@ http_response http_response::unauthorized(std::string_view scheme,
     challenge.push_back('"');
     r.with_header(http::http_utils::http_header_www_authenticate,
                   challenge);
-    // The body slot literally holds a string_body (possibly empty), so
+    // The body slot literally holds a string_response_body (possibly empty), so
     // kind() reports body_kind::string. Switching to body_kind::empty
     // for the empty-body case would fork the construction path and
     // break the invariant that kind() reflects the placed-new body.
-    r.emplace_body<detail::string_body>(body_kind::string,
-                                        std::move(body));
+    r.emplace_body<detail::string_response_body>(body_kind::string,
+                                        std::move(response_body));
     return r;
 }
 
@@ -233,7 +233,7 @@ http_response http_response::unauthorized(std::string_view scheme,
 //
 // Validates the user-supplied fields for header-injection control
 // characters (CR/LF/NUL) and packs the parameters into a
-// detail::digest_challenge_body. No `WWW-Authenticate` header is added
+// detail::digest_challenge_response_body. No `WWW-Authenticate` header is added
 // at the response-value layer; the dispatch path (digest-challenge
 // branch in materialize_and_queue_response) calls
 // MHD_queue_auth_required_response3 to attach the authoritative
@@ -257,7 +257,7 @@ http_response http_response::unauthorized(digest_challenge challenge) {
     reject_ctrl_chars("realm",  challenge.realm);
     reject_ctrl_chars("opaque", challenge.opaque);
     reject_ctrl_chars("domain", challenge.domain);
-    reject_ctrl_chars("body",   challenge.body);
+    reject_ctrl_chars("response_body", challenge.response_body);
 
     // qop="auth-int" is not implemented: the dispatch path
     // (map_to_mhd_digest_args_) has no MHD mapping for it and would
@@ -270,11 +270,11 @@ http_response http_response::unauthorized(digest_challenge challenge) {
             "leave it false");
     }
 
-    detail::digest_challenge_body::params p{
+    detail::digest_challenge_response_body::params p{
         /*realm=*/        std::move(challenge.realm),
         /*opaque=*/       std::move(challenge.opaque),
         /*domain=*/       std::move(challenge.domain),
-        /*body_text=*/    std::move(challenge.body),
+        /*body_text=*/    std::move(challenge.response_body),
         /*algorithm=*/    challenge.algorithm,
         /*qop_auth=*/     challenge.qop_auth,
         /*qop_auth_int=*/ challenge.qop_auth_int,
@@ -285,7 +285,7 @@ http_response http_response::unauthorized(digest_challenge challenge) {
 
     http_response r;
     r.status_code_ = http::http_utils::http_unauthorized;        // 401
-    r.emplace_body<detail::digest_challenge_body>(
+    r.emplace_body<detail::digest_challenge_response_body>(
         body_kind::digest_challenge, std::move(p));
     return r;
 }

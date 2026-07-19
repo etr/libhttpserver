@@ -46,7 +46,7 @@
 #include "httpserver/detail/body.hpp"
 #include "httpserver/detail/dispatch_util.hpp"
 #include "httpserver/detail/hook_bus.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 #include "httpserver/detail/resource_hook_table.hpp"
 
 namespace httpserver {
@@ -67,9 +67,9 @@ namespace {
 // caller can hold the table pointer valid. Returns nullptr when no
 // per-route table exists. Uses a direct lock() (atomic) rather than
 // expired()+lock() to avoid a TOCTOU window.
-resource_hook_table* per_route_table(detail::modded_request* mr,
+resource_hook_table* per_route_table(detail::connection_context* conn,
                                      std::shared_ptr<http_resource>& res_out) {
-    res_out = mr->resource_weak_.lock();
+    res_out = conn->resource_weak_.lock();
     if (!res_out) return nullptr;
     return res_out->hook_table_raw_();
 }
@@ -146,7 +146,7 @@ void hook_dispatcher::fire_request_completed(
 // ---- gated: before_handler (server-wide + per-route, short-circuiting) ---
 
 bool hook_dispatcher::fire_before_handler_gated(
-        detail::modded_request* mr,
+        detail::connection_context* conn,
         const std::shared_ptr<http_resource>& hrm) {
     const bool server_gate = hooks_.has_hooks_for(hook_phase::before_handler);
     // rtable comes from hrm directly (already resolved under the route
@@ -159,20 +159,20 @@ bool hook_dispatcher::fire_before_handler_gated(
     if (!server_gate && !per_route_gate) return false;
 
     std::optional<route_descriptor> desc;
-    if (!mr->matched_path_template.empty()) {
+    if (!conn->matched_path_template.empty()) {
         desc = route_descriptor{
-            /*path_template=*/std::string_view{mr->matched_path_template},
+            /*path_template=*/std::string_view{conn->matched_path_template},
             /*methods=*/hrm->get_allowed_methods(),
-            /*is_prefix=*/mr->matched_is_prefix};
+            /*is_prefix=*/conn->matched_is_prefix};
     }
     before_handler_ctx ctx{
-        /*request=*/mr->request.get(),
+        /*request=*/conn->request.get(),
         /*matched=*/std::move(desc),
-        /*method=*/mr->method_enum,
+        /*method=*/conn->method_enum,
         /*resource=*/hrm.get()};
     if (server_gate) {
         if (auto sc = fire_before_handler(ctx)) {
-            mr->response.emplace(std::move(*sc));
+            conn->response.emplace(std::move(*sc));
             return true;
         }
     }
@@ -181,7 +181,7 @@ bool hook_dispatcher::fire_before_handler_gated(
                 [this](std::string_view m) {
                     log_dispatch_error(config_, m);
                 })) {
-            mr->response.emplace(std::move(*sc));
+            conn->response.emplace(std::move(*sc));
             return true;
         }
     }
@@ -190,7 +190,7 @@ bool hook_dispatcher::fire_before_handler_gated(
 
 // ---- gated: after_handler (server-wide + per-route, replace-response) ----
 
-void hook_dispatcher::fire_after_handler_gated(detail::modded_request* mr,
+void hook_dispatcher::fire_after_handler_gated(detail::connection_context* conn,
                                                http_resource* resource) {
     const bool server_gate = hooks_.has_hooks_for(hook_phase::after_handler);
     // resource is borrowed from finalize_answer's live shared_ptr; no
@@ -200,16 +200,16 @@ void hook_dispatcher::fire_after_handler_gated(detail::modded_request* mr,
         rtable->any_hooks(hook_phase::after_handler);
 
     if (!server_gate && !route_gate) return;
-    if (!mr->response) return;  // defensive: never fire without a response
+    if (!conn->response) return;  // defensive: never fire without a response
 
-    after_handler_ctx ctx{mr->request.get(), &*mr->response};
+    after_handler_ctx ctx{conn->request.get(), &*conn->response};
     if (server_gate) {
         if (auto sc = fire_after_handler(ctx)) {
-            // Short-circuit: REPLACE mr->response (emplace destroys the old
+            // Short-circuit: REPLACE conn->response (emplace destroys the old
             // response, releasing deferred captures now). The per-route
             // chain ALSO sees the replaced response, so refresh ctx.
-            mr->response.emplace(std::move(*sc));
-            ctx.response = &*mr->response;
+            conn->response.emplace(std::move(*sc));
+            ctx.response = &*conn->response;
         }
     }
     if (route_gate) {
@@ -217,14 +217,14 @@ void hook_dispatcher::fire_after_handler_gated(detail::modded_request* mr,
                 [this](std::string_view m) {
                     log_dispatch_error(config_, m);
                 })) {
-            mr->response.emplace(std::move(*sc));
+            conn->response.emplace(std::move(*sc));
         }
     }
 }
 
 // ---- gated: response_sent (observation, server-wide + per-route) ---------
 
-void hook_dispatcher::fire_response_sent_gated(detail::modded_request* mr,
+void hook_dispatcher::fire_response_sent_gated(detail::connection_context* conn,
                                                http_resource* resource) {
     const bool server_gate = hooks_.has_hooks_for(hook_phase::response_sent);
     // resource is borrowed from finalize_answer's live shared_ptr, so read
@@ -239,23 +239,23 @@ void hook_dispatcher::fire_response_sent_gated(detail::modded_request* mr,
     const bool user_gate = server_gate || route_gate;
 
     if (!user_gate && !hooks_.has_log_access_alias()) return;
-    // mr->response is null only if materialize_and_queue_response's
+    // conn->response is null only if materialize_and_queue_response's
     // belt-and-suspenders fallback also failed; fire nothing rather than crash.
-    if (!mr->response) return;
+    if (!conn->response) return;
 
     // 0 for deferred/pipe bodies -- see response_sent_ctx docs.
-    const std::size_t bytes_queued = (mr->response->body_ != nullptr)
-        ? mr->response->body_->size() : 0;
+    const std::size_t bytes_queued = (conn->response->body_ != nullptr)
+        ? conn->response->body_->size() : 0;
     // elapsed is consumed by user hooks, not by the log_access alias.
     // Skip the steady_clock::now() syscall when only the alias slot fires.
     // NOTE: the alias body MUST NOT read ctx.elapsed; any future change that
     // needs elapsed in the alias must also remove this optimisation.
     const auto elapsed = user_gate
         ? std::chrono::duration_cast<std::chrono::nanoseconds>(
-              std::chrono::steady_clock::now() - mr->start_time)
+              std::chrono::steady_clock::now() - conn->start_time)
         : std::chrono::nanoseconds::zero();
-    response_sent_ctx ctx{mr->request.get(), &*mr->response,
-        mr->response->get_status(), bytes_queued, elapsed};
+    response_sent_ctx ctx{conn->request.get(), &*conn->response,
+        conn->response->get_status(), bytes_queued, elapsed};
     fire_response_sent(ctx);
     // Per-route chain AFTER server-wide + its alias slot.
     // response_sent is observation-only; no short-circuit logic.
@@ -268,7 +268,7 @@ void hook_dispatcher::fire_response_sent_gated(detail::modded_request* mr,
 // ---- gated: request_completed (fires from MHD completion callback) -------
 
 void hook_dispatcher::fire_request_completed_gated(
-        detail::modded_request* mr,
+        detail::connection_context* conn,
         enum MHD_RequestTerminationCode toe) {
     const bool server_gate =
         hooks_.has_hooks_for(hook_phase::request_completed);
@@ -282,8 +282,8 @@ void hook_dispatcher::fire_request_completed_gated(
     // touched.
     std::shared_ptr<http_resource> res;
     resource_hook_table* rtable = nullptr;
-    if (server_gate || mr->route_has_hook_table_) {
-        rtable = per_route_table(mr, res);
+    if (server_gate || conn->route_has_hook_table_) {
+        rtable = per_route_table(conn, res);
     }
     const bool per_route_present = rtable != nullptr &&
         rtable->any_hooks(hook_phase::request_completed);
@@ -292,20 +292,20 @@ void hook_dispatcher::fire_request_completed_gated(
         return;
     }
     const http_response* resp_ptr =
-        mr->response ? &*mr->response : nullptr;
-    // mr->start_time may be epoch if answer_to_connection never ran (e.g. a
-    // port scan: uri_log created mr but MHD closed before dispatch). Emit
+        conn->response ? &*conn->response : nullptr;
+    // conn->start_time may be epoch if answer_to_connection never ran (e.g. a
+    // port scan: uri_log created conn but MHD closed before dispatch). Emit
     // nanoseconds{-1} as a sentinel so hook authors can distinguish the
     // degenerate case from a real (but very slow) request.
     const auto raw_duration =
-        std::chrono::steady_clock::now() - mr->start_time;
+        std::chrono::steady_clock::now() - conn->start_time;
     const auto duration =
-        (mr->start_time == std::chrono::steady_clock::time_point{})
+        (conn->start_time == std::chrono::steady_clock::time_point{})
             ? std::chrono::nanoseconds{-1}
             : std::chrono::duration_cast<std::chrono::nanoseconds>(
                   raw_duration);
     request_completed_ctx ctx{
-        /*request=*/mr->request.get(),
+        /*request=*/conn->request.get(),
         /*resp=*/resp_ptr,
         /*succeeded=*/(toe == MHD_REQUEST_TERMINATED_COMPLETED_OK),
         /*duration=*/duration,

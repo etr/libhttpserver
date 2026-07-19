@@ -41,7 +41,7 @@
 #include "httpserver/detail/dispatch_util.hpp"
 #include "httpserver/detail/error_pages.hpp"
 #include "httpserver/detail/hook_dispatcher.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -76,15 +76,15 @@ void response_materializer::decorate_mhd_response(MHD_Response* response,
 }
 
 struct MHD_Response* response_materializer::get_raw_response_with_fallback(
-        detail::modded_request* mr) {
-    // Every assignment into mr->response uses emplace(std::move(...)); the
+        detail::connection_context* conn) {
+    // Every assignment into conn->response uses emplace(std::move(...)); the
     // optional owns the value and the deferred-body trampoline keeps a
-    // pointer into it for the lifetime of the modded_request.
+    // pointer into it for the lifetime of the connection_context.
     auto try_materialize = [&]() -> struct MHD_Response* {
-        return materialize_response(mr->response ? &*mr->response : nullptr);
+        return materialize_response(conn->response ? &*conn->response : nullptr);
     };
     auto emplace_and_materialize = [&](http_response r) -> struct MHD_Response* {
-        mr->response.emplace(std::move(r));
+        conn->response.emplace(std::move(r));
         return try_materialize();
     };
     try {
@@ -94,12 +94,12 @@ struct MHD_Response* response_materializer::get_raw_response_with_fallback(
             // through the safe internal-error path.
             return emplace_and_materialize(
                 errors_.run_internal_error_handler_safely(
-                    mr, "materialize_response returned null"));
+                    conn, "materialize_response returned null"));
         }
         return raw;
     } catch(const std::invalid_argument&) {
         try {
-            return emplace_and_materialize(errors_.not_found_page(mr));
+            return emplace_and_materialize(errors_.not_found_page(conn));
         } catch(...) {
             return nullptr;
         }
@@ -107,7 +107,7 @@ struct MHD_Response* response_materializer::get_raw_response_with_fallback(
         log_dispatch_error(config_, std::string("materialize threw: ") + e.what());
         try {
             return emplace_and_materialize(
-                errors_.run_internal_error_handler_safely(mr, e.what()));
+                errors_.run_internal_error_handler_safely(conn, e.what()));
         } catch(...) {
             return nullptr;
         }
@@ -115,7 +115,7 @@ struct MHD_Response* response_materializer::get_raw_response_with_fallback(
         log_dispatch_error(config_, "materialize threw unknown exception");
         try {
             return emplace_and_materialize(
-                errors_.run_internal_error_handler_safely(mr,
+                errors_.run_internal_error_handler_safely(conn,
                     "unknown exception"));
         } catch(...) {
             return nullptr;
@@ -140,7 +140,7 @@ struct mhd_digest_args {
 };
 
 mhd_digest_args map_to_mhd_digest_args_(
-        const detail::digest_challenge_body::params& p,
+        const detail::digest_challenge_response_body::params& p,
         const std::string& server_opaque) {
     MHD_DigestAuthMultiAlgo3 algo;
     switch (p.algorithm) {
@@ -172,17 +172,17 @@ mhd_digest_args map_to_mhd_digest_args_(
 
 int response_materializer::queue_response_dispatching_kind(
         MHD_Connection* connection,
-        detail::modded_request* mr,
+        detail::connection_context* conn,
         MHD_Response* raw_response) {
 #ifdef HAVE_DAUTH
-    if (mr->response->kind() == body_kind::digest_challenge) {
-        auto* dch = static_cast<detail::digest_challenge_body*>(
-            mr->response->body_);
+    if (conn->response->kind() == body_kind::digest_challenge) {
+        auto* dch = static_cast<detail::digest_challenge_response_body*>(
+            conn->response->body_);
         if (dch == nullptr) {
             // Defensive guard (CWE-476): kind() reported digest_challenge but
             // body_ is null. Fall back to the plain queue path.
             return static_cast<int>(MHD_queue_response(
-                connection, mr->response->get_status(), raw_response));
+                connection, conn->response->get_status(), raw_response));
         }
         const auto& p = dch->get_params();
         auto args = map_to_mhd_digest_args_(p, digest_opaque_);
@@ -200,14 +200,14 @@ int response_materializer::queue_response_dispatching_kind(
     }
 #endif  // HAVE_DAUTH
     return static_cast<int>(MHD_queue_response(
-        connection, mr->response->get_status(), raw_response));
+        connection, conn->response->get_status(), raw_response));
 }
 
 MHD_Result response_materializer::materialize_and_queue_response(
         MHD_Connection* connection,
-        detail::modded_request* mr,
+        detail::connection_context* conn,
         http_resource* resource) {
-    struct MHD_Response* raw_response = get_raw_response_with_fallback(mr);
+    struct MHD_Response* raw_response = get_raw_response_with_fallback(conn);
     if (raw_response == nullptr) {
         // Belt-and-suspenders: even get_raw_response_with_fallback's own
         // try/catch couldn't produce a response. Force the empty-body 500 so
@@ -216,9 +216,9 @@ MHD_Result response_materializer::materialize_and_queue_response(
             "materialize_and_queue_response: "
             "get_raw_response_with_fallback returned null; "
             "forcing hardcoded empty-body 500");
-        mr->response.emplace(
-            errors_.internal_error_page(mr, "", /*force_our=*/true));
-        raw_response = materialize_response(&*mr->response);
+        conn->response.emplace(
+            errors_.internal_error_page(conn, "", /*force_our=*/true));
+        raw_response = materialize_response(&*conn->response);
         if (raw_response == nullptr) {
             // Last-resort guard: internal_error_page's materialization also
             // returned null (e.g. under extreme memory pressure). Cannot call
@@ -228,18 +228,18 @@ MHD_Result response_materializer::materialize_and_queue_response(
             return (MHD_Result) MHD_NO;
         }
     }
-    decorate_mhd_response(raw_response, *mr->response);
-    int to_ret = queue_response_dispatching_kind(connection, mr, raw_response);
+    decorate_mhd_response(raw_response, *conn->response);
+    int to_ret = queue_response_dispatching_kind(connection, conn, raw_response);
     // Fire response_sent AFTER MHD_queue_response (status/bytes reflect what
     // was queued) and BEFORE MHD_destroy_response (ctx.response backed by live
     // storage). MHD copies the response data during queue, so destroying the
     // MHD_Response below does not affect the queued bytes.
-    hook_dispatch_.fire_response_sent_gated(mr, resource);
+    hook_dispatch_.fire_response_sent_gated(conn, resource);
     // MHD reference-counting: for callback (deferred/streaming) responses MHD
     // increments its own refcount during queue, so this destroy only releases
     // the caller's reference. MHD keeps the streaming callback (and the cls
-    // pointer into mr->response) alive until request_completed fires. The
-    // modded_request (and mr->response) are destroyed only in the
+    // pointer into conn->response) alive until request_completed fires. The
+    // connection_context (and conn->response) are destroyed only in the
     // request_completed callback, after MHD is done streaming.
     MHD_destroy_response(raw_response);
     return (MHD_Result) to_ret;

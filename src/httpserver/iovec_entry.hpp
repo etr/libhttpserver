@@ -37,7 +37,7 @@ namespace httpserver {
 // `MHD_IoVec` so the dispatch path can `reinterpret_cast` a contiguous
 // array of iovec_entry into either C type at zero copy. The pinning
 // asserts live next to the cast site in `src/detail/body.cpp`
-// (iovec_body::materialize).
+// (iovec_response_body::materialize).
 //
 // `base` is `const void*` because libhttpserver never writes through
 // these buffers on the response path.

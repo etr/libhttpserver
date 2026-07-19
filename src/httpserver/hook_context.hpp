@@ -89,7 +89,7 @@ struct peer_address {
  * `path_template` is a `string_view` into per-request storage; it is
  * valid **only for the duration of the hook call**. Do NOT capture or
  * store the view beyond the hook's return — the backing string is owned
- * by the per-request `modded_request` object and is destroyed when the
+ * by the per-request `connection_context` object and is destroyed when the
  * request completes. If you need the value after the hook returns, copy
  * it into a `std::string` inside the hook body.
  * `methods` carries the method bits the matched entry serves; `is_prefix`
@@ -295,7 +295,7 @@ struct after_handler_ctx {
  *   yet known at queue time; fall back to the Content-Length header for
  *   streamed bodies.
  * @note `elapsed` is `steady_clock::now()` at the fire site minus
- *   `modded_request::start_time` (captured on the first invocation of
+ *   `connection_context::start_time` (captured on the first invocation of
  *   `answer_to_connection`). Granularity is nanoseconds.
  * @note `elapsed` is `nanoseconds::zero()` when only the `log_access`
  *   alias slot fires (no `add_hook(response_sent, ...)` hooks registered).
@@ -303,7 +303,7 @@ struct after_handler_ctx {
  *   gratuitous `steady_clock::now()` call on that code path.
  * @attention The `response` pointer is non-null at the fire site.
  *   Hooks MUST NOT capture it past their return — the `http_response`
- *   is destroyed in `~modded_request` immediately after
+ *   is destroyed in `~connection_context` immediately after
  *   `request_completed` fires.
  */
 struct response_sent_ctx {
@@ -324,7 +324,7 @@ struct response_sent_ctx {
  *
  * @note `resp` is NULLABLE. On early-failure paths (e.g., a
  *   `request_received` hook returning `respond_with(413)`),
- *   `mr->response` is populated and `resp` points into it. On paths
+ *   `conn->response` is populated and `resp` points into it. On paths
  *   where MHD terminates the request before any response object is
  *   built, `resp` is `nullptr`.
  * @note `succeeded` maps from `MHD_RequestTerminationCode`:
@@ -334,13 +334,13 @@ struct response_sent_ctx {
  *   reports `succeeded == true` because MHD drove the request to
  *   ordinary completion.
  * @note `duration` is `steady_clock::now()` at the fire site minus
- *   `modded_request::start_time`; mirrors `response_sent_ctx::elapsed`.
+ *   `connection_context::start_time`; mirrors `response_sent_ctx::elapsed`.
  *   On degenerate paths where `answer_to_connection` never ran (e.g.,
  *   a port scan), `start_time` is epoch and `duration` is set to
  *   `nanoseconds{-1}` as a sentinel so hook authors can distinguish
  *   this case from a real (but very slow) request.
  * @attention Hooks MUST NOT capture `request` or `resp` past their
- *   return — both are destroyed in `~modded_request` immediately after
+ *   return — both are destroyed in `~connection_context` immediately after
  *   this fire.
  */
 struct request_completed_ctx {

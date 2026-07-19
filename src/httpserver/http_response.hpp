@@ -44,11 +44,11 @@
 
 namespace httpserver {
 
-// Forward-declared so http_response carries a `detail::body*` without
+// Forward-declared so http_response carries a `detail::response_body*` without
 // pulling the private body hierarchy (and its <microhttpd.h> dependency)
 // into every consumer translation unit. The complete type is required at
 // destructor / move-op definition sites only; those live in the .cpp.
-namespace detail { class body; }
+namespace detail { class response_body; }
 
 // Forward declarations needed for the friend grants in http_response.
 // body_/kind_/status_code_ are private; detail::webserver_impl dispatch
@@ -99,7 +99,7 @@ struct digest_challenge {
     bool signal_stale        = false;     // set on a stale-nonce re-challenge
     bool userhash_support    = false;     // RFC 7616 §3.4.4
     bool prefer_utf8         = true;      // charset=UTF-8
-    std::string body         = {};        // "access denied" body
+    std::string response_body = {};       // "access denied" body
 };
 
 /**
@@ -123,8 +123,8 @@ class http_response final {
      // Public type-trait shim used by the SBO unit test to
      // assert the exemption without poking private
      // members. The trait check is `!std::is_same_v<body_pointer_type,
-     // std::unique_ptr<detail::body>>`.
-     using body_pointer_type = detail::body*;
+     // std::unique_ptr<detail::response_body>>`.
+     using body_pointer_type = detail::response_body*;
 
      // SBO buffer size in bytes. Must equal the alignas/array spec on
      // body_storage_ below; the static_assert on alignof(http_response)
@@ -142,7 +142,7 @@ class http_response final {
      http_response& operator=(const http_response&) = delete;
 
      // Out-of-line because both ops touch the complete type of
-     // detail::body (placement-move via move_into(), destructor, or
+     // detail::response_body (placement-move via move_into(), destructor, or
      // ::operator delete).
      http_response(http_response&& other) noexcept;
      http_response& operator=(http_response&& other) noexcept;
@@ -150,11 +150,11 @@ class http_response final {
      // Non-virtual: the class is `final`, so polymorphic
      // destruction through a base pointer is impossible. Out-of-line
      // because the body destruct + ::operator delete pairing needs the
-     // complete type detail::body.
+     // complete type detail::response_body.
      ~http_response();
 
      // Body-kind discriminator. Mirrors the kind reported
-     // by the underlying detail::body, but answered without a virtual
+     // by the underlying detail::response_body, but answered without a virtual
      // call: the kind is recorded into kind_ at factory time and
      // preserved across moves. The dispatch path consumes
      // this for its kind-specific fast paths.
@@ -163,7 +163,7 @@ class http_response final {
      // -----------------------------------------------------------------
      // Static factories.
      //
-     // Each factory placement-news the corresponding detail::body
+     // Each factory placement-news the corresponding detail::response_body
      // subclass into the response's SBO buffer (or, if the body ever
      // exceeds 64 bytes, onto the heap via ::operator new(sizeof(T))
      // so the destructor's matched ::operator delete pairs cleanly).
@@ -179,7 +179,7 @@ class http_response final {
      // stored by move so callers retain no aliasing.
      // Throws std::invalid_argument if content_type contains CR, LF, or NUL.
      [[nodiscard]] static http_response string(
-         std::string body,
+         std::string response_body,
          std::string content_type = "text/plain");
 
      // Construct a response that streams a file from disk. Does NOT
@@ -239,7 +239,7 @@ class http_response final {
      [[nodiscard]] static http_response unauthorized(
          std::string_view scheme,
          std::string_view realm,
-         std::string body = {});  // NOLINT(build/include_what_you_use)
+         std::string response_body = {});  // NOLINT(build/include_what_you_use)
 
      /// Construct an RFC 7616 §3.3 Digest 401 Unauthorized response.
      ///
@@ -484,7 +484,7 @@ class http_response final {
      // kind without a virtual call.
      body_kind kind_ = body_kind::empty;
      alignas(16) std::byte body_storage_[body_buf_size]{};
-     detail::body* body_ = nullptr;
+     detail::response_body* body_ = nullptr;
      bool body_inline_ = false;
 
      // SBO lifecycle helpers shared by destructor / move ctor /
@@ -516,11 +516,11 @@ class http_response final {
      void ensure_cookie_mirror_() const noexcept;
      void do_set_status(int code);
 
-     // Placement-new a concrete detail::body subclass into the SBO
+     // Placement-new a concrete detail::response_body subclass into the SBO
      // buffer (or, if T does not fit, onto the heap via the matched
      // ::operator new(sizeof(T))/::operator delete pairing the
      // destructor relies on). Defined out-of-line in http_response.cpp
-     // because it requires the complete type detail::body — it is only
+     // because it requires the complete type detail::response_body — it is only
      // instantiated from the factory bodies in that TU.
      //
      // Pre-condition: the response's body slot is empty

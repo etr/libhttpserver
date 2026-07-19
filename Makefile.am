@@ -62,7 +62,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-deprecated-cookie-overload.sh \
 	scripts/test_check_littletest_skip_exit_code.sh \
 	scripts/verify-installed-examples.sh \
-	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_modded.cpp \
+	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_connection_context.cpp \
 	test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
 	test/headers/consumer_umbrella_no_backend.cpp
@@ -96,7 +96,7 @@ CHECK_HEADERS_CXX = $(CXX) -std=c++20 -I$(top_builddir) -I$(top_srcdir)/src -I$(
 # a public httpserver/* header is included without the umbrella having defined
 # _HTTPSERVER_HPP_INSIDE_.
 CHECK_HEADERS_PUBLIC_GATE_MSG = Only <httpserver.hpp> or <httpserverpp> can be included directly.
-# Detail-header gate (consumer_detail, consumer_detail_modded): post-TASK-014
+# Detail-header gate (consumer_detail, consumer_detail_connection_context): post-TASK-014
 # the detail-header gate is HTTPSERVER_COMPILATION-only and emits a message of
 # the form "httpserver/detail/<file>.hpp is internal; only include it when
 # compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
@@ -138,22 +138,22 @@ check-headers:
 	fi
 	@rm -f check-headers-A2.log
 	@echo "  PASS: A.2 gate fired as expected"
-	@echo "=== check-headers A.2b: direct detail-header (modded_request) include must fail ==="
+	@echo "=== check-headers A.2b: direct detail-header (connection_context) include must fail ==="
 	@# Complements A.2 (http_endpoint.hpp); both detail headers must carry the gate.
-	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_detail_modded.cpp -o /dev/null 2>check-headers-A2b.log; then \
-	    echo "FAIL: consumer_detail_modded.cpp compiled but should have errored"; \
+	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_detail_connection_context.cpp -o /dev/null 2>check-headers-A2b.log; then \
+	    echo "FAIL: consumer_detail_connection_context.cpp compiled but should have errored"; \
 	    cat check-headers-A2b.log; \
 	    rm -f check-headers-A2b.log; \
 	    exit 1; \
 	fi
 	@if ! grep -q "$(CHECK_HEADERS_DETAIL_GATE_MSG)" check-headers-A2b.log; then \
-	    echo "FAIL: consumer_detail_modded.cpp failed but not for the gate reason"; \
+	    echo "FAIL: consumer_detail_connection_context.cpp failed but not for the gate reason"; \
 	    cat check-headers-A2b.log; \
 	    rm -f check-headers-A2b.log; \
 	    exit 1; \
 	fi
 	@rm -f check-headers-A2b.log
-	@echo "  PASS: A.2b gate fired as expected (modded_request.hpp)"
+	@echo "  PASS: A.2b gate fired as expected (connection_context.hpp)"
 	@echo "=== check-headers A.3: umbrella include must succeed ==="
 	@if ! $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_umbrella.cpp -o consumer_umbrella.check.o 2>check-headers-A3.log; then \
 	    echo "FAIL: consumer_umbrella.cpp did not compile"; \

@@ -1514,7 +1514,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     // Default internal_error_page now surfaces the originating
-    // message in the body. file_body::materialize() returns nullptr for a
+    // message in the body. file_response_body::materialize() returns nullptr for a
     // missing file, which dispatch routes through internal_error_page
     // with a fixed diagnostic message.
     LT_CHECK_NEQ(s.find("materialize_response returned null"),

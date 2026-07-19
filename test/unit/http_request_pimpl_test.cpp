@@ -12,7 +12,7 @@
 //
 // We assert the structural invariants this TU owns:
 //   1. http_request is move-only (copy-deleted, move-defaulted). This
-//      preserves v1 semantics: modded_request holds unique_ptr<http_request>
+//      preserves v1 semantics: connection_context holds unique_ptr<http_request>
 //      and reset/move-rebinds it.
 //   2. sizeof(http_request) is bounded -- after the split, only the small
 //      backend-agnostic fields (path/method/content/version/limit) plus
@@ -43,7 +43,7 @@
 // (1) Externally non-constructible: copy is deleted (the dtor removes
 //     transient files from disk; copying would double-free) and move
 //     ctor/assign are *defaulted but private* -- only the friend dispatch
-//     path inside libhttpserver (webserver_impl, modded_request) can move
+//     path inside libhttpserver (webserver_impl, connection_context) can move
 //     a request. Externally the type therefore appears as both non-copy-
 //     and non-move-constructible. That's the contract a downstream
 //     consumer sees, and that's what we lock in here.

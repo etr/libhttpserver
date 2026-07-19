@@ -39,7 +39,7 @@ struct http_response_sbo_test_access {
     static bool body_inline(http_response& r) noexcept {
         return r.body_inline_;
     }
-    static httpserver::detail::body* body_ptr(http_response& r) noexcept {
+    static httpserver::detail::response_body* body_ptr(http_response& r) noexcept {
         return r.body_;
     }
     static body_kind kind(http_response& r) noexcept { return r.kind_; }
@@ -300,9 +300,9 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, render_with_test_request)
     LT_CHECK_EQ(static_cast<int>(resp.kind()),
                 static_cast<int>(httpserver::body_kind::string));
     // Verify the response body content reflects the arg.
-    auto* sb = dynamic_cast<httpserver::detail::string_body*>(SBO::body_ptr(resp));
+    auto* sb = dynamic_cast<httpserver::detail::string_response_body*>(SBO::body_ptr(resp));
     LT_ASSERT(sb != nullptr);
-    LT_CHECK_EQ(sb->get_content(), std::string("Hello, Alice"));
+    LT_CHECK_EQ(sb->get_data(), std::string("Hello, Alice"));
 LT_END_AUTO_TEST(render_with_test_request)
 
 // Test full chain of all builder methods

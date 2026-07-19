@@ -13,7 +13,7 @@
 // allocates a post-processor in requests_answer_first_step. A body_chunk
 // hook then returns respond_with(403) on the very first firing,
 // short-circuiting the upload. The short-circuit branch must call
-// MHD_destroy_post_processor(mr->pp) — otherwise ASan flags a leak of
+// MHD_destroy_post_processor(conn->pp) — otherwise ASan flags a leak of
 // the post-processor's 32 KB buffer.
 
 #include <curl/curl.h>

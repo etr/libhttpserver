@@ -54,7 +54,7 @@ class http_resource;
 
 namespace detail {
 
-struct modded_request;
+struct connection_context;
 class route_table;
 class hook_dispatcher;
 class error_pages;
@@ -85,7 +85,7 @@ class request_dispatcher {
     // The finalize stage of the request (called by request_pipeline's
     // complete_request). Resolves the route, runs the hook gates + handler,
     // and queues the response. Returns the MHD queue result.
-    MHD_Result finalize_answer(MHD_Connection* connection, modded_request* mr);
+    MHD_Result finalize_answer(MHD_Connection* connection, connection_context* conn);
 
  private:
     // Websocket-upgrade probe. Forwards to ws_upgrader_ on HAVE_WEBSOCKET
@@ -93,20 +93,20 @@ class request_dispatcher {
     // HAVE_WEBSOCKET #ifdef stays out of finalize_answer's CCN count (lizard
     // counts a preprocessor conditional as a branch).
     std::optional<MHD_Result> try_ws_upgrade(MHD_Connection* connection,
-                                             modded_request* mr);
+                                             connection_context* conn);
 
-    // Resolve the resource serving @p mr via routes_.lookup_v2 (cache ->
+    // Resolve the resource serving @p conn via routes_.lookup_v2 (cache ->
     // exact -> radix -> regex). Returns true and sets @p hrm on hit (also
     // replays captured params + populates the hook-ctx path template when a
     // route_resolved/before_handler hook is armed); false otherwise.
-    bool resolve_resource_for_request(modded_request* mr,
+    bool resolve_resource_for_request(connection_context* conn,
                                       std::shared_ptr<http_resource>& hrm);
 
-    // Invoke the resource handler bound to @p mr (pointer-to-member
-    // dispatch), populating mr->response. On is_allowed=false, queues a 405
+    // Invoke the resource handler bound to @p conn (pointer-to-member
+    // dispatch), populating conn->response. On is_allowed=false, queues a 405
     // with an Allow header. On handler-throw, routes through the
     // handler_exception chain / safe internal-error path.
-    void dispatch_resource_handler(modded_request* mr,
+    void dispatch_resource_handler(connection_context* conn,
                                    const std::shared_ptr<http_resource>& hrm);
 
     route_table& routes_;

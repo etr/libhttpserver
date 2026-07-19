@@ -42,7 +42,7 @@ namespace detail {
 
 // ---------------------------------------------------------------------------
 // Layout-pinning static_asserts for iovec_entry → MHD_IoVec / struct iovec.
-// These asserts live next to the cast site (iovec_body::materialize below)
+// These asserts live next to the cast site (iovec_response_body::materialize below)
 // to catch platform layout drift at compile time rather than at runtime.
 //
 // The POSIX `struct iovec` asserts are gated on !_WIN32 (no <sys/uio.h> on
@@ -81,35 +81,35 @@ static_assert(std::is_standard_layout_v<::httpserver::iovec_entry>,
 // ---------------------------------------------------------------------------
 // body — virtual destructor anchor (forces vtable emission in this TU).
 // ---------------------------------------------------------------------------
-body::~body() = default;
+response_body::~response_body() = default;
 
 // ---------------------------------------------------------------------------
-// empty_body
+// empty_response_body
 // ---------------------------------------------------------------------------
-MHD_Response* empty_body::materialize() {
+MHD_Response* empty_response_body::materialize() {
     return MHD_create_response_empty(static_cast<MHD_ResponseFlags>(flags_));
 }
 
 // ---------------------------------------------------------------------------
-// string_body
+// string_response_body
 // ---------------------------------------------------------------------------
-MHD_Response* string_body::materialize() {
+MHD_Response* string_response_body::materialize() {
     // _static variant: accepts const void* directly, no const_cast needed,
     // and documents the same PERSISTENT ownership semantics — the buffer is
     // owned by *this and outlives the MHD_Response. Requires
     // MHD >= 0x00097701, well below the project minimum 0x01000000.
     return MHD_create_response_from_buffer_static(
-        content_.size(),
-        static_cast<const void*>(content_.data()));
+        data_.size(),
+        static_cast<const void*>(data_.data()));
 }
 
 // ---------------------------------------------------------------------------
-// file_body — opens the file and fstat's it at construction so size() is
+// file_response_body — opens the file and fstat's it at construction so size() is
 // accurate immediately.  materialize() uses fstat's st_size; it never calls
 // lseek(), so the fd's read position remains at 0 when handed to
 // MHD_create_response_from_fd (CWE-367).
 // ---------------------------------------------------------------------------
-file_body::file_body(std::string path) noexcept
+file_response_body::file_response_body(std::string path) noexcept
     : path_(std::move(path)) {
 #ifndef _WIN32
     fd_ = ::open(path_.c_str(), O_RDONLY | O_NOFOLLOW);
@@ -143,7 +143,7 @@ file_body::file_body(std::string path) noexcept
     size_ = static_cast<std::size_t>(sb.st_size);
 }
 
-file_body::~file_body() {
+file_response_body::~file_response_body() {
     // Close only if MHD never took ownership (materialized_ stays false until
     // MHD_create_response_from_fd returns non-null).
     if (!materialized_ && fd_ != -1) {
@@ -153,17 +153,17 @@ file_body::~file_body() {
 
 // Hand-written move ctor: transfers fd_ ownership to the destination and
 // flips the source's materialized_ to true so the source's destructor
-// skips the close path. Without this, the moved-from file_body would
+// skips the close path. Without this, the moved-from file_response_body would
 // close the fd we just handed off — a classic double-close bug
 // (CWE-415). std::exchange keeps the move noexcept.
-file_body::file_body(file_body&& o) noexcept
+file_response_body::file_response_body(file_response_body&& o) noexcept
     : path_(std::move(o.path_)),
       size_(o.size_),
       fd_(std::exchange(o.fd_, -1)),
       materialized_(std::exchange(o.materialized_, true)) {
 }
 
-MHD_Response* file_body::materialize() {
+MHD_Response* file_response_body::materialize() {
     if (fd_ == -1) return nullptr;
 
     if (size_) {
@@ -174,7 +174,7 @@ MHD_Response* file_body::materialize() {
         return r;
     }
     // Zero-byte file: serve an empty response without giving the fd to MHD.
-    // Close the fd first, then set fd_ = -1 so ~file_body's guard
+    // Close the fd first, then set fd_ = -1 so ~file_response_body's guard
     // (`!materialized_ && fd_ != -1`) cannot reach ::close() on an already-
     // closed descriptor. fd_ == -1 is the sole sentinel here; there is no
     // need to also set materialized_ = true in this branch.
@@ -184,9 +184,9 @@ MHD_Response* file_body::materialize() {
 }
 
 // ---------------------------------------------------------------------------
-// iovec_body
+// iovec_response_body
 // ---------------------------------------------------------------------------
-MHD_Response* iovec_body::materialize() {
+MHD_Response* iovec_response_body::materialize() {
     // CWE-190 guard preserved from v1 iovec_response::get_raw_response.
     if (entries_.size() >
             static_cast<std::size_t>(
@@ -201,9 +201,9 @@ MHD_Response* iovec_body::materialize() {
 }
 
 // ---------------------------------------------------------------------------
-// pipe_body
+// pipe_response_body
 // ---------------------------------------------------------------------------
-pipe_body::~pipe_body() {
+pipe_response_body::~pipe_response_body() {
     // Only close if MHD never took ownership. After a successful
     // materialize(), libmicrohttpd closes fd_ when the MHD_Response is
     // destroyed.
@@ -212,14 +212,14 @@ pipe_body::~pipe_body() {
     }
 }
 
-// Same shape as file_body's move ctor: transfer fd_, mark source as
+// Same shape as file_response_body's move ctor: transfer fd_, mark source as
 // already-materialized so its destructor skips close.
-pipe_body::pipe_body(pipe_body&& o) noexcept
+pipe_response_body::pipe_response_body(pipe_response_body&& o) noexcept
     : fd_(std::exchange(o.fd_, -1)),
       materialized_(std::exchange(o.materialized_, true)) {
 }
 
-MHD_Response* pipe_body::materialize() {
+MHD_Response* pipe_response_body::materialize() {
     MHD_Response* r = MHD_create_response_from_pipe(fd_);
     if (r != nullptr) {
         materialized_ = true;  // MHD now owns fd_
@@ -228,31 +228,31 @@ MHD_Response* pipe_body::materialize() {
 }
 
 // ---------------------------------------------------------------------------
-// deferred_body — trampoline + materialize.
+// deferred_response_body — trampoline + materialize.
 // ---------------------------------------------------------------------------
-ssize_t deferred_body::trampoline(void* cls, std::uint64_t pos,
+ssize_t deferred_response_body::trampoline(void* cls, std::uint64_t pos,
                                   char* buf, std::size_t max) {
     // Guard against null cls or empty producer_ (CWE-476).
     // MHD's callback mechanism does not catch C++ exceptions, so
     // throwing std::bad_function_call here would call std::terminate().
     // Return MHD_CONTENT_READER_END_WITH_ERROR instead.
-    auto* self = static_cast<deferred_body*>(cls);
+    auto* self = static_cast<deferred_response_body*>(cls);
     if (!self || !self->producer_) {
         return MHD_CONTENT_READER_END_WITH_ERROR;
     }
     return self->producer_(pos, buf, max);
 }
 
-MHD_Response* deferred_body::materialize() {
+MHD_Response* deferred_response_body::materialize() {
     // Block size 1024 mirrors v1 deferred_response::get_raw_response_helper.
     // Free-callback is nullptr because *this owns producer_ and outlives the
     // MHD_Response (http_response's lifetime enforces this).
     return MHD_create_response_from_callback(
-        MHD_SIZE_UNKNOWN, 1024, &deferred_body::trampoline, this, nullptr);
+        MHD_SIZE_UNKNOWN, 1024, &deferred_response_body::trampoline, this, nullptr);
 }
 
 // ---------------------------------------------------------------------------
-// digest_challenge_body — RFC 7616 Digest auth challenge.
+// digest_challenge_response_body — RFC 7616 Digest auth challenge.
 //
 // Returns a body-only MHD_Response carrying the "access denied" payload.
 // The WWW-Authenticate header itself is NOT attached here -- the dispatch
@@ -262,7 +262,7 @@ MHD_Response* deferred_body::materialize() {
 // machinery (this satisfies the "MHD MD5/SHA-256 helpers remain the
 // underlying primitive" acceptance criterion).
 // ---------------------------------------------------------------------------
-MHD_Response* digest_challenge_body::materialize() {
+MHD_Response* digest_challenge_response_body::materialize() {
     if (!params_) {
         // Defence in depth: a moved-from body should never reach the
         // dispatch path, but if a regression causes it, hand MHD an

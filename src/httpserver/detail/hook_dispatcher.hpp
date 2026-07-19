@@ -61,7 +61,7 @@ class http_resource;
 
 namespace detail {
 
-struct modded_request;
+struct connection_context;
 class hook_bus;
 
 class hook_dispatcher {
@@ -98,16 +98,16 @@ class hook_dispatcher {
     void fire_request_completed(const request_completed_ctx& ctx) noexcept;
 
     // ---- four gated helpers (per-request gating + chain sequencing) ------
-    // Returns true iff a before_handler hook short-circuited (mr->response
+    // Returns true iff a before_handler hook short-circuited (conn->response
     // already emplaced; caller routes straight to materialize).
     bool fire_before_handler_gated(
-        modded_request* mr,
+        connection_context* conn,
         const std::shared_ptr<http_resource>& hrm);
-    void fire_after_handler_gated(modded_request* mr,
+    void fire_after_handler_gated(connection_context* conn,
                                   http_resource* resource);
-    void fire_response_sent_gated(modded_request* mr,
+    void fire_response_sent_gated(connection_context* conn,
                                   http_resource* resource);
-    void fire_request_completed_gated(modded_request* mr,
+    void fire_request_completed_gated(connection_context* conn,
                                       enum MHD_RequestTerminationCode toe);
 
  private:

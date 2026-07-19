@@ -1,4 +1,4 @@
-### 4.8 `detail::body` hierarchy
+### 4.8 `detail::response_body` hierarchy
 
 **Responsibility:** Polymorphic body representation backing `http_response`'s SBO buffer. Each subclass carries the data needed for one body kind and knows how to stream itself into an MHD response.
 
@@ -21,12 +21,12 @@ protected:
     body& operator=(body&&) = delete;
 };
 
-class string_body  : public body { /* std::string content_; */ };
-class file_body    : public body { /* std::string path_; std::size_t size_; int fd_; bool materialized_; */ };
-class iovec_body   : public body { /* std::vector<iovec_entry> entries_; std::size_t total_size_; */ };
-class pipe_body    : public body { /* int fd_; bool materialized_; */ };
-class deferred_body: public body { /* std::function<ssize_t(uint64_t, char*, std::size_t)> producer_; */ };
-class empty_body   : public body { /* int flags_; */ };
+class string_response_body  : public body { /* std::string content_; */ };
+class file_response_body    : public body { /* std::string path_; std::size_t size_; int fd_; bool materialized_; */ };
+class iovec_response_body   : public body { /* std::vector<iovec_entry> entries_; std::size_t total_size_; */ };
+class pipe_response_body    : public body { /* int fd_; bool materialized_; */ };
+class deferred_response_body: public body { /* std::function<ssize_t(uint64_t, char*, std::size_t)> producer_; */ };
+class empty_response_body   : public body { /* int flags_; */ };
 }
 ```
 
@@ -34,11 +34,11 @@ class empty_body   : public body { /* int flags_; */ };
 
 **Materialization timing:** `materialize()` is called from `webserver`'s dispatch, not from the handler. The body holds whatever data it needs (strings, paths, callables) until that point.
 
-**file_body open contract (implementation-close-out note):** Unlike the general guidance above, `file_body` opens the file descriptor and calls `fstat` at **construction** rather than in `materialize()`. This deliberate eager-open design achieves two goals: (1) `size()` is accurate immediately without calling `materialize()` first, and (2) `materialize()` can use `st_size` from the already-obtained `fstat` result, avoiding a TOCTOU race and an extra `lseek` syscall. The lazy-open guidance applies to the other body kinds (pipe, deferred); it does not apply to `file_body`.
+**file_response_body open contract (implementation-close-out note):** Unlike the general guidance above, `file_response_body` opens the file descriptor and calls `fstat` at **construction** rather than in `materialize()`. This deliberate eager-open design achieves two goals: (1) `size()` is accurate immediately without calling `materialize()` first, and (2) `materialize()` can use `st_size` from the already-obtained `fstat` result, avoiding a TOCTOU race and an extra `lseek` syscall. The lazy-open guidance applies to the other body kinds (pipe, deferred); it does not apply to `file_response_body`.
 
-**pipe_body ownership contract:** `pipe_body` takes ownership of a read-side file descriptor at construction. If `materialize()` succeeds, libmicrohttpd owns the fd (it is closed when `MHD_destroy_response` is called). If `materialize()` is never called, `~pipe_body()` closes the fd to prevent a leak. The `materialized_` field suppresses the destructor's close once MHD has taken ownership.
+**pipe_response_body ownership contract:** `pipe_response_body` takes ownership of a read-side file descriptor at construction. If `materialize()` succeeds, libmicrohttpd owns the fd (it is closed when `MHD_destroy_response` is called). If `materialize()` is never called, `~pipe_response_body()` closes the fd to prevent a leak. The `materialized_` field suppresses the destructor's close once MHD has taken ownership.
 
-**iovec_body allocation note:** `iovec_body` intentionally incurs one heap allocation for its `std::vector<iovec_entry>` backing store. The SBO slot holds only the vector control block (~24 bytes); the iovec entry array lives on the heap. This is the only SBO-resident body kind that performs a secondary heap allocation, and it is accepted as an inherent cost of `std::vector` (not a DR-005 violation — DR-005 governs the body-pointer allocation, not internal allocations within a fitting body).
+**iovec_response_body allocation note:** `iovec_response_body` intentionally incurs one heap allocation for its `std::vector<iovec_entry>` backing store. The SBO slot holds only the vector control block (~24 bytes); the iovec entry array lives on the heap. This is the only SBO-resident body kind that performs a secondary heap allocation, and it is accepted as an inherent cost of `std::vector` (not a DR-005 violation — DR-005 governs the body-pointer allocation, not internal allocations within a fitting body).
 
 **Related requirements:** PRD-RSP-REQ-006, PRD-HDR-REQ-005.
 

@@ -246,7 +246,7 @@ LT_END_AUTO_TEST(deferred_response_empty_content)
 
 namespace {
 // Sentinel whose destructor fires when the http_response (and its
-// deferred_body) is destroyed inside ~modded_request(), which fires from
+// deferred_response_body) is destroyed inside ~connection_context(), which fires from
 // webserver_impl::request_completed.  On destruction it sets *destroyed to
 // true and notifies *cv so the test thread's timed_wait can return
 // immediately rather than spinning to a 1-second timeout.
@@ -297,7 +297,7 @@ class by_value_class_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(deferred_suite, on_get_lambda_returns_value)
     // AC-1: lambda returns http_response by value and the dispatch
-    // path moves the prvalue into mr->response.
+    // path moves the prvalue into conn->response.
     ws->on_get("/by_value", [](const http_request&) {
         return http_response::string("hi");
     });
@@ -371,7 +371,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, class_render_get_returns_value)
 LT_END_AUTO_TEST(class_render_get_returns_value)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_completed)
-    // AC-3: the http_response (and its deferred_body's captured
+    // AC-3: the http_response (and its deferred_response_body's captured
     // producer state) must outlive every MHD trampoline invocation and be
     // destroyed only when request_completed fires. We pin the contract by
     // capturing a shared_ptr<destruction_sentinel> inside the producer's
@@ -401,7 +401,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     // Key contract: the producer captures must live until
     // request_completed. Capture the sentinel in the INNER (producer) lambda
     // only — not the outer on_get lambda — so it is destroyed with
-    // deferred_body when ~modded_request fires from request_completed.
+    // deferred_response_body when ~connection_context fires from request_completed.
     ws->on_get("/lifetime",
                [&producer_calls, &destroyed, &destroyed_mu, &destroyed_cv](
                    const http_request&) {

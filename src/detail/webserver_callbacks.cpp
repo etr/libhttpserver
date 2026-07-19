@@ -69,7 +69,7 @@
 #include "httpserver/websocket_handler.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 #include "httpserver/detail/upload_pipeline.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
@@ -172,29 +172,29 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     // These parameters are passed to respect the MHD interface, but are not needed here.
     std::ignore = cls;
 
-    // Fire request_completed BEFORE the modded_request is
+    // Fire request_completed BEFORE the connection_context is
     // destroyed so the ctx pointers remain backed by live storage. The
     // gate-and-fire helper reads any_hooks_[request_completed] and
-    // builds the ctx from mr->request, mr->response, and the MHD
+    // builds the ctx from conn->request, conn->response, and the MHD
     // termination code. The fire site is the very first thing this
-    // callback does, while mr is still untouched.
-    auto* mr = static_cast<detail::modded_request*>(*con_cls);
-    if (mr != nullptr) {
-        // mr->ws is the parent webserver -- set in answer_to_connection
+    // callback does, while conn is still untouched.
+    auto* conn = static_cast<detail::connection_context*>(*con_cls);
+    if (conn != nullptr) {
+        // conn->ws is the parent webserver -- set in answer_to_connection
         // (hoisted there). For paths where
         // answer_to_connection never ran (e.g., very early MHD failures),
-        // mr->ws may be null; skip the fire site in that degenerate case.
-        if (mr->ws != nullptr && mr->ws->impl_ != nullptr) {
-            mr->ws->impl_->hooks_dispatch_.fire_request_completed_gated(mr, toe);
+        // conn->ws may be null; skip the fire site in that degenerate case.
+        if (conn->ws != nullptr && conn->ws->impl_ != nullptr) {
+            conn->ws->impl_->hooks_dispatch_.fire_request_completed_gated(conn, toe);
         }
     }
 
-    // (1) Destroy the modded_request first. This runs ~http_request,
+    // (1) Destroy the connection_context first. This runs ~http_request,
     //     which calls the arena_deleter on the impl's unique_ptr (a
     //     destructor-only call: monotonic_buffer_resource never
     //     deallocates per-object), running every PMR string/vector/map
     //     destructor before we reset the arena.
-    delete static_cast<detail::modded_request*>(*con_cls);
+    delete static_cast<detail::connection_context*>(*con_cls);
     *con_cls = nullptr;
 
     // (2) Now that no live object inside the arena's storage remains,
@@ -210,7 +210,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     //
     // Unconditional release is correct regardless of the `toe`
     // (MHD_RequestTerminationCode) value: step (1) above always destroys
-    // the modded_request (and thus all arena-backed objects) before this
+    // the connection_context (and thus all arena-backed objects) before this
     // point, so the arena holds no live objects for any termination code,
     // including MHD_REQUEST_TERMINATED_WITH_ERROR. Resetting unconditionally
     // is therefore both safe and necessary to prepare the arena for the next
@@ -309,7 +309,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             // MHD ordering guarantee: NOTIFY_COMPLETED fires before
             // NOTIFY_CLOSED for the same connection. By the time we reach
             // this branch, request_completed has already called reset_arena()
-            // and the modded_request has already been deleted -- so the
+            // and the connection_context has already been deleted -- so the
             // connection_state is no longer referenced by any live object.
             // (Documents the invariant that prevents the concurrent
             // request_completed + NOTIFY_CLOSED race described in CWE-362.)
@@ -488,14 +488,14 @@ void* webserver_impl::uri_log(void* cls, const char* uri, struct MHD_Connection 
     std::ignore = cls;
     std::ignore = con;
 
-    auto mr = std::make_unique<detail::modded_request>();
+    auto conn = std::make_unique<detail::connection_context>();
     // MHD may invoke this callback with a null uri before the request line
     // has been parsed (e.g. port scans, half-open connections, or non-HTTP
     // traffic on the listening port). Treat that as an empty URI so the
     // std::string assignment does not throw std::logic_error and abort the
     // process via std::terminate. See issue #371.
-    mr->complete_uri = (uri != nullptr) ? uri : "";
-    return reinterpret_cast<void*>(mr.release());
+    conn->complete_uri = (uri != nullptr) ? uri : "";
+    return reinterpret_cast<void*>(conn.release());
 }
 
 void webserver_impl::error_log(void* cls, const char* fmt, va_list ap) {
@@ -561,20 +561,20 @@ size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char
 // behavior service (DR-014 §4.11). The no-file form-arg branch uses the
 // static upload_pipeline::handle_post_form_arg so it is reachable without an
 // owning webserver (post_iterator_null_key_test feeds a null-ws
-// modded_request); the file branch routes through the owning webserver's
+// connection_context); the file branch routes through the owning webserver's
 // upload_ instance.
 MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *key, const char *filename, const char *content_type,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
-    auto* mr = static_cast<detail::modded_request*>(cls);
+    auto* conn = static_cast<detail::connection_context*>(cls);
 
     if (!filename) {
-        return upload_pipeline::handle_post_form_arg(mr, key, data, size, off);
+        return upload_pipeline::handle_post_form_arg(conn, key, data, size, off);
     }
-    return mr->ws->impl_->upload_.iterate_file(
-        mr, key, filename, content_type, transfer_encoding, data, size);
+    return conn->ws->impl_->upload_.iterate_file(
+        conn, key, filename, content_type, transfer_encoding, data, size);
 }
 
 }  // namespace detail
@@ -604,7 +604,7 @@ namespace {
 //      duplicate '/' runs and strips a trailing '/'.
 //   2. normalize_path (below), applied to the standardized URL,
 //      resolves dot-segments ("." / "..") into a canonical absolute
-//      path; the result is stored as mr->standardized_url and is the
+//      path; the result is stored as conn->standardized_url and is the
 //      single path the rest of dispatch sees.
 //   3. canonicalize_lookup_path, inside lookup_v2
 //      (webserver_dispatch.cpp), canonicalizes slashes on the lookup
@@ -762,13 +762,13 @@ bool webserver_impl::should_skip_auth(std::string_view path) const {
 // method callback) and forwards into impl_->pipeline_.
 
 void webserver_impl::resolve_method_callback(const char* method,
-                                              detail::modded_request* mr) {
+                                              detail::connection_context* conn) {
     // Case-sensitive per RFC 7230 §3.1.1: HTTP method is case-sensitive.
     // Also record the enum form once so finalize_answer can call
     // hrm->is_allowed without re-scanning the wire string.
-    // Unrecognised methods leave mr->method_enum at the default
+    // Unrecognised methods leave conn->method_enum at the default
     // (count_), so is_allowed(count_) returns false and the request
-    // takes the 405 path. mr->callback is left at nullptr (its
+    // takes the 405 path. conn->callback is left at nullptr (its
     // default-initializer value) for unrecognised methods; the 405 guard
     // in dispatch_resource_handler fires before it is ever invoked.
     //
@@ -795,25 +795,25 @@ void webserver_impl::resolve_method_callback(const char* method,
     };
     for (const auto& e : methods) {
         if (0 == strcmp(method, e.wire)) {
-            mr->callback    = e.callback;
-            mr->method_enum = e.enum_val;
-            if (e.has_body) mr->has_body = true;
+            conn->callback    = e.callback;
+            conn->method_enum = e.enum_val;
+            if (e.has_body) conn->has_body = true;
             return;
         }
     }
-    // Unrecognised method: leave mr->callback == nullptr and
-    // mr->method_enum == http_method::count_ (both set by modded_request
+    // Unrecognised method: leave conn->callback == nullptr and
+    // conn->method_enum == http_method::count_ (both set by connection_context
     // default initialiser); the 405 guard fires before callback is used.
 }
 
 MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
         const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls) {
-    auto* mr = static_cast<detail::modded_request*>(*con_cls);
+    auto* conn = static_cast<detail::connection_context*>(*con_cls);
     auto* impl = static_cast<webserver_impl*>(cls);
 
-    if (mr->request) {
+    if (conn->request) {
         return impl->pipeline_.requests_answer_second_step(connection, method,
-            version, upload_data, upload_data_size, mr);
+            version, upload_data, upload_data_size, conn);
     }
 
     const MHD_ConnectionInfo* conninfo =
@@ -830,19 +830,19 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     // but is also invoked on non-HTTP traffic (#371); answer_to_connection
     // is the first point where a real HTTP request is unambiguously
     // in flight.
-    mr->start_time = std::chrono::steady_clock::now();
+    conn->start_time = std::chrono::steady_clock::now();
     // Hoist the parent-webserver back-pointer here (rather than in
     // complete_request) so the request_completed firing site
     // can reach impl_->any_hooks_ even on request_received short-circuit
     // paths that may not reach complete_request.
-    mr->ws = impl->parent;
+    conn->ws = impl->parent;
 
     std::string t_url = url;
     base_unescaper(&t_url, impl->parent->config.unescaper);
     // SECURITY: collapse dot-segments ("." / "..") into the canonical
     // path here, at the single point where the routing/auth path is
     // derived. Both the route matcher (segment_trie::find via
-    // mr->standardized_url) and should_skip_auth() must interpret the
+    // conn->standardized_url) and should_skip_auth() must interpret the
     // path identically; should_skip_auth() runs the path through
     // normalize_path() (which pops ".."), but standardize_url() only
     // collapses duplicate '/' and a trailing '/'. Without this, a request
@@ -852,13 +852,13 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     // normalize_path() to the standardized URL makes the two views agree;
     // it is idempotent w.r.t. the normalize_path() call already in
     // should_skip_auth().
-    mr->standardized_url = normalize_path(http_utils::standardize_url(t_url));
-    mr->has_body = false;
+    conn->standardized_url = normalize_path(http_utils::standardize_url(t_url));
+    conn->has_body = false;
 
     // log_access is now a response_sent alias (see webserver_aliases.cpp).
-    resolve_method_callback(method, mr);
+    resolve_method_callback(method, conn);
 
-    return impl->pipeline_.requests_answer_first_step(connection, mr);
+    return impl->pipeline_.requests_answer_first_step(connection, conn);
 }
 
 }  // namespace detail

@@ -52,7 +52,7 @@ class websocket_handler;
 
 namespace detail {
 
-struct modded_request;
+struct connection_context;
 class ws_registry;
 
 #ifdef HAVE_WEBSOCKET
@@ -71,7 +71,7 @@ class websocket_upgrader {
     // dispatch) or when a handshake header is missing/malformed but a 400 was
     // queued; an engaged optional carries the MHD_queue_response result.
     std::optional<MHD_Result> try_handle(MHD_Connection* connection,
-                                         modded_request* mr);
+                                         connection_context* conn);
 
  private:
     // Closure handed to MHD_create_response_for_upgrade: keeps the resolved
@@ -86,11 +86,11 @@ class websocket_upgrader {
     std::optional<const char*> validate_websocket_handshake(
         MHD_Connection* connection);
 
-    // Resolve the handler for mr->standardized_url and queue the 101 switch.
+    // Resolve the handler for conn->standardized_url and queue the 101 switch.
     // std::nullopt on no-handler / MHD failure / accept-header failure -- all
     // degraded to normal HTTP dispatch by the caller.
     std::optional<MHD_Result> complete_websocket_upgrade(
-        MHD_Connection* connection, modded_request* mr, const char* ws_key);
+        MHD_Connection* connection, connection_context* conn, const char* ws_key);
 
     // MHD upgrade callback (cls = ws_upgrade_data*). Owns the frame loop.
     static void upgrade_handler(void* cls, struct MHD_Connection* connection,

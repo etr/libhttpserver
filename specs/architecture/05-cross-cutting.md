@@ -72,9 +72,9 @@ src/
 │   └── detail/                          # NOT installed (existing convention)
 │       ├── webserver_impl.hpp            # NEW
 │       ├── http_request_impl.hpp         # NEW
-│       ├── body.hpp                      # NEW — detail::body + subclasses
+│       ├── body.hpp                      # NEW — detail::response_body + subclasses
 │       ├── http_endpoint.hpp             # existing
-│       ├── modded_request.hpp            # existing
+│       ├── connection_context.hpp            # existing
 │       ├── secure_zero.hpp               # NEW — non-elidable secure-zero helper (TASK-068)
 │       └── unescape_helpers.hpp          # NEW — shared percent-decode helpers (TASK-072)
 └── *.cpp                                  # implementations

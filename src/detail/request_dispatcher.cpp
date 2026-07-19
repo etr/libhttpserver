@@ -49,7 +49,7 @@
 #include "httpserver/detail/dispatch_util.hpp"
 #include "httpserver/detail/error_pages.hpp"
 #include "httpserver/detail/hook_dispatcher.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 #include "httpserver/detail/resource_hook_table.hpp"
 #include "httpserver/detail/response_materializer.hpp"
 #include "httpserver/detail/route_table.hpp"
@@ -63,7 +63,7 @@ using httpserver::http::http_utils;
 
 namespace detail {
 
-bool request_dispatcher::resolve_resource_for_request(detail::modded_request* mr,
+bool request_dispatcher::resolve_resource_for_request(detail::connection_context* conn,
         std::shared_ptr<http_resource>& hrm) {
     // matched_path_template + matched_is_prefix feed the route_resolved and
     // before_handler hook ctxs. Skip the heap allocation when no hook in
@@ -74,7 +74,7 @@ bool request_dispatcher::resolve_resource_for_request(detail::modded_request* mr
 
     // v2 lookup pipeline: cache -> exact -> radix -> regex.
     route_table::lookup_result result =
-        routes_.lookup_v2(mr->method_enum, mr->standardized_url);
+        routes_.lookup_v2(conn->method_enum, conn->standardized_url);
     if (!result.found) return false;
 
     // Every writer of route_entry populates a non-null shared_ptr; a null
@@ -87,9 +87,9 @@ bool request_dispatcher::resolve_resource_for_request(detail::modded_request* mr
 
     // Replay captured URL parameters into the request (per-name set_arg
     // matches v1 behaviour: duplicates with later wins).
-    if (mr->request != nullptr) {
+    if (conn->request != nullptr) {
         for (const auto& [name, value] : result.captured_params) {
-            mr->request->set_arg(name, value);
+            conn->request->set_arg(name, value);
         }
     }
 
@@ -97,8 +97,8 @@ bool request_dispatcher::resolve_resource_for_request(detail::modded_request* mr
     // registered for the phases that read them. v2 does not store the
     // matched URL template; fall back to standardized_url.
     if (need_path_template) {
-        mr->matched_path_template = mr->standardized_url;
-        mr->matched_is_prefix = result.entry.is_prefix;
+        conn->matched_path_template = conn->standardized_url;
+        conn->matched_is_prefix = result.entry.is_prefix;
     }
     return true;
 }
@@ -111,12 +111,12 @@ namespace {
 // alias slot is wired) or falls back to run_internal_error_handler_safely.
 // Extracted to keep dispatch_resource_handler under the CCN bar.
 void handle_dispatch_exception(hook_dispatcher& hooks, error_pages& errors,
-        const webserver_config& config, detail::modded_request* mr,
+        const webserver_config& config, detail::connection_context* conn,
         std::string_view message) {
-    // Per-route handler_exception: the weak_ptr was set on mr in
+    // Per-route handler_exception: the weak_ptr was set on conn in
     // finalize_answer before dispatch_resource_handler was called. res keeps
     // the resource alive while rtable is in use.
-    auto res = mr->resource_weak_.lock();
+    auto res = conn->resource_weak_.lock();
     auto* rtable = res ? res->hook_table_raw_() : nullptr;
     const bool per_route = rtable != nullptr &&
         rtable->any_hooks(hook_phase::handler_exception);
@@ -128,10 +128,10 @@ void handle_dispatch_exception(hook_dispatcher& hooks, error_pages& errors,
         // Capture the live exception_ptr before constructing the ctx so the
         // side-effectful call is separated from the struct literal.
         auto current_exc = std::current_exception();
-        handler_exception_ctx ctx{mr->request.get(), current_exc, message};
+        handler_exception_ctx ctx{conn->request.get(), current_exc, message};
         if (server_chain) {
             if (auto sc = hooks.fire_handler_exception(ctx)) {
-                mr->response.emplace(std::move(*sc));
+                conn->response.emplace(std::move(*sc));
                 return;
             }
         }
@@ -142,52 +142,52 @@ void handle_dispatch_exception(hook_dispatcher& hooks, error_pages& errors,
                     [&config](std::string_view m) {
                         log_dispatch_error(config, m);
                     })) {
-                mr->response.emplace(std::move(*sc));
+                conn->response.emplace(std::move(*sc));
                 return;
             }
         }
         // Every hook (and the alias) ran without a response -- emit the
         // hardcoded empty-body 500 directly.
-        mr->response.emplace(
-            errors.internal_error_page(mr, "", /*force_our=*/true));
+        conn->response.emplace(
+            errors.internal_error_page(conn, "", /*force_our=*/true));
         return;
     }
     // Backwards-compat fast path: no hook chain at all.
-    mr->response.emplace(
-        errors.run_internal_error_handler_safely(mr, message));
+    conn->response.emplace(
+        errors.run_internal_error_handler_safely(conn, message));
 }
 
 }  // namespace
 
-void request_dispatcher::dispatch_resource_handler(detail::modded_request* mr,
+void request_dispatcher::dispatch_resource_handler(detail::connection_context* conn,
         const std::shared_ptr<http_resource>& hrm) {
     try {
-        if (mr->pp != nullptr) {
-            MHD_destroy_post_processor(mr->pp);
-            mr->pp = nullptr;
+        if (conn->pp != nullptr) {
+            MHD_destroy_post_processor(conn->pp);
+            conn->pp = nullptr;
         }
         // before_handler fires from finalize_answer, so auth and
         // method-not-allowed alias hooks run as part of the unified
         // before_handler chain before this is called; the is_allowed check
         // below is the default (no-hook) 405 fallback.
-        if (hrm->is_allowed(mr->method_enum)) {
+        if (hrm->is_allowed(conn->method_enum)) {
             // Pointer-to-member dispatch returns http_response by value; the
             // prvalue is moved into the per-connection optional anchor.
-            mr->response.emplace(((*hrm).*(mr->callback))(*mr->request));
-            if (mr->response->get_status() == -1) {
+            conn->response.emplace(((*hrm).*(conn->callback))(*conn->request));
+            if (conn->response->get_status() == -1) {
                 // Handler returned the default-sentinel response. Route
                 // through the safe internal-error path.
-                mr->response.emplace(errors_.run_internal_error_handler_safely(
-                    mr, "handler returned null response"));
+                conn->response.emplace(errors_.run_internal_error_handler_safely(
+                    conn, "handler returned null response"));
             }
             return;
         }
         // Method not allowed: emit the Allow header from the resource's
         // lazily-cached value.
-        mr->response.emplace(errors_.method_not_allowed_page(mr));
+        conn->response.emplace(errors_.method_not_allowed_page(conn));
         const std::string& header_value = hrm->get_allow_header();
         if (!header_value.empty()) {
-            mr->response->with_header(http_utils::http_header_allow, header_value);
+            conn->response->with_header(http_utils::http_header_allow, header_value);
         }
     } catch (const std::exception& e) {
         // Handler threw std::exception -> handler_exception chain (with the
@@ -198,12 +198,12 @@ void request_dispatcher::dispatch_resource_handler(detail::modded_request* mr,
                 std::string("dispatch: handler threw std::exception: ")
                     .append(e.what()));
         }
-        handle_dispatch_exception(hooks_, errors_, config_, mr,
+        handle_dispatch_exception(hooks_, errors_, config_, conn,
                                   std::string_view{e.what()});
     } catch (...) {
         // Handler threw non-std::exception. Same flow, sentinel message.
         log_dispatch_error(config_, "dispatch: handler threw unknown exception");
-        handle_dispatch_exception(hooks_, errors_, config_, mr,
+        handle_dispatch_exception(hooks_, errors_, config_, conn,
                                   std::string_view{"unknown exception"});
     }
 }
@@ -211,7 +211,7 @@ void request_dispatcher::dispatch_resource_handler(detail::modded_request* mr,
 namespace {
 
 void fire_route_resolved_gated(hook_dispatcher& hooks,
-                               detail::modded_request* mr, bool found,
+                               detail::connection_context* conn, bool found,
                                const std::shared_ptr<http_resource>& hrm) {
     if (!hooks.has_hooks_for(hook_phase::route_resolved)) {
         return;
@@ -219,12 +219,12 @@ void fire_route_resolved_gated(hook_dispatcher& hooks,
     std::optional<route_descriptor> desc;
     if (found && hrm) {
         desc = route_descriptor{
-            /*path_template=*/std::string_view{mr->matched_path_template},
+            /*path_template=*/std::string_view{conn->matched_path_template},
             /*methods=*/hrm->get_allowed_methods(),
-            /*is_prefix=*/mr->matched_is_prefix};
+            /*is_prefix=*/conn->matched_is_prefix};
     }
     route_resolved_ctx ctx{
-        /*request=*/mr->request.get(),
+        /*request=*/conn->request.get(),
         /*matched=*/std::move(desc),
         /*resource=*/hrm ? hrm.get() : nullptr};
     hooks.fire_route_resolved(ctx);
@@ -233,77 +233,77 @@ void fire_route_resolved_gated(hook_dispatcher& hooks,
 }  // namespace
 
 std::optional<MHD_Result> request_dispatcher::try_ws_upgrade(
-        MHD_Connection* connection, detail::modded_request* mr) {
+        MHD_Connection* connection, detail::connection_context* conn) {
 #ifdef HAVE_WEBSOCKET
-    return ws_upgrader_.try_handle(connection, mr);
+    return ws_upgrader_.try_handle(connection, conn);
 #else
     (void)connection;
-    (void)mr;
+    (void)conn;
     return std::nullopt;
 #endif  // HAVE_WEBSOCKET
 }
 
 MHD_Result request_dispatcher::finalize_answer(MHD_Connection* connection,
-        detail::modded_request* mr) {
-    if (auto ws_result = try_ws_upgrade(connection, mr)) {
+        detail::connection_context* conn) {
+    if (auto ws_result = try_ws_upgrade(connection, conn)) {
         return *ws_result;
     }
 
     // A pre-handler short-circuit hook (request_received or body_chunk)
-    // already populated mr->response. Skip route lookup, auth, and dispatch
+    // already populated conn->response. Skip route lookup, auth, and dispatch
     // -- go straight to the response queue. after_handler is NOT fired on
     // this path (no handler ran); response_sent fires unconditionally in
     // materialize_and_queue_response.
-    if (mr->skip_handler) {
-        return materializer_.materialize_and_queue_response(connection, mr,
+    if (conn->skip_handler) {
+        return materializer_.materialize_and_queue_response(connection, conn,
                                                              nullptr);
     }
 
     // Hold a shared_ptr copy across dispatch so a concurrent
     // unregister_resource cannot free the resource mid-call.
     std::shared_ptr<http_resource> hrm;
-    bool found = resolve_resource_for_request(mr, hrm);
+    bool found = resolve_resource_for_request(conn, hrm);
 
     if (found) {
         // Snapshot whether this resource carries a per-route hook table so
         // fire_request_completed_gated (fires after this shared_ptr is gone)
         // can gate its weak_ptr lock() on the common zero-per-route-hook path.
-        mr->route_has_hook_table_ = (hrm->hook_table_raw_() != nullptr);
+        conn->route_has_hook_table_ = (hrm->hook_table_raw_() != nullptr);
 
         // Only stamp the weak_ptr when a later out-of-scope consumer can use
         // it (the MHD completion callback), i.e. iff this resource has a
         // per-route hook table OR a server-wide request_completed hook is
         // registered. Gating this drops 2 control-block atomics per matched
         // request on the common zero-hook path.
-        if (mr->route_has_hook_table_ ||
+        if (conn->route_has_hook_table_ ||
                 hooks_.has_hooks_for(hook_phase::request_completed)) {
-            mr->resource_weak_ = hrm;
+            conn->resource_weak_ = hrm;
         }
     }
 
-    fire_route_resolved_gated(hooks_, mr, found, hrm);
+    fire_route_resolved_gated(hooks_, conn, found, hrm);
 
     // Fire before_handler from here (not inside dispatch_resource_handler) so
     // auth + method-not-allowed alias hooks run as part of the unified
     // before_handler chain (per-route firing included by the gate). If either
-    // chain short-circuited, mr->response is already populated -> materialise.
-    if (found && hooks_.fire_before_handler_gated(mr, hrm)) {
-        return materializer_.materialize_and_queue_response(connection, mr,
+    // chain short-circuited, conn->response is already populated -> materialise.
+    if (found && hooks_.fire_before_handler_gated(conn, hrm)) {
+        return materializer_.materialize_and_queue_response(connection, conn,
                                                              hrm.get());
     }
 
     if (found) {
-        dispatch_resource_handler(mr, hrm);
-    } else if (!mr->response) {
-        mr->response.emplace(errors_.not_found_page(mr));
+        dispatch_resource_handler(conn, hrm);
+    } else if (!conn->response) {
+        conn->response.emplace(errors_.not_found_page(conn));
     }
 
     // after_handler fires between handler return (or 404 synthesis) and
     // materialise. hrm is null on the 404 path; both the gate and the
     // materialiser tolerate a null resource.
-    hooks_.fire_after_handler_gated(mr, hrm.get());
+    hooks_.fire_after_handler_gated(conn, hrm.get());
 
-    return materializer_.materialize_and_queue_response(connection, mr,
+    return materializer_.materialize_and_queue_response(connection, conn,
                                                         hrm.get());
 }
 

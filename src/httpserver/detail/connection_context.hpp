@@ -19,14 +19,14 @@
 */
 
 // Internal detail header: public headers only forward-declare
-// detail::modded_request, so this file is gated to
+// detail::connection_context, so this file is gated to
 // HTTPSERVER_COMPILATION-only, matching http_endpoint.hpp.
 #if !defined(HTTPSERVER_COMPILATION)
-#error "httpserver/detail/modded_request.hpp is internal; only include it when compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
+#error "httpserver/detail/connection_context.hpp is internal; only include it when compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
 #endif
 
-#ifndef SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
-#define SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
+#ifndef SRC_HTTPSERVER_DETAIL_CONNECTION_CONTEXT_HPP_
+#define SRC_HTTPSERVER_DETAIL_CONNECTION_CONTEXT_HPP_
 
 #include <microhttpd.h>  // MHD_destroy_post_processor (not reachable transitively via http_request.hpp -> http_utils.hpp)
 
@@ -42,7 +42,7 @@
 
 namespace httpserver {
 
-// modded_request forms a pointer-to-member on http_resource (the dispatch
+// connection_context forms a pointer-to-member on http_resource (the dispatch
 // `callback` slot) and a std::weak_ptr<http_resource>; both need only a
 // forward declaration. Declaring it here keeps this header self-contained
 // so every dispatch-pipeline TU (DR-014) can include it directly without
@@ -51,7 +51,7 @@ class http_resource;
 
 namespace detail {
 
-// modded_request adapts the raw MHD connection data into the
+// connection_context adapts the raw MHD connection data into the
 // libhttpserver request model, accumulating per-connection state
 // (parsed headers, upload stream, method callback, staged response)
 // across MHD's repeated answer_to_connection invocations for one
@@ -72,7 +72,7 @@ namespace detail {
 //      complete_request -> finalize_answer, which stages `response`.
 //   5. MHD's completion callback (request_completed) fires the
 //      request_completed hook, then deletes this object.
-struct modded_request {
+struct connection_context {
     struct MHD_PostProcessor *pp = nullptr;
     std::string complete_uri;
     std::string standardized_url;
@@ -81,7 +81,7 @@ struct modded_request {
     // Pointer-to-member dispatch slot; render_* return http_response
     // by value. Initialized to
     // nullptr; set by resolve_method_callback for recognized HTTP methods.
-    // For unrecognized methods mr->method_enum is left at count_ and
+    // For unrecognized methods conn->method_enum is left at count_ and
     // finalize_answer takes the 405 path before invoking this pointer.
     http_response (http_resource::*callback)(const http_request&) = nullptr;
 
@@ -93,7 +93,7 @@ struct modded_request {
     http_method method_enum = http_method::count_;
 
     // The http_request object for this connection, accessed throughout
-    // dispatch as mr->request. Null until the first answer_to_connection
+    // dispatch as conn->request. Null until the first answer_to_connection
     // invocation constructs it.
     std::unique_ptr<http_request> request = nullptr;
     // Anchor kept alive until request_completed. See webserver_impl.hpp for the full contract.
@@ -103,8 +103,8 @@ struct modded_request {
     // or body_chunk returning hook_action::respond_with(...)). When true,
     // finalize_answer skips resource resolution / auth / dispatch entirely
     // and goes straight to materialize_and_queue_response on the
-    // pre-populated mr->response. Defaults false; cleared only by the
-    // modded_request destructor.
+    // pre-populated conn->response. Defaults false; cleared only by the
+    // connection_context destructor.
     bool skip_handler = false;
 
     // Monotone counter of body bytes delivered to this
@@ -120,7 +120,7 @@ struct modded_request {
     // Captured by resolve_resource_for_request when a route matched.
     // The pair populates route_descriptor for both the route_resolved
     // and before_handler firing sites. Lifetime is the request (i.e.,
-    // the modded_request itself), so the string_view in the descriptor
+    // the connection_context itself), so the string_view in the descriptor
     // stays valid across hook calls even if a concurrent
     // unregister_path erases the underlying registration.
     //   - matched_path_template: CAUTION -- despite the name, this
@@ -141,7 +141,7 @@ struct modded_request {
 
     // Captured once on the first invocation of
     // webserver_impl::answer_to_connection for this request (i.e., when
-    // mr->request is still null -- the "fresh request" branch). The
+    // conn->request is still null -- the "fresh request" branch). The
     // response_sent and request_completed firing sites measure elapsed
     // wall time from this anchor. Default-constructed value (epoch) is
     // never read because both fire sites are unreachable until
@@ -174,15 +174,15 @@ struct modded_request {
     // this is true, preserving the unregistration-skip contract.
     bool route_has_hook_table_ = false;
 
-    modded_request() = default;
+    connection_context() = default;
 
-    modded_request(const modded_request& b) = delete;
-    modded_request(modded_request&& b) = default;
+    connection_context(const connection_context& b) = delete;
+    connection_context(connection_context&& b) = default;
 
-    modded_request& operator=(const modded_request& b) = delete;
-    modded_request& operator=(modded_request&& b) = default;
+    connection_context& operator=(const connection_context& b) = delete;
+    connection_context& operator=(connection_context&& b) = default;
 
-    ~modded_request() {
+    ~connection_context() {
         if (nullptr != pp) {
             MHD_destroy_post_processor(pp);
         }
@@ -193,4 +193,4 @@ struct modded_request {
 
 }  // namespace httpserver
 
-#endif  // SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
+#endif  // SRC_HTTPSERVER_DETAIL_CONNECTION_CONTEXT_HPP_

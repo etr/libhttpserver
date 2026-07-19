@@ -101,7 +101,7 @@ class websocket_handler;
 
 namespace detail {
 
-struct modded_request;
+struct connection_context;
 class lambda_resource;
 
 // connection_state lives in its own header to keep webserver_impl.hpp
@@ -276,7 +276,7 @@ class webserver_impl {
 
     // Behavior service (DR-014 §4.11): synthesises 404/405/500 responses.
     // A leaf — reads only the const config bag (via parent->config, bound
-    // at construction) and mr->request. The webserver_impl error-page
+    // at construction) and conn->request. The webserver_impl error-page
     // methods (not_found_page / internal_error_page / ...) forward here.
     error_pages errors_;
 

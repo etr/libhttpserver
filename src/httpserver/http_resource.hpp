@@ -55,8 +55,8 @@ namespace httpserver {
 
 // render_* virtuals return
 // http_response by value. The webserver dispatch path moves the value
-// into mr->response (an std::optional<http_response> living on the
-// per-connection modded_request) and keeps it alive until
+// into conn->response (an std::optional<http_response> living on the
+// per-connection connection_context) and keeps it alive until
 // MHD fires request_completed. The default render() returns a
 // default-constructed http_response whose status_code_ == -1 is the
 // v1-compatible sentinel for "handler did not produce a response"; the

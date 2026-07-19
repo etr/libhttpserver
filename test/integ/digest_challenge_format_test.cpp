@@ -84,7 +84,7 @@ class challenge_resource : public http_resource {
     http_response render_get(const http_request& /*req*/) override {
         return http_response::unauthorized(
             digest_challenge{.realm = "testrealm@host.com",
-                             .body  = "access denied"});
+                             .response_body  = "access denied"});
     }
 };
 
@@ -96,7 +96,7 @@ class sha256_challenge_resource : public http_resource {
         return http_response::unauthorized(
             digest_challenge{.realm      = "sha256realm@host.com",
                              .algorithm  = http_utils::digest_algorithm::SHA256,
-                             .body       = "denied"});
+                             .response_body       = "denied"});
     }
 };
 
@@ -109,7 +109,7 @@ class opaque_domain_challenge_resource : public http_resource {
             digest_challenge{.realm   = "odrealm@host.com",
                              .opaque  = "deadbeef",
                              .domain  = "/protected",
-                             .body    = "denied"});
+                             .response_body    = "denied"});
     }
 };
 #endif  // HAVE_DAUTH

@@ -29,9 +29,9 @@
 
 namespace httpserver {
 
-// Tag identifying which subclass of detail::body a given http_response is
+// Tag identifying which subclass of detail::response_body a given http_response is
 // currently holding. Consumers reach this through http_response::kind()
-// and should never have to name detail::body directly — the
+// and should never have to name detail::response_body directly — the
 // enum is the only consumer-visible part of the body hierarchy.
 //
 // `empty` is enumerator 0 so a value-initialised body_kind{} matches the

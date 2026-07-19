@@ -74,7 +74,7 @@
 #include "httpserver/websocket_handler.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 #include "httpserver/detail/path_normalize.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
@@ -920,7 +920,7 @@ void install_internal_error_alias(
     impl->hooks_.set_handler_exception_alias(
         [user_handler = std::move(user_handler)](
                 const handler_exception_ctx& ctx) -> hook_action {
-            // mr->request is always non-null at the call site in
+            // conn->request is always non-null at the call site in
             // handle_dispatch_exception; this guard is purely defensive for
             // any future call site that relaxes that invariant. If that
             // invariant is violated in debug builds, assert fires first.

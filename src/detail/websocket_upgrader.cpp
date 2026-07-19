@@ -45,7 +45,7 @@
 #include <utility>
 
 #include "httpserver/websocket_handler.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 #include "httpserver/detail/ws_registry.hpp"
 
 namespace httpserver {
@@ -152,12 +152,12 @@ std::optional<const char*> websocket_upgrader::validate_websocket_handshake(
 }
 
 std::optional<MHD_Result> websocket_upgrader::complete_websocket_upgrade(
-        MHD_Connection* connection, detail::modded_request* mr,
+        MHD_Connection* connection, detail::connection_context* conn,
         const char* ws_key) {
     // find() returns a shared_ptr copy taken under the registry's read lock,
     // so the handler is kept alive across the MHD upgrade callback even if
     // unregister_ws_resource erases the slot mid-upgrade.
-    std::shared_ptr<websocket_handler> handler_sp = ws_.find(mr->standardized_url);
+    std::shared_ptr<websocket_handler> handler_sp = ws_.find(conn->standardized_url);
     if (!handler_sp) {
         return std::nullopt;
     }
@@ -240,7 +240,7 @@ void websocket_upgrader::upgrade_handler(void* cls,
 }
 
 std::optional<MHD_Result> websocket_upgrader::try_handle(
-        MHD_Connection* connection, detail::modded_request* mr) {
+        MHD_Connection* connection, detail::connection_context* conn) {
     const char* upgrade_header = MHD_lookup_connection_value(connection,
         MHD_HEADER_KIND, MHD_HTTP_HEADER_UPGRADE);
     if (upgrade_header == nullptr
@@ -257,7 +257,7 @@ std::optional<MHD_Result> websocket_upgrader::try_handle(
         MHD_destroy_response(bad_response);
         return ret;
     }
-    return complete_websocket_upgrade(connection, mr, *ws_key);
+    return complete_websocket_upgrade(connection, conn, *ws_key);
 }
 
 }  // namespace detail

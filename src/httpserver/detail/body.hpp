@@ -42,7 +42,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <memory>           // unique_ptr for digest_challenge_body params
+#include <memory>           // unique_ptr for digest_challenge_response_body params
 #include <new>              // placement-new used by move_into() overrides
 #include <string>
 #include <type_traits>
@@ -69,9 +69,9 @@ namespace detail {
 // materialize() returns, libmicrohttpd holds borrowed pointers into the
 // body's storage; the body must therefore outlive the MHD_Response
 // (enforced through http_response's own lifetime).
-class body {
+class response_body {
  public:
-    virtual ~body();
+    virtual ~response_body();
 
     virtual body_kind kind() const noexcept = 0;
     virtual std::size_t size() const noexcept = 0;
@@ -86,9 +86,9 @@ class body {
     virtual void move_into(void* dst) noexcept = 0;
 
  protected:
-    body() = default;
-    body(const body&) = delete;
-    body& operator=(const body&) = delete;
+    response_body() = default;
+    response_body(const response_body&) = delete;
+    response_body& operator=(const response_body&) = delete;
     // Move ctor is intentionally NOT deleted. Concrete subclasses opt
     // back in (each declares a noexcept move ctor) so move_into() can
     // placement-move-construct into a target buffer. The base move-assign
@@ -100,26 +100,26 @@ class body {
     // relocates them by calling move_into(dst) rather than std::move. Callers
     // MUST NOT move-construct a body into an externally-owned heap object;
     // use move_into() to relocate an inline-stored body across SBO buffers.
-    body(body&&) noexcept = default;
-    body& operator=(body&&) = delete;
+    response_body(response_body&&) noexcept = default;
+    response_body& operator=(response_body&&) = delete;
 };
 
 // ---------------------------------------------------------------------------
-// empty_body — no payload. Mirrors v1 empty_response::get_raw_response.
+// empty_response_body — no payload. Mirrors v1 empty_response::get_raw_response.
 // ---------------------------------------------------------------------------
-class empty_body final : public body {
+class empty_response_body final : public response_body {
  public:
-    empty_body() noexcept = default;
-    explicit empty_body(int flags) noexcept : flags_(flags) {}
+    empty_response_body() noexcept = default;
+    explicit empty_response_body(int flags) noexcept : flags_(flags) {}
 
-    empty_body(empty_body&&) noexcept = default;
+    empty_response_body(empty_response_body&&) noexcept = default;
 
     body_kind kind() const noexcept override { return body_kind::empty; }
     std::size_t size() const noexcept override { return 0; }
     MHD_Response* materialize() override;
 
     void move_into(void* dst) noexcept override {
-        ::new (dst) empty_body(std::move(*this));
+        ::new (dst) empty_response_body(std::move(*this));
     }
 
  private:
@@ -127,36 +127,36 @@ class empty_body final : public body {
 };
 
 // ---------------------------------------------------------------------------
-// string_body — owns a std::string buffer; passes it to MHD as
+// string_response_body — owns a std::string buffer; passes it to MHD as
 // MHD_RESPMEM_PERSISTENT (no copy, body outlives the response).
 // Mirrors v1 string_response::get_raw_response.
 // ---------------------------------------------------------------------------
-class string_body final : public body {
+class string_response_body final : public response_body {
  public:
-    explicit string_body(std::string content) noexcept
-        : content_(std::move(content)) {}
+    explicit string_response_body(std::string data) noexcept
+        : data_(std::move(data)) {}
 
-    string_body(string_body&&) noexcept = default;
+    string_response_body(string_response_body&&) noexcept = default;
 
     body_kind kind() const noexcept override { return body_kind::string; }
-    std::size_t size() const noexcept override { return content_.size(); }
+    std::size_t size() const noexcept override { return data_.size(); }
     MHD_Response* materialize() override;
 
     void move_into(void* dst) noexcept override {
-        ::new (dst) string_body(std::move(*this));
+        ::new (dst) string_response_body(std::move(*this));
     }
 
-    /// Returns the body string. Primarily for tests.
-    [[nodiscard]] const std::string& get_content() const noexcept {
-        return content_;
+    /// Returns the body bytes. Primarily for tests.
+    [[nodiscard]] const std::string& get_data() const noexcept {
+        return data_;
     }
 
  private:
-    std::string content_;
+    std::string data_;
 };
 
 // ---------------------------------------------------------------------------
-// file_body — opens the file and runs fstat at construction so that:
+// file_response_body — opens the file and runs fstat at construction so that:
 //   * size() is accurate immediately (no need to call materialize() first),
 //     because the on-disk size is known from fstat, not from seek/tell.
 //   * materialize() avoids the TOCTOU race on file size: st_size from the
@@ -168,32 +168,32 @@ class string_body final : public body {
 //   path_ is assumed to be a validated, canonicalized path. O_NOFOLLOW
 //   blocks the final component being a symlink, but intermediate components
 //   are still followed. Callers supplying user-derived paths MUST canonicalize
-//   them (e.g. realpath()) before constructing file_body.
+//   them (e.g. realpath()) before constructing file_response_body.
 //
 // Ownership / lifecycle:
 //   * If open or fstat fails at construction, fd_ == -1 and size_ == 0;
 //     materialize() will return nullptr.
 //   * If materialize() succeeds, MHD owns the fd (MHD_destroy_response closes
-//     it). materialized_ is set to suppress ~file_body's close.
-//   * If materialize() is never called, ~file_body closes fd_.
+//     it). materialized_ is set to suppress ~file_response_body's close.
+//   * If materialize() is never called, ~file_response_body closes fd_.
 // ---------------------------------------------------------------------------
-class file_body final : public body {
+class file_response_body final : public response_body {
  public:
-    explicit file_body(std::string path) noexcept;
-    ~file_body() override;
+    explicit file_response_body(std::string path) noexcept;
+    ~file_response_body() override;
 
     // Hand-written move: transfers fd_ ownership and marks the source as
     // already-materialized so its destructor skips the close path
     // (otherwise the moved-from body would close the fd we just gave to
     // the destination).
-    file_body(file_body&& o) noexcept;
+    file_response_body(file_response_body&& o) noexcept;
 
     body_kind kind() const noexcept override { return body_kind::file; }
     std::size_t size() const noexcept override { return size_; }
     MHD_Response* materialize() override;
 
     void move_into(void* dst) noexcept override {
-        ::new (dst) file_body(std::move(*this));
+        ::new (dst) file_response_body(std::move(*this));
     }
 
  private:
@@ -204,7 +204,7 @@ class file_body final : public body {
 };
 
 // ---------------------------------------------------------------------------
-// iovec_body — scatter/gather buffers. The CWE-190 narrowing guard on
+// iovec_response_body — scatter/gather buffers. The CWE-190 narrowing guard on
 // entries_.size() (UINT_MAX cap) is preserved from v1
 // iovec_response::get_raw_response. The reinterpret_cast to MHD_IoVec*
 // is justified by the layout-pinning static_asserts in body.cpp.
@@ -214,42 +214,42 @@ class file_body final : public body {
 // size() contract is "logical body size in bytes".
 //
 // LIFETIME CONTRACT (CWE-416):
-//   iovec_body owns the entries_ vector (the container), but the iov_base
+//   iovec_response_body owns the entries_ vector (the container), but the iov_base
 //   pointers inside each iovec_entry are BORROWED — they point into
 //   caller-owned buffers. After materialize() returns, libmicrohttpd holds
 //   those borrowed pointers until MHD_destroy_response() is called.
 //
-//   CALLERS MUST guarantee that all iov_base buffers (and the iovec_body
+//   CALLERS MUST guarantee that all iov_base buffers (and the iovec_response_body
 //   itself) outlive the MHD_Response* returned by materialize(). The
-//   factory path enforces this by tying the iovec_body's
+//   factory path enforces this by tying the iovec_response_body's
 //   lifetime to http_response, and http_response must outlive the MHD
 //   connection. Do NOT free the underlying buffer data before the
 //   MHD_Response is destroyed.
 //
 // ALLOCATION NOTE:
 //   std::vector unconditionally heap-allocates its backing store, so every
-//   iovec_body construction performs one heap allocation. The SBO
+//   iovec_response_body construction performs one heap allocation. The SBO
 //   static_assert only verifies that the vector control block (3 words)
 //   fits in the 64-byte inline slot; the iovec_entry array itself lives on
 //   the heap. This is intentional: iovec payloads are by definition
 //   scatter lists of borrowed pointers, so a further small-vector
 //   optimisation would only save one allocation while adding complexity.
-//   The heap fallback is an accepted trade-off for iovec_body.
+//   The heap fallback is an accepted trade-off for iovec_response_body.
 // ---------------------------------------------------------------------------
-class iovec_body final : public body {
+class iovec_response_body final : public response_body {
  public:
-    explicit iovec_body(std::vector<iovec_entry> entries) noexcept
+    explicit iovec_response_body(std::vector<iovec_entry> entries) noexcept
         : entries_(std::move(entries)),
           total_size_(compute_total_size(entries_)) {}
 
-    iovec_body(iovec_body&&) noexcept = default;
+    iovec_response_body(iovec_response_body&&) noexcept = default;
 
     body_kind kind() const noexcept override { return body_kind::iovec; }
     std::size_t size() const noexcept override { return total_size_; }
     MHD_Response* materialize() override;
 
     void move_into(void* dst) noexcept override {
-        ::new (dst) iovec_body(std::move(*this));
+        ::new (dst) iovec_response_body(std::move(*this));
     }
 
  private:
@@ -265,40 +265,40 @@ class iovec_body final : public body {
 };
 
 // ---------------------------------------------------------------------------
-// pipe_body — owns a read-side fd. v2 ownership contract:
+// pipe_response_body — owns a read-side fd. v2 ownership contract:
 //   * constructor takes ownership of fd
 //   * if materialize() succeeds, MHD owns the fd (it closes on
 //     MHD_destroy_response)
-//   * if materialize() is never called, ~pipe_body() must close the fd
+//   * if materialize() is never called, ~pipe_response_body() must close the fd
 //     to avoid a leak (v1 didn't have to handle this because its
 //     pipe_response always reached the dispatch path)
 // ---------------------------------------------------------------------------
-class pipe_body final : public body {
+class pipe_response_body final : public response_body {
  public:
-    explicit pipe_body(int fd) noexcept : fd_(fd) {}
-    ~pipe_body() override;
+    explicit pipe_response_body(int fd) noexcept : fd_(fd) {}
+    ~pipe_response_body() override;
 
     // Hand-written move: transfers fd_ and suppresses the source's close
-    // path (mirrors file_body for the same reason).
-    pipe_body(pipe_body&& o) noexcept;
+    // path (mirrors file_response_body for the same reason).
+    pipe_response_body(pipe_response_body&& o) noexcept;
 
     body_kind kind() const noexcept override { return body_kind::pipe; }
     std::size_t size() const noexcept override { return 0; }  // size unknown
     MHD_Response* materialize() override;
 
     void move_into(void* dst) noexcept override {
-        ::new (dst) pipe_body(std::move(*this));
+        ::new (dst) pipe_response_body(std::move(*this));
     }
 
  private:
     int fd_ = -1;
-    // suppresses ~pipe_body's close — MHD owns fd_ after a successful
-    // materialize() (mirrors the analogous field in file_body).
+    // suppresses ~pipe_response_body's close — MHD owns fd_ after a successful
+    // materialize() (mirrors the analogous field in file_response_body).
     bool materialized_ = false;
 };
 
 // ---------------------------------------------------------------------------
-// deferred_body — type-erased producer callback. v1 stored a typed
+// deferred_response_body — type-erased producer callback. v1 stored a typed
 // callable inside deferred_response<T>; v2 type-erases through
 // std::function so the body fits the SBO budget without templating
 // http_response.
@@ -320,34 +320,34 @@ class pipe_body final : public body {
 //   libstdc++ / libc++). Lambdas that capture more than one pointer (e.g.
 //   a user object reference plus a shared_ptr sentinel) will silently
 //   heap-allocate inside std::function. The static_assert on
-//   sizeof(deferred_body) only verifies that std::function's control
+//   sizeof(deferred_response_body) only verifies that std::function's control
 //   block fits in the 64-byte SBO buffer, NOT that the callable itself
 //   is stored inline. Callers should minimise captures to stay within
 //   std::function's internal SSO threshold if zero-allocation is required.
 // ---------------------------------------------------------------------------
-class deferred_body final : public body {
+class deferred_response_body final : public response_body {
  public:
     using producer_type =
         std::function<ssize_t(std::uint64_t, char*, std::size_t)>;
 
-    explicit deferred_body(producer_type producer) noexcept
+    explicit deferred_response_body(producer_type producer) noexcept
         : producer_(std::move(producer)) {
         // Precondition: caller must not pass a null/empty callable.
         // An empty producer_ would cause trampoline() to return
         // MHD_CONTENT_READER_END_WITH_ERROR on every MHD read callback,
         // which is unlikely to be the caller's intent.
         assert(producer_ != nullptr &&
-               "deferred_body: producer must not be empty");
+               "deferred_response_body: producer must not be empty");
     }
 
-    deferred_body(deferred_body&&) noexcept = default;
+    deferred_response_body(deferred_response_body&&) noexcept = default;
 
     body_kind kind() const noexcept override { return body_kind::deferred; }
     std::size_t size() const noexcept override { return 0; }  // size unknown
     MHD_Response* materialize() override;
 
     void move_into(void* dst) noexcept override {
-        ::new (dst) deferred_body(std::move(*this));
+        ::new (dst) deferred_response_body(std::move(*this));
     }
 
     // Public so unit tests can drive it directly; also passed by name
@@ -360,7 +360,7 @@ class deferred_body final : public body {
 };
 
 // ---------------------------------------------------------------------------
-// digest_challenge_body — RFC-7616 Digest auth challenge marker.
+// digest_challenge_response_body — RFC-7616 Digest auth challenge marker.
 //
 // Stores the parameters needed to drive
 // MHD_queue_auth_required_response3 at dispatch time. materialize()
@@ -374,12 +374,12 @@ class deferred_body final : public body {
 // Parameters live on the heap inside a single unique_ptr to keep the
 // body's inline footprint under the 64-byte SBO budget. The
 // trade-off — one extra small allocation at factory time — is accepted
-// because the alternative (promoting digest_challenge_body to a
+// because the alternative (promoting digest_challenge_response_body to a
 // heap-fallback body via the existing oversized path) would also
 // allocate, and the inline-with-unique_ptr shape keeps the SBO budget
 // assertion clean.
 // ---------------------------------------------------------------------------
-class digest_challenge_body final : public body {
+class digest_challenge_response_body final : public response_body {
  public:
     struct params {
         std::string realm;
@@ -397,10 +397,10 @@ class digest_challenge_body final : public body {
     // Not noexcept: std::make_unique heap-allocates and can throw
     // std::bad_alloc. Only the move constructor and move_into() (used by
     // http_response's noexcept move path) need to be noexcept.
-    explicit digest_challenge_body(params p)
+    explicit digest_challenge_response_body(params p)
         : params_(std::make_unique<params>(std::move(p))) {}
 
-    digest_challenge_body(digest_challenge_body&&) noexcept = default;
+    digest_challenge_response_body(digest_challenge_response_body&&) noexcept = default;
 
     body_kind kind() const noexcept override {
         return body_kind::digest_challenge;
@@ -411,7 +411,7 @@ class digest_challenge_body final : public body {
     MHD_Response* materialize() override;
 
     void move_into(void* dst) noexcept override {
-        ::new (dst) digest_challenge_body(std::move(*this));
+        ::new (dst) digest_challenge_response_body(std::move(*this));
     }
 
     // Read-only accessor for params. Used by the dispatch path
@@ -437,34 +437,34 @@ class digest_challenge_body final : public body {
 // platform, http_response's factory must heap-allocate that subclass
 // instead (and its destructor must dispatch on body_inline_).
 // ---------------------------------------------------------------------------
-static_assert(sizeof(empty_body) <= 64,
-              "empty_body must fit in http_response SBO (DR-005)");
-static_assert(alignof(empty_body) <= 16,
-              "empty_body alignment must be <= alignas(16) SBO buffer (DR-005)");
-static_assert(sizeof(string_body) <= 64,
-              "string_body must fit in http_response SBO (DR-005)");
-static_assert(alignof(string_body) <= 16,
-              "string_body alignment must be <= alignas(16) SBO buffer (DR-005)");
-static_assert(sizeof(file_body) <= 64,
-              "file_body must fit in http_response SBO (DR-005)");
-static_assert(alignof(file_body) <= 16,
-              "file_body alignment must be <= alignas(16) SBO buffer (DR-005)");
-static_assert(sizeof(iovec_body) <= 64,
-              "iovec_body must fit in http_response SBO (DR-005)");
-static_assert(alignof(iovec_body) <= 16,
-              "iovec_body alignment must be <= alignas(16) SBO buffer (DR-005)");
-static_assert(sizeof(pipe_body) <= 64,
-              "pipe_body must fit in http_response SBO (DR-005)");
-static_assert(alignof(pipe_body) <= 16,
-              "pipe_body alignment must be <= alignas(16) SBO buffer (DR-005)");
-static_assert(sizeof(deferred_body) <= 64,
-              "deferred_body must fit in http_response SBO (DR-005)");
-static_assert(alignof(deferred_body) <= 16,
-              "deferred_body alignment must be <= 16 (DR-005)");
-static_assert(sizeof(digest_challenge_body) <= 64,
-              "digest_challenge_body must fit in http_response SBO (DR-005)");
-static_assert(alignof(digest_challenge_body) <= 16,
-              "digest_challenge_body alignment must be <= 16 (DR-005)");
+static_assert(sizeof(empty_response_body) <= 64,
+              "empty_response_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(empty_response_body) <= 16,
+              "empty_response_body alignment must be <= alignas(16) SBO buffer (DR-005)");
+static_assert(sizeof(string_response_body) <= 64,
+              "string_response_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(string_response_body) <= 16,
+              "string_response_body alignment must be <= alignas(16) SBO buffer (DR-005)");
+static_assert(sizeof(file_response_body) <= 64,
+              "file_response_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(file_response_body) <= 16,
+              "file_response_body alignment must be <= alignas(16) SBO buffer (DR-005)");
+static_assert(sizeof(iovec_response_body) <= 64,
+              "iovec_response_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(iovec_response_body) <= 16,
+              "iovec_response_body alignment must be <= alignas(16) SBO buffer (DR-005)");
+static_assert(sizeof(pipe_response_body) <= 64,
+              "pipe_response_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(pipe_response_body) <= 16,
+              "pipe_response_body alignment must be <= alignas(16) SBO buffer (DR-005)");
+static_assert(sizeof(deferred_response_body) <= 64,
+              "deferred_response_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(deferred_response_body) <= 16,
+              "deferred_response_body alignment must be <= 16 (DR-005)");
+static_assert(sizeof(digest_challenge_response_body) <= 64,
+              "digest_challenge_response_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(digest_challenge_response_body) <= 16,
+              "digest_challenge_response_body alignment must be <= 16 (DR-005)");
 
 // Per-subclass nothrow-move contract. http_response::move_into(...) is
 // noexcept, and that depends on every concrete body's move
@@ -472,20 +472,20 @@ static_assert(alignof(digest_challenge_body) <= 16,
 // breaks this (e.g. swapping std::function for a wrapper that allocates
 // on move), the assert fires here so the regression is caught at the
 // subclass site, not buried in http_response.cpp.
-static_assert(std::is_nothrow_move_constructible_v<empty_body>,
-              "empty_body move ctor must be noexcept (TASK-009 / DR-005)");
-static_assert(std::is_nothrow_move_constructible_v<string_body>,
-              "string_body move ctor must be noexcept (TASK-009 / DR-005)");
-static_assert(std::is_nothrow_move_constructible_v<file_body>,
-              "file_body move ctor must be noexcept (TASK-009 / DR-005)");
-static_assert(std::is_nothrow_move_constructible_v<iovec_body>,
-              "iovec_body move ctor must be noexcept (TASK-009 / DR-005)");
-static_assert(std::is_nothrow_move_constructible_v<pipe_body>,
-              "pipe_body move ctor must be noexcept (TASK-009 / DR-005)");
-static_assert(std::is_nothrow_move_constructible_v<deferred_body>,
-              "deferred_body move ctor must be noexcept (TASK-009 / DR-005)");
-static_assert(std::is_nothrow_move_constructible_v<digest_challenge_body>,
-              "digest_challenge_body move ctor must be noexcept (DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<empty_response_body>,
+              "empty_response_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<string_response_body>,
+              "string_response_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<file_response_body>,
+              "file_response_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<iovec_response_body>,
+              "iovec_response_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<pipe_response_body>,
+              "pipe_response_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<deferred_response_body>,
+              "deferred_response_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<digest_challenge_response_body>,
+              "digest_challenge_response_body move ctor must be noexcept (DR-005)");
 
 }  // namespace detail
 

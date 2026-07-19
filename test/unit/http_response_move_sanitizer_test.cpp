@@ -65,7 +65,7 @@
 
 using httpserver::body_kind;
 using httpserver::http_response;
-using httpserver::detail::body;
+using httpserver::detail::response_body;
 
 
 namespace httpserver {
@@ -73,7 +73,7 @@ namespace httpserver {
 // Friend accessor hook — see http_response_sbo_test.cpp for the canonical
 // explanation of why this definition is intentionally duplicated across TUs.
 struct http_response_sbo_test_access {
-    static body*& body_ptr(http_response& r) noexcept { return r.body_; }
+    static response_body*& body_ptr(http_response& r) noexcept { return r.body_; }
     static bool& body_inline(http_response& r) noexcept {
         return r.body_inline_;
     }
@@ -107,12 +107,12 @@ using SBO = httpserver::http_response_sbo_test_access;
 // Carries an optional dtor counter (pointer style, matching counter_body
 // in the SBO test) so individual cases can assert "exactly one dtor
 // fired" semantics on heap-allocated source / destination bodies.
-class fat_body final : public body {
+class fat_body final : public response_body {
  public:
     explicit fat_body(int* counter) noexcept : counter_(counter) {}
 
     fat_body(fat_body&& o) noexcept
-        : body(std::move(o)),  // body carries virtual dispatch machinery;
+        : response_body(std::move(o)),  // body carries virtual dispatch machinery;
                                // std::move is the required form — a future
                                // refactor that makes fat_body trivially
                                // movable must still move the vptr-bearing
@@ -171,7 +171,7 @@ static_assert(std::is_nothrow_move_constructible_v<fat_body>,
 // -----------------------------------------------------------------------
 void place_heap_fat(http_response& r, int* counter) {
     void* mem = ::operator new(sizeof(fat_body));
-    body* b = ::new (mem) fat_body(counter);
+    response_body* b = ::new (mem) fat_body(counter);
     SBO::body_ptr(r) = b;
     SBO::body_inline(r) = false;
     SBO::kind(r) = body_kind::empty;
@@ -225,7 +225,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
 
     // Source: moved-from contract — destructible (body_ == nullptr makes
     // ~http_response's destroy_body a no-op).
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(SBO::body_inline(src), false);
 LT_END_AUTO_TEST(move_ctor_inline_factory)
 
@@ -241,7 +241,7 @@ LT_END_AUTO_TEST(move_ctor_inline_factory)
 LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
                    move_ctor_heap_synthetic)
     int dtor_count = 0;
-    body* original_ptr = nullptr;
+    response_body* original_ptr = nullptr;
     {
         http_response src;
         place_heap_fat(src, &dtor_count);
@@ -251,7 +251,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
 
         LT_CHECK_EQ(SBO::body_inline(dst), false);
         LT_CHECK_EQ(SBO::body_ptr(dst), original_ptr);
-        LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+        LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
         LT_CHECK_EQ(SBO::body_inline(src), false);
 
         // While dst is still alive, the heap body has NOT been destroyed.
@@ -297,7 +297,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     LT_CHECK_EQ(SBO::body_inline(dst), true);
     LT_CHECK_EQ(reinterpret_cast<void*>(SBO::body_ptr(dst)),
                 reinterpret_cast<void*>(SBO::storage(dst)));
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
 LT_END_AUTO_TEST(move_assign_inline_to_inline_factory)
 
 
@@ -306,7 +306,7 @@ LT_END_AUTO_TEST(move_assign_inline_to_inline_factory)
 //
 // Destination is factory-constructed (inline). Source carries a synthetic
 // fat_body on the heap. Post-move: dst takes ownership of the heap body
-// (pointer identity preserved); the old inline string_body's destructor
+// (pointer identity preserved); the old inline string_response_body's destructor
 // must have fired (otherwise it would leak via the in-buffer string).
 // On scope exit, dst's destructor frees the fat_body — exactly once.
 // -----------------------------------------------------------------------
@@ -317,7 +317,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
         http_response dst = http_response::string("OLD", "text/plain");
         http_response src;
         place_heap_fat(src, &dtor_count);
-        body* heap_ptr = SBO::body_ptr(src);
+        response_body* heap_ptr = SBO::body_ptr(src);
 
         LT_ASSERT_EQ(SBO::body_inline(dst), true);
         LT_ASSERT_EQ(SBO::body_inline(src), false);
@@ -326,7 +326,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
 
         LT_CHECK_EQ(SBO::body_inline(dst), false);
         LT_CHECK_EQ(SBO::body_ptr(dst), heap_ptr);
-        LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+        LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
         // Heap body still alive at this point.
         LT_CHECK_EQ(dtor_count, 0);
     }
@@ -361,7 +361,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     LT_CHECK_EQ(SBO::body_inline(dst), true);
     LT_CHECK_EQ(reinterpret_cast<void*>(SBO::body_ptr(dst)),
                 reinterpret_cast<void*>(SBO::storage(dst)));
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(dst.get_header("Content-Type"), "text/plain");
 LT_END_AUTO_TEST(move_assign_heap_to_inline_synthetic)
 
@@ -379,7 +379,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
                    move_assign_heap_to_heap_synthetic)
     int dst_counter = 0;
     int src_counter = 0;
-    body* src_ptr = nullptr;
+    response_body* src_ptr = nullptr;
     {
         http_response dst;
         http_response src;
@@ -395,7 +395,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
         LT_CHECK_EQ(src_counter, 0);
         LT_CHECK_EQ(SBO::body_inline(dst), false);
         LT_CHECK_EQ(SBO::body_ptr(dst), src_ptr);
-        LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+        LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     }
     // Scope exit: src moved-from (no-op), dst destroys the adopted body.
     LT_CHECK_EQ(dst_counter, 1);
@@ -426,7 +426,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     LT_CHECK_EQ(r.get_status(), 200);
     LT_CHECK_EQ(r.get_header("Content-Type"), "application/json");
     LT_CHECK_EQ(r.get_header("X-Self"), "1");
-    LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<body*>(nullptr));
+    LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<response_body*>(nullptr));
 LT_END_AUTO_TEST(move_assign_self_inline_statePreserved)
 
 
@@ -480,7 +480,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     // "defined behaviour" contract above. sink_status may be 0 or 202
     // depending on the std::map moved-from state, but it must be a valid
     // int — the volatile read above already asserts no UB occurred.
-    LT_ASSERT_NEQ(SBO::body_ptr(dst), static_cast<body*>(nullptr));
+    LT_ASSERT_NEQ(SBO::body_ptr(dst), static_cast<response_body*>(nullptr));
     // Suppress unused-variable warnings on compilers that warn even after
     // a volatile assignment; the reads already happened above.
     (void)sink_status;
@@ -505,7 +505,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     http_response src = http_response::string("first", "text/plain")
                             .with_status(200);
     http_response dst(std::move(src));
-    LT_ASSERT_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_ASSERT_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
 
     // Assign a fresh response into the moved-from src — must be safe.
     src = http_response::empty().with_status(204);
@@ -513,14 +513,14 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     LT_CHECK_EQ(src.get_status(), 204);
     LT_CHECK_EQ(static_cast<int>(src.kind()),
                 static_cast<int>(body_kind::empty));
-    LT_ASSERT_NEQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_ASSERT_NEQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
 LT_END_AUTO_TEST(moved_from_is_reassignable)
 
 
 // -----------------------------------------------------------------------
-// file_body move-ctor under sanitizers.
+// file_response_body move-ctor under sanitizers.
 //
-// file_body has a hand-written move ctor (detail/body.hpp:182) that
+// file_response_body has a hand-written move ctor (detail/body.hpp:182) that
 // transfers fd ownership and flips materialized_ to suppress double-close
 // in the source's destructor. ASan would flag a use-after-close (or a
 // double-close abort from glibc) if either side mishandled the fd. The
@@ -528,7 +528,7 @@ LT_END_AUTO_TEST(moved_from_is_reassignable)
 // libtest infrastructure expects to be present at the test working dir.
 //
 // This is the only "real" production heap-aware body the test exercises:
-// while file_body fits the SBO budget, its hand-written move + fd
+// while file_response_body fits the SBO budget, its hand-written move + fd
 // ownership is a different lifetime contract than the trivial-move
 // string/empty path, so this suite deliberately includes
 // at least one file move-construct case.
@@ -550,8 +550,8 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     LT_CHECK_EQ(static_cast<int>(dst.kind()),
                 static_cast<int>(body_kind::file));
     LT_CHECK_EQ(SBO::body_inline(dst), true);
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
-    // The fd lives inside dst's file_body; scope exit closes it exactly
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
+    // The fd lives inside dst's file_response_body; scope exit closes it exactly
     // once (the moved-from src's destructor is a no-op).
 LT_END_AUTO_TEST(move_ctor_file_body_inline)
 

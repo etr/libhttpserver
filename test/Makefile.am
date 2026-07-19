@@ -94,7 +94,7 @@ create_webserver_explicit_LDADD =
 new_response_types_SOURCES = integ/new_response_types.cpp
 daemon_info_SOURCES = integ/daemon_info.cpp
 uri_log_SOURCES = unit/uri_log_test.cpp
-# uri_log_test directly references libmicrohttpd via ~modded_request(), so
+# uri_log_test directly references libmicrohttpd via ~connection_context(), so
 # it needs an explicit -lmicrohttpd in its link line on top of the default
 # LDADD (modern ld enforces --no-copy-dt-needed-entries).
 uri_log_LDADD = $(LDADD) -lmicrohttpd
@@ -109,7 +109,7 @@ unescaper_func_SOURCES = unit/unescaper_func_test.cpp
 # webserver_impl::post_iterator callback with a null key (the continuation-
 # chunk case MHD hits when a field is split across callbacks) and asserts it
 # no longer throws std::logic_error / terminates. Constructs a
-# modded_request whose ~modded_request() touches libmicrohttpd, so it needs
+# connection_context whose ~connection_context() touches libmicrohttpd, so it needs
 # the explicit -lmicrohttpd link the same way uri_log does.
 post_iterator_null_key_SOURCES = unit/post_iterator_null_key_test.cpp
 post_iterator_null_key_LDADD = $(LDADD) -lmicrohttpd
@@ -131,7 +131,7 @@ header_hygiene_LDADD =
 iovec_entry_SOURCES = unit/iovec_entry_test.cpp
 http_method_SOURCES = unit/http_method_test.cpp
 constants_SOURCES = unit/constants_test.cpp
-# body: TASK-008 unit test for the internal detail::body hierarchy. It
+# body: TASK-008 unit test for the internal detail::response_body hierarchy. It
 # constructs/destroys MHD_Response objects directly via the libmicrohttpd
 # inspection APIs (no daemon), so it needs an explicit -lmicrohttpd link
 # the same way uri_log does.
@@ -142,7 +142,7 @@ body_LDADD = $(LDADD) -lmicrohttpd
 # http_response. Pokes the private body_/body_storage_/body_inline_/kind_
 # members through a friend declaration, exercises the four-case move
 # cross-product, and asserts the type-trait acceptance criteria. Needs
-# -lmicrohttpd because it transitively touches detail::body subclasses
+# -lmicrohttpd because it transitively touches detail::response_body subclasses
 # whose materialize() returns MHD_Response*.
 http_response_sbo_SOURCES = unit/http_response_sbo_test.cpp
 http_response_sbo_LDADD = $(LDADD) -lmicrohttpd
@@ -150,7 +150,7 @@ http_response_sbo_LDADD = $(LDADD) -lmicrohttpd
 # http_response_factories: TASK-010 unit test for the static factory
 # functions on http_response (string/file/iovec/pipe/empty/deferred/
 # unauthorized). Each factory placement-news the corresponding
-# detail::body subclass into the SBO buffer, so this TU includes the
+# detail::response_body subclass into the SBO buffer, so this TU includes the
 # private detail/body.hpp via the build-tree -DHTTPSERVER_COMPILATION
 # path. Needs -lmicrohttpd for the same transitive reasons as
 # http_response_sbo.
@@ -161,7 +161,7 @@ http_response_factories_LDADD = $(LDADD) -lmicrohttpd
 # Digest-specific overload of http_response::unauthorized
 # (digest_challenge). Pins status/kind/algorithm/opaque/domain
 # round-trip through the factory, the SBO budget for the new
-# detail::digest_challenge_body subclass, and the CR/LF/NUL injection
+# detail::digest_challenge_response_body subclass, and the CR/LF/NUL injection
 # guard on realm/opaque/domain. Needs -lmicrohttpd for the same
 # transitive reasons as http_response_factories.
 http_response_digest_factory_SOURCES = unit/http_response_digest_factory_test.cpp
@@ -175,7 +175,7 @@ http_response_digest_factory_LDADD = $(LDADD) -lmicrohttpd
 # uses, and pins the moved-from invariant contract (destructible,
 # accessor-safe, re-assignable). Picked up by the asan / ubsan matrix
 # entries in .github/workflows/verify-build.yml via $(check_PROGRAMS).
-# Needs -lmicrohttpd because the TU subclasses detail::body whose
+# Needs -lmicrohttpd because the TU subclasses detail::response_body whose
 # materialize() returns MHD_Response*.
 http_response_move_sanitizer_SOURCES = unit/http_response_move_sanitizer_test.cpp
 http_response_move_sanitizer_LDADD = $(LDADD) -lmicrohttpd
@@ -620,7 +620,7 @@ hooks_handler_exception_slot_SOURCES = unit/hooks_handler_exception_slot_test.cp
 # - hooks_request_completed_ctx_shape: compile-time pin for the
 #   extended request_completed_ctx (resp pointer + succeeded flag).
 # - hooks_after_handler_replaces_response: after_handler returning
-#   respond_with(r2) replaces mr->response before MHD_queue_response.
+#   respond_with(r2) replaces conn->response before MHD_queue_response.
 # - hooks_after_handler_mutates_response_in_place: after_handler
 #   returning pass() after ctx.response->with_header(...) puts the
 #   header on the wire.

@@ -38,7 +38,7 @@
 #include <utility>
 #include <vector>
 
-#include "httpserver/detail/body.hpp"   // complete type for body_->~body()
+#include "httpserver/detail/body.hpp"   // complete type for body_->~response_body()
 #include "httpserver/detail/http_field_validation.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/iovec_entry.hpp"
@@ -80,7 +80,7 @@ static_assert(alignof(http_response) >= 16,
 // -----------------------------------------------------------------------
 void http_response::destroy_body() noexcept {
     if (body_ == nullptr) return;
-    body_->~body();
+    body_->~response_body();
     if (!body_inline_) {
         // Heap path: ::operator delete pairs with the
         // ::operator new(sizeof(T)) the factory uses.
@@ -100,9 +100,9 @@ void http_response::adopt_body_from(http_response& other) noexcept {
         // Placement-move into our buffer, then destroy the source's
         // inline body so the source's destructor is a no-op.
         other.body_->move_into(body_storage_);
-        body_ = reinterpret_cast<detail::body*>(body_storage_);
+        body_ = reinterpret_cast<detail::response_body*>(body_storage_);
         body_inline_ = true;
-        other.body_->~body();
+        other.body_->~response_body();
     } else {
         // Heap path: pointer transfer — no allocation, no copy.
         body_ = other.body_;
@@ -121,7 +121,7 @@ void http_response::adopt_body_from(http_response& other) noexcept {
 //
 // Non-virtual: the class is `final`, so polymorphic
 // destruction through a base pointer is impossible. Out-of-line because
-// destroy_body() needs the complete type detail::body.
+// destroy_body() needs the complete type detail::response_body.
 // -----------------------------------------------------------------------
 http_response::~http_response() {
     destroy_body();

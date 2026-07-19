@@ -10,7 +10,7 @@ The builder remains non-PIMPL (it's a pure value carrier; PIMPL would buy nothin
 callback is `std::function<std::optional<http_response>(const http_request&)>`.
 Returning `std::nullopt` allows the request through; returning an
 engaged optional short-circuits the before_handler chain with that
-response (the dispatcher moves it into `mr->response`). The earlier v2
+response (the dispatcher moves it into `conn->response`). The earlier v2
 work-in-progress shape returned `std::shared_ptr<http_response>`; that
 shape remains available for one transitional build via the
 `httpserver::compat::auth_handler_v1_ptr` typedef alias and a

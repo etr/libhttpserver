@@ -18,12 +18,12 @@
      USA
 */
 
-// Negative test (Check A.2b): a consumer including modded_request.hpp
+// Negative test (Check A.2b): a consumer including connection_context.hpp
 // directly must hit the gate. Complements consumer_detail.cpp (A.2) which
 // covers http_endpoint.hpp; both detail headers carry the same
 // HTTPSERVER_COMPILATION-only gate and both must be verified independently.
 // _HTTPSERVER_HPP_INSIDE_ is defined precisely to validate that the
 // stricter HTTPSERVER_COMPILATION-only gate rejects it.
 #define _HTTPSERVER_HPP_INSIDE_
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 int main() { return 0; }

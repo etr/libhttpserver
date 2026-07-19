@@ -11,7 +11,7 @@
 
 | Attribute | Requirement | Architecture response |
 |---|---|---|
-| Public-header decoupling | No `<microhttpd.h>` / `<gnutls/gnutls.h>` / `<pthread.h>` / `<sys/socket.h>` / `<sys/uio.h>` in installed headers | PIMPL on `webserver` and `http_request`; forward-declared `detail::body` for `http_response`; high-level accessors (cert DN, fingerprint) replacing raw GnuTLS handles; library-defined `httpserver::iovec_entry` POD replacing `struct iovec` in the public `http_response::iovec(...)` factory |
+| Public-header decoupling | No `<microhttpd.h>` / `<gnutls/gnutls.h>` / `<pthread.h>` / `<sys/socket.h>` / `<sys/uio.h>` in installed headers | PIMPL on `webserver` and `http_request`; forward-declared `detail::response_body` for `http_response`; high-level accessors (cert DN, fingerprint) replacing raw GnuTLS handles; library-defined `httpserver::iovec_entry` POD replacing `struct iovec` in the public `http_response::iovec(...)` factory |
 | Build-flag stability | Public API surface invariant under `HAVE_BAUTH` / `HAVE_DAUTH` / `HAVE_GNUTLS` / `HAVE_WEBSOCKET` | Unconditional declarations; runtime sentinels or `feature_unavailable` throws when backends disabled; `webserver::features()` reports availability |
 | Const correctness | Pure accessors `const`; lazy caches OK via `mutable`; daemon-driving methods exempt | Request-side caches in `mutable` storage (or unique_ptr); `is_running` / `get_fdset` / `get_timeout` documented as exempt operations |
 | Hot-path performance | Per-request getters do not allocate or copy containers | Container-returning getters change to `const&` / `string_view`; per-request impl arena-allocated from a per-connection `std::pmr::monotonic_buffer_resource`; method-state held as a `uint32_t` bitmask, not a `std::map` |

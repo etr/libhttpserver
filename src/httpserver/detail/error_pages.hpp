@@ -21,7 +21,7 @@
 // error_pages -- behavior service (DR-014, §4.11) that synthesises the
 // 404 / 405 / 500 responses. A leaf in the dispatch DAG: it reads only
 // the const config bag (the user not_found / method_not_allowed /
-// internal_error handlers + expose_exception_messages) and mr->request;
+// internal_error handlers + expose_exception_messages) and conn->request;
 // it owns no state, takes no locks, and touches no other collaborator.
 //
 // Internal header; only reachable when compiling libhttpserver.
@@ -42,7 +42,7 @@ struct webserver_config;
 
 namespace detail {
 
-struct modded_request;
+struct connection_context;
 
 class error_pages {
  public:
@@ -57,12 +57,12 @@ class error_pages {
 
     // 404 body: the user not_found_handler if set, else the fixed
     // NOT_FOUND_ERROR string with http_not_found status.
-    http_response not_found_page(modded_request* mr) const;
+    http_response not_found_page(connection_context* conn) const;
 
     // 405 body: the user method_not_allowed_handler if set, else the
     // fixed METHOD_ERROR string with http_method_not_allowed status. The
     // caller supplies the Allow header separately.
-    http_response method_not_allowed_page(modded_request* mr) const;
+    http_response method_not_allowed_page(connection_context* conn) const;
 
     // 500 body. @p force_our=true returns the double-fault fallback: an
     // EMPTY-body 500 with @p msg ignored (used when the user handler
@@ -73,7 +73,7 @@ class error_pages {
     // expose_exception_messages is on, in which case @p msg becomes the
     // body. @p msg is still logged verbatim by the caller via
     // log_dispatch_error regardless of the body path taken.
-    http_response internal_error_page(modded_request* mr,
+    http_response internal_error_page(connection_context* conn,
                                       std::string_view msg,
                                       bool force_our = false) const;
 
@@ -81,7 +81,7 @@ class error_pages {
     // user internal_error_handler: on throw, log generically via
     // log_dispatch_error and return the hardcoded empty-body 500. No
     // exception escapes.
-    http_response run_internal_error_handler_safely(modded_request* mr,
+    http_response run_internal_error_handler_safely(connection_context* conn,
                                                     std::string_view msg) const;
 
  private:

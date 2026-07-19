@@ -161,7 +161,7 @@ class user_pass_resource : public http_resource {
 
 #ifdef HAVE_DAUTH
 // digest_resource drives the full RFC-7616 nonce/opaque
-// handshake by emitting digest_challenge_body challenges. The first
+// handshake by emitting digest_challenge_response_body challenges. The first
 // request from a curl --digest client arrives with no Authorization
 // header (get_digested_user() empty), so we emit the initial RFC-7616
 // challenge with nonce/opaque/algorithm/qop populated by the dispatch
@@ -172,7 +172,7 @@ class digest_resource : public http_resource {
      http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
          using httpserver::digest_challenge;
-         digest_challenge fail_ch{.realm = "examplerealm", .body = "FAIL"};
+         digest_challenge fail_ch{.realm = "examplerealm", .response_body = "FAIL"};
          if (req.get_digested_user() == "") {
              return http_response::unauthorized(fail_ch);
          }
@@ -302,7 +302,7 @@ class digest_ha1_resource : public http_resource {
              return http_response::unauthorized(
                  digest_challenge{.realm     = "examplerealm",
                                   .algorithm = algo_,
-                                  .body      = "FAIL"});
+                                  .response_body      = "FAIL"});
          }
          auto result = req.check_digest_auth_digest("examplerealm", ha1_,
                  ha1_size_, 300, 0, algo_);
@@ -311,12 +311,12 @@ class digest_ha1_resource : public http_resource {
                  digest_challenge{.realm        = "examplerealm",
                                   .algorithm    = algo_,
                                   .signal_stale = true,
-                                  .body         = "FAIL"});
+                                  .response_body         = "FAIL"});
          } else if (result != http_utils::digest_auth_result::OK) {
              return http_response::unauthorized(
                  digest_challenge{.realm     = "examplerealm",
                                   .algorithm = algo_,
-                                  .body      = "FAIL"});
+                                  .response_body      = "FAIL"});
          }
          return http_response::string("SUCCESS");
      }
@@ -660,7 +660,7 @@ class digest_user_cache_resource : public http_resource {
             // challenge so a client can compute a response.
             return http_response::unauthorized(
                 digest_challenge{.realm = "testrealm",
-                                 .body  = "FAIL"});
+                                 .response_body  = "FAIL"});
         }
 
         // Validate the round-2 credentials. NOT_AUTHORIZED here means the
@@ -670,7 +670,7 @@ class digest_user_cache_resource : public http_resource {
         if (result != http_utils::digest_auth_result::OK) {
             return http_response::unauthorized(
                 digest_challenge{.realm = "testrealm",
-                                 .body  = "FAIL"});
+                                 .response_body  = "FAIL"});
         }
 
         // Second call: must hit the cache (lines 293-295 in http_request.cpp).

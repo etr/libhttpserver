@@ -20,7 +20,7 @@
 
 // Unit tests for the static factory functions on http_response.
 //
-// Each factory placement-news the corresponding detail::body subclass
+// Each factory placement-news the corresponding detail::response_body subclass
 // into the SBO buffer (or, in the future, onto the heap) and tags the
 // response with the appropriate body_kind. Tests cover:
 //   * the public observable contract: kind(), get_status(),
@@ -57,7 +57,7 @@
 #include <utility>
 
 #include "./httpserver.hpp"                 // public umbrella
-#include "httpserver/detail/body.hpp"       // private detail::body (test-only)
+#include "httpserver/detail/body.hpp"       // private detail::response_body (test-only)
 #include "./littletest.hpp"
 
 using httpserver::body_kind;
@@ -85,7 +85,7 @@ struct http_response_sbo_test_access {
     static bool body_inline(http_response& r) noexcept {
         return r.body_inline_;
     }
-    static httpserver::detail::body* body_ptr(http_response& r) noexcept {
+    static httpserver::detail::response_body* body_ptr(http_response& r) noexcept {
         return r.body_;
     }
     static body_kind kind(http_response& r) noexcept { return r.kind_; }
@@ -113,7 +113,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, empty_factory)
                 static_cast<int>(body_kind::empty));
     LT_CHECK_EQ(SBO::body_inline(r), true);
     LT_ASSERT_NEQ(SBO::body_ptr(r),
-                  static_cast<httpserver::detail::body*>(nullptr));
+                  static_cast<httpserver::detail::response_body*>(nullptr));
     // Default status code: 204 No Content (matches v1 empty_response).
     LT_CHECK_EQ(r.get_status(), 204);
 LT_END_AUTO_TEST(empty_factory)
@@ -211,7 +211,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_empty_span)
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::iovec));
     LT_CHECK_EQ(r.get_status(), 200);
-    // iovec_body fits in the 64-byte SBO buffer — verify inline placement.
+    // iovec_response_body fits in the 64-byte SBO buffer — verify inline placement.
     LT_CHECK_EQ(SBO::body_inline(r), true);
 LT_END_AUTO_TEST(iovec_factory_empty_span)
 
@@ -223,7 +223,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_single_entry)
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::iovec));
     LT_CHECK_EQ(r.get_status(), 200);
-    // iovec_body fits in the 64-byte SBO buffer — verify inline placement.
+    // iovec_response_body fits in the 64-byte SBO buffer — verify inline placement.
     LT_CHECK_EQ(SBO::body_inline(r), true);
 LT_END_AUTO_TEST(iovec_factory_single_entry)
 
@@ -327,7 +327,7 @@ LT_END_AUTO_TEST(unauthorized_digest_scheme_renders_in_header)
 
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
                    unauthorized_kind_is_string_even_when_body_empty)
-    // The body slot literally holds a string_body (with empty content)
+    // The body slot literally holds a string_response_body (with empty content)
     // so kind() must report body_kind::string. Forking on the empty
     // case to report body_kind::empty would break the invariant.
     auto r = http_response::unauthorized("Basic", "myrealm");
@@ -485,7 +485,7 @@ LT_END_AUTO_TEST(factory_move_preserves_kind_and_headers)
 // -----------------------------------------------------------------------
 // Zero-copy invariant: chained with_* calls on a factory's
 // rvalue must not perturb the SBO placement. http_response::string(...)
-// places a string_body inline in the SBO buffer; the && overloads of
+// places a string_response_body inline in the SBO buffer; the && overloads of
 // with_header / with_status return http_response&& (i.e. propagate the
 // xvalue without an intermediate copy/move-construct), so the body
 // pointer must remain inline through the chain.

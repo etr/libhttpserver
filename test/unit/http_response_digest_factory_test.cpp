@@ -26,11 +26,11 @@
 //     algorithm/opaque/domain/body-text values);
 //   * CR/LF/NUL in realm/opaque/domain throw std::invalid_argument
 //     (header-injection guard, mirrors the Basic-side validation);
-//   * the new digest_challenge_body subclass fits the 64-byte SBO
+//   * the new digest_challenge_response_body subclass fits the 64-byte SBO
 //     budget (pinned by the static_assert in detail/body.hpp, mirrored
 //     in-test to catch a future ABI drift early).
 //
-// The unit tests do NOT reach into detail::digest_challenge_body via the
+// The unit tests do NOT reach into detail::digest_challenge_response_body via the
 // friend hook to inspect get_params() fields (algorithm, opaque, domain).
 // Those fields are verified at the wire level in:
 //   test/integ/digest_challenge_format_test.cpp
@@ -51,7 +51,7 @@
 #include <utility>
 
 #include "./httpserver.hpp"                 // public umbrella
-#include "httpserver/detail/body.hpp"       // private detail::body (test-only)
+#include "httpserver/detail/body.hpp"       // private detail::response_body (test-only)
 #include "./littletest.hpp"
 
 using httpserver::body_kind;
@@ -69,7 +69,7 @@ struct http_response_sbo_test_access {
     static bool body_inline(http_response& r) noexcept {
         return r.body_inline_;
     }
-    static httpserver::detail::body* body_ptr(http_response& r) noexcept {
+    static httpserver::detail::response_body* body_ptr(http_response& r) noexcept {
         return r.body_;
     }
     static body_kind kind(http_response& r) noexcept { return r.kind_; }
@@ -89,14 +89,14 @@ LT_END_SUITE(http_response_digest_factory_suite)
 #ifdef HAVE_DAUTH
 
 // ---------------------------------------------------------------------
-// SBO budget pin: digest_challenge_body must fit in http_response's
+// SBO budget pin: digest_challenge_response_body must fit in http_response's
 // 64-byte inline buffer with alignment <= 16.
 // ---------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
                    digest_challenge_body_fits_sbo)
-    LT_CHECK_EQ(sizeof(httpserver::detail::digest_challenge_body) <= 64,
+    LT_CHECK_EQ(sizeof(httpserver::detail::digest_challenge_response_body) <= 64,
                 true);
-    LT_CHECK_EQ(alignof(httpserver::detail::digest_challenge_body) <= 16,
+    LT_CHECK_EQ(alignof(httpserver::detail::digest_challenge_response_body) <= 16,
                 true);
 LT_END_AUTO_TEST(digest_challenge_body_fits_sbo)
 
@@ -136,7 +136,7 @@ LT_END_AUTO_TEST(digest_challenge_does_not_set_www_authenticate_header)
 // Algorithm and field round-trips: body_kind discrimination only.
 //
 // The previous tests in this section reached into the private
-// detail::digest_challenge_body params struct via the SBO friend hook and
+// detail::digest_challenge_response_body params struct via the SBO friend hook and
 // a concrete-subclass cast (body->get_params().algorithm, .opaque, .domain).
 // That couples the unit tests to the internal storage shape.  The
 // authoritative place to verify algorithm, opaque, and domain values is
@@ -205,7 +205,7 @@ LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
                    digest_challenge_with_body_text_is_digest_challenge_kind)
     digest_challenge ch;
     ch.realm = "r";
-    ch.body = "access denied";
+    ch.response_body = "access denied";
     auto r = http_response::unauthorized(std::move(ch));
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::digest_challenge));

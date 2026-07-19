@@ -71,7 +71,7 @@ class http_response;
 // umbrella header; member-function bodies live in src/websocket_handler.cpp.
 class websocket_handler;
 namespace detail {
-struct modded_request;
+struct connection_context;
 class webserver_impl;
 class daemon_lifecycle;
 class http_endpoint;

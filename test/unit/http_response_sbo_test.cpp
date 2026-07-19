@@ -27,7 +27,7 @@
 // caught on every build, even if no runtime test references them.
 //
 // This TU is built with -DHTTPSERVER_COMPILATION so it can reach the
-// internal detail::body hierarchy directly — same exemption the body_test
+// internal detail::response_body hierarchy directly — same exemption the body_test
 // uses. From a consumer's perspective these layouts are opaque.
 //
 // All access to http_response's private SBO state goes through
@@ -55,9 +55,9 @@
 
 using httpserver::http_response;
 using httpserver::body_kind;
-using httpserver::detail::body;
-using httpserver::detail::empty_body;
-using httpserver::detail::string_body;
+using httpserver::detail::response_body;
+using httpserver::detail::empty_response_body;
+using httpserver::detail::string_response_body;
 
 // -----------------------------------------------------------------------
 // Compile-time AC enforcement.
@@ -72,13 +72,13 @@ static_assert(!std::is_copy_assignable_v<http_response>,
               "TASK-009 AC: responses are move-only");
 
 // Exemption from the public-headers-are-PIMPL rule: http_response is the
-// explicit non-PIMPL value type. The body member is a raw detail::body* (NOT a
-// unique_ptr<detail::body>), and there is no PIMPL impl_ pointer.
+// explicit non-PIMPL value type. The body member is a raw detail::response_body* (NOT a
+// unique_ptr<detail::response_body>), and there is no PIMPL impl_ pointer.
 static_assert(!std::is_same_v<http_response::body_pointer_type,
-                              std::unique_ptr<body>>,
+                              std::unique_ptr<response_body>>,
               "PRD-HDR-REQ-004 exemption: http_response is not PIMPL");
-static_assert(std::is_same_v<http_response::body_pointer_type, body*>,
-              "TASK-009: body_pointer_type is detail::body*");
+static_assert(std::is_same_v<http_response::body_pointer_type, response_body*>,
+              "TASK-009: body_pointer_type is detail::response_body*");
 
 // SBO buffer budget.
 static_assert(http_response::body_buf_size == 64,
@@ -102,7 +102,7 @@ namespace httpserver {
 // friend in http_response.hpp; defined here so it is an implementation
 // detail of this TU and adds zero footprint to the production API.
 struct http_response_sbo_test_access {
-    static body*& body_ptr(http_response& r) noexcept { return r.body_; }
+    static response_body*& body_ptr(http_response& r) noexcept { return r.body_; }
     static bool& body_inline(http_response& r) noexcept {
         return r.body_inline_;
     }
@@ -126,20 +126,20 @@ using SBO = httpserver::http_response_sbo_test_access;
 // validated by integration tests; this TU is the canonical place to
 // exercise the SBO internals directly.
 
-// Place a string_body into r's inline storage and wire the response
+// Place a string_response_body into r's inline storage and wire the response
 // fields up. `r` must be empty (default-constructed).
 void place_inline_string(http_response& r, std::string content) {
-    ::new (SBO::storage(r)) string_body(std::move(content));
-    SBO::body_ptr(r) = reinterpret_cast<body*>(SBO::storage(r));
+    ::new (SBO::storage(r)) string_response_body(std::move(content));
+    SBO::body_ptr(r) = reinterpret_cast<response_body*>(SBO::storage(r));
     SBO::body_inline(r) = true;
     SBO::kind(r) = body_kind::string;
 }
 
-// Heap-allocate a string_body via ::operator new + placement-new so it
+// Heap-allocate a string_response_body via ::operator new + placement-new so it
 // matches the destructor's ::operator delete pairing.
 void place_heap_string(http_response& r, std::string content) {
-    void* mem = ::operator new(sizeof(string_body));
-    body* b = ::new (mem) string_body(std::move(content));
+    void* mem = ::operator new(sizeof(string_response_body));
+    response_body* b = ::new (mem) string_response_body(std::move(content));
     SBO::body_ptr(r) = b;
     SBO::body_inline(r) = false;
     SBO::kind(r) = body_kind::string;
@@ -148,12 +148,12 @@ void place_heap_string(http_response& r, std::string content) {
 // Counter-based body subclass used to verify dtor calls under both
 // inline and heap paths. The class needs to fit in the 64-byte SBO
 // budget (it does: one int*).
-class counter_body final : public body {
+class counter_body final : public response_body {
  public:
     explicit counter_body(int* counter) noexcept : counter_(counter) {}
 
     counter_body(counter_body&& o) noexcept
-        : body(std::move(o)),
+        : response_body(std::move(o)),
           counter_(std::exchange(o.counter_, nullptr)) {}
 
     ~counter_body() override {
@@ -178,14 +178,14 @@ class counter_body final : public body {
 
 void place_inline_counter(http_response& r, int* counter) {
     ::new (SBO::storage(r)) counter_body(counter);
-    SBO::body_ptr(r) = reinterpret_cast<body*>(SBO::storage(r));
+    SBO::body_ptr(r) = reinterpret_cast<response_body*>(SBO::storage(r));
     SBO::body_inline(r) = true;
     SBO::kind(r) = body_kind::empty;
 }
 
 void place_heap_counter(http_response& r, int* counter) {
     void* mem = ::operator new(sizeof(counter_body));
-    body* b = ::new (mem) counter_body(counter);
+    response_body* b = ::new (mem) counter_body(counter);
     SBO::body_ptr(r) = b;
     SBO::body_inline(r) = false;
     SBO::kind(r) = body_kind::empty;
@@ -208,14 +208,14 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_ctor_inline_source)
     http_response dst(std::move(src));
 
     LT_CHECK_EQ(SBO::body_inline(dst), true);
-    LT_ASSERT_NEQ(SBO::body_ptr(dst), static_cast<body*>(nullptr));
+    LT_ASSERT_NEQ(SBO::body_ptr(dst), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
                 static_cast<int>(body_kind::string));
     // dst's body must point INTO dst's inline buffer, not into src's.
     LT_CHECK_EQ(reinterpret_cast<void*>(SBO::body_ptr(dst)),
                 reinterpret_cast<void*>(SBO::storage(dst)));
     // src must be torn down so its destructor is a no-op.
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(SBO::body_inline(src), false);
 LT_END_AUTO_TEST(move_ctor_inline_source)
 
@@ -226,13 +226,13 @@ LT_END_AUTO_TEST(move_ctor_inline_source)
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_ctor_heap_source)
     http_response src;
     place_heap_string(src, "world");
-    body* original_ptr = SBO::body_ptr(src);
+    response_body* original_ptr = SBO::body_ptr(src);
 
     http_response dst(std::move(src));
 
     LT_CHECK_EQ(SBO::body_inline(dst), false);
     LT_CHECK_EQ(SBO::body_ptr(dst), original_ptr);
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
 LT_END_AUTO_TEST(move_ctor_heap_source)
 
 // -----------------------------------------------------------------------
@@ -251,10 +251,10 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_inline_to_inline)
     // Old dst body (counter_body) must have been destroyed exactly once.
     LT_CHECK_EQ(dtor_count, 1);
     LT_CHECK_EQ(SBO::body_inline(dst), true);
-    LT_ASSERT_NEQ(SBO::body_ptr(dst), static_cast<body*>(nullptr));
+    LT_ASSERT_NEQ(SBO::body_ptr(dst), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(reinterpret_cast<void*>(SBO::body_ptr(dst)),
                 reinterpret_cast<void*>(SBO::storage(dst)));
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     // kind_ must be propagated from src to dst (string) and src reset to empty.
     LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
                 static_cast<int>(body_kind::string));
@@ -271,7 +271,7 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_src_into_inline_dst
     http_response src;
     place_inline_counter(dst, &dtor_count);   // dst holds counter_body; dtor must fire
     place_heap_string(src, "new-heap");
-    body* heap_ptr = SBO::body_ptr(src);
+    response_body* heap_ptr = SBO::body_ptr(src);
 
     dst = std::move(src);
 
@@ -279,7 +279,7 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_src_into_inline_dst
     LT_CHECK_EQ(dtor_count, 1);
     LT_CHECK_EQ(SBO::body_inline(dst), false);
     LT_CHECK_EQ(SBO::body_ptr(dst), heap_ptr);
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
                 static_cast<int>(body_kind::string));
     LT_CHECK_EQ(static_cast<int>(SBO::kind(src)),
@@ -301,7 +301,7 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_to_inline)
     LT_CHECK_EQ(SBO::body_inline(dst), true);
     LT_CHECK_EQ(reinterpret_cast<void*>(SBO::body_ptr(dst)),
                 reinterpret_cast<void*>(SBO::storage(dst)));
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
                 static_cast<int>(body_kind::string));
     LT_CHECK_EQ(static_cast<int>(SBO::kind(src)),
@@ -314,13 +314,13 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_to_heap)
     http_response src;
     place_heap_string(dst, "old-heap");
     place_heap_string(src, "new-heap");
-    body* new_ptr = SBO::body_ptr(src);
+    response_body* new_ptr = SBO::body_ptr(src);
 
     dst = std::move(src);
 
     LT_CHECK_EQ(SBO::body_inline(dst), false);
     LT_CHECK_EQ(SBO::body_ptr(dst), new_ptr);
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
                 static_cast<int>(body_kind::string));
     LT_CHECK_EQ(static_cast<int>(SBO::kind(src)),
@@ -364,9 +364,9 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_ctor_null_body)
     http_response src;  // default-constructed; body_ == nullptr
     http_response dst(std::move(src));
 
-    LT_CHECK_EQ(SBO::body_ptr(dst), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(dst), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(SBO::body_inline(dst), false);
-    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<response_body*>(nullptr));
     LT_CHECK_EQ(SBO::body_inline(src), false);
 LT_END_AUTO_TEST(move_ctor_null_body)
 
@@ -384,7 +384,7 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, self_move_assign_safe)
 
     // Body must still be valid; dtor must not have fired yet.
     LT_CHECK_EQ(dtor_count, 0);
-    LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<body*>(nullptr));
+    LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<response_body*>(nullptr));
 LT_END_AUTO_TEST(self_move_assign_safe)
 
 // -----------------------------------------------------------------------
@@ -396,14 +396,14 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, self_move_assign_safe_heap)
     int dtor_count = 0;
     http_response r;
     place_heap_counter(r, &dtor_count);
-    body* original_ptr = SBO::body_ptr(r);
+    response_body* original_ptr = SBO::body_ptr(r);
 
     http_response& alias = r;
     r = std::move(alias);
 
     // Dtor must NOT have fired (self-assign guard must have returned early).
     LT_CHECK_EQ(dtor_count, 0);
-    LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<body*>(nullptr));
+    LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<response_body*>(nullptr));
     // Heap pointer must be unchanged.
     LT_CHECK_EQ(SBO::body_ptr(r), original_ptr);
 LT_END_AUTO_TEST(self_move_assign_safe_heap)

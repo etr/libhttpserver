@@ -39,7 +39,7 @@
 #include "httpserver/file_info.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_utils.hpp"
-#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/connection_context.hpp"
 
 namespace httpserver {
 
@@ -47,7 +47,7 @@ using httpserver::http::http_utils;
 
 namespace detail {
 
-MHD_Result upload_pipeline::handle_post_form_arg(detail::modded_request* mr,
+MHD_Result upload_pipeline::handle_post_form_arg(detail::connection_context* conn,
         const char* key, const char* data, size_t size, uint64_t off) {
     // MHD may invoke the post iterator with a null key on a continuation
     // chunk (off > 0): the field name was supplied on the first call and is
@@ -62,9 +62,9 @@ MHD_Result upload_pipeline::handle_post_form_arg(detail::modded_request* mr,
     // A non-zero @p off means MHD is feeding a continuation chunk of a
     // previously-started value, so append rather than replace.
     if (off > 0) {
-        mr->request->grow_last_arg(key, std::string(data, size));
+        conn->request->grow_last_arg(key, std::string(data, size));
     } else {
-        mr->request->set_arg(key, std::string(data, size));
+        conn->request->set_arg(key, std::string(data, size));
     }
     return MHD_YES;
 }
@@ -91,59 +91,59 @@ bool upload_pipeline::setup_new_upload_file_info(http::file_info& file,
     return true;
 }
 
-void upload_pipeline::manage_upload_stream(detail::modded_request* mr,
+void upload_pipeline::manage_upload_stream(detail::connection_context* conn,
         const char* filename, const char* key, http::file_info& file) {
     // If MHD switches us to a different (filename, key) pair, close the
     // previous output stream. The four-way OR covers fresh state (both
     // tracking strings empty) and either coordinate changing.
-    if (mr->upload_filename.empty()
-            || mr->upload_key.empty()
-            || strcmp(filename, mr->upload_filename.c_str()) != 0
-            || strcmp(key, mr->upload_key.c_str()) != 0) {
-        if (mr->upload_ostrm != nullptr) mr->upload_ostrm->close();
+    if (conn->upload_filename.empty()
+            || conn->upload_key.empty()
+            || strcmp(filename, conn->upload_filename.c_str()) != 0
+            || strcmp(key, conn->upload_key.c_str()) != 0) {
+        if (conn->upload_ostrm != nullptr) conn->upload_ostrm->close();
     }
     // Open a stream when we don't already have one (first chunk, or
     // just-closed above).
-    if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
-        mr->upload_key = key;
-        mr->upload_filename = filename;
-        mr->upload_ostrm = std::make_unique<std::ofstream>();
-        mr->upload_ostrm->open(file.get_file_system_file_name(),
+    if (conn->upload_ostrm == nullptr || !conn->upload_ostrm->is_open()) {
+        conn->upload_key = key;
+        conn->upload_filename = filename;
+        conn->upload_ostrm = std::make_unique<std::ofstream>();
+        conn->upload_ostrm->open(file.get_file_system_file_name(),
                                std::ios::binary | std::ios::app);
     }
 }
 
-MHD_Result upload_pipeline::process_file_upload(detail::modded_request* mr,
+MHD_Result upload_pipeline::process_file_upload(detail::connection_context* conn,
         const char* key, const char* filename, const char* content_type,
         const char* transfer_encoding, const char* data, size_t size) const {
-    http::file_info& file = mr->request->get_or_create_file_info(key, filename);
+    http::file_info& file = conn->request->get_or_create_file_info(key, filename);
     if (file.get_file_system_file_name().empty()) {
         if (!setup_new_upload_file_info(file, filename, content_type,
                                         transfer_encoding)) {
             return MHD_NO;
         }
     }
-    manage_upload_stream(mr, filename, key, file);
+    manage_upload_stream(conn, filename, key, file);
     if (size > 0) {
-        mr->upload_ostrm->write(data, size);
-        if (!mr->upload_ostrm->good()) return MHD_NO;
+        conn->upload_ostrm->write(data, size);
+        if (!conn->upload_ostrm->good()) return MHD_NO;
     }
     file.grow_file_size(size);
     return MHD_YES;
 }
 
-MHD_Result upload_pipeline::iterate_file(detail::modded_request* mr,
+MHD_Result upload_pipeline::iterate_file(detail::connection_context* conn,
         const char* key, const char* filename, const char* content_type,
         const char* transfer_encoding, const char* data, size_t size) {
     try {
         if (config_.file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-            mr->request->set_arg_flat(key,
-                std::string(mr->request->get_arg(key)) + std::string(data, size));
+            conn->request->set_arg_flat(key,
+                std::string(conn->request->get_arg(key)) + std::string(data, size));
         }
         if (*filename != '\0'
                 && config_.file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             MHD_Result r = process_file_upload(
-                mr, key, filename, content_type, transfer_encoding, data, size);
+                conn, key, filename, content_type, transfer_encoding, data, size);
             if (r != MHD_YES) return r;
         }
         return MHD_YES;
