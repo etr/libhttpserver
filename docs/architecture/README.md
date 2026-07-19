@@ -1,13 +1,22 @@
 # libhttpserver v2.0 — architecture diagrams
 
-Two visual references for the v2.0 (`feature/v2.0`) codebase. Each exists in two forms:
+Architecture references for the v2.0 (`feature/v2.0`) codebase.
 
-| Diagram | GitHub-native (below) | Rich standalone page |
+**Two hero diagrams** — spatial maps, best viewed as the rich self-contained HTML (no external assets, light/dark aware); Mermaid quick-views render inline below.
+
+| Diagram | GitHub-native | Rich page |
 |---|---|---|
 | **Class, relationship & filesystem map** | [Mermaid ↓](#1-class-relationship--filesystem-map) | [`class-map.html`](class-map.html) |
 | **Request lifecycle & routing flow** | [Mermaid ↓](#2-request-lifecycle--routing-flow) | [`request-flow.html`](request-flow.html) |
 
-The `.html` files are self-contained (no external assets, light/dark aware) — open them directly in a browser for the full, colour-coded detail: every class card, filesystem location, ownership edge, all 28 flow steps, the four-tier route cascade, and the hook rail. The Mermaid versions below render inline on GitHub for a quick orientation.
+**Four deep dives** — reference-heavy topics, as Markdown (Mermaid + tables, render inline on GitHub).
+
+| Doc | For | Covers |
+|---|---|---|
+| [**threading.md**](threading.md) | contributors | DR-008 concurrency contract, full mutex inventory, lock ordering, Helgrind lane |
+| [**errors.md**](errors.md) | contributors | DR-009 propagation, every 4xx/5xx origin, the handler-exception path, config knobs |
+| [**hooks.md**](hooks.md) | API users | the 11 phases, context fields, short-circuit vs observe, `hook_handle`, recipes |
+| [**features.md**](features.md) | packagers / API users | `HAVE_*` detection, gated symbols, `features()`, `feature_unavailable`, build matrix |
 
 > **Colour language** (shared by both diagrams): composition-root = blue · state collaborator = amber · behavior service = teal · MHD C-ABI adapter = purple · domain / value type = slate.
 
