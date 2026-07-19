@@ -85,4 +85,4 @@ Notable details:
 - Thrown from **inside a handler** (e.g. `unauthorized(digest_challenge)` on a non-digest build, or a `websocket_session` send) → it is a normal `std::exception` on the dispatch path → generic **500** to the client, unless an `internal_error_handler` special-cases it.
 
 ---
-*See also: [request-flow](request-flow.html) (where 404/405/500 sit in the dispatch sequence) · [hooks cookbook](hooks.md) (the `handler_exception` phase).*
+*See also: [request-flow](request-flow.md) (where 404/405/500 sit in the dispatch sequence) · [hooks cookbook](hooks.md) (the `handler_exception` phase).*

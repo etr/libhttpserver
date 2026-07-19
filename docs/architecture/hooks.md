@@ -1,7 +1,7 @@
 # Hooks cookbook
 
 > A user-facing reference for the 11 lifecycle hook phases: what each observes, which can short-circuit, and how to register them.
-> Component spec: [`specs/architecture/04-components/hooks.md`](../../specs/architecture/04-components/hooks.md) · mechanics in [request-flow](request-flow.html).
+> Component spec: [`specs/architecture/04-components/hooks.md`](../../specs/architecture/04-components/hooks.md) · mechanics in [request-flow](request-flow.md).
 
 ## Where the phases fire
 
@@ -98,4 +98,4 @@ Representative examples from [`examples/`](../../examples/) and [`test/integ/`](
 - More coverage: `hooks_body_chunk_*`, `hooks_handler_exception_chain.cpp`, `hooks_response_sent_carries_status_bytes_timing.cpp`, `hooks_connection_lifecycle.cpp`, `hooks_per_route_*`.
 
 ---
-*See also: [request-flow](request-flow.html) (exactly where each phase fires) · [errors](errors.md) (the `handler_exception` phase and the 500 fallback).*
+*See also: [request-flow](request-flow.md) (exactly where each phase fires) · [errors](errors.md) (the `handler_exception` phase and the 500 fallback).*

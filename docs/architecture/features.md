@@ -80,4 +80,4 @@ Setters never throw — they only mutate config; validation is deferred. So `use
 - **CMake support is consumer-side only**: `cmakemodule/FindLibHttpServer.cmake` is a plain find-module (locates headers + library); it does no capability detection and does not build the library. There is no top-level `CMakeLists.txt`.
 
 ---
-*See also: [errors](errors.md) (`feature_unavailable`'s reach — caller vs client) · [class map](class-map.html) (the gated collaborators, marked `HAVE_WEBSOCKET`).*
+*See also: [errors](errors.md) (`feature_unavailable`'s reach — caller vs client) · [class map](class-map.md) (the gated collaborators, marked `HAVE_WEBSOCKET`).*
