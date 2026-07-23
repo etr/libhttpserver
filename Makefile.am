@@ -24,8 +24,8 @@ LIBTOOL_DEPS = @LIBTOOL_DEPS@
 AUTOMAKE_OPTIONS = foreign 1.4
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = src
-DIST_SUBDIRS = src
+SUBDIRS = src doc
+DIST_SUBDIRS = src doc
 
 if !COND_CROSS_COMPILE
 SUBDIRS += test
@@ -65,7 +65,8 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_connection_context.cpp \
 	test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
-	test/headers/consumer_umbrella_no_backend.cpp
+	test/headers/consumer_umbrella_no_backend.cpp \
+	LICENSE RELEASE_NOTES.md CONTRIBUTING.md CODE_OF_CONDUCT.md
 
 # ---------------------------------------------------------------------------
 # Header-hygiene checks (TASK-002)
@@ -374,7 +375,18 @@ check-hygiene:
 # staged the install; sub-check skips the install step to avoid double cost.
 # This knob is set only by check-local; do not set it when invoking sub-checks
 # standalone.
-check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance
+# The README / release-notes / hooks-doc / doxygen gates validate source-tree
+# documentation: README.md links into specs/ and docs/architecture/, which are
+# dev-facing and intentionally NOT shipped in the distributed tarball. Gate them
+# on the presence of specs/ so that `make check` from an unpacked release tarball
+# still runs the full test suite plus the header / example / lint gates, but
+# skips the source-only doc gates whose inputs it cannot satisfy.
+check-local: check-headers check-examples lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance
+	@if test -d "$(top_srcdir)/specs"; then \
+		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck; \
+	else \
+		echo "check-local: skipping README/release-notes/hooks-doc/doxygen gates (source-only; specs/ absent in distributed tarball)"; \
+	fi
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
@@ -634,7 +646,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc
 
 cmakemoduledir = $(datadir)/cmake/Modules
-cmakemodule_DATA = cmakemodule/FindLibHttpServer.cmake
+dist_cmakemodule_DATA = cmakemodule/FindLibHttpServer.cmake
 
 include $(top_srcdir)/aminclude.am
 
