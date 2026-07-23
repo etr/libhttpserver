@@ -14,7 +14,7 @@ Copyright (C)  2011-2026  Sebastiano Merlino.
 [![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/1bd1e8c21f66400fb70e5a5ce357b525)](https://www.codacy.com/gh/etr/libhttpserver/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=etr/libhttpserver&amp;utm_campaign=Badge_Grade)
 
-[![ko-fi](https://www.ko-fi.com/img/donate_sm.png)](https://ko-fi.com/F1F5HY8B)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/etr)
 
 ## Tl;dr
 
@@ -1947,6 +1947,6 @@ history for the complete list). Particular thanks to everyone who has
 filed issues, sent patches, and stress-tested the v2.0 redesign.
 
 If libhttpserver is useful to you, consider sponsoring continued
-maintenance: <https://ko-fi.com/F1F5HY8B>.
+maintenance: <https://github.com/sponsors/etr>.
 
 [Back to TOC](#table-of-contents)
