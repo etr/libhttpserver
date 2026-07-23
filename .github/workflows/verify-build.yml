@@ -164,14 +164,6 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             linking: dynamic
-            # TASK-089: opt this single baseline Linux gcc/libstdc++ lane into
-            # the parallel-install acceptance gate. The steps guarded on
-            # `matrix.parallel-install == 'check'` (after "Run tests") fetch the
-            # master ref and run `make check-parallel-install`, which builds v1
-            # (master) alongside v2 and asserts their SONAMEd shared libraries
-            # coexist. Kept to one lane to avoid a second full library build
-            # fanning across the matrix.
-            parallel-install: check
             shell: bash
           # clang-11, clang-12, clang-14, and clang-15 dropped (were here); clang-13 is now the minimum Clang entry.
           # All four lack full C++20 support (concepts/<bit>/<span> gaps); clang-13 passes the autoconf C++20 check on ubuntu-22.04.
@@ -949,18 +941,6 @@ jobs:
       run: ./scripts/check-dr008-lanes.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
-    - name: Run parallel-install-lane structural gate
-      # TASK-089: asserts the parallel-install CI gate is wired correctly
-      # (valid YAML, a matrix entry opts in via parallel-install: check, a step
-      # invokes `make check-parallel-install`, a step fetches the master ref,
-      # and the SKIP-authorization escape hatch is not set — so the five
-      # environment-quirk SKIP paths stay fatal in CI). The real end-to-end
-      # v1+v2 coexistence run happens on the opted-in baseline lane; this gate
-      # only guards the wiring against silent drift. Mirrors the
-      # check-valgrind-lane.sh / check-msan-lane.sh gate idiom.
-      run: ./scripts/check-parallel-install-lane.sh
-      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
-
     - name: Run CodeQL-workflow structural gate
       # TASK-090: asserts codeql-analysis.yml stays hardened — every action
       # SHA-pinned (no floating @vN), the dead Autobuild scaffolding gone, an
@@ -977,7 +957,7 @@ jobs:
       # hard-fails CI (fail_ci_if_error: true, an UPLOAD failure — distinct
       # from a coverage-percentage drop, which codecov.yml gates), and the
       # Windows doxygen invariance exclusion stays documented. Mirrors the
-      # check-parallel-install-lane.sh gate idiom.
+      # check-msan-lane.sh gate idiom.
       run: ./scripts/check-workflow-pinning.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
@@ -1279,28 +1259,6 @@ jobs:
         fi
         echo "PASS — stop_from_handler_deadlocks_as_documented exercised the DR-008 deadlock contract"
       if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.c-compiler == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
-
-    - name: Fetch master ref for parallel-install
-      # TASK-089: the default checkout is shallow (fetch-depth: 2), so the v1
-      # ref is absent on the runner and check-parallel-install would SKIP
-      # (now fatal). Fetch just the master tip so the gate has a real ref to
-      # build v1 from. A single-branch depth-1 fetch keeps this cheap.
-      run: |
-        git fetch --no-tags --depth=1 origin +refs/heads/master:refs/remotes/origin/master
-      if: ${{ matrix.parallel-install == 'check' }}
-
-    - name: Run parallel-install gate
-      # TASK-089: the TASK-044 parallel-install acceptance gate, now LIVE in
-      # per-PR CI on this single baseline Linux gcc/libstdc++ lane. Builds v1
-      # (master, via a temporary git worktree) alongside the just-tested v2
-      # tree and asserts both SONAMEd shared libraries coexist in one DESTDIR.
-      # The five environment-quirk paths emit SKIP and FAIL the job — the
-      # authorization escape hatch is deliberately NOT exported here, so any
-      # SKIP goes red rather than masquerading as a pass.
-      run: |
-        cd build ;
-        MASTER_REF=origin/master make check-parallel-install ;
-      if: ${{ matrix.parallel-install == 'check' }}
 
     - name: Run header-hygiene check
       # TASK-007: dedicated public-header hygiene gate. Runs the

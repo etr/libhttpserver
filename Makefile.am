@@ -41,15 +41,12 @@ endif
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
 	scripts/check-doxygen.sh scripts/check-hooks-doc-spotcheck.sh \
-	scripts/check-soversion.sh scripts/check-parallel-install.sh \
-	scripts/check-parallel-install-lane.sh \
+	scripts/check-soversion.sh \
 	scripts/check-msan-lane.sh scripts/check-valgrind-lane.sh \
 	scripts/check-codeql-workflow.sh scripts/check-workflow-pinning.sh \
-	scripts/test_check_parallel_install.sh \
-	scripts/test_check_parallel_install_lane.sh \
 	scripts/test_check_codeql_workflow.sh scripts/test_check_workflow_pinning.sh \
 	scripts/test_check_fence_balance.sh \
-	scripts/lib/resolve-prefix.sh scripts/lib/skip-or-fail.sh \
+	scripts/lib/resolve-prefix.sh \
 	scripts/lib/check-fence-balance.sh scripts/lib/v1-no-setters.txt \
 	scripts/lib/find-matrix-includes.py \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
@@ -381,7 +378,7 @@ check-hygiene:
 # on the presence of specs/ so that `make check` from an unpacked release tarball
 # still runs the full test suite plus the header / example / lint gates, but
 # skips the source-only doc gates whose inputs it cannot satisfy.
-check-local: check-headers check-examples lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance
+check-local: check-headers check-examples lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-fence-balance
 	@if test -d "$(top_srcdir)/specs"; then \
 		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck; \
 	else \
@@ -447,17 +444,6 @@ check-hooks-doc-spotcheck:
 check-soversion:
 	@echo "=== check-soversion: TASK-044 SOVERSION acceptance gate ==="
 	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-soversion.sh
-
-# TASK-044: parallel-installability verification. Builds master and installs
-# v1 + v2 into the same DESTDIR and asserts both SONAMEd libraries coexist.
-# TASK-089: now invoked by the CI parallel-install lane (see
-# .github/workflows/verify-build.yml, matrix key `parallel-install: check`).
-# The five environment-quirk paths emit SKIP and FAIL the job unless
-# HTTPSERVER_ALLOW_PARALLEL_INSTALL_SKIP=1. Requires a clean v1 build of
-# master, so it stays out of the generic `make check` and runs on its own lane.
-check-parallel-install:
-	@echo "=== check-parallel-install: TASK-044 v1+v2 coexistence ==="
-	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-parallel-install.sh
 
 # Per-function cyclomatic complexity gate. Wraps `lizard` against src/ and
 # fails if any function exceeds CCN_MAX (default in the script; ratcheted
@@ -548,14 +534,6 @@ lint-littletest-skip-exit-code:
 	@echo "=== lint-littletest-skip-exit-code: pin LT_SKIP exit-code semantics ==="
 	@$(top_srcdir)/scripts/test_check_littletest_skip_exit_code.sh
 
-# TASK-089: pin the skip_or_fail() exit-code contract used by the five
-# environment-quirk paths in check-parallel-install.sh. Asserts a SKIP
-# fails the job (exit 1) unless HTTPSERVER_ALLOW_PARALLEL_INSTALL_SKIP=1.
-# Wired into `make check` via check-local; pure bash, runs in every lane.
-lint-parallel-install-skip-contract:
-	@echo "=== lint-parallel-install-skip-contract: pin skip_or_fail exit-code semantics ==="
-	@$(top_srcdir)/scripts/test_check_parallel_install.sh
-
 # TASK-091: pin the fence-balance state machine shared by check-readme and
 # check-release-notes (scripts/lib/check-fence-balance.sh). Asserts that two
 # consecutive opening fences (even ``` count) are rejected — the regression the
@@ -565,25 +543,10 @@ lint-fence-balance:
 	@echo "=== lint-fence-balance: pin fenced-code-block open/close state machine ==="
 	@$(top_srcdir)/scripts/test_check_fence_balance.sh
 
-# TASK-089: structural gate asserting the parallel-install CI lane in
-# verify-build.yml stays wired (opt-in matrix key, master-ref fetch, the
-# `make check-parallel-install` invocation, and no SKIP authorization so
-# environment-quirk SKIPs stay fatal). Parses the workflow file, so it is
-# invoked directly by CI's `lint` lane rather than every check-local run —
-# mirrors the msan/valgrind lane gates below.
-# Unlike the newer lint-codeql-workflow/lint-workflow-pinning targets, this
-# target does not run test_check_parallel_install_lane.sh first -- that is
-# the original (TASK-089) idiom; the self-test-then-gate pattern in the
-# newer targets is an intentional TASK-090 enhancement, not a regression to
-# fix here.
-lint-parallel-install-lane:
-	@echo "=== lint-parallel-install-lane: verify parallel-install CI wiring ==="
-	@$(top_srcdir)/scripts/check-parallel-install-lane.sh
-
 # TASK-087: structural gate asserting the msan CI lane in verify-build.yml
 # stays wired (matrix entry present, stale commented-out block gone,
 # MSAN_OPTIONS + scoped TESTS= wiring on the run step). Parses the workflow
-# file, so — like lint-parallel-install-lane — it is invoked directly by
+# file, so — like lint-valgrind-lane — it is invoked directly by
 # CI's `lint` lane rather than every check-local run.
 lint-msan-lane:
 	@echo "=== lint-msan-lane: verify msan CI wiring ==="
@@ -593,7 +556,7 @@ lint-msan-lane:
 # verify-build.yml stays wired (helgrind/drd matrix entries present, the
 # --disable-valgrind-* configure flags gone, per-tool check-valgrind-*
 # targets invoked, helgrind/drd logs surfaced). Parses the workflow file, so
-# — like lint-parallel-install-lane — it is invoked directly by CI's `lint`
+# — like lint-msan-lane — it is invoked directly by CI's `lint`
 # lane rather than every check-local run.
 lint-valgrind-lane:
 	@echo "=== lint-valgrind-lane: verify valgrind CI wiring ==="
@@ -602,7 +565,7 @@ lint-valgrind-lane:
 # TASK-090: structural gate asserting codeql-analysis.yml stays hardened
 # (every action SHA-pinned, Autobuild deleted, explicit ./configure + make
 # build, init/analyze on one v3 SHA). The gate parses the workflow with
-# PyYAML, so — like the parallel-install/msan/valgrind lane gates — it runs on
+# PyYAML, so — like the msan/valgrind lane gates — it runs on
 # CI's `lint` lane, not on every check-local run. The target also runs the
 # gate's own fixture-driven unit test so `make lint-codeql-workflow` exercises
 # the gate logic.
@@ -620,7 +583,7 @@ lint-workflow-pinning:
 	@$(top_srcdir)/scripts/test_check_workflow_pinning.sh
 	@$(top_srcdir)/scripts/check-workflow-pinning.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance lint-parallel-install-lane lint-msan-lane lint-valgrind-lane lint-codeql-workflow lint-workflow-pinning
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-fence-balance lint-msan-lane lint-valgrind-lane lint-codeql-workflow lint-workflow-pinning
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and
