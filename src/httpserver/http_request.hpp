@@ -25,167 +25,483 @@
 #ifndef SRC_HTTPSERVER_HTTP_REQUEST_HPP_
 #define SRC_HTTPSERVER_HTTP_REQUEST_HPP_
 
-#include <microhttpd.h>
-
-#ifdef HAVE_GNUTLS
-#include <gnutls/gnutls.h>
-#endif  // HAVE_GNUTLS
+// <microhttpd.h> and <gnutls/gnutls.h> intentionally
+// do NOT appear here. Backend-coupled state lives behind
+// detail/http_request_impl.hpp. The public surface no
+// longer mentions any GnuTLS type: the raw session-handle accessor that
+// previously returned the gnutls session is removed, replaced by
+// high-level cert accessors (has_tls_session / has_client_certificate /
+// get_client_cert_* / is_client_cert_verified). The lone remaining
+// backend-typed name on the surface is `struct MHD_Connection*` on the
+// private MHD-bound constructor (gated by HTTPSERVER_COMPILATION below).
 
 #include <stddef.h>
-#include <algorithm>
-#include <array>
+#include <cstdint>
 #include <iosfwd>
 #include <limits>
 #include <map>
 #include <memory>
 
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "httpserver/cookie.hpp"
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/file_info.hpp"
 #include "httpserver/create_webserver.hpp"
 
+#ifdef HTTPSERVER_COMPILATION
+// Forward-declare MHD_Connection at GLOBAL scope. The internal
+// MHD_Connection*-taking constructor on http_request (declared below
+// inside namespace httpserver) is gated on HTTPSERVER_COMPILATION.
+// Without this top-level declaration, the elaborated type specifier
+// `struct MHD_Connection*` inside `namespace httpserver` would inject
+// `httpserver::MHD_Connection` and shadow the real (global)
+// MHD_Connection that <microhttpd.h> defines, producing a chain of
+// "cannot convert MHD_Connection*" errors in src/http_request.cpp.
 struct MHD_Connection;
+#endif  // HTTPSERVER_COMPILATION
 
 namespace httpserver {
 
-namespace details { struct modded_request; }
+namespace detail {
+struct connection_context;
+class webserver_impl;
+class upload_pipeline;  // DR-014 §4.11: owns file-upload arg/stream writes
+class request_dispatcher;  // DR-014 §4.11: replays captured route params
+class request_pipeline;  // DR-014 §4.11: constructs + fills the request
+class http_request_impl;
+// Custom deleter for http_request_impl. Used by the
+// std::unique_ptr<http_request_impl, http_request_impl_deleter> below
+// so the destructor path Just Works for both heap- and arena-allocated
+// impls. Definition lives out-of-line in src/http_request.cpp; this
+// forward-declaration alone keeps <memory_resource> off the public
+// header. The deleter holds a single function pointer (no allocator
+// state spelled in the public type), so sizeof(unique_ptr<impl,
+// deleter>) is two pointers regardless of where the impl is allocated.
+struct http_request_impl_deleter {
+    using fn_t = void (*)(http_request_impl*);
+    fn_t fn = nullptr;
+    void operator()(http_request_impl* p) const noexcept;
+};
+}  // namespace detail
 
 /**
- * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
+ * Class representing an abstraction for an Http Request. It is used from
+ * classes using these APIs to receive information through the HTTP protocol.
+ *
+ * ### string_view lifetime contract
+ *
+ * Several getter methods return `std::string_view` rather than `std::string`
+ * for zero-copy access to request data that lives in a per-connection arena.
+ * **All `std::string_view` values returned by this class are valid for the
+ * lifetime of the request object (typically the duration of the handler
+ * invocation).** They alias arena-backed storage that is released by the
+ * request-completion callback once the handler returns.
+ *
+ * Concretely: do NOT store a `std::string_view` from any getter in a
+ * variable with a lifetime that outlasts the handler invocation.  If you
+ * need the data beyond the handler, copy it into a `std::string`:
+ *
+ *     // Safe: copy before the handler returns.
+ *     std::string username_copy(request.get_user());
+ *
+ *     // UNSAFE: the view is dangling after the handler returns.
+ *     std::string_view view = request.get_user();  // captured past return!
+ *
+ * Getters affected: get_arg_flat(), get_args_flat(), get_querystring(),
+ * get_user(), get_pass(), get_digested_user(), get_header(), get_footer(),
+ * get_cookie(), get_requestor().
+ * (CWE-416 Use After Free.)
+ *
+ * ### Container reference lifetime contract
+ *
+ * The container getters `get_headers()`, `get_footers()`, `get_cookies()`,
+ * `get_args()`, `get_path_pieces()`, and `get_files()` all return a
+ * `const ContainerType&` rather than a by-value copy. The reference and
+ * any iterators / pointers / element references derived from it remain
+ * valid until the `http_request` object is destroyed (typically when the
+ * handler invocation returns).
+ *
+ * In particular, the `std::string_view` keys and values held inside the
+ * `header_view_map` and `arg_view_map` returned by these getters carry the
+ * same lifetime restriction as the standalone `std::string_view` accessors
+ * above: do not store them past the handler call frame. Copy explicitly
+ * if a longer lifetime is required.
+ *
+ * Implementation note: the first call to get_headers / get_footers /
+ * get_cookies / get_args / get_path_pieces lazily populates a per-request
+ * cache; subsequent calls are O(1) and return the same reference.
+ *
+ * ### Thread-safety
+ *
+ * `http_request` instances are **not thread-safe**. The lazy-fill booleans
+ * (`args_populated`, `headers_cache_built_`, etc.) are plain (non-atomic)
+ * booleans and the cache maps are unsynchronized. Accessing the same
+ * `http_request` from multiple threads simultaneously is a data race
+ * (CWE-362). The documented contract is that each request is processed by
+ * exactly one handler thread at a time; do not share an `http_request*`
+ * across threads without external synchronization.
 **/
 class http_request {
  public:
      static const char EMPTY[];
 
-#ifdef HAVE_BAUTH
+     // -------------------------------------------------------------------
+     // Basic-auth credentials. The string_view returns alias arena-backed
+     // storage that lives for the handler call frame only — see the
+     // class-level lifetime contract in http_request.hpp.
+     //
+     // Contract: every public symbol declared here is
+     // unconditional. http_request_auth.cpp returns documented sentinels
+     // (empty std::string_view for the BAUTH getters / get_digested_user;
+     // digest_auth_result::WRONG_HEADER for the two check_digest_auth
+     // overloads) on HAVE_BAUTH-off / HAVE_DAUTH-off builds. Any future
+     // addition to this header must preserve that property.
+     // -------------------------------------------------------------------
+
      /**
       * Method used to get the username eventually passed through basic authentication.
       * @return string representation of the username.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
+      * @note Declared unconditionally.
+      *       When HAVE_BAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel.
      **/
      std::string_view get_user() const;
-#endif  // HAVE_BAUTH
 
-#ifdef HAVE_DAUTH
      /**
-      * Method used to get the username extracted from a digest authentication
-      * @return the username
+      * Method used to get the username extracted from a digest authentication.
+      * @return the username.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
+      * @note Declared unconditionally.
+      *       When HAVE_DAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel.
      **/
      std::string_view get_digested_user() const;
-#endif  // HAVE_DAUTH
 
-#ifdef HAVE_BAUTH
      /**
       * Method used to get the password eventually passed through basic authentication.
       * @return string representation of the password.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
+      * @note Declared unconditionally.
+      *       When HAVE_BAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel.
      **/
      std::string_view get_pass() const;
-#endif  // HAVE_BAUTH
+
+     // -------------------------------------------------------------------
+     // High-level GnuTLS accessors. Declared unconditionally
+     // (no build-flag preprocessor gate) so the public surface is
+     // identical in TLS-enabled and TLS-disabled builds. When the
+     // library is built without GnuTLS the implementations return
+     // empty / false / -1 sentinels without throwing.
+     // -------------------------------------------------------------------
 
      /**
-      * Method used to get the path requested
-      * @return string representing the path requested.
+      * Method used to check whether the request was carried over a TLS
+      * session.
+      * @return true when a live TLS session is present, false otherwise
+      *         (including when HAVE_GNUTLS is disabled at build time).
+      **/
+     bool has_tls_session() const noexcept;
+
+     /**
+      * Method used to check whether the peer presented a client
+      * certificate over the TLS session.
+      * @return true when a peer certificate is available, false
+      *         otherwise (including when HAVE_GNUTLS is disabled at
+      *         build time).
+      **/
+     bool has_client_certificate() const noexcept;
+
+     /**
+      * Subject Distinguished Name from the client certificate.
+      * @return string_view over the cached subject DN; empty when no
+      *         peer cert is present or HAVE_GNUTLS is disabled.
+      * @note The returned view aliases storage owned by this
+      *       http_request and is only valid for the lifetime of the
+      *       request object (typically the handler invocation). Copy
+      *       into std::string to extend the lifetime.
+      **/
+     std::string_view get_client_cert_dn() const;
+
+     /**
+      * Issuer Distinguished Name from the client certificate.
+      * @return string_view over the cached issuer DN; empty when no
+      *         peer cert is present or HAVE_GNUTLS is disabled.
+      * @note Same lifetime contract as get_client_cert_dn().
+      **/
+     std::string_view get_client_cert_issuer_dn() const;
+
+     /**
+      * Common Name (CN) from the client certificate subject.
+      * @return string_view over the cached CN; empty when no peer cert
+      *         is present, the cert subject has no CN attribute, or
+      *         HAVE_GNUTLS is disabled.
+      * @note Multi-CN subjects: only the first CN is reported.
+      * @note Same lifetime contract as get_client_cert_dn().
+      **/
+     std::string_view get_client_cert_cn() const;
+
+     /**
+      * SHA-256 fingerprint of the client certificate (hex-encoded).
+      * @return string_view over the lowercase hex-encoded SHA-256
+      *         fingerprint (64 hex chars); empty when no peer cert is
+      *         present or HAVE_GNUTLS is disabled.
+      * @note Same lifetime contract as get_client_cert_dn().
+      **/
+     std::string_view get_client_cert_fingerprint_sha256() const;
+
+     /**
+      * Whether the peer certificate chain validated successfully against
+      * the configured trust anchors.
+      * @return true on successful validation, false otherwise (including
+      *         when no cert was presented or HAVE_GNUTLS is disabled).
+      **/
+     bool is_client_cert_verified() const noexcept;
+
+     /**
+      * Activation time (`Not Before`) of the client certificate, in
+      * seconds since the UNIX epoch.
+      * @return seconds-since-epoch as a 64-bit signed integer; -1 when
+      *         no peer cert is present or HAVE_GNUTLS is disabled.
+      **/
+     std::int64_t get_client_cert_not_before() const noexcept;
+
+     /**
+      * Expiration time (`Not After`) of the client certificate, in
+      * seconds since the UNIX epoch.
+      * @return seconds-since-epoch as a 64-bit signed integer; -1 when
+      *         no peer cert is present or HAVE_GNUTLS is disabled.
+      **/
+     std::int64_t get_client_cert_not_after() const noexcept;
+
+     // -------------------------------------------------------------------
+     // Digest-auth verification entrypoints. Same contract: the
+     // declarations are unconditional; the implementations return the
+     // WRONG_HEADER sentinel when the library is built without HAVE_DAUTH.
+     // -------------------------------------------------------------------
+
+     /**
+      * Digest-authenticate the current request against (@p realm, @p password).
+      *
+      * Declared unconditionally. When the
+      * library was built without HAVE_DAUTH the implementation returns
+      * the sentinel `digest_auth_result::WRONG_HEADER` without touching MHD.
+      *
+      * @param realm         protection realm advertised in the WWW-Authenticate header.
+      * @param password      cleartext password to verify against.
+      * @param nonce_timeout nonce lifetime in seconds (0 = backend default).
+      * @param max_nc        max accepted nonce-count value (0 = backend default).
+      * @param algo          digest hash algorithm; defaults to SHA-256.
+      * @return one of the @ref httpserver::http::http_utils::digest_auth_result values.
+      **/
+     http::http_utils::digest_auth_result check_digest_auth(
+         const std::string& realm,
+         const std::string& password,
+         unsigned int nonce_timeout = 0,
+         uint32_t max_nc = 0,
+         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
+
+     /**
+      * Digest-authenticate using a pre-computed user digest (no cleartext password).
+      *
+      * Variant of @ref check_digest_auth that takes a raw H(A1) digest
+      * instead of a cleartext password. Same feature-flag behaviour:
+      * declared unconditionally; returns
+      * `digest_auth_result::WRONG_HEADER` on HAVE_DAUTH-off builds.
+      *
+      * @param realm          protection realm advertised in the WWW-Authenticate header.
+      * @param userdigest     pre-computed digest of the username/realm/password.
+      * @param userdigest_size size of @p userdigest in bytes.
+      * @param nonce_timeout  nonce lifetime in seconds (0 = backend default).
+      * @param max_nc         max accepted nonce-count value (0 = backend default).
+      * @param algo           digest hash algorithm; defaults to SHA-256.
+      * @return one of the @ref httpserver::http::http_utils::digest_auth_result values.
      **/
-     std::string_view get_path() const {
+     // This file is included inside the http_request class body; transitive
+     // <string> lives in the parent http_request.hpp.
+     http::http_utils::digest_auth_result check_digest_auth_digest(
+         const std::string& realm,  // NOLINT(build/include_what_you_use)
+         const void* userdigest,
+         size_t userdigest_size,
+         unsigned int nonce_timeout = 0,
+         uint32_t max_nc = 0,
+         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
+
+     /**
+      * Method used to get the path requested.
+      * @return string_view spelling the request path.
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
+     **/
+     std::string_view get_path() const noexcept {
          return path;
      }
 
      /**
       * Method used to get all pieces of the path requested; considering an url splitted by '/'.
-      * @return a vector of strings containing all pieces
+      * @return a vector of strings containing all pieces. The reference
+      *         remains valid until the http_request is destroyed.
      **/
-     const std::vector<std::string> get_path_pieces() const {
-         ensure_path_pieces_cached();
-         return cache->path_pieces;
-     }
+     [[nodiscard]] const std::vector<std::string>& get_path_pieces() const;
 
      /**
       * Method used to obtain a specified piece of the path; considering an url splitted by '/'.
       * @param index the index of the piece selected
       * @return the selected piece in form of string
      **/
-     const std::string get_path_piece(int index) const {
-         ensure_path_pieces_cached();
-         if (static_cast<int>(cache->path_pieces.size()) > index) {
-             return cache->path_pieces[index];
-         }
-         return EMPTY;
-     }
+     const std::string get_path_piece(int index) const;
 
      /**
       * Method used to get the METHOD used to make the request.
-      * @return string representing the method.
+      * @return string_view spelling the request method (GET / POST / ...).
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
      **/
-     std::string_view get_method() const {
+     std::string_view get_method() const noexcept {
          return method;
      }
 
+     // Container and single-key data accessors.
+
      /**
       * Method used to get all headers passed with the request.
-      * @param result a map<string, string> > that will be filled with all headers
-      * @result the size of the map
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all headers. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (CWE-672)
      **/
-     const http::header_view_map get_headers() const;
+     [[nodiscard]] const http::header_view_map& get_headers() const;
 
      /**
       * Method used to get all footers passed with the request.
-      * @param result a map<string, string> > that will be filled with all footers
-      * @result the size of the map
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all footers. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (CWE-672)
      **/
-     const http::header_view_map get_footers() const;
+     [[nodiscard]] const http::header_view_map& get_footers() const;
 
      /**
       * Method used to get all cookies passed with the request.
-      * @param result a map<string, string> > that will be filled with all cookies
-      * @result the size of the map
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all cookies. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (CWE-672)
      **/
-     const http::header_view_map get_cookies() const;
+     [[nodiscard]] const http::header_view_map& get_cookies() const;
+
+     /**
+      * Structured cookie accessor. Returns the in-order list
+      * of cookies parsed from the request's `Cookie:` header per RFC
+      * 6265 §5.4. Each entry carries `name` and `value`; request
+      * cookies do not carry attributes per the spec, so domain/path/
+      * etc. are left default-constructed.
+      *
+      * Lifetime: the returned reference and the strings it holds remain
+      * valid until the http_request is destroyed (typically when the
+      * handler returns). Backed by a per-request lazy cache (arena
+      * pattern): the first call parses the Cookie header
+      * and builds the vector; subsequent calls are O(1) and reuse the
+      * same buffer.
+      *
+      * Byte-transparent: no percent-decoding is performed. Callers that
+      * need decoded values must decode themselves.
+     **/
+     [[nodiscard]] const std::vector<cookie>& get_cookies_parsed() const;  // NOLINT(build/include_what_you_use)
 
      /**
       * Method used to get all args passed with the request.
-      * @result the size of the map
+      * @return a const reference to the args map. The reference (and the
+      *         string_view keys/values it holds) remain valid until the
+      *         http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (CWE-672)
      **/
-     const http::arg_view_map get_args() const;
+     [[nodiscard]] const http::arg_view_map& get_args() const;
 
      /**
       * Method used to get all args passed with the request. If any key has multiple
-      * values, one value is chosen and returned.
-      * @result the size of the map
+      * values, one value is chosen and returned (the first).
+      * @return a const reference to a cached "first value per key" view map.
+      *         The reference (and the string_view keys/values it holds) remain
+      *         valid until the http_request is destroyed.
+      * @note The returned views carry the same CWE-416 dangling risk as
+      *       get_arg_flat() and the other affected getters listed in the class-level
+      *       string_view lifetime contract block above. Copy to std::string if a
+      *       longer lifetime is required.
+      * @note Returns const& backed by a lazily-populated
+      *       cache, so repeat calls are O(1) and zero-allocating.
      **/
-     const std::map<std::string_view, std::string_view, http::arg_comparator> get_args_flat() const;
+     [[nodiscard]] const std::map<std::string_view, std::string_view, http::arg_comparator>& get_args_flat() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
       * return the exiting file info struct, otherwise create one in the map and return it.
-      * @param upload_file_name the file name the user uploaded (this is the identifier for the map entry)
+      * @param key the multipart form field name (top-level map key).
+      * @param upload_file_name the file name the user uploaded (identifier for the inner map entry).
       * @result a http::file_info
      **/
      http::file_info& get_or_create_file_info(const std::string& key, const std::string& upload_file_name);
 
      /**
       * Method used to get all files passed with the request.
-      * @result result a map<std::string, map<std::string, http::file_info> > that will be filled with all files
+      * @return a const reference to a map<std::string, map<std::string,
+      *         http::file_info>> containing all files. The reference
+      *         remains valid until the http_request is destroyed.
+      * @note Copying the returned map copies file metadata only (paths,
+      *       sizes, MIME types). The actual on-disk temporary files are
+      *       NOT copied; they remain subject to cleanup when the
+      *       http_request destructor runs unless the file_cleanup_callback
+      *       suppresses deletion.
+      *       (CWE-672)
      **/
-     const std::map<std::string, std::map<std::string, http::file_info>> get_files() const {
-          return files;
-     }
+     [[nodiscard]] const std::map<std::string, std::map<std::string, http::file_info>>& get_files() const noexcept;  // NOLINT(build/include_what_you_use)
 
      /**
       * Method used to get a specific header passed with the request.
       * @param key the specific header to get the value from
       * @return the value of the header.
+      * @note The returned view is only valid within the handler's call frame.
      **/
      std::string_view get_header(std::string_view key) const;
 
+     /**
+      * Method used to get a specific cookie passed with the request.
+      * @param key the specific cookie to get the value from
+      * @return the value of the cookie.
+      * @note The returned view is only valid within the handler's call frame.
+     **/
      std::string_view get_cookie(std::string_view key) const;
 
      /**
       * Method used to get a specific footer passed with the request.
       * @param key the specific footer to get the value from
       * @return the value of the footer.
+      * @note The returned view is only valid within the handler's call frame.
      **/
      std::string_view get_footer(std::string_view key) const;
 
@@ -193,6 +509,10 @@ class http_request {
       * Method used to get a specific argument passed with the request.
       * @param key the specific argument to get the value from
       * @return the value(s) of the arg.
+      * @note The `std::string_view` values inside the returned `http_arg_value`
+      *       alias the request's arena storage and carry the same lifetime
+      *       restriction as the standalone view accessors: do not store them
+      *       past the handler invocation.
      **/
      http_arg_value get_arg(std::string_view key) const;
 
@@ -201,14 +521,20 @@ class http_request {
       * If the arg key has more than one value, only one is returned.
       * @param key the specific argument to get the value from
       * @return the value of the arg.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
      **/
-     std::string_view get_arg_flat(std::string_view key) const;
+     [[nodiscard]] std::string_view get_arg_flat(std::string_view key) const;
 
      /**
       * Method used to get the content of the request.
-      * @return the content in string representation
+      * @return string_view over the request body.
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
      **/
-     std::string_view get_content() const {
+     std::string_view get_content() const noexcept {
          return content;
      }
 
@@ -220,84 +546,35 @@ class http_request {
          return content.size() >= content_size_limit;
      }
      /**
-      * Method used to get the content of the query string..
-      * @return the query string in string representation
+      * Method used to get the content of the query string.
+      * @return string_view over the assembled query string (e.g. "?a=1&b=2"),
+      *         empty when no query was supplied.
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
+      * @note The querystring is assembled lazily on the first call and
+      *       cached; the reader is `noexcept` (an allocation failure during
+      *       assembly yields an empty view rather than throwing).
      **/
-     std::string_view get_querystring() const;
+     std::string_view get_querystring() const noexcept;
 
      /**
       * Method used to get the version of the request.
-      * @return the version in string representation
+      * @return string_view spelling the HTTP version (e.g. "HTTP/1.1").
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
      **/
-     std::string_view get_version() const {
+     std::string_view get_version() const noexcept {
          return version;
      }
 
-#ifdef HAVE_GNUTLS
-     /**
-      * Method used to check if there is a TLS session.
-      * @return the TLS session
-      **/
-      bool has_tls_session() const;
-
-     /**
-      * Method used to get the TLS session.
-      * @return the TLS session
-      **/
-      gnutls_session_t get_tls_session() const;
-
-     /**
-      * Check if a client certificate is present in the TLS session.
-      * @return true if client certificate is present
-      **/
-      bool has_client_certificate() const;
-
-     /**
-      * Get the Subject Distinguished Name from the client certificate.
-      * @return the subject DN as a string, empty if not available
-      **/
-      std::string get_client_cert_dn() const;
-
-     /**
-      * Get the Issuer Distinguished Name from the client certificate.
-      * @return the issuer DN as a string, empty if not available
-      **/
-      std::string get_client_cert_issuer_dn() const;
-
-     /**
-      * Get the Common Name (CN) from the client certificate subject.
-      * @return the CN as a string, empty if not available
-      **/
-      std::string get_client_cert_cn() const;
-
-     /**
-      * Check if the client certificate chain has been verified.
-      * @return true if certificate verification passed
-      **/
-      bool is_client_cert_verified() const;
-
-     /**
-      * Get the SHA-256 fingerprint of the client certificate.
-      * @return hex-encoded SHA-256 fingerprint, empty if not available
-      **/
-      std::string get_client_cert_fingerprint_sha256() const;
-
-     /**
-      * Get the not-before (validity start) time of the client certificate.
-      * @return validity start time as time_t, -1 if not available
-      **/
-      time_t get_client_cert_not_before() const;
-
-     /**
-      * Get the not-after (validity end) time of the client certificate.
-      * @return validity end time as time_t, -1 if not available
-      **/
-      time_t get_client_cert_not_after() const;
-#endif  // HAVE_GNUTLS
-
      /**
       * Method used to get the requestor.
-      * @return the requestor
+      * @return the requestor (IP address string).
+      * @note The returned view is only valid within the handler's call frame.
      **/
      std::string_view get_requestor() const;
 
@@ -307,24 +584,7 @@ class http_request {
      **/
      uint16_t get_requestor_port() const;
 
-#ifdef HAVE_DAUTH
-     http::http_utils::digest_auth_result check_digest_auth(
-         const std::string& realm,
-         const std::string& password,
-         unsigned int nonce_timeout = 0,
-         uint32_t max_nc = 0,
-         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
-
-     http::http_utils::digest_auth_result check_digest_auth_digest(
-         const std::string& realm,
-         const void* userdigest,
-         size_t userdigest_size,
-         unsigned int nonce_timeout = 0,
-         uint32_t max_nc = 0,
-         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
-#endif  // HAVE_DAUTH
-
-     friend std::ostream &operator<< (std::ostream &os, http_request &r);
+     friend std::ostream& operator<<(std::ostream& os, const http_request& r);
 
      ~http_request();
 
@@ -334,9 +594,25 @@ class http_request {
      **/
      http_request() = default;
 
-     http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
-         underlying_connection(underlying_connection),
-         unescaper(unescaper) {}
+#ifdef HTTPSERVER_COMPILATION
+     // Internal-only constructor: takes a live MHD_Connection*. Hidden
+     // from public consumers via the HTTPSERVER_COMPILATION gate.
+     // See the MHD_Connection forward-declaration comment at global scope
+     // above for the namespace-injection rationale.
+     http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper);
+
+ public:
+     // Internal-only test accessor. Returns the underlying
+     // MHD_Connection* the request was built against (the same pointer
+     // passed to the internal constructor above). Used exclusively by
+     // test/integ/connection_state_body_residue_test.cpp to peek the
+     // per-connection arena and pin the CWE-226 mitigation contract.
+     // NOT part of the public ABI; only visible when the library itself
+     // is being compiled (gated by HTTPSERVER_COMPILATION).
+     MHD_Connection* underlying_connection_for_testing() const noexcept;
+
+ private:
+#endif  // HTTPSERVER_COMPILATION
 
      /**
       * Copy constructor. Deleted to make class move-only. The class is move-only for several reasons:
@@ -362,39 +638,31 @@ class http_request {
      http_request& operator=(const http_request& b) = delete;
      http_request& operator=(http_request&& b) = default;
 
+     // Backend-agnostic outer state. Everything else lives behind impl_.
      std::string path;
      std::string method;
-     std::map<std::string, std::map<std::string, http::file_info>> files;
      std::string content = "";
      size_t content_size_limit = std::numeric_limits<size_t>::max();
      std::string version;
 
-     struct MHD_Connection* underlying_connection = nullptr;
-
-     unescaper_ptr unescaper = nullptr;
-
-     static MHD_Result build_request_header(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-
-     static MHD_Result build_request_args(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-
-     static MHD_Result build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-
-#ifdef HAVE_BAUTH
-     void fetch_user_pass() const;
-#endif  // HAVE_BAUTH
-
-#ifdef HAVE_GNUTLS
-     void populate_all_cert_fields() const;
-#endif  // HAVE_GNUTLS
+     // PIMPL: backend-coupled state (MHD_Connection*, unescaper, file
+     // table, parsed-args / cookies / cert caches) lives behind this
+     // pointer in src/httpserver/detail/http_request_impl.hpp. The
+     // dtor is out-of-line in http_request.cpp so the unique_ptr can
+     // see the complete impl type.
+     // The deleter is custom because the impl can be allocated
+     // either on the heap (default-resource fallback / test path) or on
+     // a per-connection arena (live request path). The deleter dispatches
+     // to the right reclamation strategy based on a function pointer set
+     // at construction.
+     std::unique_ptr<detail::http_request_impl, detail::http_request_impl_deleter> impl_;
 
      /**
       * Method used to set an argument value by key.
       * @param key The name identifying the argument
       * @param value The value assumed by the argument
      **/
-     void set_arg(const std::string& key, const std::string& value) {
-         cache->unescaped_args[key].push_back(value.substr(0, content_size_limit));
-     }
+     void set_arg(const std::string& key, const std::string& value);
 
      /**
       * Method used to set an argument value by key.
@@ -402,18 +670,14 @@ class http_request {
       * @param value The value assumed by the argument
       * @param size The size in number of char of the value parameter.
      **/
-     void set_arg(const char* key, const char* value, size_t size) {
-         cache->unescaped_args[key].push_back(std::string(value, std::min(size, content_size_limit)));
-     }
+     void set_arg(const char* key, const char* value, size_t size);
 
      /**
       * Method used to set an argument value by key. If a key already exists, overwrites it.
       * @param key The name identifying the argument
       * @param value The value assumed by the argument
      **/
-     void set_arg_flat(const std::string& key, const std::string& value) {
-         cache->unescaped_args[key] = { (value.substr(0, content_size_limit)) };
-     }
+     void set_arg_flat(const std::string& key, const std::string& value);
 
      void grow_last_arg(const std::string& key, const std::string& value);
 
@@ -471,72 +735,66 @@ class http_request {
       * Method used to set all arguments of the request.
       * @param args The args key-value map to set for the request.
      **/
-     void set_args(const std::map<std::string, std::string>& args) {
-         for (auto const& [key, value] : args) {
-             cache->unescaped_args[key].push_back(value.substr(0, content_size_limit));
-         }
-     }
+     void set_args(const std::map<std::string, std::string>& args);
 
-     std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
-     const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
+     void set_file_cleanup_callback(file_cleanup_callback_ptr callback);
 
-     // http_request objects are owned by a single connection and are not
-    // shared across threads. Lazy caching (path_pieces, args, etc.) is
-    // safe without synchronization under this invariant.
-
-    // Cache certain data items on demand so we can consistently return views
-     // over the data. Some things we transform before returning to the user for
-     // simplicity (e.g. query_str, requestor), others out of necessity (arg unescaping).
-     // Others (username, password, digested_user) MHD returns as char* that we need
-     // to make a copy of and free anyway.
-     struct http_request_data_cache {
-#ifdef HAVE_BAUTH
-        std::string username;
-        std::string password;
-#endif  // HAVE_BAUTH
-        std::string querystring;
-        std::string requestor_ip;
-#ifdef HAVE_DAUTH
-        std::string digested_user;
-#endif  // HAVE_DAUTH
-        std::map<std::string, std::vector<std::string>, http::arg_comparator> unescaped_args;
-        std::vector<std::string> path_pieces;
-
-        bool args_populated = false;
-        bool path_pieces_cached = false;
-
-#ifdef HAVE_GNUTLS
-        bool client_cert_fields_cached = false;
-        std::string client_cert_dn;
-        std::string client_cert_issuer_dn;
-        std::string client_cert_cn;
-        std::string client_cert_fingerprint_sha256;
-        time_t client_cert_not_before = static_cast<time_t>(-1);
-        time_t client_cert_not_after = static_cast<time_t>(-1);
-        bool client_cert_verified = false;
-#endif  // HAVE_GNUTLS
-     };
-     std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
-     void ensure_path_pieces_cached() const {
-         if (!cache->path_pieces_cached) {
-             cache->path_pieces = http::http_utils::tokenize_url(path);
-             cache->path_pieces_cached = true;
-         }
-     }
-
-     // Populate the data cache unescaped_args
-     void populate_args() const;
-
-     file_cleanup_callback_ptr file_cleanup_callback = nullptr;
-
-     void set_file_cleanup_callback(file_cleanup_callback_ptr callback) {
-         file_cleanup_callback = callback;
-     }
+     // Set the redaction-bypass bit for diagnostic streaming.
+     // Plumbed from webserver::expose_credentials_in_logs at dispatch
+     // time and from create_test_request::build() for unit tests.
+     void set_expose_credentials_in_logs(bool v);
 
      friend class webserver;
-     friend struct details::modded_request;
+     friend class detail::webserver_impl;  // PIMPL dispatch path
+     friend class detail::upload_pipeline;  // DR-014 §4.11 upload arg writes
+     friend class detail::request_dispatcher;  // DR-014 §4.11 route-param replay
+     friend class detail::request_pipeline;  // DR-014 §4.11 request construction
+     friend struct detail::connection_context;
+     friend class create_test_request;    // test builder accesses impl_
 };
 
+/**
+ * Stream-insert a human-readable dump of @p r into @p os for diagnostic
+ * logging.
+ *
+ * @section redaction Redaction policy (OWASP A09:2021 / CWE-312 / CWE-532)
+ * By default the following fields are emitted as the fixed token
+ * `"<redacted>"` instead of their plaintext values:
+ *   - The Basic-auth password (`pass:"<redacted>"`)
+ *   - The `Authorization` and `Proxy-Authorization` request headers
+ *     (and the same names in trailers / footers), case-insensitive
+ *   - Every cookie value (cookie keys are preserved for log triage)
+ *
+ * The username (`user:"..."`) is NOT redacted — it follows the REMOTE_USER
+ * access-log convention; it is an identifier, not a secret.
+ *
+ * Query-string arguments are streamed verbatim. Callers that put
+ * credential material in query parameters (`?token=...`) should
+ * sanitize before constructing the request URL; see the warning in
+ * the class-level block of @ref http_request.
+ *
+ * @section opt_in Restoring the verbose v1 form
+ * Call `create_webserver::expose_credentials_in_logs(true)` on the
+ * builder used to construct the parent @ref webserver. This restores
+ * the v1 plaintext-everywhere behaviour for every
+ * @ref http_request the webserver dispatches.
+ *
+ * @warning `expose_credentials_in_logs(true)` is DEVELOPMENT-ONLY.
+ *          When the dump is routed to a log aggregator (`log_access`,
+ *          `log_error`, stdout-capturing systemd, or a centralised
+ *          syslog/SIEM pipeline), enabling the flag in production
+ *          exposes every Basic-auth password, every Authorization
+ *          header, and every cookie/session token in plaintext to
+ *          anyone with read access to the log store. Guard with
+ *          `#ifndef NDEBUG` or an explicit environment check.
+ *
+ * @warning Query-string arguments — including any `?token=...`,
+ *          `?api_key=...`, or other credential-bearing parameters —
+ *          are emitted verbatim regardless of the
+ *          `expose_credentials_in_logs` flag. Avoid routing credential
+ *          material through query strings, or strip the offending
+ *          parameters before the request reaches any logging path.
+ */
 std::ostream &operator<< (std::ostream &os, const http_request &r);
 
 }  // namespace httpserver

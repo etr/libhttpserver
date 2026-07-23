@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,42 +18,34 @@
      USA
 */
 
-#include <cstdio>
+// minimal_deferred.cpp - serve a response body in chunks using a deferred
+// callback lambda. The lambda is called repeatedly by libmicrohttpd until it
+// returns -1 (signalling end-of-body). The `done` flag ensures the body is
+// sent exactly once; the second call returns -1 to close the stream.
+
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
-#include <memory>
 #include <string>
 
 #include <httpserver.hpp>
 
-static int counter = 0;
-
-ssize_t test_callback(std::shared_ptr<void> closure_data, char* buf, size_t max) {
-    std::ignore = closure_data;
-
-    if (counter == 2) {
-        return -1;
-    } else {
-        memset(buf, 0, max);
-        snprintf(buf, max, "%s", " test ");
-        counter++;
-        return std::string(buf).size();
-    }
-}
-
-class deferred_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::deferred_response<void> >(new httpserver::deferred_response<void>(test_callback, nullptr, "cycle callback response"));
-     }
-};
-
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    deferred_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::deferred(
+            [body = std::string("hello from deferred"),
+             done = false](std::uint64_t, char* buf,
+                           std::size_t max) mutable -> ssize_t {
+                if (done) return -1;
+                done = true;
+                std::size_t n = std::min(body.size(), max);
+                std::memcpy(buf, body.data(), n);
+                return static_cast<ssize_t>(n);
+            });
+    });
+
     ws.start(true);
-
     return 0;
 }
-

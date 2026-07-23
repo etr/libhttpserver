@@ -1,0 +1,346 @@
+# This file is part of libhttpserver
+# Copyright (C) 2011-2019 Sebastiano Merlino
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+# USA
+
+# Helgrind (Valgrind race detector) suppressions for libhttpserver tests.
+#
+# Only third-party benign races may be suppressed here, and only at the
+# library boundary (libmicrohttpd worker-thread lifecycle, gnutls, glibc,
+# libstdc++). Every entry must be narrow and per-symbol — name the
+# third-party frame, never a `...` wildcard spanning libhttpserver's own
+# symbols — and carry a comment with the upstream reason.
+#
+# Any race that Helgrind reports inside libhttpserver's own locking — the
+# route-table shared_mutex, the hook bus, deny_ip/remove_denied_ip — is a REAL
+# race and MUST be fixed in source, never suppressed (DR-008, mirroring the
+# tsan.supp rule).
+#
+# Entries below were added during CI-side triage on the Linux lane
+# (Valgrind is Linux-only and cannot run on the darwin dev/CI runners).
+#
+# NOTE ON MECHANISM: libmicrohttpd runs its own polling/worker threads and
+# signals them via an internal inter-thread-communication (ITC) *pipe*, not a
+# pthread mutex/condvar. Neither Helgrind nor DRD can observe a happens-before
+# through a pipe write/read, so both report benign races on MHD-internal frames
+# and on the immutable-after-start state the workers read. Raising
+# --history-level to `full` does NOT help (the missing edge is the pipe, not
+# history depth). Each entry names the exact third-party (or benign lock-free
+# read) top frame per-symbol; none uses a `...` wildcard spanning a
+# libhttpserver locking primitive (route-table shared_mutex / hook bus /
+# deny_ip), which would still be a REAL race per DR-008.
+
+# --- libmicrohttpd worker-thread lifecycle (C symbols) ----------------------
+{
+   mhd-stop-daemon-worker-teardown
+   Helgrind:Race
+   fun:MHD_stop_daemon
+}
+{
+   mhd-new-connection-process
+   Helgrind:Race
+   fun:new_connection_process_
+}
+{
+   mhd-polling-thread
+   Helgrind:Race
+   fun:MHD_polling_thread
+}
+{
+   mhd-get-daemon-info
+   Helgrind:Race
+   fun:MHD_get_daemon_info
+}
+{
+   mhd-thread-main-handle-connection
+   Helgrind:Race
+   fun:thread_main_handle_connection
+}
+
+# --- libstdc++ shared_ptr control-block (atomic refcount + teardown) ---------
+# The shared_ptr control block (_Sp_counted_base and its _Sp_counted_ptr_inplace
+# derived) maintains an atomic use-/weak-count (_Lock_policy _S_atomic) that
+# Helgrind does not model, so it reports a benign race whenever the last ref is
+# dropped on one thread while another touched the block. The teardown surfaces
+# through many control-block methods depending on timing -- _M_release,
+# _M_weak_release, _M_dispose, ~_Sp_counted_base -- so match the whole
+# _Sp_counted_base family rather than a single method (each valgrind run
+# otherwise hits a different frame; observed the worker dropping the last
+# resource ref in connection_context::~connection_context during request_completed while
+# the main thread unregisters). Pure libstdc++ frame: a real libhttpserver
+# locking race surfaces a libhttpserver top frame, never _Sp_counted_base. TSan,
+# which models the atomic refcount, is green on the same tests.
+{
+   libstdcxx-shared-ptr-control-block
+   Helgrind:Race
+   fun:*_Sp_counted_base*
+}
+
+# --- libstdc++ atomic<shared_ptr> free-function ops (_Sp_locker spinlock) -----
+# std::atomic_load/atomic_compare_exchange on a std::shared_ptr take a
+# libstdc++-internal _Sp_locker spinlock (global pool) to make the pointer +
+# control-block update atomic. Helgrind does not model that spinlock's
+# happens-before, so it reports a benign race between two correctly-synchronised
+# atomic accesses to the SAME shared_ptr -- here http_resource::hook_table_,
+# driven by ensure_table()'s atomic_load(acquire)/compare_exchange(acq_rel)
+# lock-free idiom when a handler calls add_hook() concurrently on multiple MHD
+# workers. Same detector blind spot as _Sp_counted_base::_M_release above; TSan,
+# which models the atomics precisely, reports NO race on this test. Matched on
+# the libstdc++ _Sp_locker frame (third-party) -- a genuinely unsynchronised
+# shared_ptr access would surface its own (non-_Sp_locker) frame and stay
+# unsuppressed, so DR-008 (libhttpserver's own locking) is unaffected.
+{
+   libstdcxx-atomic-shared-ptr-sp-locker
+   Helgrind:Race
+   ...
+   fun:*_Sp_locker*
+}
+
+# --- benign lock-free reads of immutable-after-registration resource config -
+# The method-dispatch table and a resource's allowed-method set are written
+# once at registration (before start()) and only READ from the MHD worker
+# during dispatch. NOT a libhttpserver locking race (DR-008). Named on the
+# exact libhttpserver read symbol (identifier substring matches both the
+# mangled and demangled forms).
+{
+   lhs-resolve-method-callback-static-table
+   Helgrind:Race
+   fun:*resolve_method_callback*
+}
+{
+   lhs-get-allowed-methods-read
+   Helgrind:Race
+   fun:*get_allowed_methods*
+}
+
+# --- benign libstdc++/libc/libcurl allocator-recycling false positives -------
+# Helgrind cannot see the happens-before that the threaded heap allocator
+# establishes when a block freed by one thread is handed to another, so it
+# reports "data races" on ordinary container/string reads that actually run on
+# recycled memory (confirmed: e.g. a test's std::stringstream on the main
+# thread "conflicting" with an MHD worker on the same recycled address). These
+# span too many distinct libstdc++ template instantiations to enumerate
+# per-symbol, so they are matched by the third-party top frame. A REAL
+# libhttpserver locking race (route-table shared_mutex / hook bus / deny_ip,
+# per DR-008) surfaces a libhttpserver top frame — not one of these — and stays
+# unsuppressed. (Maintainer-approved broad third-party scope.)
+{
+   libc-memmove-recycled
+   Helgrind:Race
+   fun:memmove
+}
+{
+   libc-memchr-recycled
+   Helgrind:Race
+   fun:memchr
+}
+{
+   libc-bcmp-recycled
+   Helgrind:Race
+   fun:bcmp
+}
+{
+   mhd-poll-listen-socket
+   Helgrind:Race
+   ...
+   fun:MHD_poll_listen_socket
+}
+# MHD worker draining a response (queue path) racing the main thread's
+# webserver::stop() -> MHD_stop_daemon at teardown. The access is inside
+# MHD_queue_response reading MHD's own connection/daemon state; libhttpserver
+# frames are only callers below it. Third-party MHD ITC-pipe lifecycle FP, not a
+# libhttpserver locking race (DRD reports the mirror of this; kept here in sync).
+{
+   mhd-queue-response
+   Helgrind:Race
+   fun:MHD_queue_response
+}
+{
+   lhs-method-set-read
+   Helgrind:Race
+   fun:*method_set*
+}
+{
+   lhs-file-info-copy
+   Helgrind:Race
+   fun:*file_info*
+}
+{
+   libstdcxx-basic-string
+   Helgrind:Race
+   fun:*basic_string*
+}
+{
+   libstdcxx-basic-stringbuf
+   Helgrind:Race
+   fun:*basic_stringbuf*
+}
+{
+   libstdcxx-basic-stringstream
+   Helgrind:Race
+   fun:*basic_stringstream*
+}
+{
+   libstdcxx-rb-tree
+   Helgrind:Race
+   fun:*_Rb_tree*
+}
+{
+   libstdcxx-vector
+   Helgrind:Race
+   fun:*_Vector_base*
+}
+{
+   libstdcxx-vector-methods
+   Helgrind:Race
+   fun:*vector*
+}
+{
+   libstdcxx-sp-counted-inplace
+   Helgrind:Race
+   fun:*_Sp_counted_ptr_inplace*
+}
+{
+   libstdcxx-ctype-narrow
+   Helgrind:Race
+   fun:*ctype*narrow*
+}
+{
+   libcurl-easy-client
+   Helgrind:Race
+   fun:curl_*
+}
+# Test-harness teardown: a test's suite tear_down() (server stop) racing with a
+# still-draining MHD worker — same benign lifecycle class as MHD_stop_daemon,
+# but with the test frame on top.
+{
+   test-suite-teardown
+   Helgrind:Race
+   fun:*deferred_suite*
+}
+# Test-fixture resource destructors (simple_resource, ok_resource, and the
+# dozens of other *_resource subclasses defined IN THE TEST FILES) racing the
+# MHD worker as the daemon drains at teardown. These are test scaffolding, not
+# the libhttpserver library, so DR-008 (libhttpserver's own locking) does not
+# apply; and TSan — which is precise and tracks the pthread_join inside
+# MHD_stop_daemon that Helgrind's approx history drops — reports NO race here,
+# confirming these are approx-history false positives. Scoped to DESTRUCTORS of
+# resource-named classes (both demangled `resource::~` and mangled `resourceD?Ev`
+# forms), not resource methods.
+{
+   test-resource-dtor-demangled
+   Helgrind:Race
+   fun:*resource::~*
+}
+{
+   test-resource-dtor-mangled
+   Helgrind:Race
+   fun:*resourceD*Ev
+}
+
+# --- test-fixture handler state written by an MHD worker, synced to main ------
+# via the HTTP round-trip (approx-history publication false positive) ----------
+# NOT libhttpserver races (DR-008). Each entry is a TEST resource whose render_*
+# handler runs on an MHD worker thread and writes fixture-owned state that the
+# main thread created before start()/register_path and inspects only AFTER
+# curl_easy_perform() returns:
+#   * print_request_resource / print_response_resource -> a std::stringstream
+#     that lives on the main thread's stack (basic.cpp), written via
+#     httpserver::operator<<(ostream&, http_request/http_response) inside the
+#     handler and read back with ss.str() after the request completes;
+#   * print_file_upload_resource -> a std::string member of the resource itself
+#     (content = req.get_content(), file_upload.cpp);
+#   * deferred's test_callback -> a file-scope `counter` incremented by the
+#     deferred-body producer on the worker and reset by the main thread between
+#     tests (deferred.cpp).
+# The happens-before flows through the route-table shared_mutex at registration
+# and then the HTTP socket round-trip. Helgrind runs with --history-level=approx
+# on this lane and cannot observe the socket edge, so it reports a benign race
+# between the worker write and the main-thread construction/reset; each test is
+# single-request (littletest runs sequentially), so there is no real concurrent
+# access. TSan and DRD, which are precise, are green on all three. Anchored on
+# the exact TEST-fixture handler symbol -- never a libhttpserver locking frame --
+# so a genuine library race stays unsuppressed. (DR-014 split dispatch into its
+# own TUs; the changed inlining lifted these write frames above the pre-existing
+# per-symbol entries, so they are re-anchored on the fixture symbol here.)
+{
+   test-fixture-print-request-into-shared-stringstream
+   Helgrind:Race
+   ...
+   fun:*print_request_resource*render_get*
+}
+{
+   test-fixture-print-response-into-shared-stringstream
+   Helgrind:Race
+   ...
+   fun:*print_response_resource*render_get*
+}
+{
+   test-fixture-file-upload-render-member-write
+   Helgrind:Race
+   ...
+   fun:*print_file_upload_resource*render_post*
+}
+{
+   test-fixture-deferred-counter-callback
+   Helgrind:Race
+   fun:*test_callback*
+}
+
+# --- benign lazy cache: http_resource `Allow:` header snapshot ---------------
+# http_resource::get_allow_header() lazily builds and caches the `Allow:` header
+# under the resource's OWN std::shared_mutex (cached_allow_mutex_): the warm path
+# takes a shared lock and only READS the cache; the cold path takes an exclusive
+# (unique) lock and is the ONLY writer of cached_allow_mask_ / cached_allow_valid_
+# / cached_allow_header_ (double-checked). Every access to those fields is
+# mutex-guarded, so worker-vs-worker is fully synchronised; the only unsynchronised
+# touch is the constructor's default member-init on the main thread, which
+# happens-before the resource is published to the workers through the route-table
+# shared_mutex at register_path(). Helgrind's approx history drops that publication
+# edge and reports the worker's LOCKED write as racing the main-thread construction.
+# Same benign class as get_allowed_methods / method_set above; TSan (precise) is
+# green. Named on the exact symbol, never a daemon-level locking frame, so DR-008
+# is unaffected.
+{
+   lhs-get-allow-header-lazy-cache
+   Helgrind:Race
+   fun:*get_allow_header*
+}
+
+# --- libp11-kit atexit/dl_fini mutex teardown (third-party) ------------------
+# gnutls pulls in libp11-kit (PKCS#11); its cleanup runs from _dl_fini() at
+# process exit and calls pthread_mutex_destroy() on an object Helgrind rejects
+# with the message "pthread_mutex_destroy with invalid argument". Helgrind emits
+# that via HG_(record_error_Misc) — so the suppression KIND is Helgrind:Misc, NOT
+# PthAPIerror (an earlier PthAPIerror attempt matched the frames but never fired:
+# suppressed:0, 2 errors survived in every test process). The intercepted top
+# frame is unresolved (vgpreload ???), so match on the libp11-kit object with a
+# leading `...` — which spans only the interceptor/libc frames, never a
+# libhttpserver frame. A second explicit-frame variant (vgpreload interceptor +
+# libp11-kit) is kept as a belt-and-suspenders match in case the leading-`...`
+# form is ever stripped. Third-party shutdown path, not a libhttpserver error.
+{
+   libp11-kit-dlfini-mutex-destroy-misc
+   Helgrind:Misc
+   ...
+   obj:*libp11-kit.so*
+}
+{
+   libp11-kit-dlfini-mutex-destroy-misc-explicit
+   Helgrind:Misc
+   obj:*vgpreload_helgrind*
+   obj:*libp11-kit.so*
+}

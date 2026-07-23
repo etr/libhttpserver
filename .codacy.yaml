@@ -1,0 +1,13 @@
+---
+# Codacy project configuration.
+#
+# specs/ holds internal groundwork artifacts (product specs, architecture
+# notes, task records, review notes). They are not user-facing docs and are
+# not subject to the same markdown style as README/ChangeLog/CONTRIBUTING.
+#
+# test/*.md are internal test-suite documents (e.g. the v2.0 routing
+# regression gate at test/REGRESSION.md). Same rationale as specs/.
+exclude_paths:
+  - 'specs/**'
+  - 'test/*.md'
+  - 'test/**/*.md'

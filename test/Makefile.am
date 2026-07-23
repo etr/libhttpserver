@@ -24,18 +24,27 @@ endif
 
 LDADD += -lcurl
 
-AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
+AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log post_iterator_null_key
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ip_access_control ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants response_body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency hook_bus ws_registry ws_registry_concurrency daemon_lifecycle routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_denied hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set debug_dump_request_body_zero littletest_skip_semantics digest_client_self_test unescaper_func
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
 basic_SOURCES = integ/basic.cpp
 file_upload_SOURCES = integ/file_upload.cpp
 threaded_SOURCES = integ/threaded.cpp
-ban_system_SOURCES = integ/ban_system.cpp
+ip_access_control_SOURCES = integ/ip_access_control.cpp
 ws_start_stop_SOURCES = integ/ws_start_stop.cpp
 authentication_SOURCES = integ/authentication.cpp
+# digest_challenge_format: TASK-062 integration test that pins the
+# RFC 7616 §3.3 WWW-Authenticate challenge format on the wire when the
+# Digest-specific http_response::unauthorized(digest_challenge{...})
+# factory is used. Spins up a webserver with digest_auth_random +
+# nonce_nc_size, hits the protected route with plain curl (no
+# --digest), and asserts the challenge header contains realm, nonce,
+# opaque, algorithm, qop. This complements the converted digest_auth
+# test in authentication.cpp which exercises the round-trip end-to-end.
+digest_challenge_format_SOURCES = integ/digest_challenge_format_test.cpp
 deferred_SOURCES = integ/deferred.cpp
 http_utils_SOURCES = unit/http_utils_test.cpp
 string_utilities_SOURCES = unit/string_utilities_test.cpp
@@ -43,24 +52,673 @@ http_endpoint_SOURCES = unit/http_endpoint_test.cpp
 nodelay_SOURCES = integ/nodelay.cpp
 http_resource_SOURCES = unit/http_resource_test.cpp
 http_response_SOURCES = unit/http_response_test.cpp
+
+# TASK-064 Cycle 1 sentinel: pins the <httpserver/cookie.hpp> public
+# header surface (class shape, enum values, copy/move-constructibility).
+# Pure compile + type-trait test -- empty LDADD.
+cookie_header_sentinel_SOURCES = unit/cookie_header_sentinel_test.cpp
+cookie_header_sentinel_LDADD =
+
+# TASK-064 Cycles 4-6: cookie::to_set_cookie_header() rendering,
+# parse_cookie_header() parsing, and the RFC-6265 round-trip pinning
+# tests. Pure-host CPU test -- no MHD round-trip, so empty LDADD apart
+# from the library link.
+cookie_render_SOURCES = unit/cookie_render_test.cpp
+
+# TASK-064 Cycle 11: [[deprecated]] attribute pin for the legacy
+# string-blob cookie surface. Calls the deprecated function so it needs
+# the library link (the [[deprecated]] attribute is purely a diagnostic
+# annotation, not a linkage change).
+cookie_deprecation_sentinel_SOURCES = unit/cookie_deprecation_sentinel_test.cpp
+
+# TASK-064 Cycle 8: wire-level rendering through decorate_mhd_response.
+# Needs -lmicrohttpd to inspect MHD_Response headers.
+http_response_cookie_wire_SOURCES = unit/http_response_cookie_wire_test.cpp
+http_response_cookie_wire_LDADD = $(LDADD) -lmicrohttpd
+
+# TASK-064 Cycle 9: http_request::get_cookies_parsed() shape + lifetime.
+# Needs -lmicrohttpd because http_request transitively touches MHD types.
+http_request_cookies_parsed_SOURCES = unit/http_request_cookies_parsed_test.cpp
+http_request_cookies_parsed_LDADD = $(LDADD) -lmicrohttpd
 create_webserver_SOURCES = unit/create_webserver_test.cpp
+# create_webserver_explicit: TASK-030 compile-time sentinel. Pins:
+#   (1) PRD-NAM-REQ-004: webserver(const create_webserver&) is explicit
+#       (negative is_convertible_v + positive is_constructible_v);
+#   (2) PRD-NAM-REQ-003: the three error-page setters carry the _handler
+#       suffix with std::function<http_response(const http_request&)>
+#       (positive SFINAE detectors) and the legacy _resource-suffixed
+#       setters are gone (negative SFINAE detectors).
+# Pure compile test -- empty LDADD.
+create_webserver_explicit_SOURCES = unit/create_webserver_explicit_test.cpp
+create_webserver_explicit_LDADD =
 new_response_types_SOURCES = integ/new_response_types.cpp
 daemon_info_SOURCES = integ/daemon_info.cpp
 uri_log_SOURCES = unit/uri_log_test.cpp
-# uri_log_test directly references libmicrohttpd via ~modded_request(), so
+# uri_log_test directly references libmicrohttpd via ~connection_context(), so
 # it needs an explicit -lmicrohttpd in its link line on top of the default
 # LDADD (modern ld enforces --no-copy-dt-needed-entries).
 uri_log_LDADD = $(LDADD) -lmicrohttpd
+# unescaper_func: TASK-073. Pins the static webserver_impl::unescaper_func
+# MHD_OPTION_UNESCAPE_CALLBACK directly -- it must leave its buffer
+# unmutated and return the string length (or 0 for a null string). See
+# the historical note above the definition in
+# src/detail/webserver_callbacks.cpp. Does not touch any libmicrohttpd
+# symbol directly, so no extra -lmicrohttpd link override is needed.
+unescaper_func_SOURCES = unit/unescaper_func_test.cpp
 # post_iterator_null_key: issue #375 regression. Drives the static
-# webserver::post_iterator callback with a null key (the continuation-chunk
-# case MHD hits when a field is split across callbacks) and asserts it no
-# longer throws std::logic_error / terminates. Constructs an http_request
-# and modded_request directly, so it needs -lmicrohttpd the same way
-# uri_log does.
+# webserver_impl::post_iterator callback with a null key (the continuation-
+# chunk case MHD hits when a field is split across callbacks) and asserts it
+# no longer throws std::logic_error / terminates. Constructs a
+# connection_context whose ~connection_context() touches libmicrohttpd, so it needs
+# the explicit -lmicrohttpd link the same way uri_log does.
 post_iterator_null_key_SOURCES = unit/post_iterator_null_key_test.cpp
 post_iterator_null_key_LDADD = $(LDADD) -lmicrohttpd
+feature_unavailable_SOURCES = unit/feature_unavailable_test.cpp
+header_hygiene_iovec_SOURCES = unit/header_hygiene_iovec_test.cpp
+# header_hygiene: TASK-007 sentinel TU. Mimics a true consumer:
+# - per-target CPPFLAGS overrides AM_CPPFLAGS so HTTPSERVER_COMPILATION
+#   and the build-tree -I src/httpserver/ entries are NOT in scope (a
+#   real consumer wouldn't have either). Only -I$(top_srcdir)/src is
+#   passed so <httpserver.hpp> resolves.
+# - LDADD is overridden to empty: this is a pure-compile assertion, the
+#   `int main(){}` body has no library dependencies.
+# Now an unconditional PASS: TASK-020 landed and the <httpserver.hpp>
+# umbrella is free of backend-header leakage. See the historical
+# XFAIL_TESTS note near the TESTS = $(check_PROGRAMS) assignment below.
+header_hygiene_SOURCES = unit/header_hygiene_test.cpp
+header_hygiene_CPPFLAGS = -I$(top_srcdir)/src $(CPPFLAGS)
+header_hygiene_LDADD =
+iovec_entry_SOURCES = unit/iovec_entry_test.cpp
+http_method_SOURCES = unit/http_method_test.cpp
+constants_SOURCES = unit/constants_test.cpp
+# response_body: TASK-008 unit test for the internal detail::response_body
+# hierarchy. It constructs/destroys MHD_Response objects directly via the
+# libmicrohttpd inspection APIs (no daemon), so it needs an explicit
+# -lmicrohttpd link the same way uri_log does.
+response_body_SOURCES = unit/response_body_test.cpp
+response_body_LDADD = $(LDADD) -lmicrohttpd
 
-noinst_HEADERS = littletest.hpp
+# http_response_sbo: TASK-009 unit test for the SBO value-type layout of
+# http_response. Pokes the private body_/body_storage_/body_inline_/kind_
+# members through a friend declaration, exercises the four-case move
+# cross-product, and asserts the type-trait acceptance criteria. Needs
+# -lmicrohttpd because it transitively touches detail::response_body subclasses
+# whose materialize() returns MHD_Response*.
+http_response_sbo_SOURCES = unit/http_response_sbo_test.cpp
+http_response_sbo_LDADD = $(LDADD) -lmicrohttpd
+
+# http_response_factories: TASK-010 unit test for the static factory
+# functions on http_response (string/file/iovec/pipe/empty/deferred/
+# unauthorized). Each factory placement-news the corresponding
+# detail::response_body subclass into the SBO buffer, so this TU includes the
+# private detail/response_body.hpp via the build-tree -DHTTPSERVER_COMPILATION
+# path. Needs -lmicrohttpd for the same transitive reasons as
+# http_response_sbo.
+http_response_factories_SOURCES = unit/http_response_factories_test.cpp
+http_response_factories_LDADD = $(LDADD) -lmicrohttpd
+
+# http_response_digest_factory: TASK-062 unit test for the RFC-7616
+# Digest-specific overload of http_response::unauthorized
+# (digest_challenge). Pins status/kind/algorithm/opaque/domain
+# round-trip through the factory, the SBO budget for the new
+# detail::digest_challenge_response_body subclass, and the CR/LF/NUL injection
+# guard on realm/opaque/domain. Needs -lmicrohttpd for the same
+# transitive reasons as http_response_factories.
+http_response_digest_factory_SOURCES = unit/http_response_digest_factory_test.cpp
+http_response_digest_factory_LDADD = $(LDADD) -lmicrohttpd
+
+# http_response_move_sanitizer: TASK-038 unit test that pins
+# sanitizer-clean (ASan + UBSan) http_response move semantics. Covers the
+# four move-assign cases and both move-ctor cases via factory-built
+# responses, drives the heap-fallback branch with a synthetic >64 B body
+# subclass (fat_body) reached through the same friend hook the SBO test
+# uses, and pins the moved-from invariant contract (destructible,
+# accessor-safe, re-assignable). Picked up by the asan / ubsan matrix
+# entries in .github/workflows/verify-build.yml via $(check_PROGRAMS).
+# Needs -lmicrohttpd because the TU subclasses detail::response_body whose
+# materialize() returns MHD_Response*.
+http_response_move_sanitizer_SOURCES = unit/http_response_move_sanitizer_test.cpp
+http_response_move_sanitizer_LDADD = $(LDADD) -lmicrohttpd
+
+# webserver_pimpl: TASK-014 sentinel. Compile-time assertions that the
+# PIMPL split has happened: <microhttpd.h>/<pthread.h> no longer leak
+# through the public webserver.hpp, and webserver is non-copyable and
+# non-movable. Pure compile test -- empty LDADD.
+webserver_pimpl_SOURCES = unit/webserver_pimpl_test.cpp
+webserver_pimpl_LDADD =
+
+# http_request_pimpl: TASK-015 sentinel. Compile-time assertions that the
+# http_request PIMPL split has happened: <microhttpd.h>/<gnutls/gnutls.h>
+# no longer leak through the public http_request.hpp, http_request is
+# move-only, and sizeof(http_request) shrank to a small bag plus one
+# impl pointer. Pure compile test -- empty LDADD.
+http_request_pimpl_SOURCES = unit/http_request_pimpl_test.cpp
+http_request_pimpl_LDADD =
+
+# create_test_request: TASK-015 functional tests for the create_test_request
+# builder and the http_request public API on test-constructed requests. Wires
+# up headers/footers/cookies/args/querystring/requestor/auth via impl_ local
+# maps rather than a live MHD_Connection*.
+create_test_request_SOURCES = unit/create_test_request_test.cpp
+create_test_request_LDADD = $(LDADD) -lmicrohttpd
+
+# http_request_operator_stream: TASK-057 unit test for the redaction
+# policy in http_request::operator<<. Default-built test requests must
+# emit pass:"<redacted>", redacted Authorization / Proxy-Authorization
+# values, and redacted cookie values; the opt-in
+# create_test_request::expose_credentials_in_logs() restores the v1
+# verbose form. Needs -lmicrohttpd because it constructs an http_request
+# via create_test_request::build().
+http_request_operator_stream_SOURCES = unit/http_request_operator_stream_test.cpp
+http_request_operator_stream_LDADD = $(LDADD) -lmicrohttpd
+
+# http_request_arena: TASK-016 unit test for the per-connection arena. Asserts
+# that connection_state owns a std::pmr::monotonic_buffer_resource arena_,
+# that arena_.release() rewinds the bump pointer, and that an
+# http_request_impl constructed from the arena does not touch the upstream
+# memory resource on the warm path. Exercises detail/http_request_impl.hpp
+# directly via the build-tree HTTPSERVER_COMPILATION include path. Needs
+# -lmicrohttpd because it transitively touches MHD types through the impl.
+http_request_arena_SOURCES = unit/http_request_arena_test.cpp
+http_request_arena_LDADD = $(LDADD) -lmicrohttpd
+
+# http_request_unescape_arena: TASK-072 unit test. Pins the warm-path
+# zero-upstream-alloc invariant for build_request_args with a "%2F"-
+# containing GET argument, both for the default unescaper and for a
+# user-registered unescaper. Also covers correctness (percent-encoded
+# decode, invalid-hex passthrough, empty input, lifetime contract,
+# user-callback grow). Needs -lmicrohttpd because it touches MHD types
+# through the impl.
+http_request_unescape_arena_SOURCES = unit/http_request_unescape_arena_test.cpp
+http_request_unescape_arena_LDADD = $(LDADD) -lmicrohttpd
+
+# http_request_const_getters: TASK-018 sentinel. Compile-time assertions
+# that the per-key getters (get_header / get_cookie / get_footer /
+# get_arg / get_arg_flat) and the always-present getters (get_path /
+# get_method / get_version / get_content / get_querystring) are callable
+# on `const http_request&` and (for the always-present five) noexcept.
+# Locks the public-API contract via static_assert so accidental drift is
+# caught at compile time. Pure compile test -- empty LDADD.
+http_request_const_getters_SOURCES = unit/http_request_const_getters_test.cpp
+http_request_const_getters_LDADD =
+
+# http_request_tls_accessors: TASK-019 sentinel. Compile-time assertions
+# that the high-level GnuTLS accessors on http_request exist
+# unconditionally (no #ifdef HAVE_GNUTLS gate around the public
+# declarations), that the raw `gnutls_session_t get_tls_session()` member
+# has been removed from the public surface, that return types match the
+# TASK-019 spec (string_view / int64_t / bool), and that the five
+# documented-noexcept accessors carry the noexcept specifier. Pure
+# compile test -- empty LDADD.
+http_request_tls_accessors_SOURCES = unit/http_request_tls_accessors_test.cpp
+http_request_tls_accessors_LDADD =
+
+# webserver_register_smartptr: TASK-023. Runtime tests for the
+# register_path smart-pointer ownership semantics (unique_ptr ownership
+# transfer, shared_ptr caller-retains-ref, throw-on-null,
+# throw-on-duplicate). The compile-time signature contract lives in
+# webserver_register_path_prefix. Default LDADD (libhttpserver + curl) is
+# sufficient; no microhttpd direct link needed.
+webserver_register_smartptr_SOURCES = unit/webserver_register_smartptr_test.cpp
+
+# webserver_register_path_prefix: TASK-024. Compile-time signature
+# assertions that register_path / register_prefix exist with both
+# unique_ptr and shared_ptr overloads, that unregister_path /
+# unregister_prefix exist, and that register_resource has been removed
+# entirely (negative SFINAE pin — clean break; no smart-pointer or
+# bool-family overloads survive). Runtime tests: register_prefix matches a
+# longer URL; register_path does not; parameterized exact paths bind their
+# args; unregister_path / unregister_prefix / the umbrella
+# unregister_resource alias all 404 the route after removal.
+webserver_register_path_prefix_SOURCES = unit/webserver_register_path_prefix_test.cpp
+
+# webserver_on_methods: TASK-025. Compile-time signature contract for
+# the seven on_* lambda registration overloads (on_get / on_post / on_put
+# / on_delete / on_patch / on_options / on_head) plus static_asserts on
+# the §4.7 detail::route_entry shape (method_set + shared_ptr<http_resource>
+# + bool is_prefix; TASK-071 collapsed the original variant arm). Runtime tests over real
+# curl round-trips: PRD §3.4 hello-world; per-method 405 + Allow header;
+# composition (on_get + on_post on the same path serve both); all seven
+# methods dispatch correctly; duplicate (method, path) registration
+# throws std::invalid_argument; merge-then-conflict still throws;
+# parameterized path binds {id}; class-resource registration on a
+# lambda-owned path throws. Default LDADD (libhttpserver + curl) is
+# sufficient.
+webserver_on_methods_SOURCES = unit/webserver_on_methods_test.cpp
+
+# webserver_route: TASK-026. Compile-time signature contract for the two
+# generic route() overloads (route(http_method, ...) and
+# route(method_set, ...)) plus runtime curl tests covering: GET/POST
+# dispatch, 405 + Allow on unregistered methods, the headline acceptance
+# test (load (method, path) pairs from a vector at runtime and dispatch),
+# method_set GET+HEAD serves both, method_set partial overlap with an
+# existing handler throws atomically (POST stays unregistered), empty
+# method_set throws, http_method::count_ sentinel throws, duplicate /
+# cross-overload conflicts with on_* throw, and parameterized paths bind
+# through the regex tier. Default LDADD (libhttpserver + curl) is
+# sufficient.
+webserver_route_SOURCES = unit/webserver_route_test.cpp
+
+# route_table: TASK-027. Unit tests for the bespoke segment-trie
+# (detail::segment_trie<route_entry>) and the LRU route cache
+# (detail::route_cache), PLUS class-level tests that construct
+# detail::route_table directly (register_v2_route / lookup_v2 /
+# lock_for_write + the locked probe/upsert primitives) added when the
+# route_table collaborator was extracted from webserver_impl (commit
+# 21296ac) -- pinning the table-before-cache lock discipline and the
+# duplicate/collision-rejection logic at the class boundary rather than
+# only through webserver_impl's forwarders. Default LDADD
+# (libhttpserver + curl) is sufficient.
+route_table_SOURCES = unit/route_table_test.cpp
+
+# lookup_pipeline: TASK-027 Cycle F. Drives the public webserver
+# registration surface (register_path / register_prefix) and probes the
+# impl-private lookup_v2() to pin the tier-order pipeline:
+# cache -> exact -> radix -> regex. Uses the webserver_test_access
+# friend gated on HTTPSERVER_COMPILATION (already supplied by AM_CPPFLAGS
+# in this Makefile). Needs -lmicrohttpd because webserver's PIMPL impl
+# carries microhttpd-typed members.
+lookup_pipeline_SOURCES = unit/lookup_pipeline_test.cpp
+lookup_pipeline_LDADD = $(LDADD) -lmicrohttpd
+
+# route_table_concurrency: TASK-027 Cycle I. Multi-thread stress test.
+# 4 writers + 16 readers for ~500ms, registering / unregistering /
+# looking up against the v2 3-tier table. Gate for the lock-order
+# discipline (table BEFORE cache). TASK-092: the tsan CI lane runs this
+# binary RTC_ITERATIONS times via `make -C test
+# check-route-table-concurrency` (time-boxed to <= 2 min); it is also
+# run once implicitly by the tsan lane's plain `make check`.
+# Needs -lmicrohttpd because webserver's PIMPL impl carries
+# microhttpd-typed members.
+route_table_concurrency_SOURCES = integ/route_table_concurrency.cpp
+route_table_concurrency_LDADD = $(LDADD) -lmicrohttpd
+
+# hook_bus: extracted-collaborator unit test (commit 1f9a82e). Constructs
+# detail::hook_bus directly (no running webserver) and drives
+# add()/remove()/has_hooks_for()/phase_hook_count(), the phase-mismatch
+# and empty-callable registration throws, the any_hooks_ advisory-gate
+# arm/clear invariant, the two alias slots (handler_exception_alias_ DOES
+# arm the gate; log_access_alias_ does NOT), and the fire_* helpers'
+# try/catch-into-log_fn containment. Previously only reachable indirectly
+# through webserver's add_hook/hook_handle API. Default LDADD
+# (libhttpserver + curl) is sufficient -- hook_bus never touches MHD.
+hook_bus_SOURCES = unit/hook_bus_test.cpp
+
+# ws_registry: extracted-collaborator unit test (commit b596fc8).
+# Constructs detail::ws_registry directly and drives
+# try_register/unregister/find/empty, the duplicate-key rejection (false
+# return, original registration untouched), the no-op unregister of an
+# unknown key, and the find()-returns-a-copy lifetime contract. Default
+# LDADD (libhttpserver + curl) is sufficient -- ws_registry never
+# dereferences websocket_handler, so it needs no MHD/websocket backend.
+ws_registry_SOURCES = unit/ws_registry_test.cpp
+
+# ws_registry_concurrency: concurrency stress companion to ws_registry,
+# mirroring route_table_concurrency.cpp's pattern (4 writers + 16
+# readers hammering try_register/unregister/find/empty). ws_registry's
+# class comment documents its mutex as independent of every other
+# cluster's; unlike route_table and hook_bus, it previously had zero
+# concurrency verification anywhere in the suite (threadsafety_stress.cpp
+# has no register_ws_resource/unregister_ws_resource op). Needs no MHD
+# daemon -- ws_registry is self-contained, so default LDADD suffices.
+ws_registry_concurrency_SOURCES = integ/ws_registry_concurrency.cpp
+
+# daemon_lifecycle: extracted-collaborator unit test (commit e6af49f).
+# Reaches the daemon_lifecycle every httpserver::webserver already owns
+# (impl_->daemon_) via webserver_test_access and drives
+# compose_transport_flags/compose_runtime_flags/compose_start_flags and
+# build_mhd_option_array's per-flag composition directly -- no MHD daemon
+# is ever started. Previously only reachable indirectly through a
+# running daemon via the integ-level start/stop tests. Needs
+# -lmicrohttpd because webserver's PIMPL impl carries microhttpd-typed
+# members (same rationale as lookup_pipeline / route_table_concurrency).
+daemon_lifecycle_SOURCES = unit/daemon_lifecycle_test.cpp
+daemon_lifecycle_LDADD = $(LDADD) -lmicrohttpd
+
+# threadsafety_stress: TASK-032. DR-008 multi-thread contract gate.
+# Spawns 16 curl clients hitting an on_get handler that re-enters the
+# public webserver surface (register_path / unregister_path / deny_ip /
+# remove_denied_ip) for HTTPSERVER_STRESS_SECONDS (default 60). The TSan-clean
+# rerun is the headline acceptance; the CI matrix `build-type: tsan`
+# entry in verify-build.yml picks this binary up via `make check`
+# without further wiring. A second sub-test reproduces the documented
+# stop()-from-handler deadlock; TASK-092: the baseline Linux gcc CI lane
+# now sets that gate via `make -C test check-stop-from-handler`
+# (HTTPSERVER_RUN_STOP_FROM_HANDLER=1). Local runs remain opt-in — the
+# sub-test skips unless the env var is set.
+# Default LDADD (libhttpserver + curl) is sufficient — this test
+# touches only public webserver APIs and does not need a direct
+# microhttpd link.
+threadsafety_stress_SOURCES = integ/threadsafety_stress.cpp
+
+# routing_regression: TASK-028. v1 routing-test corpus regression gate.
+# Drives the public webserver registration surface (register_path /
+# register_prefix / on_get / on_post / unregister_path / unregister_prefix)
+# and probes webserver_impl::lookup_v2 to assert that every routing
+# pattern in the v1 corpus resolves to the same handler / tier / captures
+# the v2 3-tier table is expected to produce after TASK-036 cuts dispatch
+# over. Documented as the v2.0 routing regression gate in
+# test/REGRESSION.md. Needs -lmicrohttpd because webserver's PIMPL impl
+# carries microhttpd-typed members.
+routing_regression_SOURCES = unit/routing_regression_test.cpp
+routing_regression_LDADD = $(LDADD) -lmicrohttpd
+
+# route_lookup_canonicalize (TASK-058 step 1): pins lookup_v2's
+# canonicalisation contract behind a behaviour-only test (empty, leading-
+# slash insertion, trailing-slash stripping, "/" identity, idempotency).
+# Same -lmicrohttpd dependency as routing_regression: the webserver
+# constructor pulls libhttpserver in, which transitively touches
+# libmicrohttpd headers.
+route_lookup_canonicalize_SOURCES = unit/route_lookup_canonicalize_test.cpp
+route_lookup_canonicalize_LDADD = $(LDADD) -lmicrohttpd
+
+# auth_skip_normalize (TASK-058 step 2): pins that auth_skip_paths
+# entries are normalized at webserver construction time, so non-
+# canonical inputs match canonical request paths.  Same -lmicrohttpd
+# dependency as routing_regression: webserver pulls libhttpserver in,
+# which transitively touches libmicrohttpd headers.
+auth_skip_normalize_SOURCES = unit/auth_skip_normalize_test.cpp
+auth_skip_normalize_LDADD = $(LDADD) -lmicrohttpd
+
+# http_resource_allow_cache (TASK-058 step 3): pins the lazy Allow-
+# header cache on http_resource -- correctness (cached value matches
+# format_allow_header; mask mutation invalidates), identity (two
+# consecutive calls return the same buffer pointer, no reallocation),
+# and the invalidation surface (set_allowing / disallow_all / allow_all).
+http_resource_allow_cache_SOURCES = unit/http_resource_allow_cache_test.cpp
+http_resource_allow_cache_LDADD = $(LDADD) -lmicrohttpd
+
+# v2_dispatch_contract: TASK-053. End-to-end safety net pinning the
+# observable invariants the dispatch path must satisfy AFTER finalize_answer
+# is cut over from resolve_resource_for_request (v1 maps) to
+# resolve_resource_for_request_v2 (lookup_v2-backed). Drives real HTTP
+# requests against the public webserver surface and asserts on response
+# body / status / hook context (parameterized capture replay, prefix vs
+# exact is_prefix flag, 405 method-mismatch still resolves the resource).
+# Default LDADD plus -lcurl is sufficient (already in LDADD); no PIMPL
+# friend access needed because the gate is the public observable contract.
+v2_dispatch_contract_SOURCES = unit/v2_dispatch_contract_test.cpp
+
+# webserver_features: TASK-034. Pins the public contract of
+# webserver::features() (PRD-FLG-REQ-003): nested `struct features` with
+# four bool fields in documented order; the static call is noexcept; the
+# fields match the HAVE_* state the library was built with. The test TU
+# is compiled with the same AM_CXXFLAGS as the library so its #ifdef
+# HAVE_* probes are in lockstep with libhttpserver's. Default LDADD is
+# sufficient.
+webserver_features_SOURCES = unit/webserver_features_test.cpp
+
+# webserver_ws_unavailable: TASK-034 / TASK-035. On HAVE_WEBSOCKET-off
+# builds, pins that all three public WebSocket entry points
+# (register_ws_resource(unique_ptr), register_ws_resource(shared_ptr),
+# unregister_ws_resource) throw feature_unavailable whose what() names
+# both "websocket" and "HAVE_WEBSOCKET". On HAVE_WEBSOCKET-on builds the
+# suite is empty (the integ-level ws_start_stop test owns the success
+# path; the smartptr ownership semantics live in
+# webserver_register_ws_smartptr).
+webserver_ws_unavailable_SOURCES = unit/webserver_ws_unavailable_test.cpp
+
+# webserver_ws_available: TASK-081 cycle 1. Paired on-path companion to
+# webserver_ws_unavailable. On HAVE_WEBSOCKET-on builds pins
+# webserver::features().websocket == true and that null unique_ptr /
+# shared_ptr arguments throw std::invalid_argument (NOT
+# feature_unavailable) — the throw-type contrast that makes the
+# unavailable TU's contract meaningful. On HAVE_WEBSOCKET-off builds
+# the suite is empty (the off-path contracts live in
+# webserver_ws_unavailable). Default LDADD is sufficient.
+webserver_ws_available_SOURCES = unit/webserver_ws_available_test.cpp
+
+# webserver_register_ws_smartptr: TASK-035. Compile-time signature
+# assertions that the new unique_ptr/shared_ptr register_ws_resource
+# overloads exist, the raw-pointer overload is gone, and
+# unregister_ws_resource exists. On HAVE_WEBSOCKET-on builds the
+# runtime suite mirrors webserver_register_smartptr (unique_ptr
+# ownership transfer, shared_ptr caller-retains-ref, throw-on-null,
+# throw-on-duplicate, unregister drops the slot). On HAVE_WEBSOCKET-off
+# builds only the compile-time contract is exercised; the
+# feature_unavailable throw-site contract lives in
+# webserver_ws_unavailable. Default LDADD (libhttpserver + curl) is
+# sufficient.
+webserver_register_ws_smartptr_SOURCES = unit/webserver_register_ws_smartptr_test.cpp
+
+# webserver_dauth_unavailable: security-reviewer-iter1-1 / TASK-034.
+# On HAVE_DAUTH-off builds, pins that webserver(create_webserver(port).digest_auth(true))
+# throws feature_unavailable naming "digest_auth" and "HAVE_DAUTH", and that a
+# default-constructed webserver does NOT throw (digest_auth_default() returns false
+# on HAVE_DAUTH-off). On HAVE_DAUTH-on builds the suite is empty.
+webserver_dauth_unavailable_SOURCES = unit/webserver_dauth_unavailable_test.cpp
+
+# webserver_dauth_available: TASK-081 cycle 2. Paired on-path companion
+# to webserver_dauth_unavailable. On HAVE_DAUTH-on builds pins
+# webserver::features().digest_auth == true and that constructing a
+# webserver with digest_auth(true) does NOT throw feature_unavailable.
+# On HAVE_DAUTH-off builds the suite is empty (the off-path contracts
+# live in webserver_dauth_unavailable). Default LDADD is sufficient.
+webserver_dauth_available_SOURCES = unit/webserver_dauth_available_test.cpp
+
+# consumer_fixture: TASK-034 / AC #2 + TASK-037 CI matrix gate
+# (PRD-FLG-REQ-001 / arch §9 testing item 2). Compile-and-link gate
+# proving that a single consumer source file referencing every
+# previously HAVE_*-gated public symbol compiles unchanged in every
+# build configuration (HAVE_BAUTH/DAUTH/GNUTLS/WEBSOCKET on or off).
+# main() returns 0; the test is "pass" purely by virtue of the binary
+# existing. TASK-037 wires two GitHub Actions matrix entries
+# (flag-invariance-on / flag-invariance-off in
+# .github/workflows/verify-build.yml) that exercise this fixture in
+# both the all-features-on and all-features-off lanes; an intentional
+# regression that re-introduces #ifdef HAVE_* around a public method
+# breaks the off lane (verified locally during TASK-037 cycle R).
+consumer_fixture_SOURCES = consumer_fixture.cpp
+
+# TASK-045 -- Hook bus skeleton (hook_phase, hook_action, hook_handle,
+# hook_context, webserver::add_hook). Three tests:
+#
+# - header_hygiene_hooks: per-header preprocessor sentinel that the
+#   four new hook public headers do not transitively pull <microhttpd.h>,
+#   <gnutls/gnutls.h>, <sys/socket.h>, or <sys/uio.h>. Mirrors
+#   header_hygiene_iovec_test.cpp.
+# - hook_api_shape: compile-time + runtime contract for hook_phase /
+#   hook_action / hook_handle / webserver::add_hook. Reaches into
+#   webserver_impl via the HTTPSERVER_COMPILATION-gated friend bridge,
+#   so it needs -lmicrohttpd transitively (default LDADD covers it).
+# - hooks_no_firing: integration sentinel registering one hook on every
+#   phase and asserting zero invocations across a real HTTP round-trip.
+header_hygiene_hooks_SOURCES = unit/header_hygiene_hooks_test.cpp
+hook_api_shape_SOURCES = unit/hook_api_shape_test.cpp
+hooks_no_firing_SOURCES = integ/hooks_no_firing.cpp
+
+# TASK-046 -- Lifecycle hook bus firing sites (connection_opened,
+# accept_decision, connection_closed). Adds:
+#
+# - hooks_accept_ctx_shape: compile-time pin for accept_ctx's extended
+#   {peer, accepted, reason} shape (TASK-045 landed peer only).
+# - hooks_connection_lifecycle: integ test driving one curl round-trip
+#   and asserting all three lifecycle hooks fired with a valid peer.
+# - hooks_accept_decision_denied: denies 127.0.0.1, asserts the
+#   accept_decision hook observes accepted=false reason="denied".
+# - hooks_accept_decision_throwing: a throwing accept_decision hook
+#   must not flip the accept/reject decision.
+hooks_accept_ctx_shape_SOURCES = unit/hooks_accept_ctx_shape_test.cpp
+hooks_connection_lifecycle_SOURCES = integ/hooks_connection_lifecycle.cpp
+hooks_accept_decision_denied_SOURCES = integ/hooks_accept_decision_denied.cpp
+hooks_accept_decision_throwing_SOURCES = integ/hooks_accept_decision_throwing.cpp
+
+# TASK-047 -- Pre-handler short-circuit hooks (request_received, body_chunk).
+# Adds:
+# - hooks_body_chunk_ctx_shape: compile-time pin for the request_received_ctx /
+#   body_chunk_ctx shapes (mutable request*, chunk span, offset, is_final).
+# - hooks_request_received_short_circuit: hook returns 413 on Content-Length > 1 MB,
+#   downstream body_chunk hook must NOT fire (closes #273).
+# - hooks_body_chunk_observes_progress: hook accumulates bytes; total equals body size.
+# - hooks_body_chunk_short_circuit_no_leak: ASan-verified that short-circuit drops
+#   the in-flight MHD_PostProcessor without leaking its buffer.
+hooks_body_chunk_ctx_shape_SOURCES = unit/hooks_body_chunk_ctx_shape_test.cpp
+hooks_request_received_short_circuit_SOURCES = integ/hooks_request_received_short_circuit.cpp
+hooks_body_chunk_observes_progress_SOURCES = integ/hooks_body_chunk_observes_progress.cpp
+hooks_body_chunk_short_circuit_no_leak_SOURCES = integ/hooks_body_chunk_short_circuit_no_leak.cpp
+
+# TASK-048 -- route_resolved + before_handler firing sites and the three
+# v1-derived single-slot setters (auth_handler, not_found_handler,
+# method_not_allowed_handler) re-described as hook-bus aliases. Adds:
+# - hooks_before_handler_ctx_shape: compile-time pin for
+#   before_handler_ctx (method + resource fields) and route_resolved_ctx.
+# - hooks_route_resolved_miss_and_hit: two route_resolved hooks
+#   observe both hit (matched.has_value()) and miss (matched==nullopt).
+# - hooks_before_handler_short_circuit: before_handler hook returning
+#   respond_with(403) skips both is_allowed check and resource handler.
+# - hooks_alias_count: registering auth_handler(fn) installs +1 hook on
+#   before_handler; not_found_handler installs +1 on route_resolved.
+hooks_before_handler_ctx_shape_SOURCES = unit/hooks_before_handler_ctx_shape_test.cpp
+hooks_route_resolved_miss_and_hit_SOURCES = integ/hooks_route_resolved_miss_and_hit.cpp
+hooks_before_handler_short_circuit_SOURCES = integ/hooks_before_handler_short_circuit.cpp
+hooks_alias_count_SOURCES = unit/hooks_alias_count_test.cpp
+# TASK-054 -- auth_handler_ptr is
+# std::function<std::optional<http_response>(...)>. The pinning TU
+# auth_handler_optional_signature static_asserts the typedef and
+# runtime-end-to-end-checks 200 on nullopt / 401 on engaged. The v1
+# compat escape hatch (compat::auth_handler_v1_ptr + a [[deprecated]]
+# setter overload) was removed in TASK-067; see no_v1_compat_shim below
+# for the post-removal sentinel.
+auth_handler_optional_signature_SOURCES = unit/auth_handler_optional_signature_test.cpp
+# TASK-067 -- sentinel that the v1 compat auth-handler shim has been
+# removed. Static_assert plus a positive control for the canonical shape.
+no_v1_compat_shim_SOURCES = unit/no_v1_compat_shim_test.cpp
+# hooks_alias_functional: TASK-048 finding fix. Pins that the
+# method_not_allowed_handler alias is a functional before_handler hook
+# that short-circuits the chain (not a no-op stub): a user hook registered
+# after the alias does NOT fire for method-not-allowed requests.
+hooks_alias_functional_SOURCES = integ/hooks_alias_functional_test.cpp
+# TASK-071 sub-item A. End-to-end pin for the not_found_handler ->
+# route_resolved alias seat: default-branch "Not Found" body, custom-branch
+# user-handler body, and DR-012 §4.10 ordering (a user route_resolved hook
+# co-fires alongside the alias seat — observation phase is not short-
+# circuit-capable). Cross-pins the wire contract so a future structural
+# refactor of install_not_found_alias_ cannot silently regress it.
+hooks_not_found_alias_SOURCES = integ/hooks_not_found_alias_test.cpp
+
+# TASK-049 -- handler_exception firing site and internal_error_handler
+# alias slot. Adds:
+# - hooks_handler_exception_chain: A=pass, B=respond_with(418); alias C is
+#   never invoked because B wins.
+# - hooks_handler_exception_user_handler_throws_continues_chain: A throws;
+#   the chain continues to B; B's 418 is queued.
+# - hooks_handler_exception_fallback_to_hardcoded_500: A=pass, B=throws,
+#   alias C=throws -> dispatcher emits empty-body 500; alias C is called
+#   exactly once (no re-entry).
+# - hooks_handler_exception_slot: unit pin that internal_error_handler
+#   wires the dedicated last-position slot (not a vector entry), distinct
+#   from the TASK-048 aliases.
+hooks_handler_exception_chain_SOURCES = integ/hooks_handler_exception_chain.cpp
+hooks_handler_exception_user_handler_throws_continues_chain_SOURCES = integ/hooks_handler_exception_user_handler_throws_continues_chain.cpp
+hooks_handler_exception_fallback_to_hardcoded_500_SOURCES = integ/hooks_handler_exception_fallback_to_hardcoded_500.cpp
+hooks_handler_exception_slot_SOURCES = unit/hooks_handler_exception_slot_test.cpp
+
+# TASK-050 -- after_handler / response_sent / request_completed firing
+# sites + log_access alias. Adds:
+# - hooks_response_sent_ctx_shape: compile-time pin for the extended
+#   response_sent_ctx fields (status, bytes_queued, elapsed).
+# - hooks_request_completed_ctx_shape: compile-time pin for the
+#   extended request_completed_ctx (resp pointer + succeeded flag).
+# - hooks_after_handler_replaces_response: after_handler returning
+#   respond_with(r2) replaces conn->response before MHD_queue_response.
+# - hooks_after_handler_mutates_response_in_place: after_handler
+#   returning pass() after ctx.response->with_header(...) puts the
+#   header on the wire.
+# - hooks_response_sent_carries_status_bytes_timing: response_sent
+#   hook observes status==200, bytes_queued==body.size(), elapsed>0.
+# - hooks_request_completed_fires_on_early_failure: a request_received
+#   hook short-circuits to a 413; request_completed still fires with
+#   succeeded==true and a non-null resp pointing at the 413.
+# - hooks_log_access_alias_slot: unit pin that log_access(fn) wires the
+#   dedicated alias slot on webserver_impl (same pattern as the TASK-049
+#   internal_error_handler alias slot), and that no entry is pushed
+#   into hooks_response_sent_.
+hooks_response_sent_ctx_shape_SOURCES = unit/hooks_response_sent_ctx_shape_test.cpp
+hooks_request_completed_ctx_shape_SOURCES = unit/hooks_request_completed_ctx_shape_test.cpp
+hooks_after_handler_replaces_response_SOURCES = integ/hooks_after_handler_replaces_response.cpp
+hooks_after_handler_mutates_response_in_place_SOURCES = integ/hooks_after_handler_mutates_response_in_place.cpp
+hooks_response_sent_carries_status_bytes_timing_SOURCES = integ/hooks_response_sent_carries_status_bytes_timing.cpp
+hooks_request_completed_fires_on_early_failure_SOURCES = integ/hooks_request_completed_fires_on_early_failure.cpp
+hooks_log_access_alias_slot_SOURCES = unit/hooks_log_access_alias_slot_test.cpp
+hooks_log_access_alias_slot_LDADD = $(LDADD) -lmicrohttpd
+
+# TASK-051 -- Per-route hooks on http_resource (add_hook overloads). Adds:
+# - hooks_per_route_invalid_phase_throws: validation gate -- the five
+#   pre-route-resolution phases must throw std::invalid_argument, the
+#   five post-route-resolution phases must not throw.
+# - hooks_per_route_order: server-wide response_sent hook A fires
+#   before per-route hook B on the matched resource; on a different
+#   resource only A fires.
+# - hooks_per_route_early_413_per_endpoint: two endpoints with
+#   different per-route before_handler size caps demonstrate per-route
+#   policy isolation.
+# - hooks_per_route_resource_destroyed_first: ASan-relevant. A
+#   hook_handle whose resource was destroyed must remove() as a no-op.
+# - hooks_per_route_concurrent_registration: TSan stress -- registers
+#   on resource R from inside a handler on resource Q, exercising the
+#   documented route_table_mutex_ -> resource hook_table_mutex_ lock
+#   order.
+hooks_per_route_invalid_phase_throws_SOURCES = integ/hooks_per_route_invalid_phase_throws.cpp
+hooks_per_route_order_SOURCES = integ/hooks_per_route_order.cpp
+hooks_per_route_early_413_per_endpoint_SOURCES = integ/hooks_per_route_early_413_per_endpoint.cpp
+hooks_per_route_resource_destroyed_first_SOURCES = integ/hooks_per_route_resource_destroyed_first.cpp
+hooks_per_route_concurrent_registration_SOURCES = integ/hooks_per_route_concurrent_registration.cpp
+
+# TASK-065 -- RFC 5952 canonicalization of peer_address::to_string() for
+# IPv6 (lowercase + leading-zero suppression + longest-run zero collapse
+# + ::ffff:a.b.c.d dotted-quad). Pure-host CPU test -- no MHD round-trip.
+peer_address_to_string_SOURCES = unit/peer_address_to_string_test.cpp
+
+# TASK-068 -- CWE-226 arena-overflow zeroing + CWE-14 explicit_bzero.
+# Three tests:
+# - secure_zero_dce: pins that httpserver::detail::secure_zero() writes
+#   actually land at -O2 -DNDEBUG (regression sentinel against future
+#   compiler dead-store elimination).
+# - connection_state_sentinel: unit pin that connection_state::reset_arena()
+#   zeros the entire initial_buffer_ (8 KiB), not just the bump-pointer
+#   prefix.
+# - connection_state_body_residue: integration acceptance criterion --
+#   a DEADBEEF body in request N is not observable to request N+1 on the
+#   same MHD keep-alive connection. Reaches into connection_state via the
+#   HTTPSERVER_COMPILATION-gated underlying_connection_for_testing()
+#   accessor on http_request. Needs -lmicrohttpd for the
+#   MHD_get_connection_info call.
+secure_zero_dce_SOURCES = unit/secure_zero_dce_test.cpp
+# Pin -O2 -DNDEBUG so the dead-store elimination assertion runs at the
+# optimization level where it actually matters.
+secure_zero_dce_CXXFLAGS = $(AM_CXXFLAGS) -O2 -DNDEBUG
+secure_zero_dce_LDADD =
+connection_state_sentinel_SOURCES = unit/connection_state_sentinel_test.cpp
+connection_state_sentinel_LDADD =
+connection_state_body_residue_SOURCES = integ/connection_state_body_residue_test.cpp
+connection_state_body_residue_LDADD = $(LDADD) -lmicrohttpd
+
+# TASK-074: integration tests gating the LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY
+# opt-in env var. Each binary calls setenv()/unsetenv() at the top of main()
+# BEFORE any libhttpserver code runs so the function-local-static cache in
+# webserver_body_pipeline.cpp sees a deterministic value. Split into separate
+# binaries because the magic-static cache means the first observation in
+# the process locks in for the remainder. debug_dump_request_body_zero pins
+# the explicit "0" value distinctly from the unset (absent-var) case.
+debug_dump_request_body_unset_SOURCES = integ/debug_dump_request_body_unset_test.cpp
+debug_dump_request_body_set_SOURCES = integ/debug_dump_request_body_set_test.cpp
+debug_dump_request_body_zero_SOURCES = integ/debug_dump_request_body_zero_test.cpp
+
+# TASK-076 Cycle 1: pin LT_SKIP / LT_SKIP_IF runtime semantics. Pure-host
+# CPU test of the littletest framework itself — no library linkage
+# needed beyond the default.
+littletest_skip_semantics_SOURCES = unit/littletest_skip_semantics_test.cpp
+littletest_skip_semantics_LDADD =
+
+# TASK-079: pure-CPU self-test for the test-side digest-client helper
+# (test/integ/digest_client.hpp). Pins the FIPS MD5/SHA-256 vectors, the
+# RFC 7616 §3.3 parser shape, and the RFC 7616 §3.9.1 worked-example
+# response value so the helper's behaviour is trusted before any integ
+# test consumes it.
+digest_client_self_test_SOURCES = unit/digest_client_self_test.cpp
+digest_client_self_test_LDADD =
+
+noinst_HEADERS = littletest.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp integ/digest_client.hpp integ/stream_capture_helpers.hpp unit/throw_probe.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
 
 if COND_GCOV
@@ -71,6 +729,148 @@ endif
 
 TESTS = $(check_PROGRAMS)
 
+# TASK-020 has landed: <httpserver.hpp> no longer transitively pulls in any
+# forbidden backend header, so header_hygiene is now an unconditional PASS.
+# (Earlier milestones tracked the failure via XFAIL_TESTS; that line was
+# removed when the umbrella went clean.)
+
 @VALGRIND_CHECK_RULES@
-VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp
-EXTRA_DIST = libhttpserver.supp
+# TASK-088: helgrind + drd race-detector suppression files join the shared
+# VALGRIND_SUPPRESSIONS_FILES list. Suppression blocks are tool-tagged
+# (Memcheck:/Helgrind:/drd:), so each tool ignores blocks meant for another;
+# a single shared list carrying all three is functionally correct. Both new
+# files ship comments-only (no entries) — real entries are added during
+# CI-side finding-triage, never for libhttpserver's own locking.
+VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp valgrind-helgrind.supp valgrind-drd.supp
+EXTRA_DIST = libhttpserver.supp \
+             valgrind-helgrind.supp \
+             valgrind-drd.supp \
+             tsan.supp \
+             PERFORMANCE.md \
+             bench_harness.hpp \
+             bench_baseline.hpp \
+             v1_baseline/README.md \
+             v1_baseline/v1_constants.hpp \
+             v1_baseline/measure_v1_sizes.cpp \
+             v1_baseline/measure_v1_get_headers.cpp
+
+# TASK-039 -- Performance acceptance gates.
+#
+# Bench binaries verify the two PRD §3.6 numeric acceptance criteria:
+#   * bench_get_headers              -> PRD-REQ-REQ-001 (>=10x speedup on get_headers)
+#   * bench_sizeof_http_resource     -> PRD-REQ-REQ-003 (sizeof(http_resource) shrink)
+#
+# They live in EXTRA_PROGRAMS (not check_PROGRAMS), so:
+#   - `make all`   does NOT build them.
+#   - `make check` does NOT run them.
+#   - `make bench` (the rule below) builds and runs both explicitly.
+#
+# Rationale (per TASK-039 plan §2 D4 / D6):
+#   - Sanitizer runs of `make check` would distort the ratio; bench
+#     belongs out of band on a quiet release-mode host.
+#   - The bench is noise-sensitive and should not gate per-commit CI.
+#     Release-readiness is gated on `make bench` succeeding once on
+#     a controlled host (TASK-040+ runbook).
+#
+# How to add a new bench:
+#   1. Append the program name to bench_targets below.
+#   2. Add a `<name>_SOURCES = ...` line.
+#   3. Add a `<name>_LDADD = ...` line if it needs more than the
+#      default empty LDADD.
+#   4. Run `make bench` from the build directory.
+bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead bench_route_lookup bench_warm_path
+EXTRA_PROGRAMS = $(bench_targets)
+
+# bench_sizeof_http_resource: pure compile-time static_assert guard.
+# Note: this binary's only meaningful check is compilation; the runtime
+# exit code carries no signal (main() returns 0 unconditionally). It is
+# listed under bench_targets rather than check_PROGRAMS because the
+# static_assert algebra references v1 baseline constants (from
+# v1_constants.hpp) that assume a release-mode ABI, making it a release-
+# validation step rather than a per-commit regression test.
+# Empty LDADD: no symbols from libhttpserver are referenced at run time.
+bench_sizeof_http_resource_SOURCES = bench_sizeof_http_resource.cpp
+bench_sizeof_http_resource_LDADD =
+
+# bench_get_headers: warms the get_headers() cache on an
+# http_request built via create_test_request, then times 10x1M
+# iterations. Compares the median ns/call to the v1 baseline.
+# Needs -lmicrohttpd because create_test_request transitively
+# constructs an http_request whose impl includes <microhttpd.h>.
+bench_get_headers_SOURCES = bench_get_headers.cpp bench_harness.hpp
+bench_get_headers_LDADD = $(LDADD) -lmicrohttpd
+
+# bench_hook_overhead (TASK-052): asserts the dispatch hot path's
+# per-phase any_hooks_ atomic-load gate stays within a 50ns ceiling
+# when no hooks are registered. The gate cost is what every request
+# pays per phase regardless of hook registration, and is the load-
+# bearing measurement for PRD-HOOK-REQ-009 / §4.10's "zero-cost-when-
+# unused" claim. Defines HTTPSERVER_COMPILATION so the bench can
+# reach webserver_test_access; this is the same friend pattern used
+# by test/unit/hook_api_shape_test.cpp.
+bench_hook_overhead_SOURCES = bench_hook_overhead.cpp bench_harness.hpp
+bench_hook_overhead_LDADD = $(LDADD) -lmicrohttpd
+
+# bench_route_lookup (TASK-053): v2 dispatch performance acceptance.
+# Drives webserver_impl::lookup_v2() directly (no MHD daemon, no
+# sockets) and asserts two ceilings on the dispatch hot path:
+#   (a) cache_warm_ns median <= 200 ns/lookup,
+#   (b) radix_pure_ns median <= 5 us/lookup for an 8-segment
+#       parameterized path (cache cold -- TASK-083 separates this from
+#       the cache-warm measurement).
+# Defines HTTPSERVER_COMPILATION so the bench can reach
+# webserver_test_access, the same friend pattern used by
+# bench_hook_overhead.cpp and the unit tests.
+bench_route_lookup_SOURCES = bench_route_lookup.cpp bench_harness.hpp
+bench_route_lookup_LDADD = $(LDADD) -lmicrohttpd
+
+# bench_warm_path (TASK-058): per-request allocation pass.  Times
+# canonicalize_lookup_path, should_skip_auth (non-empty + empty list),
+# and serialize_allow_methods to verify the TASK-058 refactors land
+# without regressing the warm GET path.  TASK-083 gates each median
+# against per-platform baselines in bench_baseline.hpp (fail on >5%
+# regression).  Defines HTTPSERVER_COMPILATION so the bench can reach
+# webserver_test_access, the same friend pattern used by
+# bench_route_lookup.
+bench_warm_path_SOURCES = bench_warm_path.cpp bench_harness.hpp bench_baseline.hpp
+bench_warm_path_LDADD = $(LDADD) -lmicrohttpd
+
+bench: $(bench_targets)
+	@for p in $(bench_targets); do \
+	    echo "=== Running bench: $$p ==="; \
+	    ./$$p || exit $$?; \
+	done
+
+# TASK-092: per-PR CI wiring for the two DR-008 stress gates. Both
+# binaries already live in check_PROGRAMS (so `make check` runs each
+# once), but the concurrency/deadlock contracts benefit from a
+# deliberate, repeatable, env-gated invocation on the matrix. These
+# convenience targets are what the tsan and baseline-gcc CI lanes call;
+# see test/PERFORMANCE.md ("CI wiring — DR-008 stress gates").
+
+# check-route-table-concurrency: loop the TSan stress binary
+# RTC_ITERATIONS times (default 8) so the tsan lane hits the typical
+# regression window instead of a single make-check pass. Time-boxed by
+# the CI step's timeout-minutes (<= 2 min).
+# RTC = route_table_concurrency
+RTC_ITERATIONS ?= 8
+# exit $$? (not exit 1) preserves route_table_concurrency's real exit code
+# in the CI log and stops the loop on first failure.
+check-route-table-concurrency: route_table_concurrency
+	@for i in $$(seq 1 $(RTC_ITERATIONS)); do \
+	    echo "=== route_table_concurrency iteration $$i/$(RTC_ITERATIONS) ==="; \
+	    ./route_table_concurrency || exit $$?; \
+	done
+
+# check-stop-from-handler: run threadsafety_stress with the DR-008
+# stop()-from-handler deadlock sub-test enabled. Sub-tests A/C are
+# shrunk to STOP_HANDLER_STRESS_SECONDS (default 1s) so Sub-test B is
+# the point of the run. Failure mode is a hang -> the CI step's
+# timeout-minutes catches it.
+STOP_HANDLER_STRESS_SECONDS ?= 1
+check-stop-from-handler: threadsafety_stress
+	@HTTPSERVER_RUN_STOP_FROM_HANDLER=1 \
+	 HTTPSERVER_STRESS_SECONDS=$(STOP_HANDLER_STRESS_SECONDS) \
+	 ./threadsafety_stress
+
+.PHONY: bench check-route-table-concurrency check-stop-from-handler

@@ -1,0 +1,229 @@
+/*
+     This file is part of libhttpserver
+     Copyright (C) 2011-2026 Sebastiano Merlino
+
+     This library is free software; you can redistribute it and/or
+     modify it under the terms of the GNU Lesser General Public
+     License as published by the Free Software Foundation; either
+     version 2.1 of the License, or (at your option) any later version.
+*/
+
+// Integration sentinel for unwired hook phases, narrowed incrementally
+// as each phase came on the wire.
+//
+// Originally named all_phases_silent_across_round_trip. As
+// each phase was wired, the test narrowed: it now only asserts
+// silence on phases that are still unwired. Renamed to
+// unwired_phases_silent_across_round_trip to
+// accurately reflect that it is a sentinel for the unwired residual,
+// NOT a claim that all phases are silent.
+//
+// Today, all eleven phases are wired; not_yet_wired returns
+// false for every phase. The loop below is therefore a no-op but is
+// preserved to document the wiring boundary: if a new phase is added
+// in a future task, it will initially return true from not_yet_wired
+// and will be asserted silent until wired.
+//
+// We still register all eleven hooks so we keep one-call-site coverage
+// of the API surface.
+
+#include <curl/curl.h>
+
+#include <atomic>
+#include <array>
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <string>
+
+#include "./httpserver.hpp"
+#include "./littletest.hpp"
+#include "./server_ready.hpp"
+
+using httpserver::create_webserver;
+using httpserver::hook_action;
+using httpserver::hook_phase;
+using httpserver::http_request;
+using httpserver::http_response;
+using httpserver::webserver;
+
+#define PORT 8198
+
+namespace {
+
+size_t writefunc(void* ptr, size_t size, size_t nmemb, std::string* s) {
+    s->append(reinterpret_cast<char*>(ptr), size * nmemb);
+    return size * nmemb;
+}
+
+class hello_resource : public httpserver::http_resource {
+ public:
+    http_response render_get(const http_request&) override {
+        return http_response::string("OK");
+    }
+};
+
+}  // namespace
+
+LT_BEGIN_SUITE(hooks_no_firing_suite)
+    void set_up() {
+    }
+    void tear_down() {
+    }
+LT_END_SUITE(hooks_no_firing_suite)
+
+LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, unwired_phases_silent_across_round_trip)
+    webserver ws{create_webserver(PORT)};
+
+    // Eleven counters indexed by phase ordinal.
+    std::array<std::atomic<std::size_t>, 11> counters{};
+    for (auto& c : counters) c.store(0);
+
+    auto bump = [&](hook_phase p) {
+        counters[static_cast<std::size_t>(p)].fetch_add(
+            1, std::memory_order_relaxed);
+    };
+
+    auto h1 = ws.add_hook(hook_phase::connection_opened,
+        std::function<void(const httpserver::connection_open_ctx&)>(
+            [&](const httpserver::connection_open_ctx&) {
+                bump(hook_phase::connection_opened);
+            }));
+    auto h2 = ws.add_hook(hook_phase::accept_decision,
+        std::function<void(const httpserver::accept_ctx&)>(
+            [&](const httpserver::accept_ctx&) {
+                bump(hook_phase::accept_decision);
+            }));
+    auto h3 = ws.add_hook(hook_phase::request_received,
+        std::function<hook_action(httpserver::request_received_ctx&)>(
+            [&](httpserver::request_received_ctx&) {
+                bump(hook_phase::request_received);
+                return hook_action{};
+            }));
+    auto h4 = ws.add_hook(hook_phase::body_chunk,
+        std::function<hook_action(httpserver::body_chunk_ctx&)>(
+            [&](httpserver::body_chunk_ctx&) {
+                bump(hook_phase::body_chunk);
+                return hook_action{};
+            }));
+    auto h5 = ws.add_hook(hook_phase::route_resolved,
+        std::function<void(const httpserver::route_resolved_ctx&)>(
+            [&](const httpserver::route_resolved_ctx&) {
+                bump(hook_phase::route_resolved);
+            }));
+    auto h6 = ws.add_hook(hook_phase::before_handler,
+        std::function<hook_action(httpserver::before_handler_ctx&)>(
+            [&](httpserver::before_handler_ctx&) {
+                bump(hook_phase::before_handler);
+                return hook_action{};
+            }));
+    auto h7 = ws.add_hook(hook_phase::handler_exception,
+        std::function<hook_action(const httpserver::handler_exception_ctx&)>(
+            [&](const httpserver::handler_exception_ctx&) {
+                bump(hook_phase::handler_exception);
+                return hook_action{};
+            }));
+    auto h8 = ws.add_hook(hook_phase::after_handler,
+        std::function<hook_action(httpserver::after_handler_ctx&)>(
+            [&](httpserver::after_handler_ctx&) {
+                bump(hook_phase::after_handler);
+                return hook_action{};
+            }));
+    auto h9 = ws.add_hook(hook_phase::response_sent,
+        std::function<void(const httpserver::response_sent_ctx&)>(
+            [&](const httpserver::response_sent_ctx&) {
+                bump(hook_phase::response_sent);
+            }));
+    auto h10 = ws.add_hook(hook_phase::request_completed,
+        std::function<void(const httpserver::request_completed_ctx&)>(
+            [&](const httpserver::request_completed_ctx&) {
+                bump(hook_phase::request_completed);
+            }));
+    auto h11 = ws.add_hook(hook_phase::connection_closed,
+        std::function<void(const httpserver::connection_close_ctx&)>(
+            [&](const httpserver::connection_close_ctx&) {
+                bump(hook_phase::connection_closed);
+            }));
+
+    auto resource = std::make_shared<hello_resource>();
+    ws.register_path("/hello", resource);
+    ws.start(false);
+    httpserver_test::wait_for_server_ready(PORT);
+
+    CURL* curl = curl_easy_init();
+    LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));
+    std::string url = "http://127.0.0.1:" + std::to_string(PORT) + "/hello";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    std::string body;
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+    LT_CHECK_EQ(res, CURLE_OK);
+    LT_CHECK_EQ(body, "OK");
+
+    ws.stop();
+
+    // The three lifecycle phases were carved out first, then
+    // request_received and body_chunk (the GET round-trip below fires
+    // request_received for every request; body_chunk does not fire on
+    // a GET, but we exclude it for symmetry with the wiring contract).
+    // Next came route_resolved (fires on every request) and
+    // before_handler (fires on every request hit). Then came
+    // handler_exception, but it only fires when the handler throws --
+    // the successful GET below does not exercise it -- so the silence
+    // assertion would still hold for it. We exclude it from
+    // not_yet_wired anyway to reflect the implementation contract.
+    // after_handler, response_sent, and request_completed were wired last
+    // -- all three fire on the happy-path GET below, so they too are now
+    // excluded from not_yet_wired. The predicate now returns false for
+    // every phase that has been put on the wire; only the
+    // residual unwired phases (if any) would still pin silence.
+    auto not_yet_wired = [](hook_phase p) {
+        switch (p) {
+        case hook_phase::connection_opened:
+        case hook_phase::accept_decision:
+        case hook_phase::connection_closed:
+        case hook_phase::request_received:
+        case hook_phase::body_chunk:
+        case hook_phase::route_resolved:
+        case hook_phase::before_handler:
+        case hook_phase::handler_exception:
+        case hook_phase::after_handler:
+        case hook_phase::response_sent:
+        case hook_phase::request_completed:
+            return false;
+        default:
+            return true;
+        }
+    };
+    for (std::size_t i = 0; i < counters.size(); ++i) {
+        if (not_yet_wired(static_cast<hook_phase>(i))) {
+            LT_CHECK_EQ(counters[i].load(), static_cast<std::size_t>(0));
+        }
+    }
+
+    // Positive regression anchors for all wired phases on a happy-path GET.
+    // If a phase stops firing, the counter drops to 0 and this catches it.
+    auto fired = [&](hook_phase p) {
+        return counters[static_cast<std::size_t>(p)].load()
+               >= static_cast<std::size_t>(1);
+    };
+    // route_resolved and before_handler fire on every route hit.
+    LT_CHECK(fired(hook_phase::route_resolved));
+    LT_CHECK(fired(hook_phase::before_handler));
+    // after_handler, response_sent, and request_completed fire
+    // on every happy-path request.
+    LT_CHECK(fired(hook_phase::after_handler));
+    LT_CHECK(fired(hook_phase::response_sent));
+    LT_CHECK(fired(hook_phase::request_completed));
+    // connection_opened and connection_closed bracket the session.
+    LT_CHECK(fired(hook_phase::connection_opened));
+    LT_CHECK(fired(hook_phase::connection_closed));
+    // request_received fires on every request (pre-body phase).
+    LT_CHECK(fired(hook_phase::request_received));
+LT_END_AUTO_TEST(unwired_phases_silent_across_round_trip)
+
+LT_BEGIN_AUTO_TEST_ENV()
+    AUTORUN_TESTS()
+LT_END_AUTO_TEST_ENV()

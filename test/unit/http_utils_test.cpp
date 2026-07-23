@@ -31,6 +31,13 @@
 #endif
 
 #include <sys/stat.h>
+#include <unistd.h>  // unlink (was reachable transitively via httpserver/http_utils.hpp -> microhttpd.h)
+// Note: the hard-coded integer values for start_method_T, digest_algorithm,
+// and digest_auth_result are pinned to the upstream MHD macros via
+// static_assert blocks in src/http_utils.cpp (unconditional start_method_T
+// asserts) and src/http_utils.cpp under #ifdef HAVE_DAUTH (digest enums).
+// Those compile-time guards serve as the test coverage for enum value
+// correctness; no duplicate runtime assertions are needed here.
 #include <cstdio>
 #include <iostream>
 #include <map>
@@ -286,13 +293,13 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_str)
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV4);
 
     for (int i = 0; i < 12; i++) {
-        LT_CHECK_EQ(test_ip.pieces[i], 0);
+        LT_CHECK_EQ(test_ip.octets[i], 0);
     }
 
-    LT_CHECK_EQ(test_ip.pieces[12], 192);
-    LT_CHECK_EQ(test_ip.pieces[13], 168);
-    LT_CHECK_EQ(test_ip.pieces[14], 5);
-    LT_CHECK_EQ(test_ip.pieces[15], 5);
+    LT_CHECK_EQ(test_ip.octets[12], 192);
+    LT_CHECK_EQ(test_ip.octets[13], 168);
+    LT_CHECK_EQ(test_ip.octets[14], 5);
+    LT_CHECK_EQ(test_ip.octets[15], 5);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation4_str)
@@ -303,13 +310,13 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_str_mask)
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV4);
 
     for (int i = 0; i < 12; i++) {
-        LT_CHECK_EQ(test_ip.pieces[i], 0);
+        LT_CHECK_EQ(test_ip.octets[i], 0);
     }
 
-    LT_CHECK_EQ(test_ip.pieces[12], 192);
-    LT_CHECK_EQ(test_ip.pieces[13], 168);
-    LT_CHECK_EQ(test_ip.pieces[14], 0);
-    LT_CHECK_EQ(test_ip.pieces[15], 0);
+    LT_CHECK_EQ(test_ip.octets[12], 192);
+    LT_CHECK_EQ(test_ip.octets[13], 168);
+    LT_CHECK_EQ(test_ip.octets[14], 0);
+    LT_CHECK_EQ(test_ip.octets[15], 0);
 
     LT_CHECK_EQ(test_ip.mask, 0x3FFF);
 LT_END_AUTO_TEST(ip_representation4_str_mask)
@@ -327,22 +334,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 32);
-    LT_CHECK_EQ(test_ip.pieces[1], 1);
-    LT_CHECK_EQ(test_ip.pieces[2], 13);
-    LT_CHECK_EQ(test_ip.pieces[3], 184);
-    LT_CHECK_EQ(test_ip.pieces[4], 135);
-    LT_CHECK_EQ(test_ip.pieces[5], 20);
-    LT_CHECK_EQ(test_ip.pieces[6], 58);
-    LT_CHECK_EQ(test_ip.pieces[7], 144);
-    LT_CHECK_EQ(test_ip.pieces[8], 0);
-    LT_CHECK_EQ(test_ip.pieces[9], 0);
-    LT_CHECK_EQ(test_ip.pieces[10], 0);
-    LT_CHECK_EQ(test_ip.pieces[11], 0);
-    LT_CHECK_EQ(test_ip.pieces[12], 0);
-    LT_CHECK_EQ(test_ip.pieces[13], 0);
-    LT_CHECK_EQ(test_ip.pieces[14], 0);
-    LT_CHECK_EQ(test_ip.pieces[15], 18);
+    LT_CHECK_EQ(test_ip.octets[0], 32);
+    LT_CHECK_EQ(test_ip.octets[1], 1);
+    LT_CHECK_EQ(test_ip.octets[2], 13);
+    LT_CHECK_EQ(test_ip.octets[3], 184);
+    LT_CHECK_EQ(test_ip.octets[4], 135);
+    LT_CHECK_EQ(test_ip.octets[5], 20);
+    LT_CHECK_EQ(test_ip.octets[6], 58);
+    LT_CHECK_EQ(test_ip.octets[7], 144);
+    LT_CHECK_EQ(test_ip.octets[8], 0);
+    LT_CHECK_EQ(test_ip.octets[9], 0);
+    LT_CHECK_EQ(test_ip.octets[10], 0);
+    LT_CHECK_EQ(test_ip.octets[11], 0);
+    LT_CHECK_EQ(test_ip.octets[12], 0);
+    LT_CHECK_EQ(test_ip.octets[13], 0);
+    LT_CHECK_EQ(test_ip.octets[14], 0);
+    LT_CHECK_EQ(test_ip.octets[15], 18);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_str)
@@ -352,22 +359,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_mask)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 32);
-    LT_CHECK_EQ(test_ip.pieces[1], 1);
-    LT_CHECK_EQ(test_ip.pieces[2], 13);
-    LT_CHECK_EQ(test_ip.pieces[3], 184);
-    LT_CHECK_EQ(test_ip.pieces[4], 135);
-    LT_CHECK_EQ(test_ip.pieces[5], 20);
-    LT_CHECK_EQ(test_ip.pieces[6], 58);
-    LT_CHECK_EQ(test_ip.pieces[7], 144);
-    LT_CHECK_EQ(test_ip.pieces[8], 0);
-    LT_CHECK_EQ(test_ip.pieces[9], 0);
-    LT_CHECK_EQ(test_ip.pieces[10], 0);
-    LT_CHECK_EQ(test_ip.pieces[11], 0);
-    LT_CHECK_EQ(test_ip.pieces[12], 0);
-    LT_CHECK_EQ(test_ip.pieces[13], 0);
-    LT_CHECK_EQ(test_ip.pieces[14], 0);
-    LT_CHECK_EQ(test_ip.pieces[15], 0);
+    LT_CHECK_EQ(test_ip.octets[0], 32);
+    LT_CHECK_EQ(test_ip.octets[1], 1);
+    LT_CHECK_EQ(test_ip.octets[2], 13);
+    LT_CHECK_EQ(test_ip.octets[3], 184);
+    LT_CHECK_EQ(test_ip.octets[4], 135);
+    LT_CHECK_EQ(test_ip.octets[5], 20);
+    LT_CHECK_EQ(test_ip.octets[6], 58);
+    LT_CHECK_EQ(test_ip.octets[7], 144);
+    LT_CHECK_EQ(test_ip.octets[8], 0);
+    LT_CHECK_EQ(test_ip.octets[9], 0);
+    LT_CHECK_EQ(test_ip.octets[10], 0);
+    LT_CHECK_EQ(test_ip.octets[11], 0);
+    LT_CHECK_EQ(test_ip.octets[12], 0);
+    LT_CHECK_EQ(test_ip.octets[13], 0);
+    LT_CHECK_EQ(test_ip.octets[14], 0);
+    LT_CHECK_EQ(test_ip.octets[15], 0);
 
     LT_CHECK_EQ(test_ip.mask, 0xF0FF);
 LT_END_AUTO_TEST(ip_representation6_str_mask)
@@ -377,22 +384,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_nested)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 0);
-    LT_CHECK_EQ(test_ip.pieces[1], 0);
-    LT_CHECK_EQ(test_ip.pieces[2], 0);
-    LT_CHECK_EQ(test_ip.pieces[3], 0);
-    LT_CHECK_EQ(test_ip.pieces[4], 0);
-    LT_CHECK_EQ(test_ip.pieces[5], 0);
-    LT_CHECK_EQ(test_ip.pieces[6], 0);
-    LT_CHECK_EQ(test_ip.pieces[7], 0);
-    LT_CHECK_EQ(test_ip.pieces[8], 0);
-    LT_CHECK_EQ(test_ip.pieces[9], 0);
-    LT_CHECK_EQ(test_ip.pieces[10], 255);
-    LT_CHECK_EQ(test_ip.pieces[11], 255);
-    LT_CHECK_EQ(test_ip.pieces[12], 192);
-    LT_CHECK_EQ(test_ip.pieces[13], 0);
-    LT_CHECK_EQ(test_ip.pieces[14], 2);
-    LT_CHECK_EQ(test_ip.pieces[15], 128);
+    LT_CHECK_EQ(test_ip.octets[0], 0);
+    LT_CHECK_EQ(test_ip.octets[1], 0);
+    LT_CHECK_EQ(test_ip.octets[2], 0);
+    LT_CHECK_EQ(test_ip.octets[3], 0);
+    LT_CHECK_EQ(test_ip.octets[4], 0);
+    LT_CHECK_EQ(test_ip.octets[5], 0);
+    LT_CHECK_EQ(test_ip.octets[6], 0);
+    LT_CHECK_EQ(test_ip.octets[7], 0);
+    LT_CHECK_EQ(test_ip.octets[8], 0);
+    LT_CHECK_EQ(test_ip.octets[9], 0);
+    LT_CHECK_EQ(test_ip.octets[10], 255);
+    LT_CHECK_EQ(test_ip.octets[11], 255);
+    LT_CHECK_EQ(test_ip.octets[12], 192);
+    LT_CHECK_EQ(test_ip.octets[13], 0);
+    LT_CHECK_EQ(test_ip.octets[14], 2);
+    LT_CHECK_EQ(test_ip.octets[15], 128);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_str_nested)
@@ -403,22 +410,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_nested_deprecated)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 0);
-    LT_CHECK_EQ(test_ip.pieces[1], 0);
-    LT_CHECK_EQ(test_ip.pieces[2], 0);
-    LT_CHECK_EQ(test_ip.pieces[3], 0);
-    LT_CHECK_EQ(test_ip.pieces[4], 0);
-    LT_CHECK_EQ(test_ip.pieces[5], 0);
-    LT_CHECK_EQ(test_ip.pieces[6], 0);
-    LT_CHECK_EQ(test_ip.pieces[7], 0);
-    LT_CHECK_EQ(test_ip.pieces[8], 0);
-    LT_CHECK_EQ(test_ip.pieces[9], 0);
-    LT_CHECK_EQ(test_ip.pieces[10], 0);
-    LT_CHECK_EQ(test_ip.pieces[11], 0);
-    LT_CHECK_EQ(test_ip.pieces[12], 192);
-    LT_CHECK_EQ(test_ip.pieces[13], 0);
-    LT_CHECK_EQ(test_ip.pieces[14], 2);
-    LT_CHECK_EQ(test_ip.pieces[15], 128);
+    LT_CHECK_EQ(test_ip.octets[0], 0);
+    LT_CHECK_EQ(test_ip.octets[1], 0);
+    LT_CHECK_EQ(test_ip.octets[2], 0);
+    LT_CHECK_EQ(test_ip.octets[3], 0);
+    LT_CHECK_EQ(test_ip.octets[4], 0);
+    LT_CHECK_EQ(test_ip.octets[5], 0);
+    LT_CHECK_EQ(test_ip.octets[6], 0);
+    LT_CHECK_EQ(test_ip.octets[7], 0);
+    LT_CHECK_EQ(test_ip.octets[8], 0);
+    LT_CHECK_EQ(test_ip.octets[9], 0);
+    LT_CHECK_EQ(test_ip.octets[10], 0);
+    LT_CHECK_EQ(test_ip.octets[11], 0);
+    LT_CHECK_EQ(test_ip.octets[12], 192);
+    LT_CHECK_EQ(test_ip.octets[13], 0);
+    LT_CHECK_EQ(test_ip.octets[14], 2);
+    LT_CHECK_EQ(test_ip.octets[15], 128);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_str_nested_deprecated)
@@ -428,22 +435,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_ipv4_mask)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 0);
-    LT_CHECK_EQ(test_ip.pieces[1], 0);
-    LT_CHECK_EQ(test_ip.pieces[2], 0);
-    LT_CHECK_EQ(test_ip.pieces[3], 0);
-    LT_CHECK_EQ(test_ip.pieces[4], 0);
-    LT_CHECK_EQ(test_ip.pieces[5], 0);
-    LT_CHECK_EQ(test_ip.pieces[6], 0);
-    LT_CHECK_EQ(test_ip.pieces[7], 0);
-    LT_CHECK_EQ(test_ip.pieces[8], 0);
-    LT_CHECK_EQ(test_ip.pieces[9], 0);
-    LT_CHECK_EQ(test_ip.pieces[10], 255);
-    LT_CHECK_EQ(test_ip.pieces[11], 255);
-    LT_CHECK_EQ(test_ip.pieces[12], 192);
-    LT_CHECK_EQ(test_ip.pieces[13], 0);
-    LT_CHECK_EQ(test_ip.pieces[14], 0);
-    LT_CHECK_EQ(test_ip.pieces[15], 0);
+    LT_CHECK_EQ(test_ip.octets[0], 0);
+    LT_CHECK_EQ(test_ip.octets[1], 0);
+    LT_CHECK_EQ(test_ip.octets[2], 0);
+    LT_CHECK_EQ(test_ip.octets[3], 0);
+    LT_CHECK_EQ(test_ip.octets[4], 0);
+    LT_CHECK_EQ(test_ip.octets[5], 0);
+    LT_CHECK_EQ(test_ip.octets[6], 0);
+    LT_CHECK_EQ(test_ip.octets[7], 0);
+    LT_CHECK_EQ(test_ip.octets[8], 0);
+    LT_CHECK_EQ(test_ip.octets[9], 0);
+    LT_CHECK_EQ(test_ip.octets[10], 255);
+    LT_CHECK_EQ(test_ip.octets[11], 255);
+    LT_CHECK_EQ(test_ip.octets[12], 192);
+    LT_CHECK_EQ(test_ip.octets[13], 0);
+    LT_CHECK_EQ(test_ip.octets[14], 0);
+    LT_CHECK_EQ(test_ip.octets[15], 0);
 
     LT_CHECK_EQ(test_ip.mask, 0x3FFF);
 LT_END_AUTO_TEST(ip_representation6_str_ipv4_mask)
@@ -453,22 +460,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_clustered_middle)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 32);
-    LT_CHECK_EQ(test_ip.pieces[1], 1);
-    LT_CHECK_EQ(test_ip.pieces[2], 13);
-    LT_CHECK_EQ(test_ip.pieces[3], 184);
-    LT_CHECK_EQ(test_ip.pieces[4], 0);
-    LT_CHECK_EQ(test_ip.pieces[5], 0);
-    LT_CHECK_EQ(test_ip.pieces[6], 0);
-    LT_CHECK_EQ(test_ip.pieces[7], 0);
-    LT_CHECK_EQ(test_ip.pieces[8], 0);
-    LT_CHECK_EQ(test_ip.pieces[9], 0);
-    LT_CHECK_EQ(test_ip.pieces[10], 255);
-    LT_CHECK_EQ(test_ip.pieces[11], 0);
-    LT_CHECK_EQ(test_ip.pieces[12], 0);
-    LT_CHECK_EQ(test_ip.pieces[13], 66);
-    LT_CHECK_EQ(test_ip.pieces[14], 131);
-    LT_CHECK_EQ(test_ip.pieces[15], 41);
+    LT_CHECK_EQ(test_ip.octets[0], 32);
+    LT_CHECK_EQ(test_ip.octets[1], 1);
+    LT_CHECK_EQ(test_ip.octets[2], 13);
+    LT_CHECK_EQ(test_ip.octets[3], 184);
+    LT_CHECK_EQ(test_ip.octets[4], 0);
+    LT_CHECK_EQ(test_ip.octets[5], 0);
+    LT_CHECK_EQ(test_ip.octets[6], 0);
+    LT_CHECK_EQ(test_ip.octets[7], 0);
+    LT_CHECK_EQ(test_ip.octets[8], 0);
+    LT_CHECK_EQ(test_ip.octets[9], 0);
+    LT_CHECK_EQ(test_ip.octets[10], 255);
+    LT_CHECK_EQ(test_ip.octets[11], 0);
+    LT_CHECK_EQ(test_ip.octets[12], 0);
+    LT_CHECK_EQ(test_ip.octets[13], 66);
+    LT_CHECK_EQ(test_ip.octets[14], 131);
+    LT_CHECK_EQ(test_ip.octets[15], 41);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_str_clustered_middle)
@@ -478,22 +485,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_loopback)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 0);
-    LT_CHECK_EQ(test_ip.pieces[1], 0);
-    LT_CHECK_EQ(test_ip.pieces[2], 0);
-    LT_CHECK_EQ(test_ip.pieces[3], 0);
-    LT_CHECK_EQ(test_ip.pieces[4], 0);
-    LT_CHECK_EQ(test_ip.pieces[5], 0);
-    LT_CHECK_EQ(test_ip.pieces[6], 0);
-    LT_CHECK_EQ(test_ip.pieces[7], 0);
-    LT_CHECK_EQ(test_ip.pieces[8], 0);
-    LT_CHECK_EQ(test_ip.pieces[9], 0);
-    LT_CHECK_EQ(test_ip.pieces[10], 0);
-    LT_CHECK_EQ(test_ip.pieces[11], 0);
-    LT_CHECK_EQ(test_ip.pieces[12], 0);
-    LT_CHECK_EQ(test_ip.pieces[13], 0);
-    LT_CHECK_EQ(test_ip.pieces[14], 0);
-    LT_CHECK_EQ(test_ip.pieces[15], 1);
+    LT_CHECK_EQ(test_ip.octets[0], 0);
+    LT_CHECK_EQ(test_ip.octets[1], 0);
+    LT_CHECK_EQ(test_ip.octets[2], 0);
+    LT_CHECK_EQ(test_ip.octets[3], 0);
+    LT_CHECK_EQ(test_ip.octets[4], 0);
+    LT_CHECK_EQ(test_ip.octets[5], 0);
+    LT_CHECK_EQ(test_ip.octets[6], 0);
+    LT_CHECK_EQ(test_ip.octets[7], 0);
+    LT_CHECK_EQ(test_ip.octets[8], 0);
+    LT_CHECK_EQ(test_ip.octets[9], 0);
+    LT_CHECK_EQ(test_ip.octets[10], 0);
+    LT_CHECK_EQ(test_ip.octets[11], 0);
+    LT_CHECK_EQ(test_ip.octets[12], 0);
+    LT_CHECK_EQ(test_ip.octets[13], 0);
+    LT_CHECK_EQ(test_ip.octets[14], 0);
+    LT_CHECK_EQ(test_ip.octets[15], 1);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_str_loopback)
@@ -504,19 +511,19 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_full_8_parts)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 32);
-    LT_CHECK_EQ(test_ip.pieces[1], 1);
-    LT_CHECK_EQ(test_ip.pieces[2], 13);
-    LT_CHECK_EQ(test_ip.pieces[3], 184);
-    LT_CHECK_EQ(test_ip.pieces[4], 133);
-    LT_CHECK_EQ(test_ip.pieces[5], 163);
-    // pieces 6-9 are 0
-    LT_CHECK_EQ(test_ip.pieces[10], 138);
-    LT_CHECK_EQ(test_ip.pieces[11], 46);
-    LT_CHECK_EQ(test_ip.pieces[12], 3);
-    LT_CHECK_EQ(test_ip.pieces[13], 112);
-    LT_CHECK_EQ(test_ip.pieces[14], 115);
-    LT_CHECK_EQ(test_ip.pieces[15], 52);
+    LT_CHECK_EQ(test_ip.octets[0], 32);
+    LT_CHECK_EQ(test_ip.octets[1], 1);
+    LT_CHECK_EQ(test_ip.octets[2], 13);
+    LT_CHECK_EQ(test_ip.octets[3], 184);
+    LT_CHECK_EQ(test_ip.octets[4], 133);
+    LT_CHECK_EQ(test_ip.octets[5], 163);
+    // octets 6-9 are 0
+    LT_CHECK_EQ(test_ip.octets[10], 138);
+    LT_CHECK_EQ(test_ip.octets[11], 46);
+    LT_CHECK_EQ(test_ip.octets[12], 3);
+    LT_CHECK_EQ(test_ip.octets[13], 112);
+    LT_CHECK_EQ(test_ip.octets[14], 115);
+    LT_CHECK_EQ(test_ip.octets[15], 52);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_full_8_parts)
@@ -529,15 +536,15 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_leading_double_colon)
 
     // First 10 bytes should be 0
     for (int i = 0; i < 10; i++) {
-        LT_CHECK_EQ(test_ip.pieces[i], 0);
+        LT_CHECK_EQ(test_ip.octets[i], 0);
     }
 
-    LT_CHECK_EQ(test_ip.pieces[10], 255);
-    LT_CHECK_EQ(test_ip.pieces[11], 255);
-    LT_CHECK_EQ(test_ip.pieces[12], 18);
-    LT_CHECK_EQ(test_ip.pieces[13], 52);
-    LT_CHECK_EQ(test_ip.pieces[14], 86);
-    LT_CHECK_EQ(test_ip.pieces[15], 120);
+    LT_CHECK_EQ(test_ip.octets[10], 255);
+    LT_CHECK_EQ(test_ip.octets[11], 255);
+    LT_CHECK_EQ(test_ip.octets[12], 18);
+    LT_CHECK_EQ(test_ip.octets[13], 52);
+    LT_CHECK_EQ(test_ip.octets[14], 86);
+    LT_CHECK_EQ(test_ip.octets[15], 120);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_leading_double_colon)
@@ -548,14 +555,14 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_trailing_double_colon)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 32);
-    LT_CHECK_EQ(test_ip.pieces[1], 1);
-    LT_CHECK_EQ(test_ip.pieces[2], 13);
-    LT_CHECK_EQ(test_ip.pieces[3], 184);
+    LT_CHECK_EQ(test_ip.octets[0], 32);
+    LT_CHECK_EQ(test_ip.octets[1], 1);
+    LT_CHECK_EQ(test_ip.octets[2], 13);
+    LT_CHECK_EQ(test_ip.octets[3], 184);
 
     // Rest should be 0
     for (int i = 4; i < 16; i++) {
-        LT_CHECK_EQ(test_ip.pieces[i], 0);
+        LT_CHECK_EQ(test_ip.octets[i], 0);
     }
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
@@ -568,7 +575,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_all_zeros)
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
     for (int i = 0; i < 16; i++) {
-        LT_CHECK_EQ(test_ip.pieces[i], 0);
+        LT_CHECK_EQ(test_ip.octets[i], 0);
     }
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
@@ -634,13 +641,13 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_sockaddr)
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV4);
 
     for (int i = 0; i < 12; i++) {
-        LT_CHECK_EQ(test_ip.pieces[i], 0);
+        LT_CHECK_EQ(test_ip.octets[i], 0);
     }
 
-    LT_CHECK_EQ(test_ip.pieces[12], 127);
-    LT_CHECK_EQ(test_ip.pieces[13], 0);
-    LT_CHECK_EQ(test_ip.pieces[14], 0);
-    LT_CHECK_EQ(test_ip.pieces[15], 1);
+    LT_CHECK_EQ(test_ip.octets[12], 127);
+    LT_CHECK_EQ(test_ip.octets[13], 0);
+    LT_CHECK_EQ(test_ip.octets[14], 0);
+    LT_CHECK_EQ(test_ip.octets[15], 1);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation4_sockaddr)
@@ -656,22 +663,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_sockaddr)
 
     LT_CHECK_EQ(test_ip.ip_version, httpserver::http::http_utils::IPV6);
 
-    LT_CHECK_EQ(test_ip.pieces[0], 32);
-    LT_CHECK_EQ(test_ip.pieces[1], 1);
-    LT_CHECK_EQ(test_ip.pieces[2], 13);
-    LT_CHECK_EQ(test_ip.pieces[3], 184);
-    LT_CHECK_EQ(test_ip.pieces[4], 135);
-    LT_CHECK_EQ(test_ip.pieces[5], 20);
-    LT_CHECK_EQ(test_ip.pieces[6], 58);
-    LT_CHECK_EQ(test_ip.pieces[7], 144);
-    LT_CHECK_EQ(test_ip.pieces[8], 0);
-    LT_CHECK_EQ(test_ip.pieces[9], 0);
-    LT_CHECK_EQ(test_ip.pieces[10], 0);
-    LT_CHECK_EQ(test_ip.pieces[11], 0);
-    LT_CHECK_EQ(test_ip.pieces[12], 0);
-    LT_CHECK_EQ(test_ip.pieces[13], 0);
-    LT_CHECK_EQ(test_ip.pieces[14], 0);
-    LT_CHECK_EQ(test_ip.pieces[15], 18);
+    LT_CHECK_EQ(test_ip.octets[0], 32);
+    LT_CHECK_EQ(test_ip.octets[1], 1);
+    LT_CHECK_EQ(test_ip.octets[2], 13);
+    LT_CHECK_EQ(test_ip.octets[3], 184);
+    LT_CHECK_EQ(test_ip.octets[4], 135);
+    LT_CHECK_EQ(test_ip.octets[5], 20);
+    LT_CHECK_EQ(test_ip.octets[6], 58);
+    LT_CHECK_EQ(test_ip.octets[7], 144);
+    LT_CHECK_EQ(test_ip.octets[8], 0);
+    LT_CHECK_EQ(test_ip.octets[9], 0);
+    LT_CHECK_EQ(test_ip.octets[10], 0);
+    LT_CHECK_EQ(test_ip.octets[11], 0);
+    LT_CHECK_EQ(test_ip.octets[12], 0);
+    LT_CHECK_EQ(test_ip.octets[13], 0);
+    LT_CHECK_EQ(test_ip.octets[14], 0);
+    LT_CHECK_EQ(test_ip.octets[15], 18);
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_sockaddr)
@@ -839,10 +846,10 @@ LT_END_AUTO_TEST(ip_representation_middle_bytes_comparison)
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_short_blocks)
     httpserver::http::ip_representation ip1("1:2:3:4:5:6:7:8");
     LT_CHECK_EQ(ip1.ip_version, httpserver::http::http_utils::IPV6);
-    LT_CHECK_EQ(ip1.pieces[0], 0);
-    LT_CHECK_EQ(ip1.pieces[1], 1);
-    LT_CHECK_EQ(ip1.pieces[2], 0);
-    LT_CHECK_EQ(ip1.pieces[3], 2);
+    LT_CHECK_EQ(ip1.octets[0], 0);
+    LT_CHECK_EQ(ip1.octets[1], 1);
+    LT_CHECK_EQ(ip1.octets[2], 0);
+    LT_CHECK_EQ(ip1.octets[3], 2);
 LT_END_AUTO_TEST(ip_representation6_short_blocks)
 
 // Test URL standardization edge cases
@@ -942,6 +949,96 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_wildcard_weight)
     // More specific (higher weight) should be "greater than" less specific
     LT_CHECK_EQ(ip1.weight() > ip2.weight(), true);
 LT_END_AUTO_TEST(ip_representation_wildcard_weight)
+
+// ---- sanitize_upload_filename -----------------------------------------------
+//
+// sanitize_upload_filename is a pure public helper that extracts the basename
+// from an upload filename, rejecting path-traversal components ('.', '..').
+// A regression would silently permit path-traversal filenames in the upload
+// path.
+
+// Normal filename: returned as-is.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_normal)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("report.pdf"),
+                std::string("report.pdf"));
+LT_END_AUTO_TEST(sanitize_upload_filename_normal)
+
+// Filename with leading Unix directory components: only the basename is returned.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_unix_path)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/tmp/uploads/report.pdf"),
+                std::string("report.pdf"));
+LT_END_AUTO_TEST(sanitize_upload_filename_unix_path)
+
+// Filename with Windows-style backslash separator: only the basename is returned.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_windows_path)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("C:\\Users\\upload\\evil.exe"),
+                std::string("evil.exe"));
+LT_END_AUTO_TEST(sanitize_upload_filename_windows_path)
+
+// Empty string input: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_empty)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(""),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_empty)
+
+// Bare dot "." is rejected: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_dot)
+
+// Bare double-dot ".." is rejected: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_dot_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(".."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_dot_dot)
+
+// Path ending in "..": the basename portion ".." is rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_ending_dot_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/a/b/.."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_ending_dot_dot)
+
+// Path ending in ".": the basename portion "." is rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_ending_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/a/b/."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_ending_dot)
+
+// Trailing separator (e.g. "dir/"): basename after the last '/' is empty -> rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_trailing_slash)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("dir/"),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_trailing_slash)
+
+// Mixed separators: last component after backslash is taken.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_mixed_separators)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("a/b\\c.txt"),
+                std::string("c.txt"));
+LT_END_AUTO_TEST(sanitize_upload_filename_mixed_separators)
+
+// Null byte in filename: CWE-626 null-byte injection. A multipart filename
+// like "foo.txt\x00.php" is passed to std::ofstream::open() whose c_str()
+// call truncates at the embedded null, creating the file at the truncated
+// location rather than the full std::string path. Reject such names by
+// returning "".
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_null_byte_returns_empty)
+    std::string with_null("foo.txt");
+    with_null += '\0';
+    with_null += ".php";
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(with_null),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_null_byte_returns_empty)
+
+// Null byte preceded by directory separator: the basename portion still
+// contains the null byte and must be rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_with_null_byte_returns_empty)
+    std::string with_null("/uploads/good");
+    with_null += '\0';
+    with_null += "bad.php";
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(with_null),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_with_null_byte_returns_empty)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

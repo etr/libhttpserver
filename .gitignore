@@ -1,9 +1,11 @@
 *.sw*
 *.*~
+*~
 *.in
 *.php
 *.pm
 *.py
+!scripts/lib/*.py
 *_wrap.*
 *.gcov
 *.gcno
@@ -14,6 +16,8 @@
 .idea
 libhttpserver.iml
 build/*
+build-debug/
+_build/
 aclocal.m4
 autom4te.cache/
 config.guess
@@ -60,3 +64,5 @@ libtool
 .worktrees
 .claude
 CLAUDE.md
+.groundwork-plans/
+.DS_Store

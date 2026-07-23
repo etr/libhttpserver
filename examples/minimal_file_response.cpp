@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,23 +18,19 @@
      USA
 */
 
-#include <memory>
+// minimal_file_response.cpp - stream a file from disk as the response
+// body using the http_response::file() factory.
 
 #include <httpserver.hpp>
 
-class file_response_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::file_response>(new httpserver::file_response("test_content", 200, "text/plain"));
-     }
-};
-
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    file_response_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::file("test_content")
+                   .with_header("Content-Type", "text/plain");
+    });
+
     ws.start(true);
-
     return 0;
 }

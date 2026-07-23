@@ -20,8 +20,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-m4_define([libhttpserver_MAJOR_VERSION],[0])dnl
-m4_define([libhttpserver_MINOR_VERSION],[20])dnl
+m4_define([libhttpserver_MAJOR_VERSION],[2])dnl
+m4_define([libhttpserver_MINOR_VERSION],[0])dnl
 m4_define([libhttpserver_REVISION],[0])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl
@@ -31,7 +31,12 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_HOST
 
-AX_VALGRIND_DFLT
+# TASK-088: sgcheck (exp-sgcheck) was removed upstream in Valgrind 3.20; the
+# CI Valgrind (ubuntu-latest -> 3.22) no longer ships it, so it is disabled
+# by default here rather than probed and skipped. helgrind + drd stay on
+# (their default) so the Valgrind lane runs memcheck + both race detectors.
+# AX_VALGRIND_DFLT calls must precede AX_VALGRIND_CHECK.
+AX_VALGRIND_DFLT([sgcheck], [off])
 AX_VALGRIND_CHECK
 
 OLD_CXXFLAGS=$CXXFLAGS
@@ -44,7 +49,7 @@ AC_LANG([C++])
 AC_SYS_LARGEFILE
 
 # Minimal feature-set required
-AX_CXX_COMPILE_STDCXX([17])
+AX_CXX_COMPILE_STDCXX([20], [noext], [mandatory])
 
 native_srcdir=$srcdir
 
@@ -80,10 +85,19 @@ For native Windows binaries, use the MinGW64 shell instead.
         ADDITIONAL_LIBS="-lpthread -no-undefined"
         NETWORK_LIBS="-lws2_32"
         native_srcdir=$(cd $srcdir; pwd -W)
+        # libmicrohttpd's <microhttpd.h> asserts _SYS_TYPES_FD_SET on Cygwin/MSYS.
+        # newlib defines that macro via <sys/select.h>, included from <sys/types.h>
+        # only when __BSD_VISIBLE -- i.e. when _DEFAULT_SOURCE is set. Strict ANSI
+        # C++ (-std=c++NN, AX_CXX_COMPILE_STDCXX noext) suppresses newlib's
+        # auto-define, so expose it explicitly here.
+        CPPFLAGS="-D_DEFAULT_SOURCE $CPPFLAGS"
         ;;
     *-cygwin*)
         NETWORK_HEADER="arpa/inet.h"
         ADDITIONAL_LIBS="-lpthread -no-undefined"
+        # See *-msys* note: libmicrohttpd's fd_set check needs _DEFAULT_SOURCE
+        # under -std=c++NN strict mode.
+        CPPFLAGS="-D_DEFAULT_SOURCE $CPPFLAGS"
         ;;
     *)
         NETWORK_HEADER="arpa/inet.h"
@@ -104,6 +118,24 @@ AC_CHECK_HEADER([$NETWORK_HEADER],[],[AC_MSG_ERROR("$NETWORK_HEADER not found")]
 AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 
 AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutls.h not found. TLS will be disabled"); have_gnutls="no"])
+
+# TASK-068: portable secure-zero primitive selection. Probe for
+# explicit_bzero (glibc / musl / FreeBSD / OpenBSD / *BSD). The header
+# httpserver/detail/secure_zero.hpp dispatches at compile time based on
+# whether this is available. Windows takes the RtlSecureZeroMemory
+# branch; macOS and other platforms without explicit_bzero take the
+# portable volatile + asm-clobber fallback (which has the same security
+# guarantee without the __STDC_WANT_LIB_EXT1__ include-order coupling
+# that memset_s would impose on a transitively-included header).
+#
+# The HAVE_EXPLICIT_BZERO macro is pushed into AM_CXXFLAGS / AM_CFLAGS
+# (matching the established libhttpserver pattern for HAVE_GNUTLS /
+# HAVE_BAUTH / etc.) so it reaches the header without requiring an
+# explicit `#include "config.h"` from secure_zero.hpp.
+AC_CHECK_DECLS([explicit_bzero], [], [], [[#include <string.h>]])
+AS_IF([test "x$ac_cv_have_decl_explicit_bzero" = "xyes"],
+    [AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_EXPLICIT_BZERO"
+     AM_CFLAGS="$AM_CFLAGS -DHAVE_EXPLICIT_BZERO"])
 
 # Checks for libmicrohttpd
 if test x"$host" = x"$build"; then
@@ -127,7 +159,11 @@ if test x"$host" = x"$build"; then
         [AC_MSG_ERROR(["microhttpd.h not found"])]
     )
 
-    CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
+    # -DHTTPSERVER_COMPILATION is intentionally NOT injected globally into
+    # CXXFLAGS. It is added per-target via AM_CPPFLAGS in src/Makefile.am and
+    # test/Makefile.am so that examples (and any other consumer-style TUs)
+    # build through the umbrella header without seeing the internal macro.
+    CXXFLAGS="-D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
     LDFLAGS="$LIBMICROHTTPD_LIBS $NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 
     cond_cross_compile="no"
@@ -140,7 +176,9 @@ else
         [AC_MSG_ERROR(["microhttpd.h not found"])]
     )
 
-    CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS"
+    # See note above: HTTPSERVER_COMPILATION is scoped to lib + tests via
+    # per-directory AM_CPPFLAGS, not injected globally into CXXFLAGS.
+    CXXFLAGS="-D_REENTRANT $CXXFLAGS"
     LDFLAGS="$NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 
     cond_cross_compile="yes"
@@ -221,7 +259,9 @@ AM_LDFLAGS="-lstdc++"
 
 if test x"$debugit" = x"yes"; then
     AC_DEFINE([DEBUG],[],[Debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -std=c++17 -Wno-unused-command-line-argument -O0"
+    # -std=c++20 is injected by AX_CXX_COMPILE_STDCXX into the CXX variable,
+    # not repeated here.  Omitting it avoids a double-standard flag conflict.
+    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -Wno-unused-command-line-argument -O0"
     AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -Wno-unused-command-line-argument -O0"
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
@@ -308,7 +348,11 @@ DX_PDF_FEATURE(OFF)
 DX_PS_FEATURE(OFF)
 DX_INIT_DOXYGEN([$PACKAGE_NAME],[doxyconfig.in])
 
-LDFLAGS="$LDFLAGS -version-number libhttpserver_LDF_VERSION"
+# Export the libtool version-number triple so src/Makefile.am can scope it
+# to libhttpserver_la_LDFLAGS rather than injecting it into the global LDFLAGS
+# (which would affect all link steps, not just the shared library).
+LHT_LDF_VERSION="libhttpserver_LDF_VERSION"
+AC_SUBST(LHT_LDF_VERSION)
 
 AC_SUBST(LHT_LIBDEPS)
 AC_SUBST(AM_CXXFLAGS)
@@ -334,6 +378,11 @@ AC_CONFIG_FILES([test/client_key_no_cn.pem:test/client_key_no_cn.pem])
 AC_CONFIG_FILES([test/client_cert_untrusted.pem:test/client_cert_untrusted.pem])
 AC_CONFIG_FILES([test/client_key_untrusted.pem:test/client_key_untrusted.pem])
 AC_CONFIG_FILES([test/libhttpserver.supp:test/libhttpserver.supp])
+# TASK-088: helgrind/drd suppression files must be copied into the build dir
+# so VALGRIND_SUPPRESSIONS_FILES (bare filenames, resolved against builddir)
+# find them in an out-of-tree build — mirroring libhttpserver.supp above.
+AC_CONFIG_FILES([test/valgrind-helgrind.supp:test/valgrind-helgrind.supp])
+AC_CONFIG_FILES([test/valgrind-drd.supp:test/valgrind-drd.supp])
 AC_CONFIG_FILES([examples/cert.pem:examples/cert.pem])
 AC_CONFIG_FILES([examples/key.pem:examples/key.pem])
 AC_CONFIG_FILES([examples/test_content:examples/test_content])

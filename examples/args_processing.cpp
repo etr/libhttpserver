@@ -1,6 +1,6 @@
 /*
     This file is part of libhttpserver
-    Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+    Copyright (C) 2011-2025 Sebastiano Merlino
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -18,14 +18,7 @@
     USA
 */
 
-#include <iostream>
-#include <memory>
-#include <sstream>
-#include <string>
-
-#include <httpserver.hpp>
-
-// This example demonstrates how to use get_args() and get_args_flat() to
+// args_processing.cpp - demonstrates get_args() and get_args_flat() to
 // process all query string and body arguments from an HTTP request.
 //
 // Try these URLs:
@@ -33,16 +26,26 @@
 //   http://localhost:8080/args?id=1&id=2&id=3  (multiple values for same key)
 //   http://localhost:8080/args?colors=red&colors=green&colors=blue
 
-class args_resource : public httpserver::http_resource {
- public:
-    std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-        std::stringstream response_body;
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <string_view>
+
+#include <httpserver.hpp>
+
+int main() {
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
+
+    ws.on_get("/args", [](const httpserver::http_request& req) {
+        std::ostringstream response_body;
 
         response_body << "=== Using get_args() (supports multiple values per key) ===\n\n";
 
-        // get_args() returns a map where each key maps to an http_arg_value.
-        // http_arg_value contains a vector of values for parameters like "?id=1&id=2&id=3"
-        auto args = req.get_args();
+        // get_args() returns a const reference to a map where each key
+        // maps to an http_arg_value. http_arg_value contains a vector of
+        // values for parameters like "?id=1&id=2&id=3". The reference
+        // remains valid for the duration of this handler call.
+        const auto& args = req.get_args();
         for (const auto& [key, arg_value] : args) {
             response_body << "Key: " << key << "\n";
             // Use get_all_values() to get all values for this key
@@ -80,21 +83,13 @@ class args_resource : public httpserver::http_resource {
             response_body << "name (via get_arg_flat): " << name_flat << "\n";
         }
 
-        return std::make_shared<httpserver::string_response>(response_body.str(), 200, "text/plain");
-    }
-};
-
-int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
-
-    args_resource ar;
-    ws.register_resource("/args", &ar);
+        return httpserver::http_response::string(response_body.str());
+    });
 
     std::cout << "Server running on http://localhost:8080/args\n";
     std::cout << "Try: http://localhost:8080/args?name=john&age=30\n";
     std::cout << "Or:  http://localhost:8080/args?id=1&id=2&id=3\n";
 
     ws.start(true);
-
     return 0;
 }

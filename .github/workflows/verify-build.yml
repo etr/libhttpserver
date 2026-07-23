@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '0 0 * * 0'
 
+# Restrict every job's GITHUB_TOKEN to read-only by default.
+# Jobs that need broader access should override at the job level.
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: Verify
@@ -67,17 +72,26 @@ jobs:
             debug: debug
             coverage: nocoverage
             shell: bash
-          # This test gives false positives on newer versions of clang
-          # and ubuntu-18.04 is not supported anymore on github
-          #- test-group: extra
-          #  os: ubuntu-18.04
-          #  os-type: ubuntu
-          #  build-type: msan
-          #  compiler-family: clang
-          #  c-compiler: clang-6.0
-          #  cc-compiler: clang++-6.0
-          #  debug: debug
-          #  coverage: nocoverage
+          # TASK-087: restored msan lane. The previous entry (retired
+          # Ubuntu / Clang toolchain) was dropped when GitHub removed that
+          # runner image and never replaced, so MemorySanitizer went
+          # silently absent. This lane runs clang-18 against an
+          # instrumented libc++ + instrumented
+          # libmicrohttpd (both built and cached in-CI), with gnutls and
+          # curl kept out of the picture. See the "instrumented libc++"
+          # and "Run tests" steps below for how the false-positive-free
+          # dependency set is assembled and why coverage is scoped to the
+          # backend-free unit tests.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: msan
+            compiler-family: clang
+            c-compiler: clang-18
+            cc-compiler: clang++-18
+            debug: debug
+            coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -108,26 +122,8 @@ jobs:
             debug: debug
             coverage: nocoverage
             shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: gcc
-            c-compiler: gcc-9
-            cc-compiler: g++-9
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
+          # gcc-9 and gcc-10 dropped (were here); gcc-11 is now the minimum GCC entry in the extra matrix.
+          # Both lack full C++20 library support (no concepts, no std::span, no <bit>).
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -167,27 +163,18 @@ jobs:
             cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
+            linking: dynamic
+            # TASK-089: opt this single baseline Linux gcc/libstdc++ lane into
+            # the parallel-install acceptance gate. The steps guarded on
+            # `matrix.parallel-install == 'check'` (after "Run tests") fetch the
+            # master ref and run `make check-parallel-install`, which builds v1
+            # (master) alongside v2 and asserts their SONAMEd shared libraries
+            # coexist. Kept to one lane to avoid a second full library build
+            # fanning across the matrix.
+            parallel-install: check
             shell: bash
-          - test-group: extra
-            os: ubuntu-22.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-11
-            cc-compiler: clang++-11
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-22.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-12
-            cc-compiler: clang++-12
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
+          # clang-11, clang-12, clang-14, and clang-15 dropped (were here); clang-13 is now the minimum Clang entry.
+          # All four lack full C++20 support (concepts/<bit>/<span> gaps); clang-13 passes the autoconf C++20 check on ubuntu-22.04.
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -195,26 +182,6 @@ jobs:
             compiler-family: clang
             c-compiler: clang-13
             cc-compiler: clang++-13
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-14
-            cc-compiler: clang++-14
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-15
-            cc-compiler: clang++-15
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -238,10 +205,42 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             shell: bash
+          # TASK-088: split valgrind into three parallel matrix entries — one
+          # per tool (memcheck / helgrind / drd). GitHub Actions runs them
+          # concurrently, capping wall-clock cost at the slowest single tool
+          # instead of the sum of all three serially.
+          #
+          # The full check_PROGRAMS suite runs under each tool. helgrind/drd
+          # scope is intentionally NOT narrowed to unit/ tests only: the
+          # concurrency tests (threadsafety_stress, route_table_concurrency)
+          # are the primary reason for running race detectors (DR-008) and must
+          # not be subsetted out. A per-step timeout-minutes guards against a
+          # hung race-detector run (helgrind/drd can serialize busy-waits into
+          # apparent livelocks).
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
-            build-type: valgrind
+            build-type: valgrind-memcheck
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug  # configure step passes --enable-debug unconditionally for valgrind-* lanes
+            coverage: nocoverage
+            shell: bash
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: valgrind-helgrind
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug
+            coverage: nocoverage
+            shell: bash
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: valgrind-drd
             compiler-family: gcc
             c-compiler: gcc-14
             cc-compiler: g++-14
@@ -275,8 +274,8 @@ jobs:
             os-type: ubuntu
             build-type: select
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -285,8 +284,8 @@ jobs:
             os-type: ubuntu
             build-type: nodelay
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -295,8 +294,8 @@ jobs:
             os-type: ubuntu
             build-type: threads
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -305,10 +304,73 @@ jobs:
             os-type: ubuntu
             build-type: lint
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: debug
             coverage: nocoverage
+            shell: bash
+          # TASK-007: dedicated header-hygiene gate. Runs `make check-hygiene`
+          # (preprocesses <httpserver.hpp> against the staged install and greps
+          # for forbidden backend headers). Surfaces this gate as its own named
+          # GitHub Actions check so reviewers see header-hygiene status
+          # independently of the broader `make check` log. HEADER_HYGIENE_STRICT
+          # defaults to "yes" (flipped from "no" at TASK-020 close); any leak
+          # of forbidden backend headers through the umbrella fails CI loudly.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: header-hygiene
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
+          # TASK-037 / PRD-FLG-REQ-001: flag-invariance-on gate.
+          # Compiles consumer_fixture with all features enabled (gnutls + full MHD).
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: flag-invariance-on
+            compiler-family: gcc
+            c-compiler: gcc
+            cc-compiler: g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
+          # TASK-037 / PRD-FLG-REQ-001: flag-invariance-off gate.
+          # Compiles consumer_fixture with MHD rebuilt without bauth/dauth/websockets
+          # and gnutls absent, so all four HAVE_* flags auto-detect to off.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: flag-invariance-off
+            compiler-family: gcc
+            c-compiler: gcc
+            cc-compiler: g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
+          # TASK-076: TLS-no-CLI lane. Installs libgnutls28-dev (so the
+          # library compiles WITH HAVE_GNUTLS) but deliberately omits
+          # `gnutls-bin`, so the gnutls-cli binary is NOT on $PATH. The
+          # five `psk_connection_*` tests in test/integ/ws_start_stop.cpp
+          # must report `[SKIP]` (via LT_SKIP_IF(!has_gnutls_cli(), ...))
+          # rather than tautological PASS. Post-test verification step
+          # below greps the test log for the [SKIP] markers.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: tls-no-cli
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
             shell: bash
           - test-group: basic
             os: windows-latest
@@ -360,7 +422,7 @@ jobs:
             shell: bash
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       with:
         # We must fetch at least the immediate parents so that if this is
         # a pull request then we can checkout the head.
@@ -374,7 +436,7 @@ jobs:
 
     - name: Setup MSYS2
       if: ${{ matrix.os-type == 'windows' }}
-      uses: msys2/setup-msys2@v2
+      uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c  # v2.31.1
       with:
         msystem: ${{ matrix.msys-env }}
         update: true
@@ -385,7 +447,23 @@ jobs:
     - name: Install MinGW64 packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
       run: |
-        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}
+        # Invariance exclusion (doxygen) — TASK-090, documenting the gap the
+        # v2 audit flagged.
+        #   WHAT: the doxygen zero-warning invariant (scripts/check-doxygen.sh,
+        #     TASK-043) runs via `make check-local` on EVERY lane, but that
+        #     script auto-SKIPs (exit 0) when doxygen is not on $PATH — see its
+        #     `command -v doxygen` guard (scripts/check-doxygen.sh, the
+        #     "SKIP — doxygen not installed" branch). doxygen + graphviz are
+        #     intentionally NOT installed here, so the invariant silently no-ops
+        #     on Windows.
+        #   WHY excluded: `check-doxygen.sh` spawns `make doxygen-run`, and the
+        #     autoconf-archive-generated MINGW recipe hangs indefinitely waiting
+        #     on a cmd.exe batch prompt (the job timed out at the 6h CI ceiling).
+        #   WHY it is safe: the invariant is fully enforced on the Linux lanes,
+        #     where doxygen + graphviz ARE installed, so this is a deliberate
+        #     per-platform exclusion, not a coverage gap. The Windows lane just
+        #     builds and tests the library.
+        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,gnutls,curl}
 
     - name: Install MSYS packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MSYS' }}
@@ -393,8 +471,12 @@ jobs:
         pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel libgnutls-devel
 
     - name: Install Ubuntu test sources
+      # ppa:ubuntu-toolchain-r/test was historically used to backport newer
+      # gcc onto older Ubuntu LTS. With the C++20 floor (TASK-001), our matrix
+      # only retains compilers that ship in stock ubuntu-22.04 / 24.04 repos
+      # (gcc-11..14, clang-13/16/17/18), so the PPA is no longer needed -- and
+      # add-apt-repository talks to launchpad, which is a flaky dependency.
       run: |
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
         sudo apt-get update ;
       if: ${{ matrix.os-type == 'ubuntu' }}
 
@@ -422,12 +504,44 @@ jobs:
 
     - name: Install valgrind if needed
       run: sudo apt-get install valgrind
-      if: ${{ matrix.build-type == 'valgrind' && matrix.os-type == 'ubuntu' }}
+      if: ${{ startsWith(matrix.build-type, 'valgrind-') && matrix.os-type == 'ubuntu' }}
 
     - name: Install cpplint if needed
       run: sudo pip3 install cpplint ;
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
-    
+
+    - name: Install lizard if needed
+      run: sudo pip3 install lizard ;
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Install PMD (CPD) if needed
+      # CPD is shipped as part of the PMD distribution. The apt package
+      # is pinned to PMD 6.x; we want the modern PMD 7 CLI (`pmd cpd ...`)
+      # to match the script. Java is pre-installed on ubuntu-latest.
+      #
+      # Supply-chain: pmd.zip is sha256-pinned. To rotate PMD, update
+      # BOTH PMD_VERSION and PMD_SHA256 in the same PR. Obtain the new
+      # digest from the GitHub release page's pmd-dist-<ver>-bin.zip
+      # asset (or `sha256sum` the freshly downloaded zip and record the
+      # resulting value in PMD_SHA256 in this file).
+      #
+      # For defence-in-depth, cross-check the digest against the
+      # pmd-dist-<ver>-bin.zip.sha256 sidecar on the same release page.
+      # Alternatively, verify the Maven Central / OSSRH attestation for
+      # the same version if the GitHub release page itself may be
+      # compromised at rotation time.
+      run: |
+        set -euo pipefail
+        PMD_VERSION=7.24.0
+        PMD_SHA256=110934b36d39c19094d1b77386931978093f238f2c2f1851748822b69c7367ac
+        curl -fsSL -o /tmp/pmd.zip \
+          "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip"
+        echo "${PMD_SHA256}  /tmp/pmd.zip" | sha256sum -c
+        sudo unzip -q /tmp/pmd.zip -d /opt
+        sudo ln -sf "/opt/pmd-bin-${PMD_VERSION}/bin/pmd" /usr/local/bin/pmd
+        pmd --version
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Install IWYU dependencies if needed
       run: |
         sudo apt-get install llvm-18-dev libclang-18-dev clang-18 ;
@@ -435,25 +549,37 @@ jobs:
 
     - name: IWYU from cache (for testing)
       id: cache-IWYU
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
       with:
         path: include-what-you-use
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-include-what-you-use-pre-built
       if: ${{ matrix.build-type == 'iwyu' && matrix.os-type == 'ubuntu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
+    # Supply-chain: pinned to an immutable commit SHA on the upstream clang_18
+    # branch (latest commit as of 2024-02-10, "[ci] Pin to LLVM 18"). To rotate,
+    # obtain the new SHA from https://github.com/include-what-you-use/include-what-you-use/commits/clang_18
+    # and update IWYU_SHA below; the assertion will fail-fast on any mismatch.
     - name: Build IWYU if requested
       run: |
-        CLANG_ROOT_PATH=`llvm-config-18 --prefix` ;
-        CLANG_BIN_PATH=`llvm-config-18 --bindir` ;
-        git clone https://github.com/include-what-you-use/include-what-you-use.git ;
-        cd include-what-you-use ;
-        git checkout clang_18 ;
-        mkdir build_iwyu ;
-        cd build_iwyu ;
-        cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
-        make ;
-        sudo make install ;
+        set -euo pipefail
+        IWYU_SHA=377eaef70cdda47368939f4d9beabfabe3f628f0
+        CLANG_ROOT_PATH=`llvm-config-18 --prefix`
+        CLANG_BIN_PATH=`llvm-config-18 --bindir`
+        git clone https://github.com/include-what-you-use/include-what-you-use.git
+        cd include-what-you-use
+        git checkout "${IWYU_SHA}"
+        HEAD_SHA="$(git rev-parse --verify HEAD)"
+        if [ "${HEAD_SHA}" != "${IWYU_SHA}" ]; then
+          echo "IWYU SHA mismatch: expected ${IWYU_SHA}, got ${HEAD_SHA}" >&2
+          exit 1
+        fi
+        echo "IWYU pinned at SHA: ${HEAD_SHA}"
+        mkdir build_iwyu
+        cd build_iwyu
+        cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../
+        make
+        sudo make install
       if: ${{ matrix.build-type == 'iwyu' && matrix.os-type == 'ubuntu' && steps.cache-IWYU.outputs.cache-hit != 'true' }}
 
     - name: Install IWYU if requested
@@ -464,19 +590,28 @@ jobs:
 
     - name: CURL from cache (for testing)
       id: cache-CURL
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
       with:
         path: curl-7.75.0
         key: ${{ matrix.os }}-CURL-pre-built-v3
       if: ${{ matrix.os == 'macos-latest' }}
 
     - name: Build CURL (for testing)
+      # Supply-chain: curl-7.75.0.tar.gz is sha256-pinned. The expected digest
+      # is the official upstream value also published at https://curl.se/download/
+      # (cross-checked against the libhttpserver S3 mirror). To rotate the curl
+      # version, update both CURL_VERSION and CURL_SHA256 in the same PR.
       run: |
-        curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
-        tar -xzf curl-7.75.0.tar.gz ;
-        cd curl-7.75.0 ;
-        ./configure --with-darwinssl --without-ssl --without-nghttp2 --without-libidn2 --without-libssh2 --without-brotli --without-zstd --without-librtmp --without-libpsl --disable-ldap --disable-ldaps ;
-        make ;
+        set -euo pipefail
+        CURL_VERSION=7.75.0
+        CURL_SHA256=4d51346fe621624c3e4b9f86a8fd6f122a143820e17889f59c18f245d2d8e7a6
+        curl -fsSL -o "curl-${CURL_VERSION}.tar.gz" \
+          "https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-${CURL_VERSION}.tar.gz"
+        echo "${CURL_SHA256}  curl-${CURL_VERSION}.tar.gz" | shasum -a 256 -c
+        tar -xzf "curl-${CURL_VERSION}.tar.gz"
+        cd "curl-${CURL_VERSION}"
+        ./configure --with-darwinssl --without-ssl --without-nghttp2 --without-libidn2 --without-libssh2 --without-brotli --without-zstd --without-librtmp --without-libpsl --disable-ldap --disable-ldaps
+        make
       if: ${{ matrix.os == 'macos-latest' && steps.cache-CURL.outputs.cache-hit != 'true' }}
       
     - name: Install CURL (for testing on mac only) 
@@ -505,33 +640,160 @@ jobs:
     - name: Setup gnutls dependency (only on linux)
       run: |
         sudo apt-get install libgnutls28-dev gnutls-bin ;
-      if: ${{ matrix.os-type == 'ubuntu' }}
+      # TASK-037: skip gnutls install on the flag-invariance-off lane so
+      # HAVE_GNUTLS auto-detects to off (the configure script just
+      # AC_CHECK_HEADER's gnutls/gnutls.h, no header == HAVE_GNUTLS=0).
+      # TASK-076: also skip on the tls-no-cli lane — it does its own
+      # install of libgnutls28-dev WITHOUT gnutls-bin in the next step
+      # so the per-test LT_SKIP_IF(!has_gnutls_cli(), ...) gate fires.
+      # TASK-087: also skip on the msan lane — installing gnutls would pull
+      # an uninstrumented gnutls/nettle/gmp tree into LDADD; with no header
+      # present configure auto-detects HAVE_GNUTLS=no and -lgnutls drops out.
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'tls-no-cli' && matrix.build-type != 'msan' }}
+
+    - name: Setup gnutls dependency WITHOUT gnutls-cli (TASK-076 tls-no-cli lane)
+      run: |
+        sudo apt-get install libgnutls28-dev ;
+        # Deliberate: NO gnutls-bin here. The lane asserts that
+        # has_gnutls_cli() returns false at runtime, which makes the
+        # five `psk_connection_*` tests in ws_start_stop.cpp emit
+        # `[SKIP]` rather than tautological PASS.
+        if which gnutls-cli >/dev/null 2>&1; then
+          echo "ERROR: gnutls-cli is on PATH but the tls-no-cli lane requires it absent" >&2
+          exit 1
+        fi
+      if: ${{ matrix.build-type == 'tls-no-cli' }}
+
+    # TASK-087: MemorySanitizer reports use-of-uninitialized-value for any
+    # bytes written by uninstrumented code and later read by instrumented
+    # code. libc++ is on nearly every code path, so it must be instrumented
+    # too. Build LLVM libc++/libc++abi with MemoryWithOrigins once and cache
+    # the install prefix (keyed by os + compiler); rebuild only on a miss.
+    - name: Fetch instrumented libc++ from cache (msan lane)
+      id: cache-libcxx-msan
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: ${{ github.workspace }}/libcxx-msan
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libcxx-msan-llvmorg-18.1.8-origins-v1
+      if: ${{ matrix.build-type == 'msan' }}
+
+    - name: Build instrumented libc++ (msan lane, if not cached)
+      # Supply-chain: llvmorg-18.1.8 is a mutable git tag, not an immutable
+      # commit SHA, so a post-clone SHA assertion guards against the tag
+      # being force-moved upstream (CWE-829). LLVM_SHA was obtained via
+      # `git ls-remote https://github.com/llvm/llvm-project refs/tags/llvmorg-18.1.8`
+      # at pin time; to rotate the tag, update both the --branch value below
+      # and LLVM_SHA in the same PR. Mirrors the IWYU SHA-pin pattern above.
+      run: |
+        set -euo pipefail
+        sudo apt-get install -y ninja-build cmake ;
+        LLVM_SHA=3b5b5c1ec4a3095ab096dd780e84d7ab81f3d7ff ;
+        git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git llvm-project ;
+        HEAD_SHA="$(git -C llvm-project rev-parse --verify HEAD)" ;
+        if [ "${HEAD_SHA}" != "${LLVM_SHA}" ]; then
+          echo "LLVM SHA mismatch: expected ${LLVM_SHA}, got ${HEAD_SHA}" >&2 ;
+          exit 1 ;
+        fi
+        echo "llvm-project pinned at SHA: ${HEAD_SHA}" ;
+        cmake -G Ninja -S llvm-project/runtimes -B build-libcxx-msan \
+          -DCMAKE_C_COMPILER=clang-18 \
+          -DCMAKE_CXX_COMPILER=clang++-18 \
+          -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi" \
+          -DLIBCXXABI_USE_LLVM_UNWINDER=OFF \
+          -DLLVM_USE_SANITIZER=MemoryWithOrigins \
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/libcxx-msan" ;
+        ninja -C build-libcxx-msan cxx cxxabi ;
+        ninja -C build-libcxx-msan install-cxx install-cxxabi ;
+      if: ${{ matrix.build-type == 'msan' && steps.cache-libcxx-msan.outputs.cache-hit != 'true' }}
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
       with:
         path: libmicrohttpd-1.0.3
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-pre-built-v2
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' }}
+      # TASK-037: the flag-invariance-off lane rebuilds libmicrohttpd with
+      # every sub-feature disabled, so it must skip the stock cache fetch.
+      # The flag-invariance-on lane uses the stock build because
+      # libmicrohttpd 1.0.3 ships TLS/Basic/Digest auth on by default and
+      # does NOT ship the websocket extension at all.
+      # TASK-087: the msan lane rebuilds libmicrohttpd instrumented (so MHD
+      # output is not read back as uninitialized), so it skips this stock
+      # cache/build too.
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'msan' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
         tar -xzf libmicrohttpd-1.0.3.tar.gz ;
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples ;
         make ;
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+      # TASK-037: as above -- flag-invariance-off has its own dedicated
+      # libmicrohttpd build step below; flag-invariance-on uses the stock
+      # build because libmicrohttpd 1.0.3 ships no websocket extension.
+      # TASK-087: msan has its own dedicated instrumented build step below.
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'msan' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+
 
     - name: Build libmicrohttpd without digest auth (no-dauth test)
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
         tar -xzf libmicrohttpd-1.0.3.tar.gz ;
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples --disable-dauth ;
         make ;
       if: ${{ matrix.build-type == 'no-dauth' }}
+
+    - name: Fetch libmicrohttpd from cache (flag-invariance-off lane)
+      id: cache-libmicrohttpd-off
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: libmicrohttpd-1.0.3
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-flags-off-v1
+      if: ${{ matrix.build-type == 'flag-invariance-off' }}
+
+    - name: Build libmicrohttpd with all features off (TASK-037 flag-invariance-off lane)
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
+        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
+        cd libmicrohttpd-1.0.3 ;
+        ./configure --disable-examples --disable-bauth --disable-dauth --disable-websockets ;
+        make ;
+      if: ${{ matrix.build-type == 'flag-invariance-off' && steps.cache-libmicrohttpd-off.outputs.cache-hit != 'true' }}
+
+    - name: Fetch libmicrohttpd from cache (msan lane)
+      id: cache-libmicrohttpd-msan
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      # NOTE: the '-v1' suffix below must be bumped manually whenever the
+      # CFLAGS/LDFLAGS in the "Build instrumented libmicrohttpd" step change
+      # -- this key does not otherwise encode them, so a flag change alone
+      # would silently keep reusing a stale (differently-instrumented)
+      # cached artifact.
+      with:
+        path: libmicrohttpd-1.0.3
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-msan-v1
+      if: ${{ matrix.build-type == 'msan' }}
+
+    - name: Build instrumented libmicrohttpd (TASK-087 msan lane)
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
+        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
+        cd libmicrohttpd-1.0.3 ;
+        # Instrument MHD with MemorySanitizer so its output buffers, which
+        # libhttpserver reads on nearly every code path, are not flagged as
+        # uninitialized. --disable-https keeps gnutls (uninstrumented) out.
+        export CC=clang-18 ;
+        export CFLAGS='-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1' ;
+        export LDFLAGS='-fsanitize=memory' ;
+        ./configure --disable-examples --disable-https ;
+        make -j$(nproc) ;
+      if: ${{ matrix.build-type == 'msan' && steps.cache-libmicrohttpd-msan.outputs.cache-hit != 'true' }}
 
     - name: Install libmicrohttpd
       run: cd libmicrohttpd-1.0.3 ; sudo make install ;
@@ -547,10 +809,40 @@ jobs:
         echo "Verified: libmicrohttpd built without digest auth support" ;
       if: ${{ matrix.build-type == 'no-dauth' }}
 
+    - name: Verify libmicrohttpd built without bauth/dauth/websockets (TASK-037 flag-invariance-off lane)
+      # TASK-037 / PRD-FLG-REQ-001: belt-and-braces check that the bespoke
+      # libmicrohttpd build above actually stripped the symbols that drive
+      # libhttpserver's HAVE_BAUTH / HAVE_DAUTH / HAVE_WEBSOCKET
+      # auto-detection. If any of these slipped back in, the configure
+      # step would (correctly) flip the corresponding HAVE_* back on and
+      # the lane would no longer be exercising the flag-off invariant.
+      run: |
+        fail=0 ;
+        for sym in \
+          MHD_basic_auth_get_username_password3 `# HAVE_BAUTH` \
+          MHD_digest_auth_check3                `# HAVE_DAUTH` \
+          MHD_queue_auth_fail_response          `# HAVE_DAUTH (secondary)`; do
+          if nm /usr/local/lib/libmicrohttpd.so 2>/dev/null | grep -q "$sym"; then
+            echo "ERROR: $sym present in libmicrohttpd (expected absent)" ;
+            fail=1 ;
+          else
+            echo "Verified: $sym absent from libmicrohttpd" ;
+          fi ;
+        done ;
+        if ls /usr/local/lib/libmicrohttpd_ws* >/dev/null 2>&1; then  # HAVE_WEBSOCKET
+          echo "ERROR: libmicrohttpd_ws present (expected absent)" ;
+          fail=1 ;
+        else
+          echo "Verified: libmicrohttpd_ws not built/installed" ;
+        fi ;
+        if [ "$fail" -ne 0 ]; then exit 1; fi
+      if: ${{ matrix.build-type == 'flag-invariance-off' }}
+
     - name: Build and install libmicrohttpd (Windows)
       if: ${{ matrix.os-type == 'windows' }}
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c
         tar -xzf libmicrohttpd-1.0.3.tar.gz
         cd libmicrohttpd-1.0.3
         ./configure --disable-examples --enable-poll=no
@@ -559,7 +851,7 @@ jobs:
 
     - name: Fetch libmicrohttpd from cache (ARM cross-compile)
       id: cache-libmicrohttpd-arm
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
       with:
         path: libmicrohttpd-1.0.3-${{ matrix.build-type }}
         key: ${{ matrix.os }}-${{ matrix.build-type }}-libmicrohttpd-1.0.3-cross-compiled
@@ -568,6 +860,7 @@ jobs:
     - name: Cross-compile libmicrohttpd for ARM
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c
         tar -xzf libmicrohttpd-1.0.3.tar.gz
         mv libmicrohttpd-1.0.3 libmicrohttpd-1.0.3-${{ matrix.build-type }}
         cd libmicrohttpd-1.0.3-${{ matrix.build-type }}
@@ -596,14 +889,119 @@ jobs:
       run: cpplint --extensions=cpp,hpp --headers=hpp --recursive . ;
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
+    - name: Run per-function complexity gate (lizard)
+      run: ./scripts/check-complexity.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run copy/paste detection gate (PMD CPD)
+      run: ./scripts/check-duplication.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run per-file line-count gate
+      run: ./scripts/check-file-size.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run warning-suppression gate
+      # TASK-060: forbid file-scoped `#pragma GCC diagnostic ignored
+      # "-Warray-bounds"` (and any future broadened list) on the watched
+      # library TUs. A regression here would silently turn the warning
+      # off TU-wide.
+      run: ./scripts/check-warning-suppressions.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run skip-rationale gate
+      # TASK-077: forbid `#ifndef _WINDOWS`, `#ifndef DARWIN`, or
+      # `#if !defined(_WINDOWS)` blocks in `test/integ/` that lack a
+      # `// reason:` comment pointing at `test/PORTABILITY.md` (or a
+      # follow-up task). Without this gate, whole-suite skips silently
+      # drift on the Windows / Darwin CI lanes and the library's
+      # portability claim quietly decays.
+      run: ./scripts/check-skip-rationales.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run msan-lane structural gate
+      # TASK-087: asserts the msan CI lane is wired correctly (valid YAML,
+      # matrix entry present with mirrored keys, stale retired-OS commented
+      # block gone, MSAN_OPTIONS + scoped TESTS= wiring present). Mirrors the
+      # check-*.sh gate idiom used by complexity, duplication, file-size,
+      # warning-suppressions, and skip-rationales gates.
+      run: ./scripts/check-msan-lane.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run valgrind-lane structural gate
+      # TASK-088: asserts the Valgrind CI lane is wired correctly (valid YAML,
+      # valgrind matrix entry present, no --disable-valgrind-{helgrind,drd,
+      # sgcheck} flags remain, `make "check-valgrind-${TOOL}"` (per-tool
+      # AX_VALGRIND_CHECK target) invoked, and the results-print step
+      # surfaces helgrind + drd logs). Valgrind is
+      # Linux-only, so the actual race-detector run + finding-triage happen on
+      # the PR's Linux lane; this gate only guards the wiring. Mirrors the
+      # check-msan-lane.sh gate idiom.
+      run: ./scripts/check-valgrind-lane.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run DR-008 stress-lane structural gate
+      # TASK-092: asserts the two DR-008 concurrency/deadlock stress-gate
+      # steps (route_table_concurrency under TSan, stop()-from-handler
+      # deadlock contract) stay wired correctly -- present, correctly `if:`
+      # gated, and timeout-boxed. See test/PERFORMANCE.md ("CI wiring —
+      # DR-008 stress gates"). Mirrors the check-msan-lane.sh gate idiom.
+      run: ./scripts/check-dr008-lanes.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run parallel-install-lane structural gate
+      # TASK-089: asserts the parallel-install CI gate is wired correctly
+      # (valid YAML, a matrix entry opts in via parallel-install: check, a step
+      # invokes `make check-parallel-install`, a step fetches the master ref,
+      # and the SKIP-authorization escape hatch is not set — so the five
+      # environment-quirk SKIP paths stay fatal in CI). The real end-to-end
+      # v1+v2 coexistence run happens on the opted-in baseline lane; this gate
+      # only guards the wiring against silent drift. Mirrors the
+      # check-valgrind-lane.sh / check-msan-lane.sh gate idiom.
+      run: ./scripts/check-parallel-install-lane.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run CodeQL-workflow structural gate
+      # TASK-090: asserts codeql-analysis.yml stays hardened — every action
+      # SHA-pinned (no floating @vN), the dead Autobuild scaffolding gone, an
+      # explicit ./configure + make build present so CodeQL's C/C++ extractor
+      # traces the real compile, and codeql-action/init + analyze pinned to the
+      # SAME v3 SHA. To rotate the CodeQL SHA see the header comment in
+      # codeql-analysis.yml. Mirrors the check-valgrind-lane.sh gate idiom.
+      run: ./scripts/check-codeql-workflow.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run workflow-pinning / Codecov structural gate
+      # TASK-090: cross-workflow invariants — BOTH codeql-analysis.yml and
+      # verify-build.yml carry only SHA-pinned actions, the Codecov upload
+      # hard-fails CI (fail_ci_if_error: true, an UPLOAD failure — distinct
+      # from a coverage-percentage drop, which codecov.yml gates), and the
+      # Windows doxygen invariance exclusion stays documented. Mirrors the
+      # check-parallel-install-lane.sh gate idiom.
+      run: ./scripts/check-workflow-pinning.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Run libhttpserver configure
+      # TASK-038: fixed CXXLAGS -> CXXFLAGS typo so C++ TUs are instrumented by the sanitizer matrix.
       run: |
         # Set memory check flags. They need to stay in step as env variables don't propagate across steps.
-        if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
-        if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
-        if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
-        if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
-        if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
+        if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXFLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
+        # TASK-087: msan needs the instrumented libc++ built above, plus
+        # origins tracking and frame pointers for readable reports. Point
+        # the C++ TUs at the instrumented libc++ headers/libs and drop the
+        # default (uninstrumented) libstdc++ via -nostdinc++/-stdlib=libc++.
+        if [ "$BUILD_TYPE" = "msan" ]; then
+          LIBCXX_MSAN="${{ github.workspace }}/libcxx-msan" ;
+          export CFLAGS="-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1" ;
+          export CXXFLAGS="-stdlib=libc++ -nostdinc++ -isystem ${LIBCXX_MSAN}/include/c++/v1 -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1 -DLHS_SANITIZER_OWNS_OPERATOR_NEW" ;
+          export LDFLAGS="-stdlib=libc++ -fsanitize=memory -L${LIBCXX_MSAN}/lib -Wl,-rpath,${LIBCXX_MSAN}/lib -lc++abi" ;
+        fi
+        # tsan/msan/lsan runtimes define their own global operator new/delete;
+        # -DLHS_SANITIZER_OWNS_OPERATOR_NEW makes the arena alloc-pin test drop
+        # its overrides so it links (see test/unit/http_request_unescape_arena_test.cpp).
+        if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXFLAGS='-fsanitize=leak -DLHS_SANITIZER_OWNS_OPERATOR_NEW'; export LDFLAGS='-fsanitize=leak'; fi
+        if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXFLAGS='-fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW'; export LDFLAGS='-fsanitize=thread'; fi
+        if [ "$BUILD_TYPE" = "ubsan" ]; then export CFLAGS='-fsanitize=undefined'; export CXXFLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 
         # Additional flags on mac. They need to stay in step as env variables don't propagate across steps.
         if [ "${{ matrix.os }}" = "macos-latest" ]; then
@@ -629,8 +1027,22 @@ jobs:
           ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
         elif [ "$DEBUG" = "debug" ]; then
           ../configure --enable-debug --disable-shared --disable-fastopen;
-        elif [ "$BUILD_TYPE" = "valgrind" ]; then
-          ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+        elif case "$BUILD_TYPE" in valgrind-*) true;; *) false;; esac; then
+          # TASK-088: Valgrind lanes (valgrind-memcheck / valgrind-helgrind /
+          # valgrind-drd). All three share the same configure flags. The race
+          # detectors (helgrind and drd) were previously turned off by per-tool
+          # disable flags; removing those flags re-enables them. Each lane
+          # invokes a single make check-<tool> target derived from BUILD_TYPE,
+          # so GitHub Actions runs memcheck, helgrind, and drd in parallel
+          # rather than serially. sgcheck (exp-sgcheck) stays off: removed
+          # upstream in Valgrind 3.20; ubuntu-latest ships 3.22; disabled in
+          # configure.ac via AX_VALGRIND_DFLT([sgcheck],[off]).
+          ../configure --enable-debug --disable-fastopen;
+        elif [ "$BUILD_TYPE" = "flag-invariance-on" ]; then
+          # TASK-037 / PRD-FLG-REQ-001: explicitly request all four feature
+          # flags so configure fails fast if any dependency is absent, rather
+          # than silently falling back to the feature-off path.
+          ../configure --disable-fastopen --enable-tls --enable-bauth --enable-dauth --enable-websocket;
         elif [ "$BUILD_TYPE" = "iwyu" ]; then
           ../configure --disable-examples;
         else
@@ -649,6 +1061,62 @@ jobs:
         fi
       if: ${{ matrix.build-type == 'no-dauth' }}
 
+    - name: Verify libhttpserver detected all features off (TASK-037 flag-invariance-off lane)
+      # TASK-037 / PRD-FLG-REQ-001 / arch §9 testing item 2. Asserts that
+      # configure auto-detected every HAVE_* feature as off in this lane;
+      # if any of them are 'yes', the lane wouldn't actually be exercising
+      # the flag-off invariant and we want the matrix to go red loudly.
+      run: |
+        cd build ;
+        # AC_MSG_NOTICE summary lines in config.log have two leading spaces
+        # rather than a 'configure:' prefix — the anchored pattern below
+        # matches that format exactly (prevents false-positive matches on
+        # unrelated config.log lines that contain the feature name).
+        fail=0 ;
+        for feat in "TLS Enabled" "Basic Auth" "Digest Auth" "WebSocket"; do
+          if grep -qE "^  ${feat}[[:space:]]*:[[:space:]]*no$" config.log; then
+            echo "Verified: ${feat} is off" ;
+          else
+            echo "ERROR: ${feat} is NOT off in this configuration" ;
+            grep "${feat}" config.log || echo "${feat} line not found" ;
+            fail=1 ;
+          fi ;
+        done ;
+        if [ "$fail" -ne 0 ]; then exit 1; fi
+      if: ${{ matrix.build-type == 'flag-invariance-off' }}
+
+    - name: Verify libhttpserver detected all features on (TASK-037 flag-invariance-on lane)
+      # TASK-037 / PRD-FLG-REQ-001 / arch §9 testing item 2. Symmetric check
+      # to the off-lane step above: asserts configure auto-detected every
+      # HAVE_* feature as 'yes'. Without this, a misconfigured dependency
+      # (e.g. missing gnutls) would silently leave a feature off and the
+      # all-features-on invariant would not actually be exercised.
+      # Note: AC_MSG_NOTICE summary lines in config.log have two leading
+      # spaces rather than a 'configure:' prefix — the anchored pattern below
+      # matches that format exactly.
+      #
+      # WebSocket intentionally omitted: libmicrohttpd 1.0.3 (the pinned
+      # dependency version) does NOT ship microhttpd_ws.h in the standard
+      # tarball, so libhttpserver's HAVE_WEBSOCKET auto-detection cannot
+      # flip on with the upstream-supported build path. The off-lane
+      # explicitly asserts microhttpd_ws is absent; the on-lane covers
+      # the other three features whose detection IS exercisable on
+      # commodity CI runners.
+      run: |
+        cd build ;
+        fail=0 ;
+        for feat in "TLS Enabled" "Basic Auth" "Digest Auth"; do
+          if grep -qE "^  ${feat}[[:space:]]*:[[:space:]]*yes$" config.log; then
+            echo "Verified: ${feat} is on" ;
+          else
+            echo "ERROR: ${feat} is NOT on in this configuration" ;
+            grep "${feat}" config.log || echo "${feat} line not found" ;
+            fail=1 ;
+          fi ;
+        done ;
+        if [ "$fail" -ne 0 ]; then exit 1; fi
+      if: ${{ matrix.build-type == 'flag-invariance-on' }}
+
     - name: Print config.log
       shell: bash
       run: |
@@ -662,7 +1130,7 @@ jobs:
         # IWYU always return an error code. If it returns "2" it indicates a success so we manage this within the function below.
         function safe_make_iwyu() {
           {
-            make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+            make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++20 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           } || {
             if [ $? -ne 2 ]; then
               return 1;
@@ -681,39 +1149,281 @@ jobs:
           make ;
         fi
 
+    - name: Build consumer fixture (TASK-037 build-flag invariance gate)
+      # TASK-037 / PRD-FLG-REQ-001 / arch §9 testing item 2. The headline
+      # gate: the same test/consumer_fixture.cpp (which touches every
+      # previously HAVE_*-gated public symbol) must compile + link in
+      # both the all-features-on and all-features-off configurations.
+      # The matrix entries skip the broad `make check` / `cppcheck` steps
+      # below -- this single fixture compile + link is the build-flag-
+      # invariance assertion.
+      # make -C test consumer_fixture (builds in build/test/) invokes the
+      # subdirectory Makefile from within the build directory.
+      run: |
+        cd build ;
+        make -C test consumer_fixture ;
+      if: ${{ matrix.build-type == 'flag-invariance-on' || matrix.build-type == 'flag-invariance-off' }}
+
     - name: Run tests
       run: |
         cd build ;
-        make check;
-      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' }}
+        # tsan: suppress libstdc++'s benign std::ctype<char> narrow-cache race
+        # (see test/tsan.supp). All libhttpserver-internal races stay fatal.
+        if [ "$BUILD_TYPE" = "tsan" ]; then
+          export TSAN_OPTIONS="suppressions=$(pwd)/../test/tsan.supp" ;
+          make check ;
+        elif [ "$BUILD_TYPE" = "msan" ]; then
+          # TASK-087: msan coverage is deliberately scoped to the
+          # backend-free UNIT tests. curl (linked into every integ
+          # round-trip via test/integ/curl_helpers.hpp) cannot be
+          # practically instrumented, so its uninstrumented output would
+          # surface as false use-of-uninitialized-value reports. libc++ and
+          # libmicrohttpd ARE instrumented (see the steps above), so the
+          # unit subset — pure libhttpserver logic plus instrumented-MHD
+          # type inspection — runs clean without wildcard suppressions.
+          export LD_LIBRARY_PATH="${{ github.workspace }}/libcxx-msan/lib:${LD_LIBRARY_PATH:-}" ;
+          export MSAN_OPTIONS="abort_on_error=1" ;
+          # Auto-wire narrow suppressions only if triage produced the file.
+          # test/msan.supp is intentionally ABSENT until a real finding
+          # forces a narrow use-of-uninitialized-value:<symbol> entry with
+          # an upstream-issue comment (never a wildcard over libhttpserver).
+          if [ -f ../test/msan.supp ]; then
+            export MSAN_OPTIONS="${MSAN_OPTIONS}:suppressions=$(pwd)/../test/msan.supp" ;
+          fi
+          # Derive the unit/ subset from the test Makefile so newly-added
+          # unit tests are covered automatically, then further exclude any
+          # unit/-sourced target whose test file transitively links curl
+          # (e.g. via curl_easy_perform() round-trips) -- curl cannot
+          # practically be msan-instrumented, so its uninstrumented output
+          # would surface as false use-of-uninitialized-value reports.
+          # NOTE: this only matches a target's _SOURCES entry when it is
+          # written on a single line (`<target>_SOURCES = unit/<file>.cpp`);
+          # a future multi-line _SOURCES assignment, or a unit/ target whose
+          # first source is not itself under unit/, would be silently
+          # dropped without failing CI (the empty-set guard below only
+          # catches total loss, not partial narrowing).
+          MSAN_TESTS="" ;
+          while IFS= read -r src_line; do
+            target="$(printf '%s' "$src_line" | sed -E 's/_SOURCES.*//')" ;
+            source_rel="$(printf '%s' "$src_line" | sed -E 's/^[A-Za-z0-9_]+_SOURCES[[:space:]]*=[[:space:]]*//')" ;
+            if grep -q 'curl/curl.h' "../test/${source_rel}" 2>/dev/null; then
+              echo "msan: excluding ${target} (${source_rel} includes curl/curl.h)" ;
+              continue ;
+            fi
+            MSAN_TESTS="${MSAN_TESTS}${target} " ;
+          done <<< "$(grep -E '^[A-Za-z0-9_]+_SOURCES[[:space:]]*=[[:space:]]*unit/' ../test/Makefile.am)" ;
+          if [ -z "$MSAN_TESTS" ]; then echo "ERROR: msan: derived empty test set — grep pattern found no unit/ targets in test/Makefile.am" >&2; exit 1; fi ;
+          make check TESTS="$MSAN_TESTS" ;
+        else
+          make check ;
+        fi
+      # TASK-037: flag-invariance-{on,off} are compile/link-only gates, so
+      # skip the full `make check` (which spins up real servers and would
+      # crash on the OFF lane for the BAUTH/DAUTH/WS unit tests anyway).
+      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' && matrix.build-type != 'flag-invariance-on' && matrix.build-type != 'flag-invariance-off' }}
+
+    - name: Run route_table_concurrency under TSan (TASK-092)
+      # TASK-092: deliberate, time-boxed multi-iteration run of the
+      # DR-008 lock-order stress binary on the tsan lane. `make check`
+      # (above) already runs it once; this loops it RTC_ITERATIONS times
+      # so the tsan lane reliably hits the typical regression window.
+      # Reuses the same TSAN_OPTIONS suppression file as "Run tests" to
+      # mask the benign libstdc++ std::ctype narrow-cache race; any
+      # libhttpserver-internal race stays fatal.
+      timeout-minutes: 5
+      run: |
+        cd build ;
+        export TSAN_OPTIONS="suppressions=$(pwd)/../test/tsan.supp" ;
+        make -C test check-route-table-concurrency ;
+      if: ${{ matrix.build-type == 'tsan' }}
+
+    - name: Run stop()-from-handler deadlock contract (TASK-092)
+      # TASK-092: the DR-008 negative case — stop() from a handler thread
+      # makes libmicrohttpd self-join and abort. Gated behind
+      # HTTPSERVER_RUN_STOP_FROM_HANDLER=1 (set by check-stop-from-handler)
+      # so it is skipped by default in local runs. Runs on exactly one
+      # lane: the baseline Ubuntu gcc / nodebug / dynamic / classic job
+      # (os-type ubuntu excludes the identically-keyed Windows classic
+      # lanes). The documented failure mode is a hang -> timeout-minutes
+      # is the safety net; a clean zero-exit child would be a regression.
+      timeout-minutes: 3
+      run: |
+        set -o pipefail ;
+        cd build ;
+        make -C test check-stop-from-handler 2>&1 | tee test/stop_from_handler.log ;
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.c-compiler == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
+
+    - name: Verify stop()-from-handler contract fired (TASK-092)
+      # TASK-092: guards against Sub-test B
+      # (stop_from_handler_deadlocks_as_documented) silently reporting
+      # [SKIP] instead of exercising the DR-008 deadlock contract -- mirrors
+      # the "Verify [SKIP] markers fire on tls-no-cli lane (TASK-076)"
+      # grep-the-log pattern.
+      run: |
+        set -euo pipefail
+        cd build
+        LOG=test/stop_from_handler.log
+        if [ ! -f "$LOG" ]; then
+            echo "ERROR: $LOG missing — check-stop-from-handler did not run" >&2
+            exit 1
+        fi
+        if grep -q '^\[SKIP\] stop_from_handler_deadlocks_as_documented' "$LOG"; then
+            echo "ERROR: stop_from_handler_deadlocks_as_documented reported [SKIP] instead of exercising the deadlock contract" >&2
+            cat "$LOG"
+            exit 1
+        fi
+        if ! grep -q '^\[OK\] stop_from_handler' "$LOG"; then
+            echo "ERROR: expected an '[OK] stop_from_handler' marker in $LOG; none found" >&2
+            cat "$LOG"
+            exit 1
+        fi
+        echo "PASS — stop_from_handler_deadlocks_as_documented exercised the DR-008 deadlock contract"
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.c-compiler == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
+
+    - name: Fetch master ref for parallel-install
+      # TASK-089: the default checkout is shallow (fetch-depth: 2), so the v1
+      # ref is absent on the runner and check-parallel-install would SKIP
+      # (now fatal). Fetch just the master tip so the gate has a real ref to
+      # build v1 from. A single-branch depth-1 fetch keeps this cheap.
+      run: |
+        git fetch --no-tags --depth=1 origin +refs/heads/master:refs/remotes/origin/master
+      if: ${{ matrix.parallel-install == 'check' }}
+
+    - name: Run parallel-install gate
+      # TASK-089: the TASK-044 parallel-install acceptance gate, now LIVE in
+      # per-PR CI on this single baseline Linux gcc/libstdc++ lane. Builds v1
+      # (master, via a temporary git worktree) alongside the just-tested v2
+      # tree and asserts both SONAMEd shared libraries coexist in one DESTDIR.
+      # The five environment-quirk paths emit SKIP and FAIL the job — the
+      # authorization escape hatch is deliberately NOT exported here, so any
+      # SKIP goes red rather than masquerading as a pass.
+      run: |
+        cd build ;
+        MASTER_REF=origin/master make check-parallel-install ;
+      if: ${{ matrix.parallel-install == 'check' }}
+
+    - name: Run header-hygiene check
+      # TASK-007: dedicated public-header hygiene gate. Runs the
+      # preprocessor-grep target (Layer 2) against a staged install and
+      # reports any forbidden backend headers reaching <httpserver.hpp>.
+      # HEADER_HYGIENE_STRICT defaults to "yes" (set at TASK-020 close);
+      # any leak of forbidden backend headers through the umbrella fails CI.
+      run: |
+        cd build
+        make check-hygiene
+      if: ${{ matrix.build-type == 'header-hygiene' }}
+
+    - name: Verify [SKIP] markers fire on tls-no-cli lane (TASK-076)
+      # The five `psk_connection_*` tests in ws_start_stop.cpp gate on
+      # has_gnutls_cli(); since this lane installs libgnutls28-dev WITHOUT
+      # gnutls-bin, the gate must fire. The runner's stdout must contain
+      # at least 5 [SKIP] markers AND zero [CHECK FAILURE] / [ASSERT
+      # FAILURE] markers attributable to a psk_connection_* test. The
+      # ws_start_stop binary log is at build/test/ws_start_stop.log
+      # (Automake's per-test capture).
+      run: |
+        set -euo pipefail
+        cd build
+        LOG=test/ws_start_stop.log
+        if [ ! -f "$LOG" ]; then
+            echo "ERROR: $LOG missing — ws_start_stop did not run" >&2
+            exit 1
+        fi
+        SKIP_COUNT=$(grep -c '^\[SKIP\].*psk_connection' "$LOG" || true)
+        echo "Found $SKIP_COUNT [SKIP] markers attributable to gnutls-cli"
+        if [ "$SKIP_COUNT" -lt 5 ]; then
+            echo "ERROR: expected >=5 [SKIP] markers in $LOG; got $SKIP_COUNT" >&2
+            cat "$LOG"
+            exit 1
+        fi
+        if grep -E '\[(CHECK|ASSERT) FAILURE\].*psk_connection' "$LOG"; then
+            echo "ERROR: a psk_connection_* test reported FAILURE in tls-no-cli lane" >&2
+            exit 1
+        fi
+      if: ${{ matrix.build-type == 'tls-no-cli' }}
+
+    - name: Verify TLS blocks exercised when gnutls-cli is present (TASK-076)
+      # Canary invariant on a representative healthy gnutls-bin-installed
+      # lane: the psk_connection_* tests must NOT report [SKIP]. If they
+      # do, gnutls-cli detection regressed. Runs on the classic
+      # ubuntu/gcc/nodebug/dynamic baseline only.
+      run: |
+        set -euo pipefail
+        cd build
+        LOG=test/ws_start_stop.log
+        if [ ! -f "$LOG" ]; then
+            echo "ERROR: $LOG missing — ws_start_stop did not run" >&2
+            exit 1
+        fi
+        if grep -E '^\[SKIP\].*psk_connection' "$LOG"; then
+            echo "ERROR: psk_connection_* skipped on a lane that has gnutls-bin" >&2
+            cat "$LOG"
+            exit 1
+        fi
+        echo "PASS — no psk_connection_* SKIPs on the with-gnutls baseline lane"
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.compiler-family == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
 
     - name: Print tests results
       shell: bash
       run: |
         cd build ;
         cat test/test-suite.log ;
-      if: ${{ failure() && matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' }}
+      if: ${{ failure() && matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
+
+    - name: Verify Windows smoke test ran (TASK-077)
+      # TASK-077: assert the `ws_start_stop_suite::windows_smoke` test is
+      # actually compiled and executed on the native MinGW64 lane so the basic
+      # daemon-start-accept-one-GET path is observed end to end on Windows.
+      # Without this, a future build-flag tweak that inadvertently turns off the
+      # `#ifdef _WINDOWS` branch would silently erase the Windows round-trip
+      # coverage. Restricted to MINGW64: windows_smoke is gated on _WINDOWS
+      # (defined(_WIN32) && !defined(__CYGWIN__)) and does native-Windows setup
+      # (winsock2 / _WIN32_WINNT), so it is deliberately NOT built on the MSYS
+      # (Cygwin/POSIX) lane where _WIN32 is undefined.
+      shell: bash
+      run: |
+        cd build
+        if [ ! -f test/ws_start_stop.log ]; then
+          echo "ERROR: test/ws_start_stop.log is missing — windows_smoke could not be verified" >&2
+          exit 1
+        fi
+        if ! grep -E "windows_smoke" test/ws_start_stop.log; then
+          echo "ERROR: windows_smoke test did not appear in test/ws_start_stop.log" >&2
+          exit 1
+        fi
+      if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
 
     - name: Run Valgrind checks
+      timeout-minutes: 90
       run: |
         cd build ;
-        make check-valgrind ;
-      if: ${{ matrix.build-type == 'valgrind' }}
+        TOOL="${BUILD_TYPE#valgrind-}" ;
+        make "check-valgrind-${TOOL}" ;
+      if: ${{ startsWith(matrix.build-type, 'valgrind-') }}
 
-    - name: Print Valgrind memcheck results
+    - name: Print Valgrind results
       shell: bash
       run: |
         cd build ;
-        if [ -f test/test-suite-memcheck.log ]; then
-          cat test/test-suite-memcheck.log ;
-        fi
-      if: ${{ always() && matrix.build-type == 'valgrind' }}
+        # TASK-088: surface memcheck + helgrind + drd logs. Without the
+        # helgrind/drd logs, race-detector failures would be invisible in the
+        # CI output, making finding-triage on the Linux lane blind.
+        for log in test-suite-memcheck.log test-suite-helgrind.log test-suite-drd.log; do
+          if [ -f "test/$log" ]; then
+            echo "===== test/$log =====" ;
+            cat "test/$log" ;
+          else
+            echo "test/$log not produced by this lane" ;
+          fi
+        done
+      if: ${{ always() && startsWith(matrix.build-type, 'valgrind-') }}
 
     - name: Run cppcheck
       run: |
         cd src/ ;
         cppcheck --error-exitcode=1 . ;
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.compiler-family != 'arm-cross' }}
+      # TASK-037: flag-invariance lanes are minimal gates -- skip cppcheck.
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'flag-invariance-on' && matrix.build-type != 'flag-invariance-off' }}
 
     - name: Run performance tests (select)
       run: |
@@ -746,9 +1456,16 @@ jobs:
       if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac  # v5.5.5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: build/coverage.xml
-        fail_ci_if_error: false
+        # TASK-090: hard-fail CI on a Codecov UPLOAD error (network / auth /
+        # tokenization / malformed report). Coverage integrity is a
+        # supply-chain + observability signal; a silently-dropped upload used
+        # to mask that the coverage number was stale or missing entirely.
+        # This is distinct from a coverage-PERCENTAGE drop, which is enforced
+        # separately by Codecov's own project/patch status checks driven by
+        # codecov.yml — not by this upload step.
+        fail_ci_if_error: true
       if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}

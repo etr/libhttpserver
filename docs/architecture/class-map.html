@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+</head>
+<body>
+<title>libhttpserver v2 — class & filesystem map</title>
+<style>
+  :root {
+    --bg: #eaeef3; --surface: #ffffff; --surface-2: #f5f7fa; --inset: #eef2f7;
+    --border: #d3dae4; --border-strong: #b9c3d1;
+    --text: #182031; --text-dim: #566072; --text-faint: #8b94a5;
+    --spine: #2f6fb3; --state: #a9742a; --behavior: #1c8478; --adapter: #6a52c2; --domain: #495a76;
+    --shadow: 0 1px 2px rgba(20,30,50,.06), 0 3px 10px rgba(20,30,50,.05);
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --surface: #161c25; --surface-2: #1a212c; --inset: #121821;
+      --border: #29323f; --border-strong: #3a4552;
+      --text: #d9dfe8; --text-dim: #98a3b4; --text-faint: #667081;
+      --spine: #63a9ec; --state: #d6a24d; --behavior: #3cb6a5; --adapter: #9c85ec; --domain: #8ba1c4;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eaeef3; --surface: #ffffff; --surface-2: #f5f7fa; --inset: #eef2f7;
+    --border: #d3dae4; --border-strong: #b9c3d1;
+    --text: #182031; --text-dim: #566072; --text-faint: #8b94a5;
+    --spine: #2f6fb3; --state: #a9742a; --behavior: #1c8478; --adapter: #6a52c2; --domain: #495a76;
+    --shadow: 0 1px 2px rgba(20,30,50,.06), 0 3px 10px rgba(20,30,50,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --surface: #161c25; --surface-2: #1a212c; --inset: #121821;
+    --border: #29323f; --border-strong: #3a4552;
+    --text: #d9dfe8; --text-dim: #98a3b4; --text-faint: #667081;
+    --spine: #63a9ec; --state: #d6a24d; --behavior: #3cb6a5; --adapter: #9c85ec; --domain: #8ba1c4;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.28);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+    line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 72px; }
+
+  /* ---- header ---- */
+  header.top { margin-bottom: 34px; }
+  .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--spine); font-weight: 600; margin: 0 0 10px; }
+  h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.1; margin: 0 0 12px; letter-spacing: -.02em;
+    text-wrap: balance; font-weight: 680; }
+  h1 .mono { font-family: var(--mono); font-weight: 600; }
+  .lede { max-width: 68ch; color: var(--text-dim); font-size: 15.5px; margin: 0; }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  /* ---- legend ---- */
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 22px; padding: 14px 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+  .legend .grp { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .lg { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-dim); }
+  .lg .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .lg .gl { font-family: var(--mono); color: var(--text-faint); font-size: 13px; width: 15px; text-align: center; }
+  .legend .sep { width: 1px; align-self: stretch; background: var(--border); }
+
+  /* ---- sections ---- */
+  section { margin-top: 40px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 4px; }
+  .sec-head h2 { font-size: 19px; margin: 0; letter-spacing: -.01em; font-weight: 640; }
+  .sec-num { font-family: var(--mono); font-size: 12px; color: var(--text-faint); font-weight: 600; }
+  .sec-sub { color: var(--text-dim); font-size: 13.5px; margin: 2px 0 20px; max-width: 74ch; }
+  .sec-sub code { font-family: var(--mono); font-size: 12.5px; background: var(--inset);
+    padding: 1px 5px; border-radius: 4px; color: var(--text); }
+
+  /* ---- containment region (webserver_impl) ---- */
+  .region { border: 1.5px solid var(--border-strong); border-radius: 14px; background: var(--surface-2);
+    padding: 16px; position: relative; box-shadow: var(--shadow); }
+  .region > .region-tag { position: absolute; top: -10px; left: 16px; background: var(--surface);
+    border: 1px solid var(--border-strong); border-left: 3px solid var(--spine);
+    border-radius: 6px; padding: 3px 10px 3px 9px; font-family: var(--mono); font-size: 12px; font-weight: 600;
+    color: var(--text); }
+  .region > .region-tag small { color: var(--text-faint); font-weight: 500; margin-left: 6px; }
+  .facade { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 10px 2px 16px; }
+  .facade .fc { font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); }
+  .facade .fc b { color: var(--text); font-weight: 600; }
+  .flow { color: var(--spine); font-family: var(--mono); }
+
+  .subgrp-label { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11.5px;
+    letter-spacing: .1em; text-transform: uppercase; font-weight: 600; margin: 4px 2px 12px; }
+  .subgrp-label .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .subgrp-label .meta { color: var(--text-faint); letter-spacing: .02em; text-transform: none; font-weight: 500; }
+
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); }
+  .grid.dense { grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); }
+
+  /* ---- class card ---- */
+  .card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--role, var(--domain));
+    border-radius: 9px; padding: 12px 13px; display: flex; flex-direction: column; gap: 8px;
+    box-shadow: var(--shadow); transition: transform .12s ease, border-color .12s ease; }
+  .card:hover { transform: translateY(-2px); border-left-color: var(--role, var(--domain)); }
+  .card .cname { font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--text);
+    display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .card .cname .tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+    font-weight: 700; padding: 1.5px 5px; border-radius: 4px; color: var(--role, var(--domain));
+    background: color-mix(in srgb, var(--role, var(--domain)) 13%, transparent); }
+  .card .desc { font-size: 12px; color: var(--text-dim); margin: -2px 0 0; line-height: 1.4; }
+  .files { font-family: var(--mono); font-size: 11px; color: var(--text-dim); display: flex; flex-direction: column; gap: 2px; }
+  .files .f { display: flex; gap: 7px; }
+  .files .k { color: var(--text-faint); width: 26px; flex: none; text-align: right; }
+  .files .p { word-break: break-all; }
+  .files .p .hl { color: var(--text); }
+  .rels { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { font-family: var(--mono); font-size: 10.5px; padding: 2px 6px; border-radius: 5px; white-space: nowrap;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim); display: inline-flex; gap: 4px; }
+  .chip .g { color: var(--text-faint); }
+  .chip.owns { border-color: color-mix(in srgb, var(--spine) 40%, var(--border)); }
+  .chip.ref-state { color: var(--state); border-color: color-mix(in srgb, var(--state) 34%, var(--border)); }
+  .chip.ref-beh { color: var(--behavior); border-color: color-mix(in srgb, var(--behavior) 34%, var(--border)); }
+  .chip.cfg { color: var(--text-faint); border-style: dashed; }
+
+  /* role colors */
+  .r-spine { --role: var(--spine); }
+  .r-state { --role: var(--state); }
+  .r-beh { --role: var(--behavior); }
+  .r-adapter { --role: var(--adapter); }
+  .r-domain { --role: var(--domain); }
+
+  /* ---- adapter facet panel ---- */
+  .facet { margin-top: 16px; border: 1px dashed color-mix(in srgb, var(--adapter) 45%, var(--border));
+    border-radius: 10px; background: color-mix(in srgb, var(--adapter) 6%, var(--surface)); padding: 13px 14px; }
+  .facet h3 { margin: 0 0 3px; font-size: 13.5px; color: var(--adapter); font-family: var(--mono); font-weight: 600; }
+  .facet p { margin: 0 0 10px; font-size: 12px; color: var(--text-dim); max-width: 80ch; }
+  .facet p code { font-family: var(--mono); background: var(--inset); padding: 0 4px; border-radius: 3px; }
+  .facet .tramps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .facet .tramps .chip { color: var(--adapter); border-color: color-mix(in srgb, var(--adapter) 32%, var(--border)); background: var(--surface); }
+  .facet .tu { font-family: var(--mono); font-size: 11px; color: var(--text-faint); margin-top: 9px; }
+
+  /* ---- inheritance tree ---- */
+  .tree { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--role, var(--domain));
+    border-radius: 9px; padding: 14px 16px; box-shadow: var(--shadow); }
+  .tree .root { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+  .tree .root .tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+    font-weight: 700; padding: 1.5px 5px; border-radius: 4px; margin-left: 7px;
+    color: var(--role, var(--domain)); background: color-mix(in srgb, var(--role, var(--domain)) 13%, transparent); }
+  .tree .files { margin: 6px 0 12px; }
+  .tree .kids { display: grid; gap: 7px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+  .leaf { font-family: var(--mono); font-size: 12px; padding: 7px 10px; border-radius: 7px; background: var(--surface-2);
+    border: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+  .leaf .ln { display: flex; align-items: center; gap: 6px; }
+  .leaf .ln::before { content: "\21B3"; color: var(--role, var(--domain)); opacity: .8; }
+  .leaf .lh { color: var(--text-faint); font-size: 10.5px; }
+
+  /* ---- compact list ---- */
+  .rows { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+  .row { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--role, var(--domain));
+    border-radius: 8px; padding: 9px 12px; display: flex; flex-direction: column; gap: 3px; }
+  .row .rn { font-family: var(--mono); font-size: 12.5px; font-weight: 600; display: flex; gap: 7px; align-items: baseline; flex-wrap: wrap; }
+  .row .rn .ext { font-weight: 500; color: var(--text-faint); font-size: 11px; }
+  .row .rf { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); word-break: break-all; }
+  .row .rf .k { color: var(--text-faint); }
+
+  footer { margin-top: 46px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 12.5px; }
+  footer code { font-family: var(--mono); background: var(--inset); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+  footer .note { max-width: 82ch; }
+  footer strong { color: var(--text); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="kicker">libhttpserver v2.0 · architecture reference</p>
+    <h1>Classes, relationships &amp; filesystem — <span class="mono">webserver</span> and its collaborators</h1>
+    <p class="lede">Post-<b>DR-014</b>: <span class="mono">webserver</span> is a thin façade over <span class="mono">webserver_impl</span>, which is a <b>pure composition root</b> holding <b>5 state collaborators</b> (own mutex + data) and <b>7 behavior services</b> (stateless, constructor-injected by <span class="mono">const&amp;</span>), plus a <b>static MHD adapter facet</b>. Colour encodes the role; every card carries its header and translation units. <span class="mono" style="color:var(--text-faint)">Paths are relative to <b style="color:var(--text-dim)">src/</b>.</span></p>
+
+    <div class="legend" aria-label="legend">
+      <div class="grp">
+        <span class="lg"><span class="sw" style="background:var(--spine)"></span>composition root</span>
+        <span class="lg"><span class="sw" style="background:var(--state)"></span>state collaborator</span>
+        <span class="lg"><span class="sw" style="background:var(--behavior)"></span>behavior service</span>
+        <span class="lg"><span class="sw" style="background:var(--adapter)"></span>MHD adapter facet</span>
+        <span class="lg"><span class="sw" style="background:var(--domain)"></span>domain / value type</span>
+      </div>
+      <div class="sep" aria-hidden="true"></div>
+      <div class="grp">
+        <span class="lg"><span class="gl">◆</span>owns (value / unique_ptr)</span>
+        <span class="lg"><span class="gl">▸</span>holds ref (injected)</span>
+        <span class="lg"><span class="gl">↳</span>inherits</span>
+        <span class="lg"><span class="gl">⌁</span>shared/weak ptr</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ 1. COMPOSITION BACKBONE ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Composition backbone</h2></div>
+    <p class="sec-sub">Ownership is strictly linear: <code>create_webserver</code> builds a <code>webserver</code>, which owns one <code>webserver_impl</code> (<code>unique_ptr</code>), which holds all twelve collaborators <b>by value</b>. Services below reference the state collaborators and each other by <code>const&amp;</code>; construction order (state → leaf services → dispatcher → pipeline) is deliberate and enforced by <code>-Wreorder</code>. Every service also holds <code>const webserver_config&amp;</code> (reached via <code>parent-&gt;config</code>) — shown as a dashed <span class="mono">cfg</span> chip.</p>
+
+    <div class="facade">
+      <span class="fc"><b>create_webserver</b> <span class="flow">──build──▸</span> <b>webserver</b></span>
+      <span class="fc" style="color:var(--text-faint)">·</span>
+      <span class="fc"><b>webserver</b> <span class="flow">◆ owns ▸</span> <b>webserver_impl</b> <span style="color:var(--text-faint)">(unique_ptr)</span> · <span class="flow">◆</span> webserver_config <span style="color:var(--text-faint)">(value)</span></span>
+    </div>
+
+    <div class="region">
+      <span class="region-tag">webserver_impl <small>composition root + MHD adapter · httpserver/detail/webserver_impl.hpp</small></span>
+
+      <div style="margin-top:14px">
+        <div class="subgrp-label"><span class="dot" style="background:var(--state)"></span>State collaborators <span class="meta">— each owns its own mutex(es) + data; no lock nests with another</span></div>
+        <div class="grid">
+          <div class="card r-state">
+            <div class="cname">daemon_lifecycle</div>
+            <p class="desc">MHD_Daemon handle, start/stop threading (RAII pthread), option-array + start-flag builders.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">daemon_lifecycle.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">daemon_lifecycle.cpp</span></span></span></div>
+            <div class="rels"><span class="chip"><span class="g">▸back</span>webserver_impl*</span></div>
+          </div>
+          <div class="card r-state">
+            <div class="cname">route_table</div>
+            <p class="desc">3-tier route store (exact map · radix trie · regex) + LRU cache, behind <span class="mono" style="font-size:10px">route_table_mutex_</span>.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">route_table.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">route_table.cpp</span></span></span></div>
+            <div class="rels"><span class="chip owns"><span class="g">◆</span>route_entry</span><span class="chip owns"><span class="g">◆</span>segment_trie</span><span class="chip owns"><span class="g">◆</span>route_cache</span></div>
+          </div>
+          <div class="card r-state">
+            <div class="cname">hook_bus</div>
+            <p class="desc">Eleven server-wide phase vectors + alias slots, behind one registration mutex.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">hook_bus.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">hook_bus.cpp</span></span></span></div>
+          </div>
+          <div class="card r-state">
+            <div class="cname">ip_access_control</div>
+            <p class="desc">Deny/allow IP sets + their mutexes; <span class="mono" style="font-size:10px">classify()</span> for the accept policy.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">ip_access_control.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">ip_access_control.cpp</span></span></span></div>
+            <div class="rels"><span class="chip owns"><span class="g">◆</span>ip_representation set</span></div>
+          </div>
+          <div class="card r-state">
+            <div class="cname">ws_registry <span class="tag">HAVE_WEBSOCKET</span></div>
+            <p class="desc">URL → handler map + mutex; hands out shared_ptr copies that survive mid-upgrade unregister.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">ws_registry.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">ws_registry.cpp</span></span></span></div>
+            <div class="rels"><span class="chip"><span class="g">⌁</span>websocket_handler</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:22px">
+        <div class="subgrp-label"><span class="dot" style="background:var(--behavior)"></span>Behavior services <span class="meta">— stateless; hold only const&amp; to state + each other; form a DAG, no back-pointer</span></div>
+        <div class="grid">
+          <div class="card r-beh">
+            <div class="cname">error_pages <span class="tag">leaf</span></div>
+            <p class="desc">Synthesises 404 / 405 / 500 responses. Reads only the config bag + <span class="mono" style="font-size:10px">cc-&gt;request</span>.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">error_pages.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">error_pages.cpp</span></span></span></div>
+            <div class="rels"><span class="chip cfg">cfg</span></div>
+          </div>
+          <div class="card r-beh">
+            <div class="cname">hook_dispatcher</div>
+            <p class="desc">Dispatch-time firing: the eleven <span class="mono" style="font-size:10px">fire_*</span> phases + four gated helpers.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">hook_dispatcher.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">hook_dispatcher.cpp</span></span></span></div>
+            <div class="rels"><span class="chip ref-state"><span class="g">▸</span>hook_bus</span><span class="chip cfg">cfg</span></div>
+          </div>
+          <div class="card r-beh">
+            <div class="cname">response_materializer</div>
+            <p class="desc">http_response → MHD_Response: materialize, decorate, kind-dispatched queue, response_sent + fallback chain.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">response_materializer.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">response_materializer.cpp</span></span></span></div>
+            <div class="rels"><span class="chip ref-beh"><span class="g">▸</span>error_pages</span><span class="chip ref-beh"><span class="g">▸</span>hook_dispatcher</span><span class="chip cfg">cfg</span></div>
+          </div>
+          <div class="card r-beh">
+            <div class="cname">upload_pipeline</div>
+            <p class="desc">Multipart / file-upload: post-iterator handling, upload streams, form args.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">upload_pipeline.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">upload_pipeline.cpp</span></span></span></div>
+            <div class="rels"><span class="chip cfg">cfg</span></div>
+          </div>
+          <div class="card r-beh">
+            <div class="cname">websocket_upgrader <span class="tag">HAVE_WEBSOCKET</span></div>
+            <p class="desc">RFC-6455 handshake + per-connection frame receive loop.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">websocket_upgrader.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">websocket_upgrader.cpp</span></span></span></div>
+            <div class="rels"><span class="chip ref-state"><span class="g">▸</span>ws_registry</span></div>
+          </div>
+          <div class="card r-beh">
+            <div class="cname">request_dispatcher</div>
+            <p class="desc">Routing + auth + handler invocation: finalize_answer / resolve_resource / dispatch_resource_handler.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">request_dispatcher.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">request_dispatcher.cpp</span></span></span></div>
+            <div class="rels"><span class="chip ref-state"><span class="g">▸</span>route_table</span><span class="chip ref-beh"><span class="g">▸</span>hook_dispatcher</span><span class="chip ref-beh"><span class="g">▸</span>error_pages</span><span class="chip ref-beh"><span class="g">▸</span>response_materializer</span><span class="chip ref-beh"><span class="g">▸</span>ws_upgrader</span><span class="chip cfg">cfg</span></div>
+          </div>
+          <div class="card r-beh">
+            <div class="cname">request_pipeline</div>
+            <p class="desc">MHD re-entrant body-accumulation state machine: first_step / second_step / complete_request.</p>
+            <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">request_pipeline.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">request_pipeline.cpp</span></span></span></div>
+            <div class="rels"><span class="chip ref-beh"><span class="g">▸</span>hook_dispatcher</span><span class="chip ref-beh"><span class="g">▸</span>request_dispatcher</span><span class="chip cfg">cfg</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="facet">
+        <h3>▪ MHD adapter facet — static C-ABI trampolines on webserver_impl (not an 8th service)</h3>
+        <p>libmicrohttpd calls these by <b>function-pointer address</b>. Each casts <code>cls → webserver → impl_</code>, marshals the C ABI (sockaddr → peer_address, <code>con_cls</code>/<code>socket_context</code> lifetime), and delegates all behavior to a service. They must live on the impl to reach every collaborator — the trampoline <em>is</em> the adapter.</p>
+        <div class="tramps">
+          <span class="chip">answer_to_connection <span class="g">▸pipeline_</span></span>
+          <span class="chip">connection_notify <span class="g">▸hooks_dispatch_</span></span>
+          <span class="chip">policy_callback <span class="g">▸acl_</span></span>
+          <span class="chip">request_completed <span class="g">▸hooks_dispatch_</span></span>
+          <span class="chip">post_iterator <span class="g">▸upload_</span></span>
+          <span class="chip">uri_log</span>
+          <span class="chip">error_log</span>
+          <span class="chip">unescaper_func</span>
+          <span class="chip">psk / sni_cert <span class="g">GnuTLS</span></span>
+        </div>
+        <p class="tu">All trampolines live in one adapter TU: detail/webserver_callbacks.cpp</p>
+      </div>
+    </div>
+
+    <div style="margin-top:26px">
+      <div class="subgrp-label"><span class="dot" style="background:var(--spine)"></span>Translation-unit map <span class="meta">— <b>one-class-per-file shape</b>: <b>webserver</b> = a single façade TU (webserver.cpp, <b style="color:var(--behavior)">552 SLOC</b>); <b>webserver_impl</b> = 2 TUs (composition root + MHD adapter, 108 + 381 SLOC). Both webserver.cpp and webserver_callbacks.cpp sit under the <b style="color:var(--adapter)">600-SLOC façade/adapter carve-out</b> (other files: 500) — <b style="color:var(--behavior)">check-file-size gate PASSES</b>. No file spans both classes. Headers: <span class="mono">webserver.hpp</span> (+ fragments <span class="mono">webserver_routes / runtime / websocket / hooks.hpp</span>) · <span class="mono">detail/webserver_impl.hpp</span> (+ <span class="mono">webserver_impl_dispatch.hpp</span>)</span></div>
+      <div class="rows">
+        <div class="row r-spine"><div class="rn">webserver.cpp <span class="ext" style="color:var(--spine)">webserver — entire public API</span></div><div class="rf">ctor/dtor · features · lifecycle (start/stop/run/quiesce/get_fdset · allow/deny/remove_ip) · register/unregister_* · on_*/route · register/unregister_ws_resource · add_hook · install_* v1 alias hooks (auth/404/405/log_access) · stop_and_wait &nbsp;<b style="color:var(--behavior)">552 SLOC — within the 600 façade carve-out ✓</b></div></div>
+
+        <div class="row r-spine"><div class="rn">detail/webserver_impl.cpp <span class="ext" style="color:var(--spine)">webserver_impl · composition root</span></div><div class="rf">webserver_impl ctor/dtor — collaborator + service wiring (the DR-014 DAG) · serialize_allow_methods · prepare_or_create_lambda_shim / commit_handlers_to_shim (on_*/route shim glue)</div></div>
+        <div class="row r-adapter"><div class="rn">detail/webserver_callbacks.cpp <span class="ext" style="color:var(--adapter)">webserver_impl · MHD adapter</span></div><div class="rf">all C-ABI trampolines — answer_to_connection · connection_notify · policy_callback · request_completed · post_iterator · uri_log · error_log · unescaper_func · psk / sni_cert (GnuTLS) + resolve_method_callback · should_skip_auth · normalize_path · peer_address adapter &nbsp;<span style="color:var(--text-faint)">(381 SLOC)</span></div></div>
+
+        <div class="row r-domain"><div class="rn">detail/webserver_body_pipeline.cpp <span class="ext" style="color:var(--text-faint)">free fns</span></div><div class="rf">debug_dump_request_body_opted_in · maybe_warn_debug_dump_request_body</div></div>
+        <div class="row r-domain"><div class="rn">detail/dispatch_util.cpp <span class="ext" style="color:var(--text-faint)">free fns</span></div><div class="rf">detail::log_dispatch_error(const webserver_config&amp;, string_view) — hpp: httpserver/detail/dispatch_util.hpp</div></div>
+        <div class="row r-domain"><div class="rn">string_utilities.cpp <span class="ext" style="color:var(--text-faint)">free fns</span></div><div class="rf">is_valid_hex · hex_char_to_val · … — hpp: httpserver/string_utilities.hpp</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. DOMAIN LAYER ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Request · response · resource layer</h2></div>
+    <p class="sec-sub">The per-request objects the services operate on. <code>connection_context</code> is the dispatch-state blackboard threaded through the pipeline via MHD's <code>con_cls</code> (allocated in <code>uri_log</code>, freed in <code>request_completed</code>); the arena that backs each <code>http_request</code> lives on <code>connection_state</code> (MHD's <code>socket_context</code>, one per keep-alive connection).</p>
+    <div class="grid">
+      <div class="card r-domain">
+        <div class="cname">http_request</div>
+        <p class="desc">Per-request inputs, PIMPL over an arena-allocated impl (custom deleter).</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/<span class="hl">http_request.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p"><span class="hl">http_request.cpp</span> · <span class="hl">http_request_auth.cpp</span></span></span></div>
+        <div class="rels"><span class="chip owns"><span class="g">◆</span>http_request_impl</span></div>
+      </div>
+      <div class="card r-domain">
+        <div class="cname">http_request_impl <span class="tag">PIMPL</span></div>
+        <p class="desc">~40 members, 5 concerns, one arena-allocated unit (not decomposed — see §4.2).</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">http_request_impl.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">http_request_impl.cpp</span> · <span class="hl">…_args.cpp</span> · <span class="hl">…_tls.cpp</span></span></span></div>
+        <div class="rels"><span class="chip owns"><span class="g">◆</span>file_info</span><span class="chip owns"><span class="g">◆</span>cookie</span></div>
+      </div>
+      <div class="card r-domain">
+        <div class="cname">http_response <span class="tag">final</span></div>
+        <p class="desc">Sealed value type; owns one polymorphic body in a 64-byte SBO buffer. Built only via factories.</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/<span class="hl">http_response.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p"><span class="hl">http_response.cpp</span> · <span class="hl">http_response_factories.cpp</span></span></span></div>
+        <div class="rels"><span class="chip owns"><span class="g">◆</span>response_body (SBO)</span><span class="chip owns"><span class="g">◆</span>cookie</span></div>
+      </div>
+      <div class="card r-domain">
+        <div class="cname">http_resource</div>
+        <p class="desc">User-subclassable handler base; lazy per-resource hook table + allowed-method cache.</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/<span class="hl">http_resource.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p"><span class="hl">http_resource.cpp</span></span></span></div>
+        <div class="rels"><span class="chip"><span class="g">⌁</span>resource_hook_table</span><span class="chip"><span class="g">◆</span>method_set</span></div>
+      </div>
+      <div class="card r-domain">
+        <div class="cname">lambda_resource <span class="tag">final</span></div>
+        <p class="desc">↳ http_resource. Header-only shim backing on_*/route lambda registration.</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">lambda_resource.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p" style="color:var(--text-faint)">— (inline)</span></span></div>
+        <div class="rels"><span class="chip"><span class="g">↳</span>http_resource</span></div>
+      </div>
+      <div class="card r-domain">
+        <div class="cname">connection_context <span class="tag">struct</span></div>
+        <p class="desc">Per-request dispatch blackboard (con_cls). Carries request, response, resolved handler + ptr-to-member callback, upload stream, post-processor.</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">connection_context.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p" style="color:var(--text-faint)">— (header-only)</span></span></div>
+        <div class="rels"><span class="chip owns"><span class="g">◆</span>http_request</span><span class="chip owns"><span class="g">◆</span>http_response?</span><span class="chip"><span class="g">⌁</span>http_resource</span><span class="chip"><span class="g">▸</span>webserver*</span></div>
+      </div>
+      <div class="card r-domain">
+        <div class="cname">connection_state <span class="tag">struct</span></div>
+        <p class="desc">Per-MHD-connection PMR arena + byte buffer; reset (release + secure-zero) between keep-alive requests.</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">connection_state.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p" style="color:var(--text-faint)">— (inline)</span></span></div>
+      </div>
+      <div class="card r-domain">
+        <div class="cname">http_endpoint</div>
+        <p class="desc">Parsed registration path (segments, params, compiled regex).</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">http_endpoint.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">http_endpoint.cpp</span></span></span></div>
+      </div>
+      <div class="card r-domain">
+        <div class="cname">file_info</div>
+        <p class="desc">Uploaded-file descriptor (size, path, content-type).</p>
+        <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/<span class="hl">file_info.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p"><span class="hl">file_info.cpp</span></span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. BODY HIERARCHY ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Response body hierarchy</h2></div>
+    <p class="sec-sub">The only real inheritance tree in the library. <code>http_response</code> owns exactly one <code>response_body</code> subclass, stored inline in its SBO buffer (each concrete body is ≤ 64 bytes, noexcept-move via <code>move_into</code>). All declared in one header, defined in one TU.</p>
+    <div class="tree r-domain">
+      <div class="root">response_body <span class="tag">abstract</span></div>
+      <div class="files"><span class="f"><span class="k">hpp</span><span class="p">httpserver/detail/<span class="hl">body.hpp</span></span></span><span class="f"><span class="k">cpp</span><span class="p">detail/<span class="hl">body.cpp</span></span></span></div>
+      <div class="kids">
+        <div class="leaf"><span class="ln">empty_response_body</span><span class="lh">int flags</span></div>
+        <div class="leaf"><span class="ln">string_response_body</span><span class="lh">std::string</span></div>
+        <div class="leaf"><span class="ln">file_response_body</span><span class="lh">path / fd / size</span></div>
+        <div class="leaf"><span class="ln">iovec_response_body</span><span class="lh">vector&lt;iovec_entry&gt;</span></div>
+        <div class="leaf"><span class="ln">pipe_response_body</span><span class="lh">fd</span></div>
+        <div class="leaf"><span class="ln">deferred_response_body</span><span class="lh">producer fn + trampoline</span></div>
+        <div class="leaf"><span class="ln">digest_challenge_response_body</span><span class="lh">unique_ptr&lt;params&gt;</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. ROUTE INTERNALS ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Route-table internals</h2></div>
+    <p class="sec-sub">Value types owned by <code>route_table</code> — the three tiers plus the LRU cache. Mostly header-only templates and PODs.</p>
+    <div class="rows">
+      <div class="row r-state"><div class="rn">route_entry <span class="ext">struct · ◆ method_set · ⌁ shared_ptr&lt;http_resource&gt;</span></div><div class="rf"><span class="k">hpp</span> httpserver/detail/route_entry.hpp</div></div>
+      <div class="row r-state"><div class="rn">segment_trie&lt;T&gt; <span class="ext">+ node / match · header-only template</span></div><div class="rf"><span class="k">hpp</span> httpserver/detail/segment_trie.hpp</div></div>
+      <div class="row r-state"><div class="rn">route_cache <span class="ext">+ cache_key / cache_value · header-only</span></div><div class="rf"><span class="k">hpp</span> httpserver/detail/route_cache.hpp</div></div>
+      <div class="row r-state"><div class="rn">route_tier_result <span class="ext">struct + helpers</span></div><div class="rf"><span class="k">hpp</span> httpserver/detail/route_tier.hpp <span class="k">·</span> helpers in detail/route_table.cpp</div></div>
+    </div>
+  </section>
+
+  <!-- ============ 5. HOOK SYSTEM ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Hook system</h2></div>
+    <p class="sec-sub"><code>hook_bus</code> (server-wide, §01) and <code>resource_hook_table</code> (per-resource) store the registered callbacks; <code>hook_dispatcher</code> fires them; <code>hook_handle</code> is the RAII receipt that removes them. Context structs are passed to user callbacks by pointer only.</p>
+    <div class="rows">
+      <div class="row r-domain"><div class="rn">hook_handle <span class="ext">move-only · ▸ webserver_impl* · ⌁ weak resource_hook_table</span></div><div class="rf"><span class="k">hpp</span> httpserver/hook_handle.hpp <span class="k">·</span> <span class="k">cpp</span> hook_handle.cpp</div></div>
+      <div class="row r-state"><div class="rn">resource_hook_table <span class="ext">per-resource · 5 phase vectors</span></div><div class="rf"><span class="k">hpp</span> httpserver/detail/resource_hook_table.hpp <span class="k">·</span> <span class="k">cpp</span> resource_hook_table.cpp</div></div>
+      <div class="row r-domain"><div class="rn">hook context structs <span class="ext">accept · request_received · body_chunk · route_resolved · before/after_handler · handler_exception · response_sent · request_completed · connection_open/close · route_descriptor</span></div><div class="rf"><span class="k">hpp</span> httpserver/hook_context.hpp</div></div>
+      <div class="row r-domain"><div class="rn">peer_address <span class="ext">struct POD</span></div><div class="rf"><span class="k">hpp</span> httpserver/hook_context.hpp <span class="k">·</span> <span class="k">cpp</span> peer_address.cpp</div></div>
+      <div class="row r-domain"><div class="rn">hook_action <span class="ext">short-circuit payload · header-only</span></div><div class="rf"><span class="k">hpp</span> httpserver/hook_action.hpp</div></div>
+    </div>
+  </section>
+
+  <!-- ============ 6. VALUE / UTILITY ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>Config, builders, value &amp; utility types</h2></div>
+    <p class="sec-sub">The config bag every service reads, the fluent builders, and the standalone value/utility types.</p>
+    <div class="rows">
+      <div class="row r-spine"><div class="rn">webserver_config <span class="ext">struct · the single config bag (const&amp; into every service)</span></div><div class="rf"><span class="k">hpp</span> httpserver/create_webserver.hpp <span class="k">·</span> <span class="k">cpp</span> create_webserver.cpp</div></div>
+      <div class="row r-spine"><div class="rn">create_webserver <span class="ext">fluent builder · ◆ webserver_config</span></div><div class="rf"><span class="k">hpp</span> httpserver/create_webserver.hpp <span class="k">(+ create_webserver_setters.hpp)</span> <span class="k">·</span> <span class="k">cpp</span> create_webserver.cpp</div></div>
+      <div class="row r-domain"><div class="rn">create_test_request <span class="ext">test-request builder</span></div><div class="rf"><span class="k">hpp</span> httpserver/create_test_request.hpp <span class="k">·</span> <span class="k">cpp</span> create_test_request.cpp</div></div>
+      <div class="row r-domain"><div class="rn">websocket_handler <span class="ext">abstract user base</span></div><div class="rf"><span class="k">hpp</span> httpserver/websocket_handler.hpp <span class="k">·</span> <span class="k">cpp</span> websocket_handler.cpp</div></div>
+      <div class="row r-domain"><div class="rn">websocket_session <span class="ext">live upgraded connection</span></div><div class="rf"><span class="k">hpp</span> httpserver/websocket_handler.hpp <span class="k">·</span> <span class="k">cpp</span> websocket_handler.cpp</div></div>
+      <div class="row r-domain"><div class="rn">ip_representation <span class="ext">struct · octets + mask</span></div><div class="rf"><span class="k">hpp</span> httpserver/ip_representation.hpp <span class="k">·</span> <span class="k">cpp</span> detail/ip_representation.cpp</div></div>
+      <div class="row r-domain"><div class="rn">cookie <span class="ext">final · RFC 6265</span></div><div class="rf"><span class="k">hpp</span> httpserver/cookie.hpp <span class="k">·</span> <span class="k">cpp</span> cookie.cpp</div></div>
+      <div class="row r-domain"><div class="rn">method_set <span class="ext">struct · method bitmask (value, held widely)</span></div><div class="rf"><span class="k">hpp</span> httpserver/http_method.hpp <span class="k">(inline)</span></div></div>
+      <div class="row r-domain"><div class="rn">http_arg_value <span class="ext">multi-value arg view · header-only</span></div><div class="rf"><span class="k">hpp</span> httpserver/http_arg_value.hpp</div></div>
+      <div class="row r-domain"><div class="rn">iovec_entry <span class="ext">POD {base, len}</span></div><div class="rf"><span class="k">hpp</span> httpserver/iovec_entry.hpp</div></div>
+      <div class="row r-domain"><div class="rn">http_utils <span class="ext">static utils + header/arg comparators</span></div><div class="rf"><span class="k">hpp</span> httpserver/http_utils.hpp <span class="k">·</span> <span class="k">cpp</span> http_utils.cpp</div></div>
+      <div class="row r-domain"><div class="rn">feature_unavailable <span class="ext">↳ std::runtime_error</span></div><div class="rf"><span class="k">hpp</span> httpserver/feature_unavailable.hpp</div></div>
+    </div>
+  </section>
+
+  <footer>
+    <p class="note"><strong>Reading the graph.</strong> Solid ownership (<span class="mono">◆</span>) flows one way and top-down: <code>webserver</code> → <code>webserver_impl</code> → collaborators (by value) → their owned value types. Behavior services never own state — they hold <span class="mono">const&amp;</span> (<span class="mono">▸</span>) into the state collaborators and each other, wired once in the <code>webserver_impl</code> constructor, forming an acyclic DAG with <strong>no back-pointer</strong> (the sole exception is <code>daemon_lifecycle</code>, which needs <code>webserver_impl*</code> to read broad config while building the MHD option array). The static MHD trampolines are the only code that touches libmicrohttpd's C ABI. Header convention: public surface under <code>src/httpserver/</code>, internal detail headers under <code>src/httpserver/detail/</code> (never installed), implementations under <code>src/</code> and <code>src/detail/</code>.</p>
+  </footer>
+</div>
+
+
+</body>
+</html>

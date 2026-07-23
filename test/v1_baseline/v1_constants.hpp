@@ -1,0 +1,146 @@
+/*
+     This file is part of libhttpserver
+     Copyright (C) 2011-2019 Sebastiano Merlino
+
+     This library is free software; you can redistribute it and/or
+     modify it under the terms of the GNU Lesser General Public
+     License as published by the Free Software Foundation; either
+     version 2.1 of the License, or (at your option) any later version.
+
+     This library is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     Lesser General Public License for more details.
+
+     You should have received a copy of the GNU Lesser General Public
+     License along with this library; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+     USA
+*/
+// v1 baseline literals captured from `master` for the performance
+// acceptance gates.
+//
+// The values in this header are sampled ONCE on `master` (the v1.x
+// release branch) and committed alongside the bench TUs that consume
+// them. They are NOT computed at v2.0 build time because the v2.0
+// `http_resource` no longer holds a `std::map<std::string, bool>` and
+// v2.0's `get_headers()` does not exercise MHD's enumeration callback
+// path at all -- there is no compile-time expression on the v2.0
+// branch that reproduces the v1 numbers.
+//
+// Baseline environment (full details in test/PERFORMANCE.md). Both the
+// sizeof constants AND the get_headers ns/call constant are selected
+// per-stdlib at compile time (the ns/call constant was split after it
+// had previously reused the libc++ value on libstdc++). The host triple
+// below describes the libc++ reference host; the libstdc++ ns/call
+// provenance is documented against its own branch lower in this file.
+//   * master SHA      : d8b055e ("Migrate to libmicrohttpd 1.0.0 API")
+//   * host triple     : aarch64-apple-darwin25.3.0 (Apple silicon, libc++)
+//   * compiler        : Apple clang 21.0.0
+//   * C++ stdlib      : libc++ (LLVM)  [libstdc++: see ns/call branch]
+//   * build profile   : -std=c++20 -O3 (release; no sanitizers)
+//   * libmicrohttpd   : 1.0.5 (only relevant to ns/call measurement)
+//
+// Re-measurement: see test/v1_baseline/README.md.
+
+#ifndef TEST_V1_BASELINE_V1_CONSTANTS_HPP_
+#define TEST_V1_BASELINE_V1_CONSTANTS_HPP_
+
+#include <cstddef>
+
+namespace httpserver::v1_baseline {
+
+// sizeof(httpserver::http_resource) on `master`, captured by
+// test/v1_baseline/measure_v1_sizes.cpp.
+//
+// Two baseline values are provided, selected at compile time by the
+// detected C++ standard library:
+//
+//   libc++   (macOS / Apple clang)  : vptr (8) + std::map (24) = 32
+//   libstdc++ (Linux / GCC)         : vptr (8) + std::map (48) = 56
+//
+// Using the correct per-stdlib baseline ensures the static_assert
+// algebra in bench_sizeof_http_resource.cpp holds on both platforms.
+//
+// IMPORTANT: if V1_HTTP_RESOURCE_SIZEOF is updated to the libstdc++ value
+// (56), V1_STD_MAP_STRING_BOOL_SIZEOF must also be updated to the libstdc++
+// value (48) simultaneously, and vice versa. The static_assert algebra
+// depends on both constants coming from the same ABI; mixing values from
+// different stdlibs would produce a spuriously tight or loose bound.
+#if defined(__GLIBCXX__)
+// libstdc++ (Linux): std::map is 48 bytes (node, allocator, comparator
+// each 16 bytes on 64-bit), vptr is 8 bytes.
+inline constexpr std::size_t V1_HTTP_RESOURCE_SIZEOF = 56;
+// sizeof(std::map<std::string, bool>) on a libstdc++ host.
+inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 48;
+#elif defined(_LIBCPP_VERSION)
+// libc++ (macOS / Apple clang) — the maintainer reference host.
+// std::map is 24 bytes (three-pointer representation), vptr is 8 bytes.
+inline constexpr std::size_t V1_HTTP_RESOURCE_SIZEOF = 32;
+// sizeof(std::map<std::string, bool>) on the libc++ baseline host.
+// Three pointers: __begin_node_, __pair1_->__value_, __pair3_->__value_.
+inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 24;
+#else
+// Unknown C++ standard library. The baseline values below are validated
+// only for libc++ and libstdc++. On MSVC STL or other toolchains these
+// numbers may be incorrect, producing a spuriously tight or loose bound.
+// Re-run test/v1_baseline/measure_v1_sizes.cpp on the target host and
+// update the constants here before relying on bench_sizeof_http_resource.
+#error "Unknown C++ stdlib: re-measure v1 baseline on this host and update v1_constants.hpp"
+#endif
+
+// Median v1 ns/call for `http_request::get_headers()` against a
+// 16-header request. Captured by
+// test/v1_baseline/measure_v1_get_headers.cpp, 11 outer reps x
+// 1,000,000 inner iterations (OUTER=11, odd, consistent with
+// bench_get_headers.cpp), std::chrono::steady_clock, asm-volatile
+// sink to defeat dead-store elimination.
+//
+// This constant is selected per-stdlib. It was previously a
+// single mono-platform literal (the libc++ value) reused unchanged on
+// libstdc++/Linux; the libstdc++ value was later re-measured so the
+// >=10x speedup gate has a real per-stdlib baseline. The
+// dominant per-call cost is the std::map node layout + 16 string copies,
+// which differs between the two standard libraries' map implementations.
+//
+// We commit the conservatively rounded LOWER end of each platform's
+// observed range so the >=10x ratio assertion keeps margin under host
+// jitter (a lower v1 baseline makes the gate strictly harder, never
+// spuriously easier).
+#if defined(__GLIBCXX__)
+// libstdc++ (Linux / GCC): re-measured for the per-stdlib split.
+//
+// Provenance: gcc-14 (g++-14 14.2.0, Ubuntu 24.04, the verify-build.yml
+// performance lane's toolchain), -std=c++20 -O3 -DNDEBUG, libstdc++
+// __GLIBCXX__=20240908. Measured via the Step-3 recipe in
+// test/v1_baseline/README.md.
+//
+// Two measurement vantage points were taken (a native x86-64
+// verify-build.yml runner is not reachable from the macOS maintainer
+// host, so the value is filled from the most authoritative available
+// libstdc++ measurement per the README re-measurement procedure):
+//   * native aarch64 libstdc++ (Apple-silicon Linux container, no
+//     emulation) : ~667 .. 742 ns/call across reps.
+//   * emulated x86-64 libstdc++ (Docker on Apple silicon) : ~4477 ..
+//     5029 ns/call -- inflated ~6x by binary translation, recorded only
+//     to confirm libstdc++'s map is comparable-or-slower than libc++,
+//     NOT used to set the literal.
+// We commit the rounded lower end of the un-emulated native range
+// (~667 ns rounded down to 640 ns) as the conservative libstdc++
+// baseline (wider margin than the libc++ branch's 756->760 rounding;
+// intentional given the wider observed native/emulated spread).
+inline constexpr double V1_GET_HEADERS_NS_PER_CALL = 640.0;
+#elif defined(_LIBCPP_VERSION)
+// libc++ (macOS / Apple clang) -- the original baseline measurement.
+//
+// Measured median on the baseline host: 767.665 ns/call (range
+// 756 .. 784 across the 11 reps). We commit the rounded lower end of
+// the observed range (756 ns rounded to 760 ns) as a conservative number.
+inline constexpr double V1_GET_HEADERS_NS_PER_CALL = 760.0;
+#else
+#error "Unknown C++ stdlib: re-measure v1 get_headers ns/call (see test/v1_baseline/README.md) and add a branch in v1_constants.hpp"
+#endif
+
+}  // namespace httpserver::v1_baseline
+
+#endif  // TEST_V1_BASELINE_V1_CONSTANTS_HPP_

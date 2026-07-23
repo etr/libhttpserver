@@ -19,6 +19,7 @@
 */
 
 #include "httpserver/webserver.hpp"
+#include "httpserver/detail/webserver_impl.hpp"
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>
@@ -34,9 +35,11 @@
 
 #include <errno.h>
 #include <microhttpd.h>
+// <microhttpd_ws.h> remains gated (only the upgrade trampolines
+// need it). The public websocket_handler header is unconditional and is
+// included below with the other project headers.
 #ifdef HAVE_WEBSOCKET
 #include <microhttpd_ws.h>
-#include "httpserver/websocket_handler.hpp"
 #endif  // HAVE_WEBSOCKET
 #include <signal.h>
 #include <stdint.h>
@@ -49,38 +52,79 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <regex>
 #include <set>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <cassert>
+#include <cstdint>
+#include <exception>
+#include <functional>
+#include <optional>
 
 #include "httpserver/create_webserver.hpp"
-#include "httpserver/details/http_endpoint.hpp"
-#include "httpserver/details/modded_request.hpp"
+// feature_unavailable + websocket_handler are public headers
+// included unconditionally so the public surface is identical across
+// HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds.
+#include "httpserver/feature_unavailable.hpp"
+#include "httpserver/websocket_handler.hpp"
+#include "httpserver/detail/http_endpoint.hpp"
+#include "httpserver/detail/lambda_resource.hpp"
+#include "httpserver/detail/connection_context.hpp"
+#include "httpserver/detail/path_normalize.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
-#include "httpserver/string_response.hpp"
-
-struct MHD_Connection;
+#include "httpserver/detail/response_body.hpp"
+#include "httpserver/constants.hpp"
+#include "httpserver/hook_action.hpp"
+#include "httpserver/hook_context.hpp"
+#include "httpserver/hook_handle.hpp"
+#include "httpserver/hook_phase.hpp"
+#include "httpserver/http_method.hpp"
+#include "httpserver/detail/dispatch_util.hpp"
+#include "httpserver/detail/method_utils.hpp"
+#include "httpserver/detail/route_tier.hpp"
 
 #define _REENTRANT 1
 
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
 #include <gnutls/x509.h>
+
+// Pin httpserver::http::http_utils::cred_type_T values to the
+// GnuTLS credentials enum. The cred_type_T enum body in
+// src/httpserver/http_utils.hpp hard-codes the integer values rather
+// than referencing GNUTLS_CRD_* (which would force the public header to
+// drag <gnutls/gnutls.h> through the umbrella). This block is the
+// compile-time guard that those hard-coded values stay in lockstep
+// with the upstream definitions; an upstream renumber breaks the build
+// here, where someone with full context can react.
+static_assert(static_cast<int>(::httpserver::http::http_utils::CERTIFICATE) ==
+              static_cast<int>(GNUTLS_CRD_CERTIFICATE),
+              "cred_type_T::CERTIFICATE drifted from GNUTLS_CRD_CERTIFICATE");
+static_assert(static_cast<int>(::httpserver::http::http_utils::ANON) ==
+              static_cast<int>(GNUTLS_CRD_ANON),
+              "cred_type_T::ANON drifted from GNUTLS_CRD_ANON");
+static_assert(static_cast<int>(::httpserver::http::http_utils::SRP) ==
+              static_cast<int>(GNUTLS_CRD_SRP),
+              "cred_type_T::SRP drifted from GNUTLS_CRD_SRP");
+static_assert(static_cast<int>(::httpserver::http::http_utils::PSK) ==
+              static_cast<int>(GNUTLS_CRD_PSK),
+              "cred_type_T::PSK drifted from GNUTLS_CRD_PSK");
+static_assert(static_cast<int>(::httpserver::http::http_utils::IA) ==
+              static_cast<int>(GNUTLS_CRD_IA),
+              "cred_type_T::IA drifted from GNUTLS_CRD_IA");
 #endif  // HAVE_GNUTLS
 
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 02000000
-#endif
-
-#if MHD_VERSION < 0x00097002
-typedef int MHD_Result;
 #endif
 
 using std::string;
@@ -94,18 +138,6 @@ using httpserver::http::ip_representation;
 using httpserver::http::base_unescaper;
 
 namespace httpserver {
-
-MHD_Result policy_callback(void *, const struct sockaddr*, socklen_t);
-void error_log(void*, const char*, va_list);
-void* uri_log(void*, const char*, struct MHD_Connection *con);
-void access_log(webserver*, string);
-size_t unescaper_func(void*, struct MHD_Connection*, char*);
-
-struct compare_value {
-    bool operator() (const std::pair<int, int>& left, const std::pair<int, int>& right) const {
-        return left.second < right.second;
-    }
-};
 
 #if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__CYGWIN__)
 static void catcher(int) { }
@@ -130,418 +162,363 @@ static void ignore_sigpipe() {
 #endif
 }
 
-// WEBSERVER
+// webserver_impl construction / destruction and the small non-trampoline
+// webserver_impl member glue (serialize_allow_methods, the on_*/route
+// lambda-shim helpers) live in src/detail/webserver_impl.cpp. This TU holds
+// only the public webserver:: façade core.
+
+// ----- webserver construction / destruction ------------------------------
+
 webserver::webserver(const create_webserver& params):
-    port(params._port),
-    start_method(params._start_method),
-    max_threads(params._max_threads),
-    max_connections(params._max_connections),
-    memory_limit(params._memory_limit),
-    content_size_limit(params._content_size_limit),
-    connection_timeout(params._connection_timeout),
-    per_IP_connection_limit(params._per_IP_connection_limit),
-    log_access(params._log_access),
-    log_error(params._log_error),
-    validator(params._validator),
-    unescaper(params._unescaper),
-    bind_address(params._bind_address),
-    bind_address_storage(params._bind_address_storage),
-    bind_socket(params._bind_socket),
-    max_thread_stack_size(params._max_thread_stack_size),
-    use_ssl(params._use_ssl),
-    use_ipv6(params._use_ipv6),
-    use_dual_stack(params._use_dual_stack),
-    debug(params._debug),
-    pedantic(params._pedantic),
-    https_mem_key(params._https_mem_key),
-    https_mem_cert(params._https_mem_cert),
-    https_mem_trust(params._https_mem_trust),
-    https_priorities(params._https_priorities),
-    cred_type(params._cred_type),
-    psk_cred_handler(params._psk_cred_handler),
-    digest_auth_random(params._digest_auth_random),
-    nonce_nc_size(params._nonce_nc_size),
-    running(false),
-    default_policy(params._default_policy),
-#ifdef HAVE_BAUTH
-    basic_auth_enabled(params._basic_auth_enabled),
-#endif  // HAVE_BAUTH
-    digest_auth_enabled(params._digest_auth_enabled),
-    regex_checking(params._regex_checking),
-    ban_system_enabled(params._ban_system_enabled),
-    post_process_enabled(params._post_process_enabled),
-    put_processed_data_to_content(params._put_processed_data_to_content),
-    file_upload_target(params._file_upload_target),
-    file_upload_dir(params._file_upload_dir),
-    generate_random_filename_on_upload(params._generate_random_filename_on_upload),
-    deferred_enabled(params._deferred_enabled),
-    single_resource(params._single_resource),
-    tcp_nodelay(params._tcp_nodelay),
-    not_found_resource(params._not_found_resource),
-    method_not_allowed_resource(params._method_not_allowed_resource),
-    internal_error_resource(params._internal_error_resource),
-    file_cleanup_callback(params._file_cleanup_callback),
-    auth_handler(params._auth_handler),
-    auth_skip_paths(params._auth_skip_paths),
-    sni_callback(params._sni_callback),
-    no_listen_socket(params._no_listen_socket),
-    no_thread_safety(params._no_thread_safety),
-    turbo(params._turbo),
-    suppress_date_header(params._suppress_date_header),
-    listen_backlog(params._listen_backlog),
-    address_reuse(params._address_reuse),
-    connection_memory_increment(params._connection_memory_increment),
-    tcp_fastopen_queue_size(params._tcp_fastopen_queue_size),
-    sigpipe_handled_by_app(params._sigpipe_handled_by_app),
-    https_mem_dhparams(params._https_mem_dhparams),
-    https_key_password(params._https_key_password),
-    https_priorities_append(params._https_priorities_append),
-    no_alpn(params._no_alpn),
-    client_discipline_level(params._client_discipline_level) {
+    // Copy the builder's config wholesale; the feature-availability guards
+    // in the ctor body below throw if an option (e.g. basic_auth_enabled)
+    // was requested on a build that lacks it.
+    config(params._config),
+    // Derived at construction from config.auth_skip_paths (not a builder
+    // input), so it is initialised separately rather than copied.
+    auth_skip_paths_normalized(
+        detail::normalize_auth_skip_paths(params._config.auth_skip_paths)),
+    // create_webserver uses int=0 as "no pre-bound socket" to keep the
+    // public builder header free of <microhttpd.h>. Convert to the
+    // MHD_socket sentinel (MHD_INVALID_SOCKET) so the impl always uses
+    // a well-defined sentinel. Pass through the impl_ constructor so the
+    // impl is fully initialised from the member-initialiser list with no
+    // post-construction mutations of impl_ members.
+    impl_(std::make_unique<detail::webserver_impl>(
+        this,
+        (params._config.bind_socket != 0)
+            ? static_cast<MHD_socket>(params._config.bind_socket)
+            : MHD_INVALID_SOCKET)) {
+        // Any feature the builder asked for that the
+        // library was not compiled with must fail loudly here. Throwing
+        // from the ctor body (after the member-initialiser list) lets
+        // the just-constructed impl_ unique_ptr destroy itself cleanly
+        // — no MHD daemon is running yet.
+#ifndef HAVE_GNUTLS
+        if (config.use_ssl) {
+            throw feature_unavailable("tls", "HAVE_GNUTLS");
+        }
+#endif
+#ifndef HAVE_BAUTH
+        if (config.basic_auth_enabled) {
+            throw feature_unavailable("basic_auth", "HAVE_BAUTH");
+        }
+#endif
+#ifndef HAVE_DAUTH
+        // CWE-287: symmetric guard for digest
+        // auth. Without this a HAVE_DAUTH-off build silently accepts
+        // digest_auth_enabled=true and the request handler returns
+        // WRONG_HEADER, making the authentication gate a silent no-op.
+        if (config.digest_auth_enabled) {
+            throw feature_unavailable("digest_auth", "HAVE_DAUTH");
+        }
+#endif
         ignore_sigpipe();
-        pthread_mutex_init(&mutexwait, nullptr);
-        pthread_cond_init(&mutexcond, nullptr);
+        // Register the three v1 setter aliases as hooks
+        // (route_resolved for not_found_handler; before_handler for
+        // method_not_allowed_handler and auth_handler). Conditional on
+        // each setter being non-null so zero-cost-when-unused holds.
+        install_default_alias_hooks_();
+}
+
+// Build-time feature reporting. The body
+// lives in this TU rather than in the header so consumers see whatever
+// HAVE_* the library was built with — not whatever HAVE_* their own TU
+// happens to define.
+//
+// The struct-tag spelling `struct webserver::features` disambiguates the
+// return type from the function name (both spelled `features`). The
+// returned aggregate uses the same elaborated form for the same reason.
+struct webserver::features webserver::features() noexcept {
+    // Constexpr locals resolve each HAVE_* flag once. The aggregate-init
+    // braces below omit the type name to avoid the name collision between
+    // the return type and the member function (both spelled `features`);
+    // `return {a,b,c,d};` is resolved via the elaborated-type-specifier
+    // in the function signature above.
+#ifdef HAVE_BAUTH
+    constexpr bool k_bauth = true;
+#else
+    constexpr bool k_bauth = false;
+#endif
+#ifdef HAVE_DAUTH
+    constexpr bool k_dauth = true;
+#else
+    constexpr bool k_dauth = false;
+#endif
+#ifdef HAVE_GNUTLS
+    constexpr bool k_tls = true;
+#else
+    constexpr bool k_tls = false;
+#endif
+#ifdef HAVE_WEBSOCKET
+    constexpr bool k_ws = true;
+#else
+    constexpr bool k_ws = false;
+#endif
+    return {k_bauth, k_dauth, k_tls, k_ws};
 }
 
 webserver::~webserver() {
     stop();
-    pthread_mutex_destroy(&mutexwait);
-    pthread_cond_destroy(&mutexcond);
-
-#if defined(HAVE_GNUTLS) && defined(MHD_OPTION_HTTPS_CERT_CALLBACK)
-    // Clean up cached SNI credentials
-    for (auto& [name, creds] : sni_credentials_cache) {
-        gnutls_certificate_free_credentials(creds);
-    }
-    sni_credentials_cache.clear();
-#endif  // HAVE_GNUTLS && MHD_OPTION_HTTPS_CERT_CALLBACK
+    // impl_'s destructor (running pthread destroys + GnuTLS cleanup) runs
+    // when the unique_ptr is destroyed, after this body finishes.
 }
 
-void webserver::sweet_kill() {
+void webserver::stop_and_wait() {
+    // The "wait for in-flight handlers" guarantee is provided by
+    // MHD_stop_daemon(), which is a blocking call that drains all active
+    // connections and joins libmicrohttpd's worker threads before returning.
+    // stop() calls MHD_stop_daemon() internally, so this wrapper fulfils its
+    // stronger contract without additional synchronisation.  If the contract
+    // were ever stronger than what MHD_stop_daemon() provides (e.g. an
+    // application-level quiesce step), the extra logic should be added here
+    // rather than in stop(), preserving the distinction between the two
+    // entry-points.
     stop();
 }
 
-void webserver::request_completed(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) {
-    // These parameters are passed to respect the MHD interface, but are not needed here.
-    std::ignore = cls;
-    std::ignore = connection;
-    std::ignore = toe;
 
-    delete static_cast<details::modded_request*>(*con_cls);
+// ===== webserver_add_hook.cpp (public webserver:: API) ====================
+
+// webserver_add_hook.cpp -- the typed webserver::add_hook overload family
+// and webserver::make_hook_handle_. Each overload delegates registration
+// (phase-mismatch + empty-callable validation, slot-id alloc, push under
+// lock, gate arming) to detail::hook_bus::add and wraps the returned
+// slot_id in an armed hook_handle.
+//
+// Carved out of src/webserver.cpp to keep both translation
+// units under the project per-file LOC ceiling (FILE_LOC_MAX in
+// scripts/check-file-size.sh).
+
+// Tiny static helper that materialises an armed hook_handle.
+// hook_handle's constructor is private but webserver is friend; this
+// static gives the anonymous-namespace register_hook_impl a way to
+// reach into that private surface without making it a friend itself.
+hook_handle webserver::make_hook_handle_(detail::webserver_impl* impl,
+                                         hook_phase phase,
+                                         std::uint64_t slot_id) noexcept {
+    return hook_handle{impl, phase, slot_id};
 }
 
-bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family) {
-    if (hrm == nullptr) {
-        throw std::invalid_argument("The http_resource pointer cannot be null");
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const connection_open_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::connection_opened,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const accept_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::accept_decision,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(request_received_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::request_received,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(body_chunk_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::body_chunk,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const route_resolved_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::route_resolved,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(before_handler_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::before_handler,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(const handler_exception_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::handler_exception,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(after_handler_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::after_handler,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const response_sent_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::response_sent,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const request_completed_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::request_completed,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const connection_close_ctx&)> fn) {
+    return make_hook_handle_(impl_.get(), hook_phase::connection_closed,
+        impl_->hooks_.add(phase, std::move(fn)));
+}
+
+
+// ===== webserver_lifecycle.cpp (public webserver:: API) ====================
+
+
+// The MHD daemon-construction builders (make_option, add_*_mhd_options,
+// build_mhd_option_array, compose_*_flags) moved to the daemon_lifecycle
+// collaborator (src/detail/daemon_lifecycle.cpp); the webserver:: lifecycle
+// methods below reach them through impl_->daemon_.
+
+bool webserver::start(bool blocking) {
+    if (config.start_method == http_utils::THREAD_PER_CONNECTION
+            && (config.max_threads != 0 || config.max_thread_stack_size != 0)) {
+        throw std::invalid_argument(
+            "Cannot specify maximum number of threads when using a thread per connection");
     }
 
-    if (single_resource && ((resource != "" && resource != "/") || !family)) {
-        throw std::invalid_argument("The resource should be '' or '/' and be marked as family when using a single_resource server");
+    // Fire the one-shot raw-body-dump opt-in SECURITY
+    // WARNING before MHD_start_daemon so the operator sees the
+    // notice on every fresh process invocation that actually starts
+    // accepting traffic. Defined in webserver_body_pipeline.cpp
+    // alongside the consumer of the opt-in flag.
+    // Maintenance invariant: this call must happen before any request
+    // is dispatched, and therefore before
+    // debug_dump_request_body_opted_in()'s magic-static is first
+    // initialised by the body pipeline. A future refactor that moves
+    // work ahead of webserver::start() (or reorders the body pipeline)
+    // must preserve or replicate this ordering.
+    detail::maybe_warn_debug_dump_request_body(this);
+
+    vector<struct MHD_OptionItem> iov;
+    impl_->daemon_.build_mhd_option_array(iov);
+    const int start_conf = impl_->daemon_.compose_start_flags();
+
+    struct MHD_Daemon* d = nullptr;
+    if (config.bind_address == nullptr) {
+        d = MHD_start_daemon(start_conf, config.port, &detail::webserver_impl::policy_callback, this,
+                &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
+                &iov[0], MHD_OPTION_END);
+    } else {
+        // libmicrohttpd ignores the port argument when MHD_OPTION_SOCK_ADDR
+        // is supplied; the literal 1 is a placeholder that only needs to be
+        // non-zero.
+        d = MHD_start_daemon(start_conf, 1, &detail::webserver_impl::policy_callback, this,
+                &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
+                &iov[0], MHD_OPTION_SOCK_ADDR, config.bind_address, MHD_OPTION_END);
+    }
+    // Release store: publish the daemon (+ its bind-port) so a concurrent get_bound_port() on another thread sees it.
+    impl_->daemon_.daemon.store(d, std::memory_order_release);
+    if (d == nullptr) {
+        throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(config.port));
     }
 
-    details::http_endpoint idx(resource, family, true, regex_checking);
+    impl_->daemon_.running = true;
 
-    std::unique_lock registered_resources_lock(registered_resources_mutex);
-    pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
-
-    if (result.second) {
-        bool is_exact = !family && idx.get_url_pars().empty();
-        if (is_exact) {
-            registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
+    if (blocking) {
+        pthread_mutex_lock(&impl_->daemon_.mutexwait);
+        while (impl_->daemon_.running) {
+            pthread_cond_wait(&impl_->daemon_.mutexcond, &impl_->daemon_.mutexwait);
         }
-        if (idx.is_regex_compiled()) {
-            registered_resources_regex.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
-        }
-        registered_resources_lock.unlock();
-        invalidate_route_cache();
+        pthread_mutex_unlock(&impl_->daemon_.mutexwait);
         return true;
     }
-
     return false;
 }
 
-#ifdef HAVE_WEBSOCKET
-bool webserver::register_ws_resource(const std::string& resource, websocket_handler* handler) {
-    if (handler == nullptr) {
-        throw std::invalid_argument("The websocket_handler pointer cannot be null");
-    }
-    std::unique_lock lock(registered_resources_mutex);
-    registered_ws_handlers[http_utils::standardize_url(resource)] = handler;
-    return true;
-}
-#endif  // HAVE_WEBSOCKET
-
-bool webserver::start(bool blocking) {
-    struct {
-        MHD_OptionItem operator ()(enum MHD_OPTION opt, intptr_t val, void *ptr = nullptr) {
-            MHD_OptionItem x = {opt, val, ptr};
-            return x;
-        }
-    } gen;
-    vector<struct MHD_OptionItem> iov;
-
-    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &request_completed, nullptr));
-    iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &uri_log, this));
-    iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
-    iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &unescaper_func, this));
-    iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connection_timeout));
-    if (bind_socket != 0) {
-        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
-    }
-
-    if (start_method == http_utils::THREAD_PER_CONNECTION && (max_threads != 0 || max_thread_stack_size != 0)) {
-        throw std::invalid_argument("Cannot specify maximum number of threads when using a thread per connection");
-    }
-
-    if (max_threads != 0) {
-        iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
-    }
-
-    if (max_connections != 0) {
-        iov.push_back(gen(MHD_OPTION_CONNECTION_LIMIT, max_connections));
-    }
-
-    if (memory_limit != 0) {
-        iov.push_back(gen(MHD_OPTION_CONNECTION_MEMORY_LIMIT, memory_limit));
-    }
-
-    if (per_IP_connection_limit != 0) {
-        iov.push_back(gen(MHD_OPTION_PER_IP_CONNECTION_LIMIT, per_IP_connection_limit));
-    }
-
-    if (max_thread_stack_size != 0) {
-        iov.push_back(gen(MHD_OPTION_THREAD_STACK_SIZE, max_thread_stack_size));
-    }
-
-#ifdef HAVE_DAUTH
-    if (nonce_nc_size != 0) {
-        iov.push_back(gen(MHD_OPTION_NONCE_NC_SIZE, nonce_nc_size));
-    }
-#endif  // HAVE_DAUTH
-
-    if (use_ssl) {
-        // Need for const_cast to respect MHD interface that needs a void*
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_key.c_str()))));
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_cert.c_str()))));
-
-        if (!https_mem_trust.empty()) {
-            iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_trust.c_str()))));
-        }
-
-        if (!https_priorities.empty()) {
-            iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, reinterpret_cast<void*>(const_cast<char*>(https_priorities.c_str()))));
-        }
-    }
-
-#ifdef HAVE_DAUTH
-    if (digest_auth_random != "") {
-        // Need for const_cast to respect MHD interface that needs a char*
-        iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM, digest_auth_random.size(), const_cast<char*>(digest_auth_random.c_str())));
-    }
-#endif  // HAVE_DAUTH
-
-#ifdef HAVE_GNUTLS
-    if (cred_type != http_utils::NONE) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
-    }
-
-    if (psk_cred_handler != nullptr && use_ssl) {
-        iov.push_back(gen(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER,
-                          (intptr_t)&psk_cred_handler_func, this));
-    }
-
-#ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
-    if (sni_callback != nullptr && use_ssl) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_CERT_CALLBACK,
-                          (intptr_t)&sni_cert_callback_func, this));
-    }
-#endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
-#endif  // HAVE_GNUTLS
-
-    if (listen_backlog > 0) {
-        iov.push_back(gen(MHD_OPTION_LISTEN_BACKLOG_SIZE, listen_backlog));
-    }
-
-    if (address_reuse != 0) {
-        iov.push_back(gen(MHD_OPTION_LISTENING_ADDRESS_REUSE, address_reuse));
-    }
-
-    if (connection_memory_increment > 0) {
-        iov.push_back(gen(MHD_OPTION_CONNECTION_MEMORY_INCREMENT, connection_memory_increment));
-    }
-
-    if (tcp_fastopen_queue_size > 0) {
-        iov.push_back(gen(MHD_OPTION_TCP_FASTOPEN_QUEUE_SIZE, tcp_fastopen_queue_size));
-    }
-
-    if (sigpipe_handled_by_app) {
-        iov.push_back(gen(MHD_OPTION_SIGPIPE_HANDLED_BY_APP, 1));
-    }
-
-    if (!https_mem_dhparams.empty()) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_DHPARAMS, 0, const_cast<char*>(https_mem_dhparams.c_str())));
-    }
-
-    if (!https_key_password.empty()) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_KEY_PASSWORD, 0, const_cast<char*>(https_key_password.c_str())));
-    }
-
-    if (!https_priorities_append.empty()) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES_APPEND, 0, const_cast<char*>(https_priorities_append.c_str())));
-    }
-
-    if (no_alpn) {
-        iov.push_back(gen(MHD_OPTION_TLS_NO_ALPN, 1));
-    }
-
-    if (client_discipline_level >= 0) {
-        iov.push_back(gen(MHD_OPTION_CLIENT_DISCIPLINE_LVL, client_discipline_level));
-    }
-
-    iov.push_back(gen(MHD_OPTION_END, 0, nullptr));
-
-    int start_conf = start_method;
-
-    if (use_ssl) {
-        start_conf |= MHD_USE_SSL;
-    }
-
-    if (use_ipv6) {
-        start_conf |= MHD_USE_IPv6;
-    }
-
-    if (use_dual_stack) {
-        start_conf |= MHD_USE_DUAL_STACK;
-    }
-
-    if (debug) {
-        start_conf |= MHD_USE_DEBUG;
-    }
-    if (pedantic) {
-        start_conf |= MHD_USE_PEDANTIC_CHECKS;
-    }
-
-    if (deferred_enabled) {
-        start_conf |= MHD_USE_SUSPEND_RESUME;
-    }
-
-#ifdef USE_FASTOPEN
-    start_conf |= MHD_USE_TCP_FASTOPEN;
-#endif
-
-    if (no_listen_socket) {
-        start_conf |= MHD_USE_NO_LISTEN_SOCKET;
-    }
-
-    if (no_thread_safety) {
-        start_conf |= MHD_USE_NO_THREAD_SAFETY;
-    }
-
-    if (turbo) {
-        start_conf |= MHD_USE_TURBO;
-    }
-
-    if (suppress_date_header) {
-        start_conf |= MHD_USE_SUPPRESS_DATE_NO_CLOCK;
-    }
-
-#ifdef HAVE_WEBSOCKET
-    if (!registered_ws_handlers.empty()) {
-        start_conf |= MHD_ALLOW_UPGRADE;
-    }
-#endif  // HAVE_WEBSOCKET
-
-
-    daemon = nullptr;
-    if (bind_address == nullptr) {
-        daemon = MHD_start_daemon(start_conf, port, &policy_callback, this,
-                &answer_to_connection, this, MHD_OPTION_ARRAY,
-                &iov[0], MHD_OPTION_END);
-    } else {
-        daemon = MHD_start_daemon(start_conf, 1, &policy_callback, this,
-                &answer_to_connection, this, MHD_OPTION_ARRAY,
-                &iov[0], MHD_OPTION_SOCK_ADDR, bind_address, MHD_OPTION_END);
-    }
-
-    if (daemon == nullptr) {
-        throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
-    }
-
-    bool value_onclose = false;
-
-    running = true;
-
-    if (blocking) {
-        pthread_mutex_lock(&mutexwait);
-        while (blocking && running) {
-            pthread_cond_wait(&mutexcond, &mutexwait);
-        }
-        pthread_mutex_unlock(&mutexwait);
-        value_onclose = true;
-    }
-    return value_onclose;
-}
-
 bool webserver::is_running() {
-    return running;
+    return impl_->daemon_.running;
 }
 
 bool webserver::stop() {
-    if (!running) return false;
+    if (!impl_->daemon_.running) return false;
 
-    pthread_mutex_lock(&mutexwait);
-    running = false;
-    pthread_cond_signal(&mutexcond);
-    pthread_mutex_unlock(&mutexwait);
+    pthread_mutex_lock(&impl_->daemon_.mutexwait);
+    impl_->daemon_.running = false;
+    pthread_cond_signal(&impl_->daemon_.mutexcond);
+    pthread_mutex_unlock(&impl_->daemon_.mutexwait);
 
-    MHD_stop_daemon(daemon);
+    MHD_stop_daemon(impl_->daemon_.daemon.load(std::memory_order_acquire));
+    // Reset so the daemon != nullptr guards treat it as absent after stop().
+    impl_->daemon_.daemon.store(nullptr, std::memory_order_release);
 
-    shutdown(bind_socket, 2);
+    // Only shut down the pre-bound socket if one was actually provided.
+    // MHD_INVALID_SOCKET (-1 on POSIX, INVALID_SOCKET on Windows) is the
+    // sentinel written by the webserver_impl constructor when no pre-bound
+    // socket was passed via create_webserver().bind_socket(). Without this
+    // guard, the unconditional shutdown() call would operate on fd MHD_INVALID_SOCKET
+    // which on POSIX could be interpreted as fd -1 (implementation-defined)
+    // and previously (before the fix) the sentinel was 0 which would have
+    // shut down stdin (fd 0).
+    if (impl_->daemon_.bind_socket != MHD_INVALID_SOCKET) {
+        shutdown(impl_->daemon_.bind_socket, 2);
+    }
 
     return true;
 }
 
 int webserver::quiesce() {
-    if (daemon == nullptr) return -1;
-    MHD_socket fd = MHD_quiesce_daemon(daemon);
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return -1;
+    MHD_socket fd = MHD_quiesce_daemon(d);
     return static_cast<int>(fd);
 }
 
 int webserver::get_listen_fd() const {
-    if (daemon == nullptr) return -1;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_LISTEN_FD);
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return -1;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(d, MHD_DAEMON_INFO_LISTEN_FD);
     if (info == nullptr) return -1;
     return static_cast<int>(info->listen_fd);
 }
 
 unsigned int webserver::get_active_connections() const {
-    if (daemon == nullptr) return 0;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_CURRENT_CONNECTIONS);
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return 0;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(d, MHD_DAEMON_INFO_CURRENT_CONNECTIONS);
     if (info == nullptr) return 0;
     return info->num_connections;
 }
 
 uint16_t webserver::get_bound_port() const {
-    if (daemon == nullptr) return 0;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_BIND_PORT);
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return 0;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(d, MHD_DAEMON_INFO_BIND_PORT);
     if (info == nullptr) return 0;
     return info->port;
 }
 
 bool webserver::run() {
-    if (daemon == nullptr) return false;
-    return MHD_run(daemon) == MHD_YES;
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return false;
+    return MHD_run(d) == MHD_YES;
 }
 
 bool webserver::run_wait(int32_t millisec) {
-    if (daemon == nullptr) return false;
-    return MHD_run_wait(daemon, millisec) == MHD_YES;
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return false;
+    return MHD_run_wait(d, millisec) == MHD_YES;
 }
 
-bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set, fd_set* except_fd_set, int* max_fd) {
-    if (daemon == nullptr) return false;
+bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set,
+                          fd_set* except_fd_set, int* max_fd) {
+    // The signature uses typed fd_set* rather than void*,
+    // restoring compile-time type safety. The public header pulls in
+    // <sys/select.h> / <winsock2.h> directly because fd_set is a typedef
+    // and cannot be portably forward-declared.
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return false;
     MHD_socket mhd_max_fd = 0;
-    if (MHD_get_fdset(daemon, read_fd_set, write_fd_set, except_fd_set, &mhd_max_fd) != MHD_YES) {
+    if (MHD_get_fdset(d,
+                      read_fd_set,
+                      write_fd_set,
+                      except_fd_set,
+                      &mhd_max_fd) != MHD_YES) {
         return false;
     }
     *max_fd = static_cast<int>(mhd_max_fd);
@@ -549,898 +526,701 @@ bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set, fd_set* exc
 }
 
 bool webserver::get_timeout(uint64_t* timeout) {
-    if (daemon == nullptr) return false;
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return false;
     MHD_UNSIGNED_LONG_LONG mhd_timeout = 0;
-    if (MHD_get_timeout(daemon, &mhd_timeout) != MHD_YES) {
+    if (MHD_get_timeout(d, &mhd_timeout) != MHD_YES) {
         return false;
     }
     *timeout = static_cast<uint64_t>(mhd_timeout);
     return true;
 }
 
-bool webserver::add_connection(int client_socket, const struct sockaddr* addr, socklen_t addrlen) {
-    if (daemon == nullptr) return false;
-    return MHD_add_connection(daemon, client_socket, addr, addrlen) == MHD_YES;
+bool webserver::add_connection(int client_socket, const struct sockaddr* addr, unsigned int addrlen) {
+    // The public signature accepts `unsigned int` instead of
+    // `socklen_t` so the public header does not need <sys/socket.h>.
+    // POSIX guarantees `socklen_t` is an unsigned integer of at least 32
+    // bits; `unsigned int` matches on every supported platform.
+    // (The sizeof static_assert is at file scope above.)
+    struct MHD_Daemon* d = impl_->daemon_.handle();
+    if (d == nullptr) return false;
+    return MHD_add_connection(d, client_socket, addr,
+                              static_cast<socklen_t>(addrlen)) == MHD_YES;
 }
 
-void webserver::invalidate_route_cache() {
-    std::lock_guard<std::mutex> lock(route_cache_mutex);
-    route_cache_list.clear();
-    route_cache_map.clear();
+// The deny/allow IP setters forward to the ip_access_control collaborator
+// that owns the lists and their locks (and the wildcard-precedence insert
+// invariant). See httpserver/detail/ip_access_control.hpp.
+void webserver::deny_ip(std::string_view ip) {
+    impl_->acl_.deny(ip);
+}
+
+void webserver::remove_denied_ip(std::string_view ip) {
+    impl_->acl_.remove_denied(ip);
+}
+
+void webserver::allow_ip(std::string_view ip) {
+    impl_->acl_.allow(ip);
+}
+
+void webserver::remove_allowed_ip(std::string_view ip) {
+    impl_->acl_.remove_allowed(ip);
+}
+
+
+// ===== webserver_register.cpp (public webserver:: API) ====================
+
+
+
+// ----- Resource registration --------------------------------------------
+
+// register_path / register_prefix split. Both public methods funnel into
+// this private helper, which carries the validation and insertion logic.
+// Keeping the work in one place prevents drift between the two registration
+// kinds.
+// Input-validation guard for register_impl_. Extracted so register_impl_
+// stays inside the project-wide CCN gate.
+void webserver::validate_register_inputs_(const std::string& resource,
+        const std::shared_ptr<http_resource>& res, bool family) const {
+    if (res == nullptr) {
+        throw std::invalid_argument("The http_resource pointer cannot be null");
+    }
+    if (config.single_resource && ((resource != "" && resource != "/") || !family)) {
+        throw std::invalid_argument(
+            "The resource should be '' or '/' and be registered via "
+            "register_prefix when using a single_resource server");
+    }
+    // Lightweight input hygiene (CWE-20): reject paths containing embedded
+    // null bytes, matching validate_on_methods_inputs_'s guard for on_*/
+    // route. A std::string can hold '\0' but the underlying regex and
+    // routing engines treat it as a string terminator, producing silent
+    // mismatches. Reject early with a clear diagnostic rather than letting
+    // the error surface deep in regex compilation or route matching.
+    if (resource.find('\0') != std::string::npos) {
+        throw std::invalid_argument(
+            "Route path must not contain embedded null bytes");
+    }
+}
+
+void webserver::register_impl_(const std::string& resource,
+                               std::shared_ptr<http_resource> res,
+                               bool family) {
+    validate_register_inputs_(resource, res, family);
+
+    detail::http_endpoint idx(resource, family, true, config.regex_checking);
+
+    // Duplicate detection happens entirely
+    // inside register_v2_route, which takes its own unique_lock on
+    // route_table_mutex_ and runs reject_terminus_collision (plus a
+    // tier-classification probe for the exact tier) BEFORE any mutation.
+    // A duplicate at any tier surfaces as std::invalid_argument with the
+    // table still in its prior state -- no rollback required.
+    //
+    // Ownership contract: when register_v2_route throws,
+    // the shared_ptr parameter `res` (and any unique_ptr-derived shared_ptr
+    // funnelled through the webserver.hpp inline template shim) is destroyed
+    // by exception unwinding, cleanly releasing the resource.
+    impl_->routes_.register_v2_route(idx, std::move(res), family);
+    impl_->routes_.invalidate_route_cache();
+}
+
+void webserver::register_path(const std::string& path,
+                              std::shared_ptr<http_resource> res) {
+    register_impl_(path, std::move(res), /*family=*/false);
+}
+
+void webserver::register_prefix(const std::string& path,
+                                std::shared_ptr<http_resource> res) {
+    register_impl_(path, std::move(res), /*family=*/true);
+}
+
+// Erase a single registration of the requested kind (family).
+// Each kind keeps a distinct v2-table entry (parameterized routes live in
+// the radix tier, regex routes in the regex_routes_ vector, exact routes
+// in the exact_routes_ hash map; prefix routes are radix-tier with
+// is_prefix=true), so we route by the same classification used at
+// registration. The route_table_mutex_ write lock keeps the erasure
+// atomic against concurrent dispatch.
+void webserver::unregister_impl_(const string& resource, bool family) {
+    detail::http_endpoint he(resource, family, true, config.regex_checking);
+
+    // Erase from the v2 3-tier table.
+    // Lock ordering: route_table_mutex_ -> route_lru_cache's internal
+    // mutex (inside invalidate_route_cache). Table lock released before
+    // the LRU cache is cleared, matching register_impl_ / on_methods_.
+    {
+        auto table_lock = impl_->routes_.lock_for_write();
+        const std::string& key = he.get_url_complete();
+        if (family) {
+            impl_->routes_.remove_param_prefix_locked_(key, /*is_prefix=*/true);
+        } else if (!he.get_url_pars().empty()) {
+            impl_->routes_.remove_param_prefix_locked_(key, /*is_prefix=*/false);
+        } else {
+            // Erase from exact tier; also sweep regex tier (url_complete key).
+            impl_->routes_.erase_exact_and_regex_locked_(key);
+        }
+    }
+    impl_->routes_.invalidate_route_cache();
+}
+
+void webserver::unregister_path(const string& path) {
+    unregister_impl_(path, /*family=*/false);
+}
+
+void webserver::unregister_prefix(const string& path) {
+    unregister_impl_(path, /*family=*/true);
 }
 
 void webserver::unregister_resource(const string& resource) {
-    // family does not matter - it just checks the url_normalized anyhow
-    details::http_endpoint he(resource, false, true, regex_checking);
-    std::unique_lock registered_resources_lock(registered_resources_mutex);
+    // Build the canonical endpoint key once. The family flag does not
+    // affect which v2 storage location holds the entry; the
+    // url_complete key is the only sweep key.
+    detail::http_endpoint he_exact(resource, /*family=*/false, true, config.regex_checking);
 
-    // Invalidate cache while holding registered_resources_mutex to prevent
-    // any thread from retrieving dangling resource pointers from the cache
-    // after we erase from the resource maps.
+    // Erase from the v2 3-tier table. Hold a single write-lock
+    // across all four tier sweeps so no request thread can observe a
+    // partially-unregistered state (CWE-367 TOCTOU: a prior register_path
+    // AND register_prefix on the same path are both cleared atomically).
     {
-        std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
-        route_cache_list.clear();
-        route_cache_map.clear();
+        auto table_lock = impl_->routes_.lock_for_write();
+        const std::string& key = he_exact.get_url_complete();
+        // Sweep every tier the key could occupy so a prior register_path AND
+        // register_prefix on the same path are both cleared atomically.
+        impl_->routes_.erase_exact_and_regex_locked_(key);
+        impl_->routes_.remove_param_prefix_locked_(key, /*is_prefix=*/false);
+        impl_->routes_.remove_param_prefix_locked_(key, /*is_prefix=*/true);
     }
-
-    registered_resources.erase(he);
-    registered_resources.erase(he.get_url_complete());
-    registered_resources_str.erase(he.get_url_complete());
-    registered_resources_regex.erase(he);
+    // Delegate cache clearing to invalidate_route_cache() matching the
+    // pattern used by register_impl_ and on_methods_ (table lock released
+    // before cache is cleared).
+    impl_->routes_.invalidate_route_cache();
 }
 
-void webserver::ban_ip(const string& ip) {
-    std::unique_lock bans_lock(bans_mutex);
-    ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = bans.find(t_ip);
-    if (it != bans.end() && (t_ip.weight() < (*it).weight())) {
-        bans.erase(it);
-        bans.insert(t_ip);
-    } else {
-        bans.insert(t_ip);
+// IP-control API: a symmetric, consistently-named surface (replacing
+// the v1 ban_ip / unban_ip / allow_ip / disallow_ip quartet):
+//   deny_ip / remove_denied_ip   -> the deny list (exception under ACCEPT)
+//   allow_ip / remove_allowed_ip -> the allow list (exception under REJECT;
+//                                   also overrides a deny entry under ACCEPT)
+// See webserver::deny_ip / allow_ip (impls in webserver_lifecycle.cpp) and
+// classify_decision (webserver_callbacks_lifecycle.cpp).
+
+
+// ===== webserver_routes.cpp (public webserver:: API) ====================
+
+
+// Input-validation guard for on_methods_. Extracted so on_methods_ stays
+// inside the project-wide CCN gate.
+void webserver::validate_on_methods_inputs_(method_set methods,
+        const std::string& path,
+        const std::function<http_response(const http_request&)>& handler) const {
+    if (methods.empty()) {
+        throw std::invalid_argument(
+            "route(method_set, ...) requires at least one method bit set");
+    }
+    if (!handler) {
+        throw std::invalid_argument(
+            "The handler function passed to on_*/route must be non-empty");
+    }
+    // Same single-resource constraint as register_path: only "" or "/"
+    // is acceptable. register_impl_'s version of this guard
+    // (webserver_register.cpp) has an additional `!family` arm; it is
+    // deliberately omitted here because on_*/route routes are ALWAYS
+    // exact-matched (family=false by design -- prefix matching is only
+    // available via register_prefix()), so the arm would always be
+    // true. The guard below is therefore complete for lambda routes.
+    if (config.single_resource && path != "" && path != "/") {
+        throw std::invalid_argument(
+            "When using a single_resource server, on_*/route requires "
+            "the path to be '' or '/'");
+    }
+    // Lightweight input hygiene (CWE-20): reject paths containing embedded
+    // null bytes. A std::string can hold '\0' but the underlying regex and
+    // routing engines treat it as a string terminator, producing silent
+    // mismatches. Reject early with a clear diagnostic rather than letting
+    // the error surface deep in regex compilation or route matching.
+    if (path.find('\0') != std::string::npos) {
+        throw std::invalid_argument(
+            "Route path must not contain embedded null bytes");
+    }
+    // Hardening: registration is a privileged
+    // server-setup call, not a network-reachable path, but an
+    // accidentally megabyte-scale path would still be stored in the
+    // route table data structures for no benefit. Reject unreasonably
+    // long paths early with a clear diagnostic.
+    if (path.size() > 8192) {
+        throw std::invalid_argument(
+            "Route path exceeds maximum length of 8192 bytes");
     }
 }
 
-void webserver::allow_ip(const string& ip) {
-    std::unique_lock allowances_lock(allowances_mutex);
-    ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = allowances.find(t_ip);
-    if (it != allowances.end() && (t_ip.weight() < (*it).weight())) {
-        allowances.erase(it);
-        allowances.insert(t_ip);
-    } else {
-        allowances.insert(t_ip);
-    }
-}
+void webserver::on_methods_(method_set methods,
+                            const std::string& path,
+                            std::function<http_response(const http_request&)> handler) {
+    validate_on_methods_inputs_(methods, path, handler);
 
-void webserver::unban_ip(const string& ip) {
-    std::unique_lock bans_lock(bans_mutex);
-    bans.erase(ip_representation(ip));
-}
+    detail::http_endpoint idx(path, /*family=*/false,
+                              /*registration=*/true, config.regex_checking);
 
-void webserver::disallow_ip(const string& ip) {
-    std::unique_lock allowances_lock(allowances_mutex);
-    allowances.erase(ip_representation(ip));
-}
-
-#ifdef HAVE_GNUTLS
-// MHD_PskServerCredentialsCallback signature:
-// The 'cls' parameter is our webserver pointer (passed via MHD_OPTION)
-// Returns 0 on success, -1 on error
-// The psk output should be allocated with malloc() - MHD will free it
-int webserver::psk_cred_handler_func(void* cls,
-                                      struct MHD_Connection* connection,
-                                      const char* username,
-                                      void** psk,
-                                      size_t* psk_size) {
-    std::ignore = connection;  // Not needed - we get context from cls
-
-    webserver* ws = static_cast<webserver*>(cls);
-
-    // Initialize output to safe values
-    *psk = nullptr;
-    *psk_size = 0;
-
-    if (ws == nullptr || ws->psk_cred_handler == nullptr) {
-        return -1;
-    }
-
-    std::string psk_hex = ws->psk_cred_handler(std::string(username));
-    if (psk_hex.empty()) {
-        return -1;
-    }
-
-    // Validate hex string before allocating memory
-    size_t psk_len = psk_hex.size() / 2;
-    if (psk_len == 0 || (psk_hex.size() % 2 != 0) ||
-        !string_utilities::is_valid_hex(psk_hex)) {
-        return -1;
-    }
-
-    // Allocate with malloc - MHD will free this
-    unsigned char* psk_data = static_cast<unsigned char*>(malloc(psk_len));
-    if (psk_data == nullptr) {
-        return -1;
-    }
-
-    // Convert hex string to binary
-    for (size_t i = 0; i < psk_len; i++) {
-        psk_data[i] = static_cast<unsigned char>(
-            (string_utilities::hex_char_to_val(psk_hex[i * 2]) << 4) |
-             string_utilities::hex_char_to_val(psk_hex[i * 2 + 1]));
-    }
-
-    *psk = psk_data;
-    *psk_size = psk_len;
-    return 0;
-}
-
-#ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
-// SNI callback for selecting certificates based on server name
-// Returns 0 on success, -1 on failure
-int webserver::sni_cert_callback_func(void* cls,
-                                       struct MHD_Connection* connection,
-                                       const char* server_name,
-                                       gnutls_certificate_credentials_t* creds) {
-    std::ignore = connection;
-
-    webserver* ws = static_cast<webserver*>(cls);
-    if (ws == nullptr || ws->sni_callback == nullptr || server_name == nullptr) {
-        return -1;
-    }
-
-    std::string name(server_name);
-
-    // Check if we have cached credentials for this server name
     {
-        std::shared_lock lock(ws->sni_credentials_mutex);
-        auto it = ws->sni_credentials_cache.find(name);
-        if (it != ws->sni_credentials_cache.end()) {
-            *creds = it->second;
-            return 0;
-        }
+        // Single-locked window across the v2 conflict probe, the
+        // per-method atomicity pre-check, the slot writes, and the
+        // table mutation. route_table_mutex_ is the only consistency
+        // boundary and must cover both the probe and the mutation. An
+        // upsert throw (e.g. reject_terminus_collision) leaves the
+        // local shim unreferenced and discarded -- no rollback required
+        // since the table itself was never touched.
+        auto table_lock = impl_->routes_.lock_for_write();
+        // is_new_entry is the bool prepare_or_create_lambda_shim
+        // returns as /*fresh=*/ and upsert_v2_table_entry_locked_
+        // receives as `fresh` -- the same flag under three names.
+        auto [shim, is_new_entry] =
+            impl_->prepare_or_create_lambda_shim(idx, methods);
+        impl_->commit_handlers_to_shim(*shim, methods, std::move(handler));
+        impl_->routes_.upsert_v2_table_entry_locked_(idx, methods, shim,
+                                                     is_new_entry);
     }
-
-    // Call user's callback to get cert/key pair
-    auto [cert_pem, key_pem] = ws->sni_callback(name);
-    if (cert_pem.empty() || key_pem.empty()) {
-        return -1;  // Use default certificate
-    }
-
-    // Create new credentials for this server name
-    gnutls_certificate_credentials_t new_creds;
-    if (gnutls_certificate_allocate_credentials(&new_creds) != GNUTLS_E_SUCCESS) {
-        return -1;
-    }
-
-    gnutls_datum_t cert_data = {
-        reinterpret_cast<unsigned char*>(const_cast<char*>(cert_pem.data())),
-        static_cast<unsigned int>(cert_pem.size())
-    };
-    gnutls_datum_t key_data = {
-        reinterpret_cast<unsigned char*>(const_cast<char*>(key_pem.data())),
-        static_cast<unsigned int>(key_pem.size())
-    };
-
-    int ret = gnutls_certificate_set_x509_key_mem(new_creds, &cert_data, &key_data, GNUTLS_X509_FMT_PEM);
-    if (ret != GNUTLS_E_SUCCESS) {
-        gnutls_certificate_free_credentials(new_creds);
-        return -1;
-    }
-
-    // Cache the credentials with double-check to avoid race condition
-    {
-        std::unique_lock lock(ws->sni_credentials_mutex);
-        // Re-check after acquiring exclusive lock - another thread may have inserted
-        auto it = ws->sni_credentials_cache.find(name);
-        if (it != ws->sni_credentials_cache.end()) {
-            // Another thread already cached credentials, use theirs and free ours
-            gnutls_certificate_free_credentials(new_creds);
-            *creds = it->second;
-            return 0;
-        }
-        ws->sni_credentials_cache[name] = new_creds;
-    }
-
-    *creds = new_creds;
-    return 0;
-}
-#endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
-#endif  // HAVE_GNUTLS
-
-MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen) {
-    // Parameter needed to respect MHD interface, but not needed here.
-    std::ignore = addrlen;
-
-    const auto ws = static_cast<webserver*>(cls);
-
-    if (!ws->ban_system_enabled) return MHD_YES;
-
-    std::shared_lock bans_lock(ws->bans_mutex);
-    std::shared_lock allowances_lock(ws->allowances_mutex);
-    const bool is_banned = ws->bans.count(ip_representation(addr));
-    const bool is_allowed = ws->allowances.count(ip_representation(addr));
-
-    if ((ws->default_policy == http_utils::ACCEPT && is_banned && !is_allowed) ||
-        (ws->default_policy == http_utils::REJECT && (!is_allowed || is_banned))) {
-        return MHD_NO;
-    }
-
-    return MHD_YES;
+    impl_->routes_.invalidate_route_cache();
 }
 
-void* uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
-    // Parameter needed to respect MHD interface, but not needed here.
-    std::ignore = cls;
-    std::ignore = con;
-
-    auto mr = std::make_unique<details::modded_request>();
-    // MHD may invoke this callback with a null uri before the request line
-    // has been parsed (e.g. port scans, half-open connections, or non-HTTP
-    // traffic on the listening port). Treat that as an empty URI so the
-    // std::string assignment does not throw std::logic_error and abort the
-    // process via std::terminate. See issue #371.
-    mr->complete_uri = (uri != nullptr) ? uri : "";
-    return reinterpret_cast<void*>(mr.release());
+// The seven named forwarders below are the only place that maps the
+// method name to its http_method enum constant. Each is a thin alias
+// for on_methods_; all validation and insertion logic lives there.
+// on_delete uses http_method::del because `delete` is a C++ keyword;
+// the wire token is "DELETE" (see http_method::to_string).
+void webserver::on_get(const std::string& path,
+                       std::function<http_response(const http_request&)> handler) {
+    on_methods_(method_set{}.set(http_method::get), path, std::move(handler));
 }
 
-void error_log(void* cls, const char* fmt, va_list ap) {
-    webserver* dws = static_cast<webserver*>(cls);
+void webserver::on_post(const std::string& path,
+                        std::function<http_response(const http_request&)> handler) {
+    on_methods_(method_set{}.set(http_method::post), path, std::move(handler));
+}
 
-    std::string msg;
-    msg.resize(80);  // Asssume one line will be enought most of the time.
+void webserver::on_put(const std::string& path,
+                       std::function<http_response(const http_request&)> handler) {
+    on_methods_(method_set{}.set(http_method::put), path, std::move(handler));
+}
 
-    va_list va;
-    va_copy(va, ap);  // Stash a copy in case we need to try again.
+void webserver::on_delete(const std::string& path,
+                          std::function<http_response(const http_request&)> handler) {
+    on_methods_(method_set{}.set(http_method::del), path, std::move(handler));
+}
 
-    size_t r = vsnprintf(&*msg.begin(), msg.size(), fmt, ap);
-    va_end(ap);
+void webserver::on_patch(const std::string& path,
+                         std::function<http_response(const http_request&)> handler) {
+    on_methods_(method_set{}.set(http_method::patch), path, std::move(handler));
+}
 
-    if (msg.size() < r) {
-      msg.resize(r);
-      r = vsnprintf(&*msg.begin(), msg.size(), fmt, va);
+void webserver::on_options(const std::string& path,
+                           std::function<http_response(const http_request&)> handler) {
+    on_methods_(method_set{}.set(http_method::options), path, std::move(handler));
+}
+
+void webserver::on_head(const std::string& path,
+                        std::function<http_response(const http_request&)> handler) {
+    on_methods_(method_set{}.set(http_method::head), path, std::move(handler));
+}
+
+// Generic table-driven entry points. The single-method form
+// rejects http_method::count_ explicitly because the public route()
+// overload accepts a runtime value (and so the sentinel is reachable);
+// the on_* forwarders never pass count_, so the on_methods_ helper
+// itself does not guard against it.
+void webserver::route(http_method m,
+                      const std::string& path,
+                      std::function<http_response(const http_request&)> handler) {
+    if (m == http_method::count_) {
+        throw std::invalid_argument(
+            "http_method::count_ is a sentinel and may not be "
+            "registered as a route");
     }
-    va_end(va);
-    msg.resize(r);
-
-    if (dws->log_error != nullptr) dws->log_error(msg);
+    on_methods_(method_set{}.set(m), path, std::move(handler));
 }
 
-void access_log(webserver* dws, string uri) {
-    if (dws->log_access != nullptr) dws->log_access(uri);
+void webserver::route(method_set methods,
+                      const std::string& path,
+                      std::function<http_response(const http_request&)> handler) {
+    // method_set::set() does not validate its argument; a caller who
+    // passes only count_ bits produces a non-empty bitmask (the
+    // count_ bit lies outside 0..count_-1) that for_each_requested_method
+    // will iterate over zero times, resulting in an empty shim. The
+    // on_methods_ empty() guard uses bits==0 and therefore does not catch
+    // this edge case. The single-method route(http_method,...) already
+    // guards against http_method::count_ explicitly; for the method_set
+    // overload we rely on the documented precondition that callers only
+    // set valid method bits. No additional sentinel check is added here
+    // because method_set is a user-visible type and validating its
+    // internal representation would duplicate policy already owned by
+    // method_set itself.
+    on_methods_(methods, path, std::move(handler));
 }
 
-size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
-    // Parameter needed to respect MHD interface, but not needed here.
-    std::ignore = cls;
-    std::ignore = c;
-
-    // THIS IS USED TO AVOID AN UNESCAPING OF URL BEFORE THE ANSWER.
-    // IT IS DUE TO A BOGUS ON libmicrohttpd (V0.99) THAT PRODUCING A
-    // STRING CONTAINING '\0' AFTER AN UNESCAPING, IS UNABLE TO PARSE
-    // ARGS WITH get_connection_values FUNC OR lookup FUNC.
-    if (s == nullptr) return 0;
-    return std::char_traits<char>::length(s);
-}
-
-MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
-        const char *key, const char *filename, const char *content_type,
-        const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
-    // Parameter needed to respect MHD interface, but not needed here.
-    std::ignore = kind;
-
-    struct details::modded_request* mr = (struct details::modded_request*) cls;
-
-    if (!filename) {
-        // MHD may invoke the post iterator with a null key on a
-        // continuation chunk (off > 0): the field name was supplied on the
-        // first call and is not repeated. With no field name there is
-        // nothing to store the value under, so silently accept the chunk
-        // (MHD_YES tells MHD to continue; MHD_NO would abort the whole
-        // request). Guarding here also stops the raw pointer from reaching
-        // std::string, which throws std::logic_error on null and aborts the
-        // process via std::terminate because the throw escapes a C
-        // callback. See issue #375 (same class of bug as the null-uri fix
-        // in uri_log, issue #371).
-        if (!key) {
-            return MHD_YES;
-        }
-
-        // There is no actual file, just set the arg key/value and return.
-        if (off > 0) {
-            mr->dhr->grow_last_arg(key, std::string(data, size));
-            return MHD_YES;
-        }
-
-        mr->dhr->set_arg(key, std::string(data, size));
-        return MHD_YES;
-    }
-
-    try {
-        if (mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-            mr->dhr->set_arg_flat(key, std::string(mr->dhr->get_arg(key)) + std::string(data, size));
-        }
-
-        if (*filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
-            // either get the existing file info struct or create a new one in the file map
-            http::file_info& file = mr->dhr->get_or_create_file_info(key, filename);
-            // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
-            // (either random or copy of the original filename)
-            if (file.get_file_system_file_name().empty()) {
-                if (mr->ws->generate_random_filename_on_upload) {
-                    file.set_file_system_file_name(http_utils::generate_random_upload_filename(mr->ws->file_upload_dir));
-                } else {
-                    std::string safe_name = http_utils::sanitize_upload_filename(filename);
-                    if (safe_name.empty()) {
-                        return MHD_NO;
-                    }
-                    file.set_file_system_file_name(mr->ws->file_upload_dir + "/" + safe_name);
-                }
-                // to not append to an already existing file, delete an already existing file
-                unlink(file.get_file_system_file_name().c_str());
-                if (content_type != nullptr) {
-                    file.set_content_type(content_type);
-                }
-                if (transfer_encoding != nullptr) {
-                    file.set_transfer_encoding(transfer_encoding);
-                }
-            }
-
-            // if multiple files are uploaded, a different filename or a different key indicates
-            // the start of a new file, so close the previous one
-            if (mr->upload_filename.empty() ||
-                mr->upload_key.empty() ||
-                0 != strcmp(filename, mr->upload_filename.c_str()) ||
-                0 != strcmp(key, mr->upload_key.c_str())) {
-                if (mr->upload_ostrm != nullptr) {
-                    mr->upload_ostrm->close();
-                }
-            }
-
-            if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
-                mr->upload_key = key;
-                mr->upload_filename = filename;
-                mr->upload_ostrm = std::make_unique<std::ofstream>();
-                mr->upload_ostrm->open(file.get_file_system_file_name(), std::ios::binary | std::ios::app);
-            }
-
-            if (size > 0) {
-                mr->upload_ostrm->write(data, size);
-                if (!mr->upload_ostrm->good()) {
-                    return MHD_NO;
-                }
-            }
-
-            // update the file size in the map
-            file.grow_file_size(size);
-        }
-        return MHD_YES;
-    } catch(const http::generateFilenameException& e) {
-        return MHD_NO;
-    }
-}
-
+// Canonical smart-pointer overload. The templated unique_ptr
+// shim in webserver.hpp constructs a shared_ptr from the unique_ptr and
+// forwards here, so this is the single funnel for both ownership shapes.
+void webserver::register_ws_resource(const std::string& resource,
+                                     std::shared_ptr<websocket_handler> handler) {
 #ifdef HAVE_WEBSOCKET
-static void decode_websocket_buffer(struct MHD_WebSocketStream* ws_stream,
-                                    websocket_handler* handler,
-                                    websocket_session& session,
-                                    const char* buf, size_t buf_len) {
-    size_t offset = 0;
-    while (offset < buf_len && session.is_valid()) {
-        char* frame_data = nullptr;
-        size_t frame_len = 0;
-        size_t step = 0;
-        int status = MHD_websocket_decode(ws_stream,
-                                           buf + offset,
-                                           buf_len - offset,
-                                           &step,
-                                           &frame_data,
-                                           &frame_len);
-        offset += step;
-        switch (status) {
-            case MHD_WEBSOCKET_STATUS_TEXT_FRAME:
-                handler->on_message(session, std::string_view(frame_data, frame_len));
-                MHD_websocket_free(ws_stream, frame_data);
-                break;
-            case MHD_WEBSOCKET_STATUS_BINARY_FRAME:
-                handler->on_binary(session, frame_data, frame_len);
-                MHD_websocket_free(ws_stream, frame_data);
-                break;
-            case MHD_WEBSOCKET_STATUS_PING_FRAME:
-                handler->on_ping(session, std::string_view(frame_data, frame_len));
-                MHD_websocket_free(ws_stream, frame_data);
-                break;
-            case MHD_WEBSOCKET_STATUS_CLOSE_FRAME: {
-                uint16_t close_code = 1000;
-                std::string close_reason;
-                if (frame_len >= 2) {
-                    close_code = static_cast<uint16_t>(
-                        (static_cast<unsigned char>(frame_data[0]) << 8) |
-                         static_cast<unsigned char>(frame_data[1]));
-                    if (frame_len > 2) {
-                        close_reason.assign(frame_data + 2, frame_len - 2);
-                    }
-                }
-                handler->on_close(session, close_code, close_reason);
-                MHD_websocket_free(ws_stream, frame_data);
-                // Send close response and end the loop
-                session.close(close_code, close_reason);
-                break;
-            }
-            case MHD_WEBSOCKET_STATUS_OK:
-                // Need more data - go back to recv
-                if (frame_data != nullptr) {
-                    MHD_websocket_free(ws_stream, frame_data);
-                }
-                break;
-            default:
-                // Protocol error or unknown frame
-                if (frame_data != nullptr) {
-                    MHD_websocket_free(ws_stream, frame_data);
-                }
-                session.close(1002, "Protocol error");
-                break;
-        }
-        // If decode consumed no bytes, we need more data
-        if (step == 0) break;
+    if (!handler) {
+        throw std::invalid_argument("The websocket_handler pointer cannot be null");
     }
+    std::string url_key = http_utils::standardize_url(resource);
+    if (!impl_->ws_.try_register(std::move(url_key), std::move(handler))) {
+        // v1's operator[]-based insert silently overwrote; v2.0
+        // surfaces the collision by throwing.
+        throw std::invalid_argument(
+            "A websocket_handler is already registered at this path");
+    }
+#else
+    // WebSocket compiled out -- fail loudly at the public
+    // entry point so callers can catch feature_unavailable.
+    (void)resource;
+    (void)handler;
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+#endif
 }
 
-void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection,
-                                void *req_cls, const char *extra_in,
-                                size_t extra_in_size, MHD_socket sock,
-                                struct MHD_UpgradeResponseHandle *urh) {
-    std::ignore = connection;
-    std::ignore = req_cls;
-
-    ws_upgrade_data* data = static_cast<ws_upgrade_data*>(cls);
-    websocket_handler* handler = data->handler;
-    delete data;
-
-    // Create a WebSocket stream for this connection
-    struct MHD_WebSocketStream* ws_stream = nullptr;
-    int ws_result = MHD_websocket_stream_init(&ws_stream,
-                                               MHD_WEBSOCKET_FLAG_SERVER | MHD_WEBSOCKET_FLAG_NO_FRAGMENTS,
-                                               0);
-    if (ws_result != MHD_WEBSOCKET_STATUS_OK || ws_stream == nullptr) {
-        MHD_upgrade_action(urh, MHD_UPGRADE_ACTION_CLOSE);
-        return;
-    }
-
-    websocket_session session(sock, urh, ws_stream);
-    handler->on_open(session);
-
-    // Process any initial data that MHD may have buffered
-    if (extra_in != nullptr && extra_in_size > 0) {
-        decode_websocket_buffer(ws_stream, handler, session, extra_in, extra_in_size);
-    }
-
-    // Receive loop
-    char buf[4096];
-    while (session.is_valid()) {
-        ssize_t got = recv(sock, buf, sizeof(buf), 0);
-        if (got <= 0) break;
-
-        decode_websocket_buffer(ws_stream, handler, session,
-                                buf, static_cast<size_t>(got));
-    }
-
-    // Session destructor will free ws_stream and close urh
-}
-#endif  // HAVE_WEBSOCKET
-
-std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const {
-    if (not_found_resource != nullptr) {
-        return not_found_resource(*mr->dhr);
-    } else {
-        return std::make_shared<string_response>(NOT_FOUND_ERROR, http_utils::http_not_found);
-    }
-}
-
-std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modded_request* mr) const {
-    if (method_not_allowed_resource != nullptr) {
-        return method_not_allowed_resource(*mr->dhr);
-    } else {
-        return std::make_shared<string_response>(METHOD_ERROR, http_utils::http_method_not_allowed);
-    }
-}
-
-std::shared_ptr<http_response> webserver::internal_error_page(details::modded_request* mr, bool force_our) const {
-    if (internal_error_resource != nullptr && !force_our) {
-        return internal_error_resource(*mr->dhr);
-    } else {
-        return std::make_shared<string_response>(GENERIC_ERROR, http_utils::http_internal_server_error);
-    }
-}
-
-static std::string normalize_path(const std::string& path) {
-    std::vector<std::string> segments;
-    std::string::size_type start = 0;
-    // Skip leading slash
-    if (!path.empty() && path[0] == '/') {
-        start = 1;
-    }
-    while (start < path.size()) {
-        auto end = path.find('/', start);
-        if (end == std::string::npos) end = path.size();
-        std::string seg = path.substr(start, end - start);
-        if (seg == "..") {
-            if (!segments.empty()) segments.pop_back();
-        } else if (!seg.empty() && seg != ".") {
-            segments.push_back(seg);
-        }
-        start = end + 1;
-    }
-    std::string normalized = "/";
-    for (size_t i = 0; i < segments.size(); i++) {
-        if (i > 0) normalized += "/";
-        normalized += segments[i];
-    }
-    return normalized;
-}
-
-bool webserver::should_skip_auth(const std::string& path) const {
-    std::string normalized = normalize_path(path);
-
-    for (const auto& skip_path : auth_skip_paths) {
-        if (skip_path == normalized) return true;
-        // Support wildcard suffix (e.g., "/public/*")
-        if (skip_path.size() > 2 && skip_path.back() == '*' &&
-            skip_path[skip_path.size() - 2] == '/') {
-            std::string prefix = skip_path.substr(0, skip_path.size() - 1);
-            if (normalized.compare(0, prefix.size(), prefix) == 0) return true;
-        }
-    }
-    return false;
-}
-
-MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr) {
-    mr->dhr.reset(new http_request(connection, unescaper));
-    mr->dhr->set_file_cleanup_callback(file_cleanup_callback);
-
-    if (!mr->has_body) {
-        return MHD_YES;
-    }
-
-    mr->dhr->set_content_size_limit(content_size_limit);
-    const char *encoding = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, http_utils::http_header_content_type);
-
-    if (post_process_enabled &&
-        (nullptr != encoding &&
-            ((0 == strncasecmp(http_utils::http_post_encoding_form_urlencoded, encoding, strlen(http_utils::http_post_encoding_form_urlencoded))) ||
-             (0 == strncasecmp(http_utils::http_post_encoding_multipart_formdata, encoding, strlen(http_utils::http_post_encoding_multipart_formdata)))))) {
-        const size_t post_memory_limit(32 * 1024);  // Same as #MHD_POOL_SIZE_DEFAULT
-        mr->pp = MHD_create_post_processor(connection, post_memory_limit, &post_iterator, mr);
-    } else {
-        mr->pp = nullptr;
-    }
-    return MHD_YES;
-}
-
-MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, const char* method,
-        const char* version, const char* upload_data,
-        size_t* upload_data_size, struct details::modded_request* mr) {
-    if (0 == *upload_data_size) return complete_request(connection, mr, version, method);
-
-    if (mr->has_body) {
-#ifdef DEBUG
-        std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
-#endif  // DEBUG
-        // The post iterator is only created from the libmicrohttpd for content of type
-        // multipart/form-data and application/x-www-form-urlencoded
-        // all other content (which is indicated by mr-pp == nullptr)
-        // has to be put to the content even if put_processed_data_to_content is set to false
-        if (mr->pp == nullptr || put_processed_data_to_content) {
-            mr->dhr->grow_content(upload_data, *upload_data_size);
-        }
-
-        if (mr->pp != nullptr) {
-            mr->ws = this;
-            MHD_post_process(mr->pp, upload_data, *upload_data_size);
-            if (mr->upload_ostrm != nullptr && mr->upload_ostrm->is_open()) {
-                mr->upload_ostrm->close();
-            }
-        }
-    }
-
-    *upload_data_size = 0;
-    return MHD_YES;
-}
-
-struct MHD_Response* webserver::get_raw_response_with_fallback(details::modded_request* mr) {
-    try {
-        struct MHD_Response* raw = mr->dhrs->get_raw_response();
-        if (raw == nullptr) {
-            mr->dhrs = internal_error_page(mr);
-            raw = mr->dhrs->get_raw_response();
-        }
-        return raw;
-    } catch(const std::invalid_argument&) {
-        try {
-            mr->dhrs = not_found_page(mr);
-            return mr->dhrs->get_raw_response();
-        } catch(...) {
-            return nullptr;
-        }
-    } catch(...) {
-        try {
-            mr->dhrs = internal_error_page(mr);
-            return mr->dhrs->get_raw_response();
-        } catch(...) {
-            return nullptr;
-        }
-    }
-}
-
-MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method) {
-    int to_ret = MHD_NO;
-
+void webserver::unregister_ws_resource(const std::string& resource) {
 #ifdef HAVE_WEBSOCKET
-    // Check for WebSocket upgrade request before normal resource dispatch
-    {
-        const char* upgrade_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, MHD_HTTP_HEADER_UPGRADE);
-        if (upgrade_header != nullptr && 0 == strcasecmp(upgrade_header, "websocket")) {
-            // RFC 6455 handshake validation
-            const char* connection_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, MHD_HTTP_HEADER_CONNECTION);
-            const char* ws_version = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Sec-WebSocket-Version");
-            const char* ws_key = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Sec-WebSocket-Key");
-
-            // Validate required headers per RFC 6455 Section 4.2.1
-            auto send_bad_request = [&]() -> MHD_Result {
-                struct MHD_Response* bad_response = MHD_create_response_from_buffer(0, nullptr, MHD_RESPMEM_PERSISTENT);
-                MHD_Result ret = (MHD_Result) MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST, bad_response);
-                MHD_destroy_response(bad_response);
-                return ret;
-            };
-
-            if (connection_header == nullptr || strcasestr(connection_header, "Upgrade") == nullptr) {
-                return send_bad_request();
-            }
-            if (ws_version == nullptr || strcmp(ws_version, "13") != 0) {
-                return send_bad_request();
-            }
-            if (ws_key == nullptr || ws_key[0] == '\0') {
-                return send_bad_request();
-            }
-
-            std::shared_lock lock(registered_resources_mutex);
-            auto ws_it = registered_ws_handlers.find(mr->standardized_url);
-            if (ws_it != registered_ws_handlers.end()) {
-                websocket_handler* handler = ws_it->second;
-                lock.unlock();
-
-                ws_upgrade_data* data = new ws_upgrade_data{this, handler};
-                struct MHD_Response* response = MHD_create_response_for_upgrade(&upgrade_handler, data);
-                if (response != nullptr) {
-                    // Add required WebSocket response headers
-                    MHD_add_response_header(response, MHD_HTTP_HEADER_UPGRADE, "websocket");
-
-                    // Compute Sec-WebSocket-Accept from client's key (RFC 6455 Section 4.2.2)
-                    char accept_header[29];  // Base64 of SHA-1 = 28 chars + null
-                    if (MHD_websocket_create_accept_header(ws_key, accept_header) == MHD_WEBSOCKET_STATUS_OK) {
-                        MHD_add_response_header(response, "Sec-WebSocket-Accept", accept_header);
-                    }
-
-                    to_ret = MHD_queue_response(connection, MHD_HTTP_SWITCHING_PROTOCOLS, response);
-                    MHD_destroy_response(response);
-                    return (MHD_Result) to_ret;
-                }
-                delete data;
-            }
-        }
-    }
-#endif  // HAVE_WEBSOCKET
-
-    map<string, http_resource*>::iterator fe;
-
-    http_resource* hrm;
-
-    bool found = false;
-    struct MHD_Response* raw_response;
-    {
-        std::shared_lock registered_resources_lock(registered_resources_mutex);
-        if (!single_resource) {
-            const char* st_url = mr->standardized_url.c_str();
-            fe = registered_resources_str.find(st_url);
-            if (fe == registered_resources_str.end()) {
-                if (regex_checking) {
-                    details::http_endpoint endpoint(st_url, false, false, false);
-
-                    // Data needed for parameter extraction after match.
-                    // On cache hit, we copy these while holding the cache lock
-                    // to avoid use-after-free if another thread invalidates cache.
-                    vector<string> matched_url_pars;
-                    vector<int> matched_chunks;
-
-                    // Check the LRU route cache first
-                    {
-                        std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
-                        auto cache_it = route_cache_map.find(mr->standardized_url);
-                        if (cache_it != route_cache_map.end()) {
-                            // Cache hit — move to front of LRU list
-                            route_cache_list.splice(route_cache_list.begin(), route_cache_list, cache_it->second);
-                            const route_cache_entry& cached = cache_it->second->second;
-                            matched_url_pars = cached.matched_endpoint.get_url_pars();
-                            matched_chunks = cached.matched_endpoint.get_chunk_positions();
-                            hrm = cached.resource;
-                            found = true;
-                        }
-                    }
-
-                    if (!found) {
-                        // Cache miss — perform regex scan
-                        map<details::http_endpoint, http_resource*>::iterator found_endpoint;
-
-                        size_t len = 0;
-                        size_t tot_len = 0;
-                        for (auto it = registered_resources_regex.begin(); it != registered_resources_regex.end(); ++it) {
-                            size_t endpoint_pieces_len = it->first.get_url_pieces().size();
-                            size_t endpoint_tot_len = it->first.get_url_complete().size();
-                            if (!found || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len)) {
-                                if (it->first.match(endpoint)) {
-                                    found = true;
-                                    len = endpoint_pieces_len;
-                                    tot_len = endpoint_tot_len;
-                                    found_endpoint = it;
-                                }
-                            }
-                        }
-
-                        if (found) {
-                            // Safe to reference: registered_resources_mutex (shared) is still held
-                            matched_url_pars = found_endpoint->first.get_url_pars();
-                            matched_chunks = found_endpoint->first.get_chunk_positions();
-                            hrm = found_endpoint->second;
-
-                            // Store in LRU cache
-                            {
-                                std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
-                                route_cache_list.emplace_front(mr->standardized_url, route_cache_entry{found_endpoint->first, hrm});
-                                route_cache_map[mr->standardized_url] = route_cache_list.begin();
-
-                                if (route_cache_map.size() > ROUTE_CACHE_MAX_SIZE) {
-                                    route_cache_map.erase(route_cache_list.back().first);
-                                    route_cache_list.pop_back();
-                                }
-                            }
-                        }
-                    }
-
-                    // Extract URL parameters from matched endpoint
-                    if (found) {
-                        const auto& url_pieces = endpoint.get_url_pieces();
-                        for (unsigned int i = 0; i < matched_url_pars.size(); i++) {
-                            if (matched_chunks[i] >= 0 && static_cast<size_t>(matched_chunks[i]) < url_pieces.size()) {
-                                mr->dhr->set_arg(matched_url_pars[i], url_pieces[matched_chunks[i]]);
-                            }
-                        }
-                    }
-                }
-            } else {
-                hrm = fe->second;
-                found = true;
-            }
-        } else {
-            hrm = registered_resources.begin()->second;
-            found = true;
-        }
-    }
-
-    // Check centralized authentication if handler is configured
-    if (found && auth_handler != nullptr) {
-        std::string path(mr->dhr->get_path());
-        if (!should_skip_auth(path)) {
-            std::shared_ptr<http_response> auth_response = auth_handler(*mr->dhr);
-            if (auth_response != nullptr) {
-                mr->dhrs = auth_response;
-                found = false;  // Skip resource rendering, go directly to response
-            }
-        }
-    }
-
-    if (found) {
-        try {
-            if (mr->pp != nullptr) {
-                MHD_destroy_post_processor(mr->pp);
-                mr->pp = nullptr;
-            }
-            if (hrm->is_allowed(method)) {
-                mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
-                if (mr->dhrs.get() == nullptr || mr->dhrs->get_response_code() == -1) {
-                    mr->dhrs = internal_error_page(mr);
-                }
-            } else {
-                mr->dhrs = method_not_allowed_page(mr);
-
-                vector<string> allowed_methods = hrm->get_allowed_methods();
-                if (allowed_methods.size() > 0) {
-                    string header_value = allowed_methods[0];
-                    for (auto it = allowed_methods.cbegin() + 1; it != allowed_methods.cend(); ++it) {
-                        header_value += ", " + (*it);
-                    }
-                    mr->dhrs->with_header(http_utils::http_header_allow, header_value);
-                }
-            }
-        } catch(const std::exception& e) {
-            mr->dhrs = internal_error_page(mr);
-        } catch(...) {
-            mr->dhrs = internal_error_page(mr);
-        }
-    } else if (mr->dhrs == nullptr) {
-        mr->dhrs = not_found_page(mr);
-    }
-
-    raw_response = get_raw_response_with_fallback(mr);
-    if (raw_response == nullptr) {
-        mr->dhrs = internal_error_page(mr, true);
-        raw_response = mr->dhrs->get_raw_response();
-    }
-    mr->dhrs->decorate_response(raw_response);
-    to_ret = mr->dhrs->enqueue_response(connection, raw_response);
-    MHD_destroy_response(raw_response);
-    return (MHD_Result) to_ret;
+    impl_->ws_.unregister(http_utils::standardize_url(resource));
+#else
+    (void)resource;
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+#endif
 }
 
-MHD_Result webserver::complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method) {
-    mr->ws = this;
 
-    mr->dhr->set_path(mr->standardized_url);
-    mr->dhr->set_method(method);
-    mr->dhr->set_version(version);
+// ===== webserver_aliases.cpp (public webserver:: API) ====================
 
-    return finalize_answer(connection, mr, method);
+namespace {
+
+// Install the internal_error_handler alias into the dedicated
+// last-position slot on webserver_impl. Extracted from
+// install_default_alias_hooks_ so the added `if` does not push the host
+// function over the CCN bar. See webserver_impl::handler_exception_alias_
+// for the lifetime contract (write-once-at-construction).
+//
+// Naming: no trailing underscore -- this is a file-scope free function in
+// an anonymous namespace, not a private member function. Matches the
+// naming convention of install_log_access_alias (which itself follows
+// the same pattern).
+//
+// Also sets any_hooks_[handler_exception] so the gate is the single source
+// of truth even when only the alias is wired. A future caller
+// that checks only any_hooks_ (e.g., a stats collector) then observes the
+// correct true value without also needing to know about the alias slot.
+void install_internal_error_alias(
+        detail::webserver_impl* impl,
+        internal_error_handler_t user_handler) {
+    if (user_handler == nullptr) return;
+    // set_handler_exception_alias also arms any_hooks_[handler_exception]
+    // so the gate stays the canonical zero-cost fast-check regardless of
+    // whether hooks are in the vector or only in the alias slot.
+    impl->hooks_.set_handler_exception_alias(
+        [user_handler = std::move(user_handler)](
+                const handler_exception_ctx& ctx) -> hook_action {
+            // conn->request is always non-null at the call site in
+            // handle_dispatch_exception; this guard is purely defensive for
+            // any future call site that relaxes that invariant. If that
+            // invariant is violated in debug builds, assert fires first.
+            assert(ctx.request != nullptr &&
+                   "handler_exception_ctx::request must be non-null");
+            if (ctx.request == nullptr) return hook_action::pass();
+            return hook_action::respond_with(
+                user_handler(*ctx.request, ctx.message));
+        });
 }
 
-MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
-        const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls) {
-    struct details::modded_request* mr = static_cast<struct details::modded_request*>(*con_cls);
-
-    if (mr->dhr) {
-        return static_cast<webserver*>(cls)->requests_answer_second_step(connection, method, version, upload_data, upload_data_size, mr);
+// SECURITY (CWE-117): sanitize a string_view for use in an access-log line.
+// Replace any ASCII control character (< 0x20 or == 0x7F) with '-' to
+// prevent a client from injecting additional log lines via embedded newlines
+// or carriage-returns in the request path or method. Appends directly to
+// `out` rather than returning a heap-allocated copy, avoiding an extra
+// std::string allocation on every request.
+void append_sanitized(std::string& out, std::string_view sv) {
+    for (unsigned char c : sv) {
+        out += (c < 0x20 || c == 0x7f) ? '-' : static_cast<char>(c);
     }
+}
 
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CONNECTION_FD);
+// Install the log_access alias into the dedicated response_sent
+// alias slot on webserver_impl. Extracted from install_default_alias_hooks_
+// for the same reason as install_internal_error_alias: keeping the host
+// function under the project CCN gate. See webserver_impl::log_access_alias_
+// for the lifetime contract.
+void install_log_access_alias(
+        detail::webserver_impl* impl,
+        log_access_ptr user_logger) {
+    if (user_logger == nullptr) return;
+    impl->hooks_.set_log_access_alias(
+        [user_logger = std::move(user_logger)](
+                const response_sent_ctx& ctx) {
+        if (ctx.request == nullptr) return;
+        std::string_view path = ctx.request->get_path();
+        std::string_view method = ctx.request->get_method();
+        std::string line;
+        // Reserve exactly what this request needs (path + " METHOD: " +
+        // method) instead of a fixed guess, so paths/methods longer than
+        // ~50 bytes don't trigger a reallocation mid-append.
+        line.reserve(path.size() + method.size() + 9);
+        // Append path and method with control-character sanitization
+        // (CWE-117). Append string_view directly to avoid intermediate
+        // heap allocations (performance: saves two alloc/dealloc pairs
+        // per request vs. the previous std::string(sv) approach).
+        append_sanitized(line, path);
+        line += " METHOD: ";
+        append_sanitized(line, method);
+        user_logger(line);
+    });
+}
 
-    if (conninfo != nullptr && static_cast<webserver*>(cls)->tcp_nodelay) {
-        int yes = 1;
-        setsockopt(conninfo->connect_fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<char*>(&yes), sizeof(int));
-    }
+}  // namespace
 
-    std::string t_url = url;
+// ----------------------------------------------------------------
+// auth_handler -> before_handler (registered first, ahead of the
+// method_not_allowed alias, so auth always fires before it).
+//
+// This is an alias. Calling auth_handler(fn) registers a hook at
+// hook_phase::before_handler. Equivalent to
+// ws.add_hook(hook_phase::before_handler, ...).
+//
+// The hook IS the auth enforcement path — it replaces (and removes)
+// the former webserver_impl::apply_auth_short_circuit inline call.
+// It respects auth_skip_paths via should_skip_auth, calls the user-
+// supplied auth_handler callable, and returns
+// hook_action::respond_with(*resp) when auth fails, short-circuiting
+// the remaining before_handler chain AND dispatch_resource_handler.
+//
+// IMPORTANT: because before_handler fires from finalize_answer BEFORE
+// dispatch_resource_handler is called (see webserver_request.cpp:
+// fire_before_handler_gated), the auth hook fires for every request
+// that resolves to a registered route (route hit). It does NOT fire
+// for 404 paths (found==false), which is the correct semantic: there
+// is no resource to authenticate against.
+//
+// DO NOT remove or replace this hook registration without also
+// providing an equivalent enforcement mechanism. The hook IS the
+// security boundary; there is no separate apply_auth_short_circuit
+// fallback path remaining.
+//
+// Design note (CWE-200): the route-hit-only
+// firing above creates an auth oracle — requests to unregistered paths
+// get 404 without auth, while registered paths get 401 if blocked, so
+// 401-vs-404 distinguishes registered from unregistered routes.
+// Callers needing uniform authentication on all requests (including
+// 404s) should add a catch-all fallback route or register a
+// not_found_handler that applies equivalent auth logic.
+void webserver::install_auth_alias_() {
+    if (config.auth_handler == nullptr) return;
+    // Capture both the webserver* (for auth_handler callable) and the
+    // webserver_impl* (for should_skip_auth, which normalises the path
+    // before comparing against auth_skip_paths).
+    webserver* ws_ptr = this;
+    detail::webserver_impl* impl_ptr = impl_.get();
+    // add_hook returns a prvalue hook_handle; .detach() is called
+    // directly on it -- std::move() on a prvalue is a no-op and
+    // is omitted here.
+    add_hook(hook_phase::before_handler,
+        std::function<hook_action(before_handler_ctx&)>(
+            [ws_ptr, impl_ptr](before_handler_ctx& ctx) -> hook_action {
+                if (ctx.request == nullptr) return hook_action::pass();
+                // Respect auth_skip_paths: skip auth for listed prefixes.
+                // Empty skip-list is the production-typical case — skip
+                // the std::string allocation entirely when there is
+                // nothing to compare against (should_skip_auth's own
+                // empty-list early-out still fires for the non-empty
+                // path).
+                if (!ws_ptr->auth_skip_paths_normalized.empty()) {
+                    if (impl_ptr->should_skip_auth(ctx.request->get_path())) {
+                        return hook_action::pass();
+                    }
+                }
+                // Call the user-supplied auth_handler. The return
+                // type is std::optional<http_response>. nullopt
+                // means "allow"; an engaged optional carries the
+                // rejection response. Compared to the v1
+                // shared_ptr<http_response> shape this saves the
+                // per-authenticated-request control-block allocation
+                // (one heap alloc removed per request that runs through
+                // this hook), and small responses ride the http_response
+                // SBO with zero further allocs.
+                // Fail-closed: the auth seat is a security
+                // boundary, so a throwing auth callable must NOT fall
+                // through to the resource. The generic short-circuit
+                // firing path (fire_short_circuit_hooks_for_phase) treats
+                // a throwing hook as pass(), which would be a security
+                // fail-open here (CWE-703). Wrap the callable in a local
+                // try/catch that short-circuits with a 500 instead,
+                // matching the documented dispatch contract that an
+                // exception thrown by a hook is routed through the same
+                // path as a throwing resource handler (which yields 500).
+                std::optional<http_response> rejection;
+                bool auth_threw = false;
+                try {
+                    rejection = ws_ptr->config.auth_handler(*ctx.request);
+                } catch (const std::exception& e) {
+                    detail::log_dispatch_error(ws_ptr->config,
+                        std::string("auth_handler threw: ").append(e.what())
+                            .append("; failing closed with 500"));
+                    auth_threw = true;
+                } catch (...) {
+                    detail::log_dispatch_error(ws_ptr->config,
+                        "auth_handler threw unknown exception; "
+                        "failing closed with 500");
+                    auth_threw = true;
+                }
+                if (auth_threw) {
+                    // Deliberately ignores create_webserver::expose_exception_
+                    // messages: the auth fail-closed 500 always has an empty
+                    // body, unlike internal_error_page (webserver_error_pages.cpp),
+                    // to keep the auth boundary fail-safe by default.
+                    return hook_action::respond_with(
+                        http_response::empty().with_status(500));
+                }
+                if (!rejection) {
+                    return hook_action::pass();
+                }
+                // Auth failed: short-circuit with the rejection response.
+                return hook_action::respond_with(std::move(*rejection));
+            }))
+        .detach();
+}
 
-    base_unescaper(&t_url, static_cast<webserver*>(cls)->unescaper);
-    mr->standardized_url = http_utils::standardize_url(t_url);
+// ----------------------------------------------------------------
+// method_not_allowed_handler -> before_handler (registered second).
+//
+// This is an alias. Calling method_not_allowed_handler(fn) registers
+// a hook at hook_phase::before_handler. Equivalent to
+// ws.add_hook(hook_phase::before_handler, ...).
+//
+// The hook checks whether the request method is in the resource's
+// allowed set. If not, it calls method_not_allowed_handler (or
+// synthesises a default 405 body), appends the Allow header, and
+// returns hook_action::respond_with(...) to short-circuit dispatch.
+void webserver::install_method_not_allowed_alias_() {
+    if (config.method_not_allowed_handler == nullptr) return;
+    webserver* ws_ptr = this;
+    add_hook(hook_phase::before_handler,
+        std::function<hook_action(before_handler_ctx&)>(
+            [ws_ptr](before_handler_ctx& ctx) -> hook_action {
+                // Only fire when the resource is known (route hit).
+                if (ctx.resource == nullptr) {
+                    return hook_action::pass();
+                }
+                if (ctx.resource->is_allowed(ctx.method)) {
+                    return hook_action::pass();
+                }
+                // Method not allowed: build the response.
+                http_response resp =
+                    ws_ptr->config.method_not_allowed_handler(*ctx.request);
+                // Append Allow header from the matched route descriptor.
+                if (ctx.matched) {
+                    std::string allow_value =
+                        detail::format_allow_header(ctx.matched->methods);
+                    if (!allow_value.empty()) {
+                        resp.with_header(
+                            http::http_utils::http_header_allow,
+                            allow_value);
+                    }
+                }
+                return hook_action::respond_with(std::move(resp));
+            }))
+        .detach();
+}
 
-    mr->has_body = false;
+// ----------------------------------------------------------------
+// not_found_handler -> route_resolved (observation-only phase).
+//
+// This is an alias. Calling not_found_handler(fn) registers a hook
+// at hook_phase::route_resolved. Equivalent to
+// ws.add_hook(hook_phase::route_resolved, ...).
+//
+// Structural pin: route_resolved is observation-only
+// — it cannot mutate the in-flight response or its delivery, and
+// route_resolved_ctx exposes no mutable response slot. The user-
+// provided not_found_handler is therefore consulted at the v1 call
+// site webserver_impl::not_found_page (invoked from finalize_answer
+// and the materialize-fallback path; see src/detail/webserver_error_pages.cpp
+// and src/detail/webserver_request.cpp). The alias seat here is the
+// architectural anchor: it reserves a stable hook[0] index at this
+// phase, it keeps the hook count observable
+// via the public hook API (verified by hooks_alias_count_test), and
+// it gives future observation-only integrations (logging, metrics)
+// a known phase boundary to subscribe alongside. The on-wire 404
+// body shape is pinned by hooks_not_found_alias_test (default and
+// custom branches) and by basic.cpp:custom_not_found_handler.
+void webserver::install_not_found_alias_() {
+    if (config.not_found_handler == nullptr) return;
+    add_hook(hook_phase::route_resolved,
+        std::function<void(const route_resolved_ctx&)>(
+            [](const route_resolved_ctx&) {
+                // Pure observation marker. The on-wire 404 body is
+                // synthesised by webserver_impl::not_found_page; this
+                // hook intentionally does NOT re-invoke the user
+                // handler (doing so would double-count the user
+                // handler's call rate and violate v1 observed-call-
+                // count semantics). The route_resolved phase forbids
+                // mutating the response. The unused parameter makes
+                // explicit that no response-shaping decision is taken
+                // here.
+            }))
+        .detach();
+}
 
-    access_log(static_cast<webserver*>(cls), mr->complete_uri + " METHOD: " + method);
+void webserver::install_default_alias_hooks_() {
+    install_auth_alias_();
+    install_method_not_allowed_alias_();
+    install_not_found_alias_();
 
-    // Case-sensitive per RFC 7230 §3.1.1: HTTP method is case-sensitive.
-    if (0 == strcmp(method, http_utils::http_method_get)) {
-        mr->callback = &http_resource::render_GET;
-    } else if (0 == strcmp(method, http_utils::http_method_post)) {
-        mr->callback = &http_resource::render_POST;
-        mr->has_body = true;
-    } else if (0 == strcmp(method, http_utils::http_method_put)) {
-        mr->callback = &http_resource::render_PUT;
-        mr->has_body = true;
-    } else if (0 == strcmp(method, http_utils::http_method_delete)) {
-        mr->callback = &http_resource::render_DELETE;
-        mr->has_body = true;
-    } else if (0 == strcmp(method, http_utils::http_method_patch)) {
-        mr->callback = &http_resource::render_PATCH;
-        mr->has_body = true;
-    } else if (0 == strcmp(method, http_utils::http_method_head)) {
-        mr->callback = &http_resource::render_HEAD;
-    } else if (0 == strcmp(method, http_utils::http_method_connect)) {
-        mr->callback = &http_resource::render_CONNECT;
-    } else if (0 == strcmp(method, http_utils::http_method_trace)) {
-        mr->callback = &http_resource::render_TRACE;
-    } else if (0 == strcmp(method, http_utils::http_method_options)) {
-        mr->callback = &http_resource::render_OPTIONS;
-    }
+    // ----------------------------------------------------------------
+    // internal_error_handler -> handler_exception alias slot (LAST position).
+    //
+    // This is an alias. Calling internal_error_handler(fn) on the builder
+    // makes the user callable the LAST-position fallback in the
+    // handler_exception chain.
+    //
+    // Unlike auth_handler / method_not_allowed_handler / not_found_handler
+    // (which install at the FIRST position via add_hook so they short-
+    // circuit before user hooks), the internal_error_handler alias must
+    // fire LAST so user-added handler_exception hooks have a chance to
+    // recover first. We achieve this by storing the alias in the
+    // dedicated webserver_impl::handler_exception_alias_ slot rather than
+    // push_back-ing into the hooks_handler_exception_ vector. The fire
+    // site (fire_handler_exception in src/hook_handle.cpp) iterates the
+    // user vector first and only then invokes the alias slot.
+    //
+    // The alias body invokes the user-supplied callable with the
+    // originating exception's message and returns
+    // hook_action::respond_with(response). If the user callable itself
+    // throws, fire_handler_exception's catch arm absorbs it and returns
+    // nullopt; the caller in dispatch_resource_handler then emits the
+    // hardcoded empty-body 500 DIRECTLY without re-invoking the user
+    // callable (it has already been seen to throw on this request --
+    // calling it a second time would observably invoke the user code
+    // twice for one logical exception). See webserver_dispatch.cpp.
+    //
+    // The alias slot is written exactly once here and is immutable
+    // thereafter. Runtime extension of the
+    // handler_exception phase is via add_hook(); the alias slot is not
+    // user-mutable post-construction.
+    install_internal_error_alias(impl_.get(), config.internal_error_handler);
 
-    return static_cast<webserver*>(cls)->requests_answer_first_step(connection, mr);
+    // ----------------------------------------------------------------
+    // log_access -> response_sent alias slot.
+    //
+    // This is an alias. Calling log_access(fn) on the create_webserver
+    // builder wires `fn` into the dedicated single-slot member
+    // webserver_impl::log_access_alias_, which fire_response_sent
+    // invokes AFTER the user-added response_sent vector. Users who want
+    // the structured ctx (status, bytes_queued, elapsed -- the data
+    // issues #281 and #69 asked for) should call
+    // add_hook(hook_phase::response_sent, ...) directly.
+    //
+    // Format: '<path> METHOD: <method>' -- mirrors v1 access_log to keep
+    // basic.cpp log_access_callback test passing without modification.
+    install_log_access_alias(impl_.get(), config.log_access);
 }
 
 }  // namespace httpserver
+

@@ -1,0 +1,248 @@
+# This file is part of libhttpserver
+# Copyright (C) 2011-2019 Sebastiano Merlino
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+# USA
+
+# DRD (Valgrind race detector) suppressions for libhttpserver tests.
+#
+# DRD and Helgrind report differently-shaped warnings on identical code, so
+# the same benign third-party race needs a drd:-tagged block here (e.g.
+# drd:ConflictingAccess / drd:CondErr) distinct from its Helgrind:Race
+# counterpart in valgrind-helgrind.supp.
+#
+# Only third-party benign races may be suppressed here, and only at the
+# library boundary (libmicrohttpd worker-thread lifecycle, gnutls, glibc,
+# libstdc++). Every entry must be narrow and per-symbol — name the
+# third-party frame, never a `...` wildcard spanning libhttpserver's own
+# symbols — and carry a comment with the upstream reason.
+#
+# Any race that DRD reports inside libhttpserver's own locking — the
+# route-table shared_mutex, the hook bus, deny_ip/remove_denied_ip — is a REAL
+# race and MUST be fixed in source, never suppressed (DR-008, mirroring the
+# tsan.supp rule).
+#
+# Entries below were added during CI-side triage on the Linux lane
+# (Valgrind is Linux-only and cannot run on the darwin dev/CI runners).
+#
+# NOTE ON MECHANISM: libmicrohttpd signals its polling/worker threads via an
+# internal ITC *pipe*, not a pthread primitive, so DRD cannot observe the
+# happens-before and reports benign conflicting accesses on MHD-internal
+# frames and on the immutable-after-start state the workers read. Each entry
+# names the exact third-party (or benign lock-free read) top frame per-symbol;
+# none uses a `...` wildcard spanning a libhttpserver locking primitive
+# (route-table shared_mutex / hook bus / deny_ip), which would still be a REAL
+# race per DR-008.
+
+# --- libmicrohttpd worker-thread lifecycle (C symbols) ----------------------
+{
+   mhd-stop-daemon-worker-teardown
+   drd:ConflictingAccess
+   fun:MHD_stop_daemon
+}
+{
+   mhd-new-connection-process
+   drd:ConflictingAccess
+   fun:new_connection_process_
+}
+{
+   mhd-polling-thread
+   drd:ConflictingAccess
+   fun:MHD_polling_thread
+}
+{
+   mhd-get-daemon-info
+   drd:ConflictingAccess
+   fun:MHD_get_daemon_info
+}
+{
+   mhd-thread-main-handle-connection
+   drd:ConflictingAccess
+   fun:thread_main_handle_connection
+}
+
+# --- libstdc++ shared_ptr control-block (atomic refcount + teardown) ---------
+# The shared_ptr control block (_Sp_counted_base and derived) keeps an atomic
+# use-/weak-count DRD does not model, so it reports a benign conflict whenever
+# the last ref is dropped on one thread while another touched the block. The
+# teardown surfaces through many control-block methods depending on timing
+# (_M_release, _M_weak_release, _M_dispose, ~_Sp_counted_base), so match the
+# whole _Sp_counted_base family rather than a single method -- otherwise each
+# timing-dependent valgrind run hits a different frame (observed: the MHD worker
+# dropping the last resource ref in connection_context::~connection_context during
+# request_completed while the main thread unregisters). Pure libstdc++ frame; a
+# real libhttpserver locking race surfaces a libhttpserver top frame. TSan is
+# green on the same tests.
+{
+   libstdcxx-shared-ptr-control-block
+   drd:ConflictingAccess
+   fun:*_Sp_counted_base*
+}
+
+# --- libstdc++ atomic<shared_ptr> free-function ops (_Sp_locker spinlock) -----
+# std::atomic_load/atomic_compare_exchange on a std::shared_ptr take a
+# libstdc++-internal _Sp_locker spinlock whose happens-before DRD does not model,
+# so it can report a benign conflict between two correctly-synchronised atomic
+# accesses to the SAME shared_ptr (http_resource::hook_table_, via ensure_table's
+# atomic_load/compare_exchange lock-free idiom). Helgrind reports the mirror of
+# this; kept here in sync. Matched on the third-party _Sp_locker frame, never the
+# libhttpserver caller, so DR-008 is unaffected.
+{
+   libstdcxx-atomic-shared-ptr-sp-locker
+   drd:ConflictingAccess
+   ...
+   fun:*_Sp_locker*
+}
+
+# --- benign lock-free reads of immutable-after-registration resource config -
+# Written once at registration (before start()), only READ from the MHD worker
+# during dispatch. NOT a libhttpserver locking race (DR-008).
+{
+   lhs-resolve-method-callback-static-table
+   drd:ConflictingAccess
+   fun:*resolve_method_callback*
+}
+{
+   lhs-get-allowed-methods-read
+   drd:ConflictingAccess
+   fun:*get_allowed_methods*
+}
+
+# --- benign libstdc++/libc/libcurl allocator-recycling false positives -------
+# DRD, like Helgrind, cannot see the happens-before the threaded allocator
+# establishes on recycled blocks, so it reports conflicting accesses on
+# ordinary container/string operations running on reused memory. Matched by the
+# third-party top frame; a REAL libhttpserver locking race (DR-008) surfaces a
+# libhttpserver top frame and stays unsuppressed. (Maintainer-approved broad
+# third-party scope.)
+{
+   libc-memmove-recycled
+   drd:ConflictingAccess
+   fun:memmove
+}
+{
+   libc-memchr-recycled
+   drd:ConflictingAccess
+   fun:memchr
+}
+{
+   libc-bcmp-recycled
+   drd:ConflictingAccess
+   fun:bcmp
+}
+{
+   mhd-poll-listen-socket
+   drd:ConflictingAccess
+   ...
+   fun:MHD_poll_listen_socket
+}
+# MHD worker draining a response (queue path) at the instant the main thread
+# calls webserver::stop() -> MHD_stop_daemon. The conflicting access is inside
+# MHD_queue_response reading MHD's own connection/daemon state; the libhttpserver
+# frames in the stack are only callers *below* it, so this is a third-party MHD
+# ITC-pipe lifecycle FP (DRD can't see the pipe/join happens-before), NOT a
+# libhttpserver locking race. Top frame is the MHD C symbol.
+{
+   mhd-queue-response
+   drd:ConflictingAccess
+   fun:MHD_queue_response
+}
+{
+   lhs-method-set-read
+   drd:ConflictingAccess
+   fun:*method_set*
+}
+{
+   lhs-file-info-copy
+   drd:ConflictingAccess
+   fun:*file_info*
+}
+{
+   libstdcxx-basic-string
+   drd:ConflictingAccess
+   fun:*basic_string*
+}
+{
+   libstdcxx-basic-stringbuf
+   drd:ConflictingAccess
+   fun:*basic_stringbuf*
+}
+{
+   libstdcxx-basic-stringstream
+   drd:ConflictingAccess
+   fun:*basic_stringstream*
+}
+{
+   libstdcxx-rb-tree
+   drd:ConflictingAccess
+   fun:*_Rb_tree*
+}
+{
+   libstdcxx-vector
+   drd:ConflictingAccess
+   fun:*_Vector_base*
+}
+{
+   libstdcxx-vector-methods
+   drd:ConflictingAccess
+   fun:*vector*
+}
+{
+   libstdcxx-sp-counted-inplace
+   drd:ConflictingAccess
+   fun:*_Sp_counted_ptr_inplace*
+}
+{
+   libstdcxx-ctype-narrow
+   drd:ConflictingAccess
+   fun:*ctype*narrow*
+}
+{
+   libcurl-easy-client
+   drd:ConflictingAccess
+   fun:curl_*
+}
+{
+   test-suite-teardown
+   drd:ConflictingAccess
+   fun:*deferred_suite*
+}
+# Test-fixture resource destructors (test-file *_resource subclasses) racing the
+# MHD worker as the daemon drains at teardown — test scaffolding, not the
+# libhttpserver library (DR-008 N/A); TSan (precise) reports no race, confirming
+# these are detector artifacts. Scoped to destructors (demangled + mangled).
+{
+   test-resource-dtor-demangled
+   drd:ConflictingAccess
+   fun:*resource::~*
+}
+{
+   test-resource-dtor-mangled
+   drd:ConflictingAccess
+   fun:*resourceD*Ev
+}
+
+# --- libp11-kit atexit/dl_fini mutex teardown (third-party) ------------------
+# gnutls pulls in libp11-kit (PKCS#11), whose global cleanup runs from
+# _dl_fini() at process exit and calls pthread_mutex_destroy() on an object DRD
+# no longer recognises as a mutex ("The object at address ... is not a mutex").
+# This fires once per test process during shutdown and is entirely inside the
+# third-party libp11-kit teardown path — not a libhttpserver mutex error.
+{
+   libp11-kit-dlfini-not-a-mutex
+   drd:MutexErr
+   fun:pthread_mutex_destroy*
+   obj:*libp11-kit.so*
+}

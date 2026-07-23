@@ -25,118 +25,532 @@
 #ifndef SRC_HTTPSERVER_HTTP_RESPONSE_HPP_
 #define SRC_HTTPSERVER_HTTP_RESPONSE_HPP_
 
+#include <sys/types.h>          // ssize_t — for the deferred() producer
+
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <iosfwd>
 #include <map>
+#include <span>
 #include <string>
+#include <string_view>
+#include <vector>
+#include "httpserver/body_kind.hpp"
+#include "httpserver/cookie.hpp"
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_utils.hpp"
-
-struct MHD_Connection;
-struct MHD_Response;
+#include "httpserver/iovec_entry.hpp"
 
 namespace httpserver {
+
+// Forward-declared so http_response carries a `detail::response_body*` without
+// pulling the private body hierarchy (and its <microhttpd.h> dependency)
+// into every consumer translation unit. The complete type is required at
+// destructor / move-op definition sites only; those live in the .cpp.
+namespace detail { class response_body; }
+
+// Forward declarations needed for the friend grants in http_response.
+// body_/kind_/status_code_ are private; detail::webserver_impl dispatch
+// helpers need direct access to materialise wire responses without
+// widening the public API.
+class webserver;
+namespace detail {
+class webserver_impl;
+// DR-014 §4.11: the wire-construction and response_sent-firing logic moved
+// off webserver_impl into these behavior services, which therefore need the
+// same body_ access the god-object had.
+class response_materializer;
+class hook_dispatcher;
+}  // namespace detail
+
+/**
+ * RFC-7616 Digest auth challenge parameters.
+ *
+ * Passed by value to `http_response::unauthorized(digest_challenge)`,
+ * which produces a `body_kind::digest_challenge` response. The dispatch
+ * path branches on that body kind and routes through
+ * libmicrohttpd's `MHD_queue_auth_required_response3` so the
+ * authoritative `WWW-Authenticate: Digest ...` challenge with
+ * nonce/opaque/algorithm/qop is written into the wire response.
+ *
+ * Field defaults mirror the RFC 7616 §3.3 "minimal challenge"
+ * recommendations:
+ *   * `algorithm = MD5` — the only RFC 7616 baseline algorithm;
+ *     `SHA256` and `SHA512_256` are RFC-compliant alternatives.
+ *   * `qop_auth = true` — RFC 7616 mandates `qop` on every challenge
+ *     except in strict RFC-2069 backward-compat mode.
+ *   * `prefer_utf8 = true` — `charset=UTF-8` advisory per §3.3.
+ *
+ * `opaque` left empty -> the dispatch path substitutes a per-server
+ * random hex string seeded once at startup.
+ *
+ * Empty `domain` -> RFC 7616 default (challenge applies to the entire
+ * origin).
+ */
+struct digest_challenge {
+    std::string realm;
+    std::string opaque       = {};        // empty -> server-substituted
+    std::string domain       = {};        // optional space-separated URIs
+    http::http_utils::digest_algorithm algorithm
+                             = http::http_utils::digest_algorithm::MD5;
+    bool qop_auth            = true;      // qop="auth"
+    bool qop_auth_int        = false;     // qop="auth-int" not in v2 scope
+    bool signal_stale        = false;     // set on a stale-nonce re-challenge
+    bool userhash_support    = false;     // RFC 7616 §3.4.4
+    bool prefer_utf8         = true;      // charset=UTF-8
+    std::string response_body = {};       // "access denied" body
+};
 
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/
-class http_response {
+// http_response is the v2 sealed
+// value type and does NOT use the PIMPL pattern. It carries a 64-byte
+// SBO buffer (`body_storage_`) so the polymorphic body lives inline for
+// the common cases (string/empty/file/iovec/pipe/deferred), and falls
+// back to a heap pointer for outsized bodies. Move-only;
+// copying a response would have to deep-copy the body, which is
+// semantically wrong for fd-owning bodies and unnecessary in practice.
+//
+// `final`: the v1 polymorphic subclass hierarchy
+// (string_response, file_response, iovec_response, pipe_response,
+// deferred_response, empty_response, basic_auth_fail_response,
+// digest_auth_fail_response) was removed; the only way to
+// build a response is through the static factories below.
+class http_response final {
  public:
+     // Public type-trait shim used by the SBO unit test to
+     // assert the exemption without poking private
+     // members. The trait check is `!std::is_same_v<body_pointer_type,
+     // std::unique_ptr<detail::response_body>>`.
+     using body_pointer_type = detail::response_body*;
+
+     // SBO buffer size in bytes. Must equal the alignas/array spec on
+     // body_storage_ below; the static_assert on alignof(http_response)
+     // in http_response.cpp catches any drift.
+     static constexpr std::size_t body_buf_size = 64;
+
      http_response() = default;
 
-     explicit http_response(int response_code, const std::string& content_type):
-         response_code(response_code) {
-             headers[http::http_utils::http_header_content_type] = content_type;
-     }
+     // Move-only. Copy ops are deleted because
+     // a response's body may own non-copyable resources (file fds, pipe
+     // fds, std::function targets) and a deep-copy would either silently
+     // duplicate ownership or be a slice. v2 propagation is always by
+     // move or by shared_ptr.
+     http_response(const http_response&) = delete;
+     http_response& operator=(const http_response&) = delete;
+
+     // Out-of-line because both ops touch the complete type of
+     // detail::response_body (placement-move via move_into(), destructor, or
+     // ::operator delete).
+     http_response(http_response&& other) noexcept;
+     http_response& operator=(http_response&& other) noexcept;
+
+     // Non-virtual: the class is `final`, so polymorphic
+     // destruction through a base pointer is impossible. Out-of-line
+     // because the body destruct + ::operator delete pairing needs the
+     // complete type detail::response_body.
+     ~http_response();
+
+     // Body-kind discriminator. Mirrors the kind reported
+     // by the underlying detail::response_body, but answered without a virtual
+     // call: the kind is recorded into kind_ at factory time and
+     // preserved across moves. The dispatch path consumes
+     // this for its kind-specific fast paths.
+     [[nodiscard]] body_kind kind() const noexcept { return kind_; }
+
+     // -----------------------------------------------------------------
+     // Static factories.
+     //
+     // Each factory placement-news the corresponding detail::response_body
+     // subclass into the response's SBO buffer (or, if the body ever
+     // exceeds 64 bytes, onto the heap via ::operator new(sizeof(T))
+     // so the destructor's matched ::operator delete pairs cleanly).
+     // Replaces the v1 polymorphic *_response subclasses.
+     //
+     // Status-code defaults match v1: 200 for content-bearing bodies,
+     // 204 for empty(), 401 for unauthorized().
+     // -----------------------------------------------------------------
+
+     // Construct a response carrying a string body. The Content-Type
+     // header defaults to "text/plain"; pass a different value (for
+     // example "application/json") to override. The body string is
+     // stored by move so callers retain no aliasing.
+     // Throws std::invalid_argument if content_type contains CR, LF, or NUL.
+     [[nodiscard]] static http_response string(
+         std::string response_body,
+         std::string content_type = "text/plain");
+
+     // Construct a response that streams a file from disk. Does NOT
+     // throw on a missing or unreadable path — failure is observable at
+     // dispatch time (the materialized MHD_Response is null and the
+     // dispatch path renders a 500). Mirrors v1 file_response semantics.
+     [[nodiscard]] static http_response file(std::string path);
+
+     // Construct a response from a span of scatter/gather buffers. The
+     // entries array is deep-copied into the body so the span need not
+     // outlive the response, but the buffers each entry's `base` points
+     // at remain BORROWED — they must outlive the response (and the
+     // MHD_Response that response materializes).
+     [[nodiscard]] static http_response iovec(
+         std::span<const iovec_entry> entries);
+
+     // Construct a response that streams from a pipe read-end. The
+     // factory takes ownership of `fd` immediately. The fd is closed
+     // when the materialized MHD_Response is destroyed; if the response
+     // is never materialized, the http_response's destructor closes
+     // it. Callers MUST NOT close `fd` after handing it off.
+     [[nodiscard]] static http_response pipe(int fd);
+
+     // Construct an empty (no-payload) response. Defaults to 204
+     // No Content, matching v1 empty_response. The optional `mhd_flags`
+     // argument forwards to MHD_set_response_options on the materialized
+     // MHD_Response — pass `MHD_RF_HEAD_ONLY_RESPONSE` to send a HEAD-only
+     // response with headers but no body, etc.
+     [[nodiscard]] static http_response empty(int mhd_flags = 0);
+
+     // Construct a response that streams from a producer callback.
+     // libmicrohttpd invokes `producer(pos, buf, max)` whenever it
+     // needs more bytes; the producer should return the number of
+     // bytes written, MHD_CONTENT_READER_END_OF_STREAM, or
+     // MHD_CONTENT_READER_END_WITH_ERROR. The producer is stored by
+     // move; large captures may force std::function to heap-allocate
+     // internally (independent of http_response's own SBO).
+     [[nodiscard]] static http_response deferred(
+         std::function<ssize_t(std::uint64_t, char*, std::size_t)> producer);
+
+     /// Construct a 401 Unauthorized response with a WWW-Authenticate
+     /// header of the form `<scheme> realm="<realm>"`. Replaces v1's
+     /// basic_auth_fail_response and digest_auth_fail_response.
+     ///
+     /// Use this overload for `"Basic"` and for RFC-2069-compatible
+     /// static `Digest realm="..."` challenges.  For full RFC 7616 §3.3
+     /// Digest challenges with `nonce`, `opaque`, `algorithm`, and `qop`
+     /// parameters — required by strict RFC-7616 parsers — use the
+     /// `unauthorized(digest_challenge)` overload below.  The dispatch
+     /// path detects a `body_kind::digest_challenge` body and routes
+     /// through libmicrohttpd's `MHD_queue_auth_required_response3`,
+     /// driving the per-connection nonce state machine.  See RFC 7616
+     /// §3.3 (challenge format), §3.4 (Authorization validation), and
+     /// §5.10 (security considerations).
+     ///
+     /// @see digest_challenge
+     [[nodiscard]] static http_response unauthorized(
+         std::string_view scheme,
+         std::string_view realm,
+         std::string response_body = {});  // NOLINT(build/include_what_you_use)
+
+     /// Construct an RFC 7616 §3.3 Digest 401 Unauthorized response.
+     ///
+     /// The returned response carries a `body_kind::digest_challenge`
+     /// body that the webserver dispatch path recognises: instead of
+     /// `MHD_queue_response`, the dispatch site invokes
+     /// `MHD_queue_auth_required_response3` (libmicrohttpd >= 0x00097701)
+     /// with the parameters carried on the body.  libmicrohttpd then
+     /// writes the authoritative `WWW-Authenticate: Digest ...`
+     /// challenge with `nonce`, `opaque`, `algorithm`, `qop`, and
+     /// (optionally) `charset=UTF-8` / `userhash=true`.
+     ///
+     /// The nonce is generated and replay-tracked by libmicrohttpd
+     /// itself, HMAC-keyed by `create_webserver().digest_auth_random`
+     /// and replay-windowed by `create_webserver().nonce_nc_size`.
+     /// libhttpserver does not implement its own nonce store, in line
+     /// with the "MHD's MD5/SHA-256 helpers remain the underlying
+     /// primitive" architectural constraint.
+     ///
+     /// The `opaque` field is optional — when left empty, the dispatch
+     /// path substitutes a per-webserver-instance random hex string
+     /// generated once at startup.
+     ///
+     /// Header-injection guards: `realm`, `opaque`, `domain`, and `body`
+     /// are rejected with `std::invalid_argument` if they contain CR,
+     /// LF, or NUL (CWE-113).
+     ///
+     /// Always declared, regardless of `HAVE_DAUTH` (public
+     /// declarations must not be conditionally compiled). On a
+     /// `HAVE_DAUTH`-off build the call throws
+     /// `feature_unavailable("digest_auth", "HAVE_DAUTH")`
+     /// instead of constructing a response.
+     ///
+     /// @see http_response::unauthorized(std::string_view,std::string_view,std::string)
+     [[nodiscard]] static http_response unauthorized(
+         digest_challenge challenge);
+
+     // -----------------------------------------------------------------
+     // Read accessors.
+     //
+     // Lifetime contract for the string_view-returning accessors:
+     //
+     // The returned view points into storage owned by *this. The view is
+     // valid until ANY of the following happen:
+     //   1. *this is destroyed.
+     //   2. *this is moved-from (move ctor / move-assign target).
+     //   3. The corresponding map is mutated for the SAME key
+     //      (with_header(key, ...) replacing an existing value
+     //      invalidates a view obtained from a prior get_header(key)).
+     //
+     // std::map's node-stability guarantee means that adding or removing
+     // OTHER keys does NOT invalidate views of unrelated keys; only
+     // same-key re-assignment, erase, or whole-response destruction
+     // does. Multi-value headers are not modelled in v2.0 — header_map
+     // is single-valued per key.
+     //
+     // Callers MUST NOT keep the view past the next non-const operation
+     // on the response, and MUST NOT keep it past the response's
+     // destruction. If a longer lifetime is required, copy into a
+     // std::string.
+     //
+     // No noexcept on the single-key accessors: std::map::find can in
+     // principle propagate a comparator exception. The map-returning
+     // accessors and the trivial scalar accessors (get_status, kind) are
+     // noexcept (they only return a reference / scalar member).
+     // -----------------------------------------------------------------
+
+     /// Returns the value of header `key`, or an empty view if absent.
+     /// Does NOT insert on miss.
+     /// View lifetime: see lifetime contract above.
+     [[nodiscard]] std::string_view get_header(std::string_view key) const;
+
+     /// Returns the value of footer `key`, or an empty view if absent.
+     /// Does NOT insert on miss. View lifetime: see lifetime contract.
+     [[nodiscard]] std::string_view get_footer(std::string_view key) const;
+
+     /// Returns the value of cookie `key`, or an empty view if absent.
+     /// Does NOT insert on miss. View lifetime: see lifetime contract.
+     ///
+     /// Deprecated in v2.0. Use `get_cookies_parsed()` to walk
+     /// the structured cookie vector instead. Will be removed in v2.1.
+     [[deprecated("TASK-064: use get_cookies_parsed() (returns const "
+                  "std::vector<httpserver::cookie>&). Removed in v2.1.")]]
+     [[nodiscard]] std::string_view get_cookie(std::string_view key) const;
 
      /**
-      * Copy constructor
-      * @param b The http_response object to copy attributes value from.
-     **/
-     http_response(const http_response& b) = default;
-     http_response(http_response&& b) noexcept = default;
-
-     http_response& operator=(const http_response& b) = default;
-     http_response& operator=(http_response&& b) noexcept = default;
-
-     virtual ~http_response() = default;
-
-     /**
-      * Method used to get a specified header defined for the response
-      * @param key The header identification
-      * @return a string representing the value assumed by the header
-     **/
-     const std::string& get_header(const std::string& key) {
-         return headers[key];
-     }
-
-     /**
-      * Method used to get a specified footer defined for the response
-      * @param key The footer identification
-      * @return a string representing the value assumed by the footer
-     **/
-     const std::string& get_footer(const std::string& key) {
-         return footers[key];
-     }
-
-     const std::string& get_cookie(const std::string& key) {
-         return cookies[key];
-     }
-
-     /**
-      * Method used to get all headers passed with the request.
+      * Method used to get all response headers.
       * @return a map<string,string> containing all headers.
      **/
-     const std::map<std::string, std::string, http::header_comparator>& get_headers() const {
-         return headers;
+     [[nodiscard]] const http::header_map& get_headers() const noexcept {
+         return headers_;
      }
 
      /**
-      * Method used to get all footers passed with the request.
+      * Method used to get all response footers.
       * @return a map<string,string> containing all footers.
      **/
-     const std::map<std::string, std::string, http::header_comparator>& get_footers() const {
-         return footers;
-     }
-
-     const std::map<std::string, std::string, http::header_comparator>& get_cookies() const {
-         return cookies;
+     [[nodiscard]] const http::header_map& get_footers() const noexcept {
+         return footers_;
      }
 
      /**
-      * Method used to get the response code from the response
+      * Method used to get all response cookies (legacy string-blob view).
+      *
+      * Deprecated. The map is a `name -> value` mirror that the
+      * dispatch path NO LONGER uses for wire rendering. Use
+      * `get_cookies_parsed()` for the authoritative structured view.
+      * Will be removed in v2.1.
+      *
+      * @return a map<string,string> containing all cookies' name/value
+      *         mirrors. Attribute data (Path, Secure, etc.) is NOT
+      *         reflected here -- use `get_cookies_parsed()` for that.
+     **/
+     [[deprecated("TASK-064: use get_cookies_parsed() (returns const "
+                  "std::vector<httpserver::cookie>&). Removed in v2.1.")]]
+     [[nodiscard]] const http::header_map& get_cookies() const noexcept {
+         ensure_cookie_mirror_();
+         return cookies_;
+     }
+
+     /**
+      * Structured cookie accessor. Returns the in-order list
+      * of cookies attached via `with_cookie(...)`. Each entry carries
+      * name/value plus optional attributes (Domain, Path, Expires,
+      * Max-Age, Secure, HttpOnly, SameSite).
+      *
+      * The returned reference is stable across other mutations and
+      * remains valid until *this is destroyed or moved-from. No
+      * allocation occurs on access -- the vector is populated by
+      * `with_cookie(...)`, not lazily.
+     **/
+     [[nodiscard]] const std::vector<cookie>& get_cookies_parsed() const noexcept {
+         return structured_cookies_;
+     }
+
+     /**
+      * Method used to get the response status code.
       * @return The response code
      **/
-     int get_response_code() const {
-         return response_code;
+     [[nodiscard]] int get_status() const noexcept {
+         return status_code_;
      }
 
-     void with_header(const std::string& key, const std::string& value) {
-         headers[key] = value;
-     }
+     // ------------------------------------------------------------------
+     // Fluent setters.
+     //
+     // Each setter is overloaded on the value-category of *this so that
+     // both lvalue and rvalue (factory) chains keep the response live
+     // and zero-copy:
+     //
+     //   * The `&` overload returns http_response& so that
+     //         r.with_header(k, v).with_status(s);
+     //     compiles and returns *this when `r` is an lvalue.
+     //   * The `&&` overload returns http_response&& so that
+     //         http_response::string("hi").with_header(...).with_status(...)
+     //     keeps the temporary as an rvalue end-to-end; the chain calls
+     //     successive `&&` overloads on the same SBO-inline body without
+     //     any intermediate move-construction or heap relocation.
+     //
+     // String parameters are taken by value: the body internally moves
+     // them into the underlying header/footer/cookie maps via
+     // insert_or_assign, so callers can either copy or move into the
+     // setter without an extra allocation.
+     //
+     // Backward compatibility (constraint): v1 callers wrote
+     //         r.with_header(k, v);
+     // in statement form, discarding the (then `void`) return. Switching
+     // the return type to a non-`[[nodiscard]]` reference is strictly
+     // source-compatible — the reference is silently ignored.
+     //
+     // Cookie API: the structured `cookie` type (see cookie.hpp) is
+     // the current surface. `with_cookie(cookie{}.with_name(...)
+     // .with_value(...))` validates the name and value at the cookie's
+     // own setter sites and throws on a `;` in the value (attribute
+     // injection guard), rather than rendering it verbatim. The v1
+     // `with_cookie(std::string name, std::string value)` string-pair
+     // overloads below are deprecated and will be removed in v2.1 --
+     // new code should use the structured overload.
+     //
+     // Note on with_status: status replaces the stored code outright,
+     // including any flag bits set by shoutCAST() (which ORs
+     // MHD_ICY_FLAG into status_code_). Callers wanting both write
+     // with_status(...) first and shoutCAST() second.
+     // ------------------------------------------------------------------
+     http_response& with_header(std::string key, std::string value) &;
+     http_response&& with_header(std::string key, std::string value) &&;
 
-     void with_footer(const std::string& key, const std::string& value) {
-         footers[key] = value;
-     }
+     http_response& with_footer(std::string key, std::string value) &;
+     http_response&& with_footer(std::string key, std::string value) &&;
 
-     void with_cookie(const std::string& key, const std::string& value) {
-         cookies[key] = value;
-     }
+     // Structured cookie overload. Appends a typed cookie to
+     // the response. Validated at the cookie's own setter sites; the
+     // renderer (dispatch path) emits one `Set-Cookie` header per entry,
+     // RFC 6265 §4.1 compliant. Accepts the cookie by VALUE so callers
+     // can either copy or move.
+     http_response& with_cookie(cookie c) &;
+     http_response&& with_cookie(cookie c) &&;
+
+     // Legacy string-blob overload. Kept as a thin shim that
+     // forwards through the structured path, so wire output matches:
+     // `Set-Cookie: name=value`. Deprecated; will be removed in v2.1.
+     [[deprecated("TASK-064: use with_cookie(cookie{}.with_name(...)"
+                  ".with_value(...)) for RFC-6265 attribute safety. "
+                  "Removed in v2.1.")]]
+     http_response& with_cookie(std::string key, std::string value) &;
+
+     [[deprecated("TASK-064: use with_cookie(cookie{}.with_name(...)"
+                  ".with_value(...)) for RFC-6265 attribute safety. "
+                  "Removed in v2.1.")]]
+     http_response&& with_cookie(std::string key, std::string value) &&;
+
+     http_response& with_status(int code) &;
+     http_response&& with_status(int code) &&;
 
      void shoutCAST();
 
-     virtual MHD_Response* get_raw_response();
-     virtual void decorate_response(MHD_Response* response);
-     virtual int enqueue_response(MHD_Connection* connection, MHD_Response* response);
-
  private:
-     int response_code = -1;
+     int status_code_ = -1;
 
-     http::header_map headers;
-     http::header_map footers;
-     http::header_map cookies;
+     http::header_map headers_;
+     http::header_map footers_;
+     // Legacy name->value mirror backing the deprecated get_cookies() /
+     // get_cookie() accessors. Rebuilt lazily from structured_cookies_ by
+     // ensure_cookie_mirror_() (gated by cookies_mirror_valid_) on first
+     // read after a mutation, so the hot
+     // with_cookie() setters do not pay a map insert whose result the wire
+     // path never reads (it renders from structured_cookies_).
+     // `mutable` because the const accessors populate it on demand.
+     mutable http::header_map cookies_;
+     mutable bool cookies_mirror_valid_ = false;
+     // Authoritative structured cookie list. One entry per
+     // `with_cookie(...)` call. The dispatch path renders one
+     // `Set-Cookie` header per entry via cookie::to_set_cookie_header().
+     std::vector<cookie> structured_cookies_;
 
- protected:
+     // SBO state for the polymorphic body. body_ is either nullptr (no
+     // body), a pointer into body_storage_ (inline), or a heap pointer
+     // allocated via ::operator new(sizeof(T)) + placement-new (heap
+     // fallback). body_inline_ discriminates the two non-null cases so
+     // the destructor knows whether to invoke ::operator delete.
+     // kind_ lets dispatch sites fast-path on body
+     // kind without a virtual call.
+     body_kind kind_ = body_kind::empty;
+     alignas(16) std::byte body_storage_[body_buf_size]{};
+     detail::response_body* body_ = nullptr;
+     bool body_inline_ = false;
+
+     // SBO lifecycle helpers shared by destructor / move ctor /
+     // move-assign. Both noexcept. See http_response.cpp for
+     // the inline-vs-heap discriminator details.
+     void destroy_body() noexcept;
+     void adopt_body_from(http_response& other) noexcept;
+
+     // Shared mutation helpers for the fluent setters.
+     // Each helper validates its inputs, then performs the
+     // map mutation or scalar assignment.  Centralising the logic here
+     // means the & and && overloads only differ in their return
+     // statement; the mutation + validation is in exactly one place.
+     void do_set_header(std::string key, std::string value);
+     void do_set_footer(std::string key, std::string value);
+     // Legacy entry point: forwards through the structured path so
+     // wire rendering goes through a single code path. Preserves v1
+     // overwrite semantics: a cookie with the same name (compared with
+     // http::header_comparator, matching `cookies_`) replaces the
+     // existing structured entry instead of appending a duplicate.
+     void do_set_cookie(std::string key, std::string value);
+     // Structured entry point. Appends `c` (duplicate names append) to
+     // `structured_cookies_` (the authoritative store) and invalidates the
+     // lazy `cookies_` mirror so the deprecated accessors rebuild on read.
+     void do_set_cookie_struct(cookie c);
+     // Rebuilds the deprecated `cookies_` name->value mirror from
+     // `structured_cookies_` when `cookies_mirror_valid_` is false. const
+     // + noexcept so the deprecated const accessors can populate on demand.
+     void ensure_cookie_mirror_() const noexcept;
+     void do_set_status(int code);
+
+     // Placement-new a concrete detail::response_body subclass into the SBO
+     // buffer (or, if T does not fit, onto the heap via the matched
+     // ::operator new(sizeof(T))/::operator delete pairing the
+     // destructor relies on). Defined out-of-line in http_response.cpp
+     // because it requires the complete type detail::response_body — it is only
+     // instantiated from the factory bodies in that TU.
+     //
+     // Pre-condition: the response's body slot is empty
+     // (default-constructed). Factories construct on a fresh
+     // http_response, so this always holds; an assertion guards it.
+     template <typename T, typename... Args>
+     void emplace_body(body_kind k, Args&&... args);
+
+     // Friend declarations belong in private: — friendship is unaffected
+     // by access specifiers, but placing them here (rather than in a
+     // misleading protected: section) signals clearly that these names can
+     // bypass encapsulation; http_response is final so there are no
+     // subclasses to inherit any protected access anyway.
      friend std::ostream &operator<< (std::ostream &os, const http_response &r);
+
+     // The SBO unit test exercises the four-case move
+     // cross-product directly through the SBO state above. Only the test
+     // TU is friended; production callers go through the factory
+     // functions. The friend is restricted by name and
+     // does not widen the public API.
+     friend struct http_response_sbo_test_access;
+
+     // body_ is private; detail::webserver_impl dispatch helpers need
+     // direct access to materialise wire responses and fire the
+     // response_sent hook (body_->size()). Post DR-014 that logic lives in
+     // the response_materializer (materialise/queue) and hook_dispatcher
+     // (response_sent bytes) behavior services, which need the same access.
+     friend class detail::webserver_impl;
+     friend class detail::response_materializer;
+     friend class detail::hook_dispatcher;
 };
 
 std::ostream &operator<<(std::ostream &os, const http_response &r);

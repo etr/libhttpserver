@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,28 +18,23 @@
      USA
 */
 
-#include <memory>
+// handlers.cpp - register distinct lambda handlers for two HTTP methods
+// on the same path. The webserver composes them: a GET to /hello dispatches
+// to the first lambda, a POST to the second, and any other method gets the
+// default 405 Method Not Allowed response.
 
 #include <httpserver.hpp>
 
-class hello_world_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("GET: Hello, World!"));
-     }
-
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("OTHER: Hello, World!"));
-     }
-};
-
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("GET: Hello, World!");
+    });
+    ws.on_post("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("POST: Hello, World!");
+    });
+
     ws.start(true);
-
     return 0;
 }
-

@@ -25,40 +25,32 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./test_utils.hpp"
 
 using std::shared_ptr;
 
 using httpserver::http_resource;
 using httpserver::http_response;
-using httpserver::string_response;
 using httpserver::http_request;
 using httpserver::http_resource;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
-#define STR2(p) #p
-#define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
-
 class ok_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
 };
 
 LT_BEGIN_SUITE(threaded_suite)
     std::unique_ptr<webserver> ws;
+    uint16_t port = 0;
 
     void set_up() {
-        ws = std::make_unique<webserver>(create_webserver(PORT));
+        ws = std::make_unique<webserver>(create_webserver(0));
         ws->start(false);
+        port = ws->get_bound_port();
     }
 
     void tear_down() {
@@ -67,15 +59,16 @@ LT_BEGIN_SUITE(threaded_suite)
 LT_END_SUITE(threaded_suite)
 
 LT_BEGIN_AUTO_TEST(threaded_suite, base)
-    ok_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    auto resource = std::make_shared<ok_resource>();
+    ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL* curl;
     CURLcode res;
 
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string base_url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);

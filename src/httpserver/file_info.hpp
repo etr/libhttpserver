@@ -29,6 +29,7 @@
 
 namespace httpserver {
 class webserver;
+namespace detail { class webserver_impl; class upload_pipeline; }
 
 namespace http {
 
@@ -53,6 +54,8 @@ class file_info {
      void grow_file_size(size_t additional_file_size);
 
      friend class httpserver::webserver;
+     friend class httpserver::detail::webserver_impl;
+     friend class httpserver::detail::upload_pipeline;
 };
 
 }  // namespace http

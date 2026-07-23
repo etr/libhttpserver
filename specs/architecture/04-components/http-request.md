@@ -1,0 +1,40 @@
+### 4.2 `http_request`
+
+**Responsibility:** Carry per-request inputs from MHD's worker thread to the user handler. Lazily-cache derived data (path pieces, parsed args, basic-auth credentials, client cert fields).
+
+**Implementation:** PIMPL via `std::unique_ptr<http_request_impl>` (with a custom deleter that supports both heap and arena lifetimes). The impl is **arena-allocated** from a `std::pmr::monotonic_buffer_resource` that lives on the connection (one arena per MHD connection, reset between requests on the same keep-alive connection). The arena also backs the impl's owned strings and lazy-cache containers where practical, eliminating per-request `malloc` on the hot path. *[Historical note: the PIMPL boundary was introduced in TASK-015 using `std::make_unique` as a temporary heap allocation; the per-connection arena plumbing was wired in TASK-016, completing the DR-003b Option 2 decision.]*
+
+**Implementation structure (`http_request_impl`).** The backing impl is a *single* class (`detail::http_request_impl`, `src/httpserver/detail/http_request_impl.hpp`) that owns ~40 data members spanning five concerns; unlike `webserver_impl` (DR-014) it is deliberately **not** decomposed into sub-collaborators — it is handled as one arena-allocated unit and the DR-003b per-connection PMR allocation makes any collaborator split a distinct, deferred problem. It *is* file-split by concern so contributors and tooling can navigate it; the map:
+
+| Concern | Members (representative) | Definition file |
+|---|---|---|
+| Backend handles | `connection_` (MHD), `unescaper_`, `files_` | `detail/http_request_impl.cpp` |
+| Lazy-cache farm | args / headers / footers / cookies / querystring / path-pieces caches + their `*_built_` guard bools + `get_cookies_parsed` vector | `detail/http_request_impl.cpp` (core), `detail/http_request_impl_args.cpp` (GET/POST arg parsing + arena unescape) |
+| Test-request local storage | `headers_local` / `footers_local` / `cookies_local` (used only by `create_test_request`) | `detail/http_request_impl.cpp` |
+| Auth credentials | Basic user/pass, Digest username, `check_digest_auth` family | `http_request_auth.cpp` (`HAVE_BAUTH` / `HAVE_DAUTH`) |
+| GnuTLS client-cert cache | `gnutls_session_t` handle + the ~8 extracted cert fields (DN, issuer, CN, fingerprint, validity, verified) | `detail/http_request_impl_tls.cpp` (`HAVE_GNUTLS`) |
+
+All four `.cpp` files operate on the same one `http_request_impl` object; there are no sub-collaborator types (contrast the webserver's `daemon_` / `routes_` / `hooks_`). A future collaborator extraction (e.g. `cert_cache`, `lazy_arg_cache`, `auth_credentials`) is a possible follow-on but is out of scope for v2.0 (DR-014 "Scope boundaries").
+
+**Interfaces:**
+- Exposes (from PRD §3.6):
+  - `get_path()`, `get_method()`, `get_version()`, `get_content()`, `get_querystring()` returning `string_view`
+  - `get_headers()`, `get_footers()`, `get_cookies()`, `get_args()`, `get_path_pieces()`, `get_files()` returning `const ContainerType&`
+  - `get_header(key)`, `get_cookie(key)`, `get_footer(key)`, `get_arg(key)`, `get_arg_flat(key)` returning `string_view` (empty on miss; never insert)
+  - `get_cookies_parsed()` (TASK-064) returning `const std::vector<httpserver::cookie>&`: structured RFC 6265 §5.4 parse of the request's `Cookie:` header. Each entry carries `name` and `value` (request cookies have no attributes per the spec). Backed by a per-request lazy cache that follows the TASK-016/TASK-017 arena pattern: the first call parses and populates the vector; subsequent calls are O(1) and reuse the same buffer (`reference_stable_across_calls`, `second_call_does_not_reallocate` pinned by `http_request_cookies_parsed_test`).
+  - `get_user()`, `get_pass()`, `get_digested_user()` returning `string_view` (empty when basic/digest auth disabled at build)
+  - `has_tls_session()`, `has_client_certificate()`, `get_client_cert_dn()`, `get_client_cert_issuer_dn()`, `get_client_cert_cn()`, `get_client_cert_fingerprint_sha256()`, `is_client_cert_verified()`, `get_client_cert_not_before()`, `get_client_cert_not_after()` (all returning sentinels when GnuTLS disabled)
+  - `check_digest_auth(...)` family
+  - `get_requestor()`, `get_requestor_port()`
+- All getters are `const`. Lazy caches use `mutable` (or unique_ptr indirection); the const-correctness NFR's exemption for daemon-driving methods does not apply to request — every request getter is logically const.
+- Move-only (preserves identity; rules out shared ownership). PRD §3.6 out-of-scope: not changing the move-only identity.
+
+**Key design notes:**
+- The arena allocator is plumbed through `webserver_impl` → connection state → `http_request` constructor. The user does not see it; it is an internal optimization.
+  - GET-argument population (`http_request_impl::build_request_args`) writes the unescaped value directly into the per-connection arena (TASK-072). The standard `%HH` / `+`→space transformation runs in-place on the arena-backed `pmr::string`; when a user-registered unescaper is set, a per-thread reusable `std::string` scratch buffer adapts the ABI-locked `void(std::string&)` callback signature without a per-request global-heap allocation. Pinned by `test/unit/http_request_unescape_arena_test.cpp` (zero global `operator new` calls during the warm cycle) and exercised by `bench_warm_path` variants (5) and (6).
+- Containers returned by `get_*()` reference impl-owned storage; the request must outlive any view derived from it. Documented as a lifetime contract.
+- `gnutls_session_t` (raw GnuTLS handle) is not exposed publicly. Users wanting custom TLS introspection use the high-level `get_client_cert_*` accessors. The handle remains accessible via friend access from internal code.
+
+**Related requirements:** PRD-HDR-REQ-001..004, PRD-FLG-REQ-001..002, PRD-REQ-REQ-001, PRD-RSP-REQ-* (for the response side of the request/response cycle).
+
+---

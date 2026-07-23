@@ -1,0 +1,191 @@
+/*
+     This file is part of libhttpserver
+     Copyright (C) 2011-2026 Sebastiano Merlino
+
+     This library is free software; you can redistribute it and/or
+     modify it under the terms of the GNU Lesser General Public
+     License as published by the Free Software Foundation; either
+     version 2.1 of the License, or (at your option) any later version.
+
+     This library is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     Lesser General Public License for more details.
+
+     You should have received a copy of the GNU Lesser General Public
+     License along with this library; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+     USA
+*/
+
+// peer_address::to_string out-of-line body. Carved out of hook_handle.cpp
+// to keep both TUs under the FILE_LOC_MAX 500-line ceiling.
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <string>
+
+#include "httpserver/hook_context.hpp"
+
+namespace httpserver {
+
+namespace {
+
+// Eight 16-bit groups in network byte order.
+using ipv6_groups = std::array<std::uint16_t, 8>;
+
+// (start, length) of the zero-run RFC 5952 §4.2.2 collapses with "::".
+// length == 0 means "no collapse" (RFC 5952 §4.3: a single zero MUST
+// NOT be shortened).
+struct zero_run {
+    int start = -1;
+    int len = 0;
+};
+
+// Assemble eight 16-bit groups in network byte order from the 16 raw
+// bytes. Cast each byte to unsigned before shifting to avoid signed-int
+// promotion UB and to match the unsigned int expected by '%x'
+// (CWE-704).
+ipv6_groups assemble_groups(const std::array<std::uint8_t, 16>& bytes) {
+    ipv6_groups g{};
+    for (std::size_t i = 0; i < 8; ++i) {
+        g[i] = static_cast<std::uint16_t>(
+            (static_cast<unsigned>(bytes[2 * i]) << 8) |
+             static_cast<unsigned>(bytes[2 * i + 1]));
+    }
+    return g;
+}
+
+// RFC 5952 §5 IPv4-mapped (::ffff:0:0/96) detection. The plain
+// IPv4-compatible (::a.b.c.d) form is NOT covered by §5 and stays in
+// hex (e.g. "::1" rather than "::0.0.0.1").
+bool is_ipv4_mapped(const ipv6_groups& g) {
+    for (int i = 0; i < 5; ++i) {
+        if (g[i] != 0) return false;
+    }
+    return g[5] == 0xffff;
+}
+
+// Format the IPv4-mapped form per RFC 5952 §5.
+std::string format_ipv4_mapped(const std::array<std::uint8_t, 16>& bytes) {
+    char buf[24];  // "::ffff:255.255.255.255" + NUL = 23
+    int n = std::snprintf(buf, sizeof(buf), "::ffff:%u.%u.%u.%u",
+                           static_cast<unsigned>(bytes[12]),
+                           static_cast<unsigned>(bytes[13]),
+                           static_cast<unsigned>(bytes[14]),
+                           static_cast<unsigned>(bytes[15]));
+    return std::string(buf, static_cast<std::size_t>(n));
+}
+
+// Find the longest run of consecutive zero groups of length >= 2.
+// Strict > update preserves first-occurrence tie-break (RFC 5952
+// §4.2.3); runs of length 1 are dropped per RFC 5952 §4.3.
+zero_run find_longest_zero_run(const ipv6_groups& g) {
+    zero_run best;
+    int run_start = 0;  // always overwritten before use
+    int run_len = 0;
+    for (int i = 0; i < 8; ++i) {
+        if (g[i] != 0) {
+            run_len = 0;
+            continue;
+        }
+        if (run_len == 0) run_start = i;
+        ++run_len;
+        if (run_len > best.len) {
+            best.len = run_len;
+            best.start = run_start;
+        }
+    }
+    if (best.len < 2) return zero_run{};
+    return best;
+}
+
+// Emit the canonical text form, given the assembled groups and the
+// collapse window. Edge cases ("::1", "1::", "::") fall out naturally
+// because the "::" marker brings both colons with it.
+//
+// We write into a fixed stack buffer (max 39 chars for a fully-expanded
+// all-non-zero address) and construct the returned std::string from
+// (buf, len). This lets short compressed addresses like "::1" (3 chars)
+// or "2001:db8::1" (11 chars) stay within SBO on all common
+// implementations without any reserve() call that would defeat it.
+std::string emit_canonical(const ipv6_groups& g, const zero_run& collapse) {
+    char buf[40];  // "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" = 39 + NUL
+    std::size_t pos = 0;
+    // `i` is advanced in two places below: via `i += collapse.len` on the
+    // collapse branch, via `++i` on the normal per-group branch.
+    for (int i = 0; i < 8;) {
+        if (i == collapse.start) {
+            buf[pos++] = ':';
+            buf[pos++] = ':';
+            i += collapse.len;
+            continue;
+        }
+        int n = std::snprintf(buf + pos, sizeof(buf) - pos, "%x",
+                               static_cast<unsigned>(g[i]));
+        // snprintf returns the length it WOULD have written (excl. NUL).
+        // A group is at most 4 hex digits, so with buf[40] this branch is
+        // never taken; the explicit guard keeps `pos` provably within the
+        // buffer so the `sizeof(buf) - pos` size argument can never
+        // underflow into a huge size_t (cpp/overflowing-snprintf, CWE-190).
+        if (n < 0 || static_cast<std::size_t>(n) >= sizeof(buf) - pos) {
+            return std::string(buf, pos);
+        }
+        pos += static_cast<std::size_t>(n);
+        ++i;
+        // Emit a ':' separator if more groups remain AND the next slot
+        // is not the collapse window (which brings its own leading ':').
+        if (i < 8 && i != collapse.start) buf[pos++] = ':';
+    }
+    return std::string(buf, pos);
+}
+
+// RFC 5952 §4 canonicalizer for the 16-byte big-endian IPv6 address in
+// `bytes`. The output is bounded by INET6_ADDRSTRLEN (45 + NUL = 46).
+// emit_canonical() uses a stack buffer to avoid defeating SBO for the
+// typical compressed short addresses ("::1", "2001:db8::1", etc.).
+//
+// We deliberately implement the canonical form in pure C++ over the
+// 16-byte buffer rather than delegating to `inet_ntop`:
+//
+//   (a) `peer_address.cpp` stays free of <netinet/in.h> / <sys/socket.h>
+//       (see file-header comment above), keeping the "no
+//       backend-platform headers in this TU" rule.
+//   (b) Post-processing produces deterministic, identical output across
+//       glibc / musl / macOS / Windows builds. Platform `inet_ntop`
+//       behaviour for the IPv4-mapped dotted-quad form (RFC 5952 §5) is
+//       not uniformly canonical across libc versions.
+std::string ipv6_canonical(const std::array<std::uint8_t, 16>& bytes) {
+    const auto groups = assemble_groups(bytes);
+    if (is_ipv4_mapped(groups)) return format_ipv4_mapped(bytes);
+    return emit_canonical(groups, find_longest_zero_run(groups));
+}
+
+}  // namespace
+
+std::string peer_address::to_string() const {
+    // No <netinet/in.h> / inet_ntop here so we keep this TU free of
+    // backend-platform headers. IPv6 is rendered in RFC 5952 §4 canonical
+    // form by an in-TU post-processor (see ipv6_canonical above) for
+    // deterministic output across libc versions.
+    switch (fam) {
+    case family::ipv4: {
+        char buf[16];  // "255.255.255.255" + NUL = 16
+        int n = std::snprintf(buf, sizeof(buf), "%u.%u.%u.%u",
+                               static_cast<unsigned>(bytes[0]),
+                               static_cast<unsigned>(bytes[1]),
+                               static_cast<unsigned>(bytes[2]),
+                               static_cast<unsigned>(bytes[3]));
+        return std::string(buf, static_cast<std::size_t>(n));
+    }
+    case family::ipv6:
+        return ipv6_canonical(bytes);
+    case family::unspec:
+    default:
+        return std::string{};
+    }
+}
+
+}  // namespace httpserver
