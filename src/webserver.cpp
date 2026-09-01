@@ -421,11 +421,9 @@ bool webserver::start(bool blocking) {
     impl_->daemon_.running = true;
 
     if (blocking) {
-        pthread_mutex_lock(&impl_->daemon_.mutexwait);
         while (impl_->daemon_.running) {
-            pthread_cond_wait(&impl_->daemon_.mutexcond, &impl_->daemon_.mutexwait);
+            impl_->daemon_.running.wait(true);
         }
-        pthread_mutex_unlock(&impl_->daemon_.mutexwait);
         return true;
     }
     return false;
@@ -438,10 +436,8 @@ bool webserver::is_running() {
 bool webserver::stop() {
     if (!impl_->daemon_.running) return false;
 
-    pthread_mutex_lock(&impl_->daemon_.mutexwait);
     impl_->daemon_.running = false;
-    pthread_cond_signal(&impl_->daemon_.mutexcond);
-    pthread_mutex_unlock(&impl_->daemon_.mutexwait);
+    impl_->daemon_.running.notify_all();
 
     MHD_stop_daemon(impl_->daemon_.daemon.load(std::memory_order_acquire));
     // Reset so the daemon != nullptr guards treat it as absent after stop().

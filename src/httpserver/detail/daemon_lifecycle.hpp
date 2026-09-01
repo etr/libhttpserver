@@ -18,10 +18,10 @@
      USA
 */
 
-// MHD daemon handle + start/stop threading state, plus the option-array
-// and start-flag builders that construct the daemon. Internal header;
-// only reachable when compiling libhttpserver translation units. NOT part
-// of the installed surface.
+// MHD daemon handle + start/stop state, plus the option-array and
+// start-flag builders that construct the daemon. Internal header; only
+// reachable when compiling libhttpserver translation units. NOT part of the
+// installed surface.
 #if !defined(HTTPSERVER_COMPILATION)
 #error "daemon_lifecycle.hpp is internal; only reachable when compiling libhttpserver."
 #endif
@@ -29,11 +29,10 @@
 #ifndef SRC_HTTPSERVER_DETAIL_DAEMON_LIFECYCLE_HPP_
 #define SRC_HTTPSERVER_DETAIL_DAEMON_LIFECYCLE_HPP_
 
-#include <microhttpd.h>
-#include <pthread.h>
-
 #include <atomic>
 #include <vector>
+
+#include <microhttpd.h>
 
 namespace httpserver {
 
@@ -44,14 +43,12 @@ namespace detail {
 class webserver_impl;
 
 // daemon_lifecycle -- owns the libmicrohttpd daemon handle and the
-// start/stop synchronization primitives, and knows how to construct the
-// daemon (the MHD option-array + start-flag builders).
+// start/stop state, and knows how to construct the daemon (the MHD
+// option-array + start-flag builders).
 //
 // State ownership: the atomic `daemon` handle, the caller-supplied
-// pre-bound `bind_socket`, the blocking-start mutex/cond pair, and the
-// atomic `running` flag. The pthread primitives are initialised in the
-// constructor and destroyed in the destructor (RAII), so webserver_impl
-// no longer manages them by hand.
+// pre-bound `bind_socket`, and the atomic `running` flag used both for
+// lock-free status reads and blocking-start wakeup.
 //
 // The option-array / flag builders read the const config bag and register
 // the dispatch trampolines. They reach both through a back-pointer to the
@@ -73,7 +70,7 @@ class daemon_lifecycle {
     // builders reach parent config + the ws registry through it).
     explicit daemon_lifecycle(webserver_impl* owner,
                               MHD_socket bind_socket_val = MHD_INVALID_SOCKET);
-    ~daemon_lifecycle();
+    ~daemon_lifecycle() = default;
     daemon_lifecycle(const daemon_lifecycle&) = delete;
     daemon_lifecycle& operator=(const daemon_lifecycle&) = delete;
     daemon_lifecycle(daemon_lifecycle&&) = delete;
@@ -94,7 +91,7 @@ class daemon_lifecycle {
     int compose_transport_flags() const;
     int compose_runtime_flags() const;
 
-    // --- Daemon handle + start/stop threading state ----------------------
+    // --- Daemon handle + start/stop state ---------------------------------
     // Atomic so start() publishes the daemon pointer (and the immutable
     // MHD daemon struct it points at, including the ephemeral bind port set
     // before publication) with release semantics, and get_bound_port() et al.
@@ -117,12 +114,13 @@ class daemon_lifecycle {
     // MHD_INVALID_SOCKET is the sentinel meaning "no pre-bound socket".
     MHD_socket bind_socket = MHD_INVALID_SOCKET;
 
-    pthread_mutex_t mutexwait;
-    pthread_cond_t  mutexcond;
-
-    // Atomic to allow lock-free reads in stop()/is_running() concurrent
-    // with the mutex-guarded writes in start()/stop(). TSan-flagged in the
-    // ws_start_stop integ test (start on worker thread, stop on main).
+    // Atomic to allow lock-free reads in stop()/is_running() concurrent with
+    // stop()'s store. blocking start() waits on this same atomic; its value
+    // check happens before waiting, so a stop that completes first cannot be
+    // missed. Unlike a pthread mutex/cond pair, atomic wait does not submit a
+    // new pthread lock object at allocator-reused storage. That matters under
+    // Valgrind 3.22 Helgrind: a stale rwlock record can otherwise make a valid
+    // mutex at a reused address look like an rwlock and fail the CI lane.
     std::atomic<bool> running{false};
 
  private:

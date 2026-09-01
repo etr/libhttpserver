@@ -18,22 +18,20 @@
      USA
 */
 
-// daemon_lifecycle.cpp -- the MHD daemon handle + start/stop threading
-// state, and the option-array / start-flag builders that construct the
-// daemon. Extracted from webserver_impl so the coordinator no longer owns
-// the daemon handle, the blocking-start mutex/cond pair, or the daemon-
-// construction machinery. The public webserver::start/stop/is_running/
-// run/... methods (webserver_lifecycle.cpp) drive this state; those remain
-// on webserver as the orchestration layer and reach the handle + builders
-// through impl_->daemon_.
+// daemon_lifecycle.cpp -- the MHD daemon handle + start/stop state, and
+// the option-array / start-flag builders that construct the daemon.
+// Extracted from webserver_impl so the coordinator no longer owns the
+// daemon handle or the daemon-construction machinery. The public
+// webserver::start/stop/is_running/run/... methods (webserver_lifecycle.cpp)
+// drive this state; those remain on webserver as the orchestration layer and
+// reach the handle + builders through impl_->daemon_.
 
 #include "httpserver/detail/daemon_lifecycle.hpp"
 
-#include <microhttpd.h>
-#include <pthread.h>
-
 #include <cstdint>
 #include <vector>
+
+#include <microhttpd.h>
 
 #include "httpserver/webserver.hpp"
 #include "httpserver/create_webserver.hpp"
@@ -52,15 +50,7 @@ namespace detail {
 
 daemon_lifecycle::daemon_lifecycle(webserver_impl* owner,
                                    MHD_socket bind_socket_val)
-    : bind_socket(bind_socket_val), owner_(owner) {
-    pthread_mutex_init(&mutexwait, nullptr);
-    pthread_cond_init(&mutexcond, nullptr);
-}
-
-daemon_lifecycle::~daemon_lifecycle() {
-    pthread_mutex_destroy(&mutexwait);
-    pthread_cond_destroy(&mutexcond);
-}
+    : bind_socket(bind_socket_val), owner_(owner) {}
 
 // Wrap MHD_OptionItem aggregate-init so each push reads uniformly
 // across the option-array builders below.

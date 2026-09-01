@@ -165,15 +165,14 @@ class webserver_impl {
     // Set in the constructor to the owning webserver.
     webserver* parent = nullptr;
 
-    // MHD daemon handle + start/stop threading state + the daemon-
+    // MHD daemon handle + start/stop state + the daemon-
     // construction builders (MHD option array + start-flag composers) live
     // behind this collaborator. webserver::start/stop/is_running/
     // get_bound_port/run/... (webserver_lifecycle.cpp) drive it via
-    // impl_->daemon_.{daemon,running,mutexwait,mutexcond,bind_socket} and
+    // impl_->daemon_.{daemon,running,bind_socket} and
     // daemon_.build_mhd_option_array / compose_start_flags. Constructed with
     // a back-pointer to this impl so the builders can read parent config +
-    // the ws registry. Its pthread primitives are RAII (ctor init / dtor
-    // destroy).
+    // the ws registry.
     daemon_lifecycle daemon_;
 
     // Per-webserver-instance `opaque` value handed to
