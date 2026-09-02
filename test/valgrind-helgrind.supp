@@ -70,6 +70,53 @@
    fun:thread_main_handle_connection
 }
 
+# --- Valgrind 3.22 stale lock-identity metadata at reused addresses -------
+# Ubuntu 24.04's Valgrind 3.22 keeps a lock's old mutex/rwlock classification
+# when allocator reuse places a differently typed pthread object at the same
+# address. Current Valgrind source removes that stale record on explicit
+# initialization, but that fix is not in the release used by CI. libmicrohttpd
+# owns and correctly initializes these mutexes; Helgrind nevertheless reports
+# "pthread_mutex_* with a pthread_rwlock_t* argument" when one reuses storage
+# formerly occupied by a std::shared_mutex rwlock. Entries are anchored on the
+# exact third-party MHD functions and cover only Helgrind:Misc, so races in
+# libhttpserver's own locking remain unsuppressed.
+{
+   mhd-valgrind322-stale-lock-new-connection
+   Helgrind:Misc
+   ...
+   fun:new_connection_process_
+}
+{
+   mhd-valgrind322-stale-lock-cleanup-connections
+   Helgrind:Misc
+   ...
+   fun:MHD_cleanup_connections
+}
+{
+   mhd-valgrind322-stale-lock-update-last-activity
+   Helgrind:Misc
+   ...
+   fun:MHD_update_last_activity_
+}
+{
+   mhd-valgrind322-stale-lock-connection-cleanup
+   Helgrind:Misc
+   ...
+   fun:cleanup_connection
+}
+{
+   mhd-valgrind322-stale-lock-close-all-connections
+   Helgrind:Misc
+   ...
+   fun:close_all_connections
+}
+{
+   mhd-valgrind322-stale-lock-stop-daemon
+   Helgrind:Misc
+   ...
+   fun:MHD_stop_daemon
+}
+
 # --- libstdc++ shared_ptr control-block (atomic refcount + teardown) ---------
 # The shared_ptr control block (_Sp_counted_base and its _Sp_counted_ptr_inplace
 # derived) maintains an atomic use-/weak-count (_Lock_policy _S_atomic) that

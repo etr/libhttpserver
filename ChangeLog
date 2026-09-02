@@ -1,5 +1,11 @@
 Version 2.0.0
 
+	Fixed macOS CI failure when verifying the pinned libmicrohttpd
+		archive by using the portable `shasum -a 256` interface.
+	Replaced the blocking-start pthread mutex/condvar pair with C++20
+		atomic wait/notify, avoiding a Valgrind 3.22 Helgrind stale
+		lock-address false positive, and suppressed the same third-party
+		detector limitation in libmicrohttpd-owned mutexes.
 	v2.0 release. See RELEASE_NOTES.md for the full v1->v2 porting summary.
 	SOVERSION bumped: shared library now ships as libhttpserver.so.2
 		(Linux) / libhttpserver.2.dylib (Darwin). Parallel-installable

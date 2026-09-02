@@ -5,6 +5,15 @@ coverage:
   precision: 2
   round: down
   range: "70...100"
+  status:
+    project:
+      default:
+        target: auto
+        # Integration tests exercise timing-dependent logging/error paths, so
+        # unrelated lines can move between fully covered and partially covered
+        # between otherwise green runs. Permit that measured noise without
+        # weakening the 70% floor or patch coverage enforcement.
+        threshold: 1%
 
 parsers:
   gcov:
