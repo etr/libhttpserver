@@ -29,10 +29,10 @@
 #ifndef SRC_HTTPSERVER_DETAIL_DAEMON_LIFECYCLE_HPP_
 #define SRC_HTTPSERVER_DETAIL_DAEMON_LIFECYCLE_HPP_
 
+#include <microhttpd.h>
+
 #include <atomic>
 #include <vector>
-
-#include <microhttpd.h>
 
 namespace httpserver {
 

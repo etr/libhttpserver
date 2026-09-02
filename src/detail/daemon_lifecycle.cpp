@@ -28,10 +28,10 @@
 
 #include "httpserver/detail/daemon_lifecycle.hpp"
 
+#include <microhttpd.h>
+
 #include <cstdint>
 #include <vector>
-
-#include <microhttpd.h>
 
 #include "httpserver/webserver.hpp"
 #include "httpserver/create_webserver.hpp"
