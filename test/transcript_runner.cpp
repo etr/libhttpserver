@@ -60,9 +60,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
-#include <cstring>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -96,18 +94,6 @@ struct run_config {
 };
 
 run_config g_cfg;
-
-// Hard-coded corpus registry mirroring test/parity/transcripts/. The
-// inventory (specs/architecture/v3/v2-parity-inventory.md) documents
-// every case and its baseline status.
-const std::vector<std::string>& corpus_files() {
-    static const std::vector<std::string> files = {
-        "routing.tseq", "hooks.tseq", "auth_basic.tseq", "auth_digest.tseq",
-        "forms.tseq", "file_resp.tseq", "ip_controls.tseq", "shoutcast.tseq",
-        "websocket.tseq", "tls.tseq",
-    };
-    return files;
-}
 
 // ------------------------------------------------------------------
 // Case-shape helpers.
