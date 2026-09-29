@@ -59,6 +59,13 @@ const std::vector<const char*>& header_files() {
         "/http/outcome.hpp",
         "/http/protocol.hpp",
         "/http/request_head.hpp",
+        // TASK-098: the v3 concurrency core joins the sentinel scan with
+        // the same rules (no config gates, no backend/OS-socket tokens).
+        "/concurrency/concurrency.hpp",
+        "/concurrency/cancellation.hpp",
+        "/concurrency/executor.hpp",
+        "/concurrency/resume_signal.hpp",
+        "/concurrency/task.hpp",
     };
     return files;
 }
