@@ -58,15 +58,13 @@
 #include <curl/curl.h>
 
 #include <algorithm>
-#include <chrono>
-#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <vector>
 
+#include "./integ/server_ready.hpp"
 #include "./littletest.hpp"
 
 #ifdef PARITY_TRANSCRIPT_DIR
@@ -287,18 +285,13 @@ raw_case_result run_raw_case(uint16_t port, const tcase& c) {
 // ------------------------------------------------------------------
 
 std::string compare_case(const tcase& c, const raw_case_result& result,
-                         const std::string& body_file_base,
-                         const std::vector<normalized_exchange>& recorded) {
+                         const std::string& body_file_base) {
     if (!result.error.empty()) {
         return "transport error: " + result.error;
     }
     std::vector<normalized_exchange> exchanges;
-    if (recorded.empty()) {
-        for (const observed_response& r : result.responses) {
-            exchanges.push_back(normalize(r));
-        }
-    } else {
-        exchanges = recorded;  // curl transport path
+    for (const observed_response& r : result.responses) {
+        exchanges.push_back(normalize(r));
     }
     if (exchanges.empty()) {
         return "no response observed";
@@ -481,7 +474,7 @@ std::string record_case(const tcase& c, const raw_case_result& result) {
     return ss.str();
 }
 
-std::string record_curl_case(const tcase& c, const curl_case_result& result) {
+std::string record_curl_case(const curl_case_result& result) {
     std::ostringstream ss;
     ss << "expect status " << result.status << "\n";
     for (const auto& h : result.headers) {
@@ -489,26 +482,6 @@ std::string record_curl_case(const tcase& c, const curl_case_result& result) {
     }
     ss << "expect body \"" << parity::escape(result.body) << "\"\n";
     return ss.str();
-}
-
-// Readiness probe mirroring integ/server_ready.hpp semantics (curl
-// CONNECT_ONLY: no HTTP request on the wire, so no hook firings).
-void httpserver_test_wait_ready(int port) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::milliseconds(3000);
-    const std::string url = "http://127.0.0.1:" + std::to_string(port) + "/";
-    while (std::chrono::steady_clock::now() < deadline) {
-        CURL* curl = curl_easy_init();
-        if (curl != nullptr) {
-            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-            curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
-            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 100L);
-            CURLcode rc = curl_easy_perform(curl);
-            curl_easy_cleanup(curl);
-            if (rc != CURLE_COULDNT_CONNECT) return;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
 }
 
 // ------------------------------------------------------------------
@@ -542,7 +515,7 @@ transcript_outcome run_transcript(const std::string& file_name) {
         return out;
     }
     uint16_t port = fixture.start(t.profile);
-    httpserver_test_wait_ready(static_cast<int>(port));
+    httpserver_test::wait_for_server_ready(static_cast<int>(port));
 
     const std::string body_file_base =
         std::string(PARITY_TRANSCRIPTS) + "/..";
@@ -562,7 +535,7 @@ transcript_outcome run_transcript(const std::string& file_name) {
             curl_case_result r = run_curl_case(port, c);
             if (g_cfg.record) {
                 record_out << "case " << c.name << "\n"
-                           << record_curl_case(c, r) << "\n";
+                           << record_curl_case(r) << "\n";
                 continue;
             }
             failure = compare_curl_case(c, r, body_file_base);
@@ -574,7 +547,7 @@ transcript_outcome run_transcript(const std::string& file_name) {
                            << record_case(c, r) << "\n";
                 continue;
             }
-            failure = compare_case(c, r, body_file_base, {});
+            failure = compare_case(c, r, body_file_base);
             ++out.cases_run;
         }
         if (!failure.empty()) {
@@ -590,8 +563,6 @@ transcript_outcome run_transcript(const std::string& file_name) {
 
 }  // namespace
 
-// One auto-test per corpus file keeps failure attribution per transcript
-// area while a single fixture-wiring site drives them all.
 LT_BEGIN_SUITE(transcript_runner_suite)
 
     void set_up() { }
