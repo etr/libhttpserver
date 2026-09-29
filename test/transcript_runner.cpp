@@ -534,12 +534,16 @@ struct transcript_outcome {
     std::string skip_reason;
     // "transcript=<file> case=<name> expect-line=<n>: <diff>" on failure.
     std::string failure;
+    // Cases actually executed (list/record/compare modes).
+    std::size_t cases_run = 0;
 };
 
 transcript_outcome run_transcript(const std::string& file_name) {
     transcript_outcome out;
     if (!g_cfg.filter.empty() &&
         file_name.find(g_cfg.filter) == std::string::npos) {
+        out.skipped = true;
+        out.skip_reason = "excluded by filter";
         return out;
     }
     const std::string path = std::string(PARITY_TRANSCRIPTS) + "/" + file_name;
@@ -564,6 +568,7 @@ transcript_outcome run_transcript(const std::string& file_name) {
     for (const tcase& c : t.cases) {
         if (g_cfg.list) {
             std::cout << file_name << ":" << c.name << std::endl;
+            ++out.cases_run;
             continue;
         }
         std::string failure;
@@ -575,6 +580,7 @@ transcript_outcome run_transcript(const std::string& file_name) {
                 continue;
             }
             failure = compare_curl_case(c, r, body_file_base);
+            ++out.cases_run;
         } else {
             raw_case_result r = run_raw_case(port, c);
             if (g_cfg.record) {
@@ -583,6 +589,7 @@ transcript_outcome run_transcript(const std::string& file_name) {
                 continue;
             }
             failure = compare_case(c, r, body_file_base, {});
+            ++out.cases_run;
         }
         if (!failure.empty()) {
             fixture.stop();
@@ -615,6 +622,7 @@ LT_END_SUITE(transcript_runner_suite)
         if (outcome.skipped) { LT_SKIP(outcome.skip_reason); }               \
         /* braces required: LT_FAIL expands to several statements */         \
         if (!outcome.failure.empty()) { LT_FAIL(outcome.failure); }          \
+        LT_CHECK(outcome.cases_run > 0); /* a corpus file runs its cases */  \
     LT_END_AUTO_TEST(test_name)
 
 PARITY_CORPUS_TEST(run_corpus_routing, "routing.tseq")
