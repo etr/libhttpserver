@@ -158,12 +158,12 @@ LT_BEGIN_AUTO_TEST(task_core_suite, move_assignment_destroys_pending_frame)
 LT_END_AUTO_TEST(move_assignment_destroys_pending_frame)
 
 LT_BEGIN_AUTO_TEST(task_core_suite, destroying_unconsumed_task_destroys_frame)
-    {
+    [&] {  // the task is destroyed without being consumed: its frame is
+           // destroyed and the body never runs (documented as a
+           // cancellation at this layer)
         auto t = counting_body();
         LT_ASSERT(t.valid());
-        // Destroyed without being consumed: the frame is destroyed and the
-        // body never runs (documented as a cancellation at this layer).
-    }
+    }();
     LT_ASSERT_EQ(g_body_runs, 0);
 LT_END_AUTO_TEST(destroying_unconsumed_task_destroys_frame)
 

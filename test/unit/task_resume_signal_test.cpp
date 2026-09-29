@@ -46,7 +46,8 @@ using httpserver::spawn;
 using httpserver::task;
 using httpserver::task_result;
 
-using namespace std::chrono_literals;
+using std::chrono_literals::operator""ms;
+using std::chrono_literals::operator""s;
 
 static_assert(std::is_copy_constructible_v<resume_signal>,
               "resume_signal hands copies to application code");

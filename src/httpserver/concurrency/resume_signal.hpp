@@ -51,7 +51,7 @@ namespace httpserver {
 enum class resume_outcome : std::uint8_t {
     resumed,   // signal() fired first
     timeout,   // the wait_for deadline expired first
-    cancelled, // cancel() fired first (e.g. the exchange ended)
+    cancelled,  // cancel() fired first (e.g. the exchange ended)
 };
 
 namespace detail {

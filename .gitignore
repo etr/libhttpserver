@@ -16,6 +16,7 @@
 .idea
 libhttpserver.iml
 build/*
+build-v3/
 build-debug/
 _build/
 aclocal.m4
