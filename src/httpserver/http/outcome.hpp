@@ -30,8 +30,8 @@ namespace httpserver {
 namespace http {
 
 // Typed outcome codes for libhttpserver v3 operations. The taxonomy is
-// entirely libhttpserver-owned (PRD-V3N-REQ-037): no libmicrohttpd, OS,
-// or third-party numeric identifiers appear here or ever will. The list
+// entirely libhttpserver-owned (PRD-V3N-REQ-037): no backend, OS, or
+// third-party numeric identifiers appear here or ever will. The list
 // is extensible; values are ABI before the v3.0 freeze.
 enum class outcome_code : std::uint8_t {
     ok = 0,               // operation completed successfully

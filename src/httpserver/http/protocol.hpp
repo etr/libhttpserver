@@ -31,8 +31,9 @@ namespace httpserver {
 namespace http {
 
 // HTTP protocol version, library-owned (DR-V3-001). No OS or backend
-// enum types. WebSocket is an upgrade performed within a protocol
-// version, not a protocol value of its own.
+// enum types. Upgrade-based subprotocols (anything negotiated with a
+// 101 Switching Protocols response) live within a protocol version;
+// they are not protocol values of their own.
 enum class protocol : std::uint8_t {
     http_1_0,
     http_1_1,
