@@ -1,0 +1,32 @@
+# forms.tseq -- urlencoded and multipart POST handling (TASK-096).
+profile forms
+
+case urlencoded_echo
+send POST /echo_form HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send Content-Type: application/x-www-form-urlencoded\r\n
+send Content-Length: 9\r\n
+send \r\n
+send a=1&b=two
+expect status 200
+expect header Content-Type: text/plain
+expect header Content-Length: 9
+expect body "a=1;b=two"
+expect framing content-length
+expect connection keep-alive
+
+case multipart_field
+# Multipart body sent as one raw segment; the parsed form field value
+# is echoed back by the resource.
+send POST /upload HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send Content-Type: multipart/form-data; boundary=PARITY096B\r\n
+send Content-Length: 84\r\n
+send \r\n
+send --PARITY096B\r\nContent-Disposition: form-data; name="note"\r\n\r\nhello\r\n--PARITY096B--\r\n
+expect status 200
+expect header Content-Type: text/plain
+expect header Content-Length: 10
+expect body "note=hello"
+expect framing content-length
+expect connection keep-alive

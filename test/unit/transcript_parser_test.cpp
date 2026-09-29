@@ -134,6 +134,34 @@ LT_BEGIN_AUTO_TEST(transcript_parser_suite, escape_handling)
     LT_CHECK_EQ(t.cases[0].sends[0].bytes, "tab\there A\\quote\" \r\n");
 LT_END_AUTO_TEST(escape_handling)
 
+LT_BEGIN_AUTO_TEST(transcript_parser_suite, curl_transport_options)
+    const std::string sample =
+        "profile p\n"
+        "case c1\n"
+        "option transport curl\n"
+        "option curl_tls true\n"
+        "option curl_auth digest\n"
+        "option curl_user bob:builder\n"
+        "send GET / HTTP/1.1\\r\\n\\r\\n\n"
+        "expect status 200\n";
+    transcript t = parity::parse_transcript(sample, "s.tseq");
+    LT_CHECK_EQ(t.cases[0].transport, "curl");
+    LT_CHECK(t.cases[0].curl_tls);
+    LT_CHECK_EQ(t.cases[0].curl_auth, "digest");
+    LT_CHECK_EQ(t.cases[0].curl_user, "bob:builder");
+LT_END_AUTO_TEST(curl_transport_options)
+
+LT_BEGIN_AUTO_TEST(transcript_parser_suite, bad_transport_option_is_error)
+    LT_CHECK_EQ(parse_fail(
+        "profile p\n"
+        "case c1\n"
+        "option transport telepathy\n").line(), 3);
+    LT_CHECK_EQ(parse_fail(
+        "profile p\n"
+        "case c1\n"
+        "option curl_auth ntlm\n").line(), 3);
+LT_END_AUTO_TEST(bad_transport_option_is_error)
+
 LT_BEGIN_AUTO_TEST(transcript_parser_suite, quoted_body_with_escapes)
     const std::string sample =
         "profile p\n"

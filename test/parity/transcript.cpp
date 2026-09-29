@@ -318,14 +318,41 @@ void parse_option(parser_state& st, const std::string& rest) {
     if (st.current_case == nullptr) fail(st, "option directive outside a case");
     std::string name = first_token(rest);
     std::string arg = trim(rest.substr(skip_nonws(rest, skip_ws(rest, 0))));
-    if (name != "read_timeout_ms") {
-        fail(st, "unknown option: " + name);
+    if (name == "read_timeout_ms") {
+        int ms = 0;
+        if (!parse_int(arg, ms) || ms <= 0) {
+            fail(st, "option read_timeout_ms requires a positive integer");
+        }
+        st.current_case->read_timeout_ms = ms;
+        return;
     }
-    int ms = 0;
-    if (!parse_int(arg, ms) || ms <= 0) {
-        fail(st, "option read_timeout_ms requires a positive integer");
+    if (name == "transport") {
+        if (arg != "raw" && arg != "curl") {
+            fail(st, "option transport must be raw or curl: " + arg);
+        }
+        st.current_case->transport = arg;
+        return;
     }
-    st.current_case->read_timeout_ms = ms;
+    if (name == "curl_user") {
+        if (arg.empty()) fail(st, "option curl_user requires user:password");
+        st.current_case->curl_user = arg;
+        return;
+    }
+    if (name == "curl_auth") {
+        if (arg != "basic" && arg != "digest") {
+            fail(st, "option curl_auth must be basic or digest: " + arg);
+        }
+        st.current_case->curl_auth = arg;
+        return;
+    }
+    if (name == "curl_tls") {
+        if (arg != "true" && arg != "false") {
+            fail(st, "option curl_tls must be true or false: " + arg);
+        }
+        st.current_case->curl_tls = (arg == "true");
+        return;
+    }
+    fail(st, "unknown option: " + name);
 }
 
 void parse_profile(parser_state& st, const std::string& rest, bool inside_case) {

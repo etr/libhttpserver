@@ -59,10 +59,14 @@ bool parse_decimal(const std::string& s, std::size_t& out) {
 
 // RFC 7230 §3.1.2: status-line = HTTP-version SP status-code SP reason.
 // A bare three-digit code with no trailing SP/reason is also accepted.
+// Status-line check per the RFC 7230 §3.1.2 shape: protocol token SP
+// 3-digit code [SP reason]. The protocol token is not restricted to
+// "HTTP/n.n": SHOUTcast responses use "ICY 200 OK" (that is the entire
+// point of the shoutcast transcript), while a non-numeric code or a
+// missing code stays a parse error.
 bool parse_status_line(const std::string& line, int& status_out) {
-    if (line.compare(0, 5, "HTTP/") != 0) return false;
     std::size_t space = line.find(' ');
-    if (space == std::string::npos || space == 5) return false;
+    if (space == std::string::npos || space == 0) return false;
     std::size_t code_begin = space + 1;
     if (code_begin + 3 > line.size()) return false;
     int code = 0;
@@ -249,6 +253,14 @@ void response_frame_parser::decide_framing() {
     }
     if (status_ < 200 || status_ == 204 || status_ == 304) {
         // RFC 7230 §3.3.3: bodiless statuses complete immediately.
+        framing_ = "none";
+        finish_response();
+        mode_ = mode::head;
+        return;
+    }
+    if (head_only_) {
+        // HEAD request: headers-only response regardless of declared
+        // body length (RFC 7231 §4.3.2).
         framing_ = "none";
         finish_response();
         mode_ = mode::head;

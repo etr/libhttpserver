@@ -1,0 +1,21 @@
+# websocket.tseq -- cleartext upgrade handshake (TASK-096).
+# Sec-WebSocket-Accept is pinned exactly: the fixed client key
+# dGhlIHNhbXBsZSBub25jZQ== (RFC 6455 section 1.3 example) MUST yield
+# s3pPLMBiTxaQ9kYGzzhZRbK+xOo=, so no client-side crypto is needed.
+# Frame-level echo is out of scope for TASK-096 (inventory-only;
+# TASK-107+ own protocol-level transcripts). Skips on builds without
+# libmicrohttpd_ws.
+profile websocket
+
+case upgrade_handshake_fixed_key
+send GET /ws HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send Upgrade: websocket\r\n
+send Connection: Upgrade\r\n
+send Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n
+send Sec-WebSocket-Version: 13\r\n
+send \r\n
+expect status 101
+expect header Upgrade: websocket
+expect header Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+expect connection close

@@ -1,0 +1,38 @@
+# file_resp.tseq -- file response bodies (TASK-096).
+profile file_resp
+
+case file_ok
+send GET /file HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: application/octet-stream
+expect header Content-Length: 21
+expect body "test content of file\n"
+expect framing content-length
+expect connection keep-alive
+
+case file_empty
+send GET /empty_file HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: application/octet-stream
+expect header Content-Length: 0
+expect body ""
+expect framing content-length
+expect connection keep-alive
+
+case file_missing
+# Documented v2 semantics: file construction does not throw; the
+# failure is observable at dispatch time as the sanitized 500 body
+# (CWE-209 fix: no exception text in the body).
+send GET /missing HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 500
+expect header Content-Type: text/plain
+expect header Content-Length: 21
+expect body "Internal Server Error"
+expect framing content-length
+expect connection keep-alive

@@ -214,6 +214,16 @@ LT_BEGIN_AUTO_TEST(response_frame_suite, bad_status_line_is_error)
     LT_CHECK(!p.error().empty());
 LT_END_AUTO_TEST(bad_status_line_is_error)
 
+LT_BEGIN_AUTO_TEST(response_frame_suite, shoutcast_icy_status_line)
+    // SHOUTcast: non-HTTP protocol token, the entire point of the
+    // shoutcast transcript.
+    observed_response r = parse_one("ICY 200 OK\r\nContent-Length: 2\r\n\r\nOK");
+    LT_CHECK_EQ(r.status, 200);
+    LT_CHECK_EQ(r.raw_status_line, "ICY 200 OK");
+    LT_CHECK_EQ(r.body, "OK");
+    LT_CHECK_EQ(r.framing, "content-length");
+LT_END_AUTO_TEST(shoutcast_icy_status_line)
+
 LT_BEGIN_AUTO_TEST(response_frame_suite, incremental_pipelined_feed)
     response_frame_parser p;
     std::vector<observed_response> out = p.feed(std::string(CL_200).substr(0, 20));

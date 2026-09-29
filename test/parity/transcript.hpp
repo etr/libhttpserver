@@ -108,6 +108,15 @@ struct tcase {
     std::vector<expectation> expects;
     // Failure-detection bound only: never a pass condition.
     int read_timeout_ms = 5000;
+    // "raw" (default: segmented POSIX socket writes) or "curl"
+    // (client-mediated case for TLS / auth round-trips where a raw
+    // client is impractical; the runner builds the request from the
+    // first send segment's request line).
+    std::string transport = "raw";
+    // curl-transport options.
+    std::string curl_user;   // user:password
+    std::string curl_auth;   // "basic" | "digest"
+    bool curl_tls = false;   // https:// with the self-signed test cert
 };
 
 struct transcript {

@@ -76,6 +76,18 @@ class response_frame_parser {
     // feeds after an error.
     const std::string& error() const;
 
+    // True once a parse error occurred (error() carries the detail).
+    bool failed() const { return error_; }
+
+    // True while an until-close response is being accumulated: the
+    // runner reads until EOF before finish() can emit it.
+    bool pending_until_close() const { return mode_ == mode::until_close; }
+
+    // HEAD request context (RFC 7231 §4.3.2): the response completes
+    // after the header block even when it declares a body length, and
+    // no body bytes are expected on the wire.
+    void set_head_only(bool head_only) { head_only_ = head_only; }
+
     // Memory guard: responses declaring more body than this are an
     // error, not an allocation.
     static constexpr std::size_t max_response_bytes = 4u * 1024u * 1024u;
@@ -104,6 +116,7 @@ class response_frame_parser {
     std::vector<observed_response> completed_;
     std::size_t content_remaining_ = 0;
     std::size_t chunk_remaining_ = 0;
+    bool head_only_ = false;
     bool error_ = false;
     std::string error_text_;
 };

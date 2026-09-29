@@ -93,12 +93,15 @@ std::unique_ptr<webserver> build_routing_basic() {
 // pages. No hook-internal state is ever asserted.
 std::unique_ptr<webserver> build_routing_hooks() {
     auto ws = std::make_unique<webserver>(create_webserver().port(0)
+        // Documented convention: the custom handlers own their status.
         .not_found_handler([](const http_request&) {
-            return http_response::string("custom-not-found");
+            return http_response::string("custom-not-found").with_status(404);
         })
         .method_not_allowed_handler([](const http_request&) {
-            return http_response::string("custom-not-allowed");
+            return http_response::string("custom-not-allowed").with_status(405);
         }));
+    // hook_handle erases its registration on destruction; the profile
+    // keeps the hooks for the server's lifetime, so detach().
     ws->add_hook(httpserver::hook_phase::before_handler,
         std::function<httpserver::hook_action(httpserver::before_handler_ctx&)>(
             [](httpserver::before_handler_ctx& ctx) {
@@ -108,7 +111,7 @@ std::unique_ptr<webserver> build_routing_hooks() {
                         http_response::string("hooked403").with_status(403));
                 }
                 return httpserver::hook_action::pass();
-            }));
+            })).detach();
     ws->add_hook(httpserver::hook_phase::after_handler,
         std::function<httpserver::hook_action(httpserver::after_handler_ctx&)>(
             [](httpserver::after_handler_ctx& ctx) {
@@ -116,7 +119,7 @@ std::unique_ptr<webserver> build_routing_hooks() {
                     ctx.response->with_header("X-Hook", "after");
                 }
                 return httpserver::hook_action::pass();
-            }));
+            })).detach();
     ws->on_get("/hello", [](const http_request&) {
         return http_response::string("OK");
     });
