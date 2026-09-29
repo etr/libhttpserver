@@ -1,7 +1,7 @@
 # EARS-based Product Requirements
 
-**Doc status:** Draft 0.4
-**Last updated:** 2026-04-30
+**Doc status:** Draft 0.5
+**Last updated:** 2026-09-28
 **Owner:** Sebastiano Merlino
 **Audience:** Maintainers, library consumers, distro packagers
 
@@ -26,6 +26,7 @@
   - Paired `foo()/no_foo()` setters: 0.
   - Hello-world example LOC: ≤10 (currently ~15 with subclassing).
 - **Release strategy:** Single breaking release as **v2.0** with a SOVERSION bump. No deprecation period, no compatibility shims, no migration macro. v2.0 is a clean cutover — the v1.x line is end-of-life on the day v2.0 ships; there is no parallel maintenance branch.
+- **Version scope:** The product context, cross-cutting requirements, and features through §3.8 describe v2.0. Section 3.9 defines v3.0 and supersedes v2.0 requirements where their behavior conflicts; v2.0 requirements remain the historical v2.0 contract.
 
 ---
 
@@ -326,6 +327,81 @@ After this work, users register hooks at named lifecycle phases via `webserver::
 
 ---
 
+### 3.9 Native Engine and Protocol API (V3N)
+
+**Problem / outcome**
+Give C++ applications one embedded server API across HTTP/1.1, HTTP/2, HTTP/3, and WebSockets, without a libmicrohttpd dependency. Make streaming, resource limits, ownership, and shutdown behavior explicit.
+
+**In scope**
+- An owned protocol engine and an optional TLS provider as the only permitted external production dependency.
+- HTTP/1.0 and HTTP/1.1 compatibility, HTTP/2, HTTP/3, and WebSockets over each applicable protocol.
+- The request, response, lifecycle, configuration, TLS, and release capabilities below.
+- Preservation of documented v2.0 behavior where applicable, without source compatibility.
+
+**Out of scope**
+- A pluggable HTTP backend or v2.0 source compatibility.
+- Automatic ACME account management or certificate issuance.
+- WebSocket extensions, cleartext HTTP/2 (`h2c`), and unspecified future HTTP versions.
+
+**EARS requirements — engine and protocols**
+- `PRD-V3N-REQ-001` When v3.0 is built or run, the system shall require no libmicrohttpd headers, binaries, or runtime library.
+- `PRD-V3N-REQ-002` Where TLS is disabled, the production library shall require no third-party runtime library beyond the platform and C++ runtimes.
+- `PRD-V3N-REQ-003` Where TLS is enabled, the production library shall require no third-party runtime library other than its selected TLS/cryptography provider.
+- `PRD-V3N-REQ-004` When an HTTP/1.0 or HTTP/1.1 request arrives, the system shall process it according to its protocol version.
+- `PRD-V3N-REQ-005` When an HTTP/2 client negotiates `h2` over TLS, the system shall serve requests on that connection.
+- `PRD-V3N-REQ-006` While multiple HTTP/2 streams are active on one connection, the system shall process their requests independently and honor stream and connection flow control.
+- `PRD-V3N-REQ-007` When an HTTP/3 client establishes a QUIC connection, the system shall serve requests on that connection.
+- `PRD-V3N-REQ-008` While multiple HTTP/3 streams are active, the system shall process their requests independently and honor transport flow control.
+- `PRD-V3N-REQ-009` When a route is registered, the system shall make it available to semantically equivalent requests over every enabled HTTP version.
+
+**EARS requirements — WebSockets and configuration**
+- `PRD-V3N-REQ-010` When a valid WebSocket request arrives over HTTP/1.1, the system shall establish a WebSocket session.
+- `PRD-V3N-REQ-011` When a valid WebSocket request arrives over HTTP/2 or HTTP/3, the system shall establish a WebSocket session using that version's defined mechanism.
+- `PRD-V3N-REQ-012` When an application sends a WebSocket message, the session API shall report whether the message was accepted, blocked by backpressure, or rejected because the session closed.
+- `PRD-V3N-REQ-013` When a WebSocket session closes or is cancelled, the system shall notify its handler once with the reason available to the server.
+- `PRD-V3N-REQ-014` When configuring a server, the user shall be able to set listeners, concurrency, timeouts, resource limits, TLS, and enabled protocols without backend-specific flags.
+- `PRD-V3N-REQ-015` Where an application supplies an external event loop, the server shall provide a documented way to register and process its network events.
+- `PRD-V3N-REQ-016` If server options are incompatible or outside documented bounds, the system shall report the error before accepting connections.
+
+**EARS requirements — request and response API**
+- `PRD-V3N-REQ-017` When reading headers or trailers, the application shall be able to observe repeated fields in their received order.
+- `PRD-V3N-REQ-018` When constructing fields, the application shall be able to append a value, replace values, retrieve the first value, and retrieve all values for a name.
+- `PRD-V3N-REQ-019` When inspecting a request, the application shall be able to distinguish its raw target from the path used for route matching.
+- `PRD-V3N-REQ-020` When inspecting a request, the application shall receive library-owned method and protocol identifiers rather than backend constants.
+- `PRD-V3N-REQ-021` When consuming a request body, the application shall be able to read it incrementally with bounded buffering and backpressure.
+- `PRD-V3N-REQ-022` When the application requests a fully buffered body with a maximum size, the system shall either return the complete body within that limit or report that the limit was exceeded.
+- `PRD-V3N-REQ-023` When request headers are complete, the application shall be able to respond, admit the body, suspend processing, or accept a protocol upgrade before body data is delivered to its handler.
+- `PRD-V3N-REQ-024` When an application suspends a request or response, the system shall allow it to resume from an application event and shall apply documented timeout and cancellation behavior.
+- `PRD-V3N-REQ-025` When a client disconnects or cancels a stream, the system shall notify work associated with that request so it can stop.
+- `PRD-V3N-REQ-026` When producing a streaming response, the application shall be able to report data, completion, or failure without backend-specific sentinel values.
+- `PRD-V3N-REQ-027` While a response consumer cannot accept more data, the system shall apply backpressure without unbounded buffering.
+- `PRD-V3N-REQ-028` When a response uses a file, pipe, or borrowed buffer, the API shall state whether the library owns it and how long it must remain valid.
+- `PRD-V3N-REQ-029` Where a response body is replayable, the application shall be able to reuse an immutable response definition concurrently.
+- `PRD-V3N-REQ-030` When sending a reusable response, the application shall be able to add request-specific headers and trailers without modifying the shared definition.
+
+**EARS requirements — lifecycle, TLS, and compatibility**
+- `PRD-V3N-REQ-031` When a handler requests server shutdown, the request shall return without waiting for that handler to finish.
+- `PRD-V3N-REQ-032` When an application drains a server with a deadline, the system shall stop accepting new work and report whether active work completed by that deadline.
+- `PRD-V3N-REQ-033` When a server drains, the system shall apply documented close behavior to active WebSocket sessions.
+- `PRD-V3N-REQ-034` Where TLS is enabled, the system shall retain the documented v2.0 capabilities for server certificates, SNI, client certificates, and TLS-PSK wherever the negotiated protocol permits them.
+- `PRD-V3N-REQ-035` When an application replaces a certificate on a running server, new handshakes shall use the replacement without interrupting established connections.
+- `PRD-V3N-REQ-036` When an application supplies an ACME TLS-ALPN challenge certificate for a domain, the system shall present it for matching challenge handshakes and allow its removal.
+- `PRD-V3N-REQ-037` When an operation fails or a feature is unavailable, the public API shall report it using libhttpserver-defined outcomes rather than libmicrohttpd values.
+- `PRD-V3N-REQ-038` When a documented v2.0 capability is exercised through its v3.0 equivalent, the system shall preserve its externally observable behavior unless a v3.0 migration note explicitly records the change. The parity review shall cover routing, hooks, Basic and Digest authentication, forms and multipart uploads, file responses, IP controls, TLS features, and SHOUTcast.
+
+**Acceptance criteria**
+- Independent clients complete HTTP/1.1, HTTP/2, HTTP/3, and WebSocket interoperability tests, including concurrent streams and cancellation.
+- Configured header, body, connection, stream, and WebSocket message limits reject excess input without unbounded memory growth.
+- Protocol conformance, malformed-input, fuzz, and sanitizer suites pass for the owned engine.
+- Supported Linux, BSD, macOS, and Windows builds pass their applicable integration suites.
+- Certificate replacement and ACME TLS-ALPN challenge tests pass without restarting the server.
+- A v2.0-to-v3.0 migration guide identifies removed API calls and any intentional behavior changes.
+
+**Release rule**
+All in-scope protocol and TLS requirements above gate v3.0; none is deferred to v3.x.
+
+---
+
 ## 4) Traceability
 - API-HDR → `src/httpserver/*.hpp`, `src/webserver.cpp`, `src/http_response.cpp`
 - API-FLG → `src/httpserver/*.hpp`, `src/webserver.cpp`, `src/http_request.cpp`
@@ -335,6 +411,7 @@ After this work, users register hooks at named lifecycle phases via `webserver::
 - API-REQ → `src/httpserver/http_request.hpp`, `src/httpserver/http_resource.hpp`
 - API-NAM → `src/httpserver/webserver.hpp`, `src/httpserver/http_response.hpp`, `README.md`
 - API-HOOK → `src/httpserver/hook_phase.hpp`, `src/httpserver/hook_action.hpp`, `src/httpserver/hook_handle.hpp`, `src/httpserver/hook_context.hpp`, `src/httpserver/webserver.hpp`, `src/httpserver/http_resource.hpp`, `src/webserver.cpp`
+- V3N → [v3.0 architecture](architecture/v3/architecture.md): native protocol engine, request/response API, server lifecycle, TLS integration, and v3.0 interoperability and security gates. Implementation locations follow that architecture.
 
 ---
 
