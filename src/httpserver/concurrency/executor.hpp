@@ -56,6 +56,10 @@ class unique_function<R(Args...)> {
 
     unique_function(unique_function&&) noexcept = default;
     unique_function& operator=(unique_function&&) noexcept = default;
+    unique_function& operator=(std::nullptr_t) noexcept {
+        fn_ = nullptr;
+        return *this;
+    }
 
     unique_function(const unique_function&) = delete;
     unique_function& operator=(const unique_function&) = delete;
