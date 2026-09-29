@@ -43,7 +43,9 @@ namespace parity {
 
 class v2_fixture : public server_fixture {
  public:
-    v2_fixture() = default;
+    // Out-of-line: the unique_ptr<webserver> member needs the complete
+    // webserver type, which this header deliberately does not include.
+    v2_fixture();
     ~v2_fixture() override;
     v2_fixture(const v2_fixture&) = delete;
     v2_fixture& operator=(const v2_fixture&) = delete;

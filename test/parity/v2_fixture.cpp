@@ -276,6 +276,7 @@ std::unique_ptr<webserver> build_tls() {
 
 }  // namespace
 
+v2_fixture::v2_fixture() = default;
 v2_fixture::~v2_fixture() = default;
 
 const std::vector<std::string>& v2_fixture::profile_names() {
