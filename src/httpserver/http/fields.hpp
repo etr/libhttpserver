@@ -51,7 +51,7 @@ namespace http {
 // all(), and entries() refer to storage owned by the container and are
 // invalidated by any subsequent mutation.
 class fields {
-public:
+ public:
     // One received field occurrence. The views refer to container
     // storage and are invalidated by mutation.
     struct entry {
@@ -142,7 +142,7 @@ public:
         return !(a == b);
     }
 
-private:
+ private:
     static constexpr std::size_t npos = static_cast<std::size_t>(-1);
 
     static bool iequals(std::string_view a, std::string_view b) noexcept {

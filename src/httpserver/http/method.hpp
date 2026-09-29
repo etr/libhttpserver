@@ -62,18 +62,27 @@ inline constexpr std::array<std::string_view, 11> method_tokens = {
     "OPTIONS", "TRACE", "PATCH", "", "",
 };
 
+// Lookup table for the RFC 9110 tchar set: every byte allowed in a
+// token (ALPHA / DIGIT / "!#$%&'*+-.^_`|~").
+inline constexpr std::array<bool, 256> tchar_table = [] {
+    std::array<bool, 256> t {};
+    for (const char c : std::string_view("!#$%&'*+-.^_`|~0123456789")) {
+        t[static_cast<unsigned char>(c)] = true;
+    }
+    for (char c = 'A'; c <= 'Z'; ++c) {
+        t[static_cast<unsigned char>(c)] = true;
+    }
+    for (char c = 'a'; c <= 'z'; ++c) {
+        t[static_cast<unsigned char>(c)] = true;
+    }
+    return t;
+} ();
+
 // True iff every byte of v is in the RFC 9110 token set (tchar).
 constexpr bool is_token(std::string_view v) noexcept {
     if (v.empty()) return false;
     for (const char c : v) {
-        const auto u = static_cast<unsigned char>(c);
-        const bool tchar =
-            (u >= 'A' && u <= 'Z') || (u >= 'a' && u <= 'z')
-            || (u >= '0' && u <= '9')
-            || c == '!' || c == '#' || c == '$' || c == '%' || c == '&'
-            || c == '\'' || c == '*' || c == '+' || c == '-' || c == '.'
-            || c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
-        if (!tchar) return false;
+        if (!tchar_table[static_cast<unsigned char>(c)]) return false;
     }
     return true;
 }
@@ -93,7 +102,7 @@ constexpr std::uint8_t ascii_upper(const char c) noexcept {
 // representations are normalized). The default-constructed value is
 // the invalid unknown_ state.
 class method {
-public:
+ public:
     // Precondition: id is one of the nine known enumerators (below
     // extension). No validation is performed for constexpr friendliness.
     static constexpr method known(method_id id) noexcept {
@@ -171,7 +180,7 @@ public:
         return !(a == b);
     }
 
-private:
+ private:
     constexpr explicit method(method_id id) noexcept : id_(id) { }
 
     explicit method(method_id id, std::string ext_name) noexcept

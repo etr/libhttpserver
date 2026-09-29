@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace httpserver {
 
@@ -51,7 +52,7 @@ enum class outcome_code : std::uint8_t {
 // result<T> template that transports an outcome lands with the task
 // plumbing; outcome is the error vocabulary it will carry.
 class outcome {
-public:
+ public:
     constexpr outcome() noexcept = default;
 
     outcome(outcome_code code, std::string message) noexcept
@@ -77,7 +78,7 @@ public:
         return ok_instance;
     }
 
-private:
+ private:
     outcome_code code_ = outcome_code::ok;
     std::string message_;
 };
