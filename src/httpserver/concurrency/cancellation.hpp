@@ -107,17 +107,26 @@ class stop_token {
                 return awaiting;
             }
             callback_.emplace(token_, fire{this});
-            // Publish the callback, then re-check. With sequentially
-            // consistent atomics the two orderings are exhaustive:
-            //   - the claim happened before our fired_ load -> the
-            //     callback observed armed_ == false and did not post; we
-            //     resume here via symmetric transfer;
-            //   - the claim happens after our load -> the callback
-            //     observes armed_ == true and posts the resumption.
-            // Either way exactly one path resumes the waiter.
+            // Publish the callback, then re-check. Exactly one of the two
+            // paths (this registration re-check, or the stop callback on
+            // the requesting thread) wins the resume_claimed_ exchange and
+            // resumes the waiter:
+            //   - the callback saw armed_ == false (it ran before the
+            //     store below): it deferred without claiming, so this
+            //     re-check wins the exchange and resumes via symmetric
+            //     transfer;
+            //   - the callback saw armed_ == true: it won the exchange and
+            //     posted, so this re-check observes the claim taken and
+            //     does nothing.
+            // The exchange decides; the two paths can never both act.
             armed_.store(true, std::memory_order_seq_cst);
-            if (fired_.load(std::memory_order_seq_cst)) return awaiting;
-            return std::noop_coroutine();
+            if (!fired_.load(std::memory_order_seq_cst)) {
+                return std::noop_coroutine();  // callback will post
+            }
+            if (!resume_claimed_.exchange(true, std::memory_order_acq_rel)) {
+                return awaiting;  // stop raced registration: resume here
+            }
+            return std::noop_coroutine();  // callback claimed and posted
         }
 
         // Resumption only ever happens through a fired path.
@@ -145,7 +154,13 @@ class stop_token {
 
         void on_stop() noexcept {
             if (!claim()) return;
-            if (!armed_.load(std::memory_order_seq_cst)) return;  // await_suspend resumes
+            // armed_ == false means the registration re-check has not run
+            // yet: it will observe fired_ and resume via symmetric
+            // transfer, so this path must not claim the resumption.
+            if (!armed_.load(std::memory_order_seq_cst)) return;
+            if (resume_claimed_.exchange(true, std::memory_order_acq_rel)) {
+                return;  // the registration re-check resumed the waiter
+            }
             post_resume();
         }
 
@@ -181,6 +196,9 @@ class stop_token {
         std::coroutine_handle<> awaiting_;
         std::atomic<bool> fired_{false};
         std::atomic<bool> armed_{false};
+        // Single-resumer handoff between the registration re-check and the
+        // stop callback: exactly one exchange wins and resumes the waiter.
+        std::atomic<bool> resume_claimed_{false};
     };
 
     [[nodiscard]] cancellation_awaiter cancelled() const noexcept {

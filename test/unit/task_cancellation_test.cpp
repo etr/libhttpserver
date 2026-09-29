@@ -34,6 +34,7 @@
 //   - waiters are never resumed synchronously inside request_stop().
 
 #include <atomic>
+#include <chrono>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -171,6 +172,53 @@ LT_BEGIN_AUTO_TEST(task_cancellation_suite, cancellation_propagates_through_chai
     ex.run_pending();
     LT_ASSERT_EQ(deliveries, 1);
 LT_END_AUTO_TEST(cancellation_propagates_through_chains)
+
+LT_BEGIN_AUTO_TEST(task_cancellation_suite, stop_racing_awaiter_registration_delivers_once)
+    // request_stop() races the cancelled() awaiter registration itself:
+    // the stop may fire before registration (pre-cancelled path), inside
+    // await_suspend (registration re-check path), or after it (posted
+    // callback path). Every waiter must still complete exactly once with
+    // the typed cancelled outcome, and never inline inside request_stop.
+    for (int i = 0; i < 300; ++i) {
+        manual_executor ex;
+        stop_source source;
+        std::atomic<int> completions{0};
+        std::atomic<int> deliveries{0};
+        std::atomic<bool> outcome_cancelled{false};
+        std::atomic<int> arrivals{0};
+
+        spawn(ex, await_cancelled(source.get_token(), &completions),
+              [&](task_result<void> r) {
+                  ++deliveries;
+                  outcome_cancelled =
+                      r.has_outcome()
+                      && r.outcome()
+                             == httpserver::http::outcome_code::cancelled;
+              });
+
+        std::thread requester([&] {
+            arrivals.fetch_add(1, std::memory_order_acq_rel);
+            while (arrivals.load(std::memory_order_acquire) < 2) {
+                std::this_thread::yield();
+            }
+            source.request_stop();
+        });
+        arrivals.fetch_add(1, std::memory_order_acq_rel);
+        while (arrivals.load(std::memory_order_acquire) < 2) {
+            std::this_thread::yield();
+        }
+        ex.run_pending();  // registration races the concurrent request
+        requester.join();
+
+        for (int spin = 0; spin < 2000 && deliveries.load() == 0; ++spin) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            ex.run_pending();
+        }
+        LT_CHECK_EQ(deliveries.load(), 1);
+        LT_CHECK(outcome_cancelled.load());
+        LT_CHECK_EQ(completions.load(), 0);
+    }
+LT_END_AUTO_TEST(stop_racing_awaiter_registration_delivers_once)
 
 LT_BEGIN_AUTO_TEST(task_cancellation_suite, waiter_is_never_resumed_inside_request_stop)
     manual_executor ex;
