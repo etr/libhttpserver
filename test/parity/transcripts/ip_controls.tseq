@@ -1,0 +1,17 @@
+# ip_controls.tseq -- IP access control (TASK-096).
+# Profile: default-REJECT policy with loopback allow-listed
+# (webserver::allow_ip). The deny-then-refuse wire shape is policy
+# timing dependent and is recorded as inventory-only in the parity
+# inventory, not pinned here.
+profile ip_controls
+
+case allow_listed_loopback
+send GET /hello HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: text/plain
+expect header Content-Length: 2
+expect body "OK"
+expect framing content-length
+expect connection keep-alive

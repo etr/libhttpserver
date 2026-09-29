@@ -1,0 +1,27 @@
+# shoutcast.tseq -- ICY status line, unobservable through curl (TASK-096).
+profile shoutcast
+
+case icy_status_line
+# The SHOUTcast wire status line replaces the HTTP version token; the
+# parser reads the code and the raw line is pinned exactly.
+send GET /stream HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status_line "ICY 200 OK"
+expect header Content-Type: text/plain
+expect header Content-Length: 2
+expect body "OK"
+expect framing content-length
+expect connection keep-alive
+
+case plain_get_still_http
+# The same server answers ordinary HTTP for non-shoutCAST responses.
+send GET /__smoke HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: text/plain
+expect header Content-Length: 8
+expect body "smoke-ok"
+expect framing content-length
+expect connection keep-alive

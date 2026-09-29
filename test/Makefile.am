@@ -26,7 +26,24 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ip_access_control ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants response_body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency hook_bus ws_registry ws_registry_concurrency daemon_lifecycle routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_denied hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set debug_dump_request_body_zero littletest_skip_semantics digest_client_self_test unescaper_func
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ip_access_control ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants response_body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency hook_bus ws_registry ws_registry_concurrency daemon_lifecycle routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_denied hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set debug_dump_request_body_zero littletest_skip_semantics digest_client_self_test unescaper_func transcript_parser response_frame normalize v2_profile_registry transcript_runner
+
+# TASK-096 Cycle 5: segmented-input transcript runner. Executes the
+# committed *.tseq corpus over raw segmented loopback sockets (plus
+# curl-mediated TLS / Digest round-trip cases) against the v2 fixture.
+transcript_runner_SOURCES = transcript_runner.cpp parity/transcript.cpp parity/response_frame.cpp parity/normalize.cpp parity/v2_fixture.cpp
+transcript_runner_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"'
+
+PARITY_TRANSCRIPTS = parity/transcripts/routing.tseq \
+                     parity/transcripts/hooks.tseq \
+                     parity/transcripts/auth_basic.tseq \
+                     parity/transcripts/auth_digest.tseq \
+                     parity/transcripts/forms.tseq \
+                     parity/transcripts/file_resp.tseq \
+                     parity/transcripts/ip_controls.tseq \
+                     parity/transcripts/shoutcast.tseq \
+                     parity/transcripts/websocket.tseq \
+                     parity/transcripts/tls.tseq
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -718,7 +735,31 @@ littletest_skip_semantics_LDADD =
 digest_client_self_test_SOURCES = unit/digest_client_self_test.cpp
 digest_client_self_test_LDADD =
 
-noinst_HEADERS = littletest.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp integ/digest_client.hpp integ/stream_capture_helpers.hpp integ/log_capture.hpp unit/throw_probe.hpp
+# TASK-096 -- v2 observable-behavior parity harness (test/parity/).
+# Four unit binaries test the harness pieces themselves (parser, response
+# framer, normalizer, v2 profile registry); transcript_runner executes the
+# committed *.tseq corpus against the running v2 server through raw
+# segmented sockets. The parser/framer/normalizer binaries are pure-host
+# code with zero libhttpserver dependency (empty LDADD).
+transcript_parser_SOURCES = unit/transcript_parser_test.cpp parity/transcript.cpp
+transcript_parser_LDADD =
+
+# TASK-096 Cycle 2: response framer (byte stream -> observed_response).
+response_frame_SOURCES = unit/response_frame_test.cpp parity/response_frame.cpp
+response_frame_LDADD =
+
+# TASK-096 Cycle 3: normalizer (expectation-vs-observation comparison).
+normalize_SOURCES = unit/normalize_test.cpp parity/normalize.cpp parity/response_frame.cpp parity/transcript.cpp
+normalize_LDADD =
+normalize_CPPFLAGS = $(AM_CPPFLAGS) -DNORMALIZE_FIXTURE_DIR='"$(top_srcdir)/test/data"'
+
+# TASK-096 Cycle 4: v2 profile registry guard (every profile starts on
+# port 0, serves /__smoke, stops cleanly).
+v2_profile_registry_SOURCES = unit/v2_profile_registry_test.cpp parity/v2_fixture.cpp
+v2_profile_registry_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TEST_DATA_DIR='"$(top_srcdir)/test"'
+
+
+noinst_HEADERS = littletest.hpp parity/transcript.hpp parity/response_frame.hpp parity/normalize.hpp parity/server_fixture.hpp parity/v2_fixture.hpp parity/socket_io.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp integ/digest_client.hpp integ/stream_capture_helpers.hpp integ/log_capture.hpp unit/throw_probe.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
 
 if COND_GCOV
@@ -746,6 +787,7 @@ EXTRA_DIST = libhttpserver.supp \
              valgrind-helgrind.supp \
              valgrind-drd.supp \
              tsan.supp \
+             $(PARITY_TRANSCRIPTS) \
              PERFORMANCE.md \
              bench_harness.hpp \
              bench_baseline.hpp \

@@ -1,0 +1,28 @@
+# auth_digest.tseq -- Digest auth challenge structure + round-trip.
+# Nonce/opaque are server-generated volatile material and are masked
+# with <*> per D3; only the documented challenge structure is pinned.
+# The round-trip case is curl-mediated: a raw client cannot compute the
+# response against a server-chosen nonce.
+profile auth_digest
+
+case challenge_structure
+send GET /digest HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 401
+expect header WWW-Authenticate: Digest realm="transcript", qop="auth", algorithm=MD5, nonce="<*>", opaque="<*>", charset=UTF-8
+expect header Content-Length: 15
+expect body "digest required"
+expect framing content-length
+expect connection keep-alive
+
+case roundtrip_digest
+# curl performs the RFC 7616 challenge/response automatically.
+option transport curl
+option curl_auth digest
+option curl_user bob:builder
+send GET /digest HTTP/1.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: text/plain
+expect body "digest-ok"

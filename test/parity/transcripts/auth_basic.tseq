@@ -1,0 +1,38 @@
+# auth_basic.tseq -- Basic auth challenge/round-trip (TASK-096).
+# Credentials are fixed fixture constants (alice:wonderland).
+profile auth_basic
+
+case no_credentials
+send GET /secret HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 401
+expect header WWW-Authenticate: Basic realm="transcript"
+expect header Content-Length: 0
+expect body ""
+expect framing content-length
+expect connection keep-alive
+
+case valid_credentials
+# Authorization: Basic YWxpY2U6d29uZGVybGFuZA== (alice:wonderland)
+send GET /secret HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send Authorization: Basic YWxpY2U6d29uZGVybGFuZA==\r\n
+send \r\n
+expect status 200
+expect header Content-Type: text/plain
+expect header Content-Length: 9
+expect body "secret-ok"
+expect framing content-length
+expect connection keep-alive
+
+case invalid_credentials
+# Authorization: Basic aW52YWxpZDppbnZhbGlk (invalid:invalid)
+send GET /secret HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send Authorization: Basic aW52YWxpZDppbnZhbGlk\r\n
+send \r\n
+expect status 401
+expect header WWW-Authenticate: Basic realm="transcript"
+expect framing content-length
+expect connection keep-alive

@@ -1,0 +1,56 @@
+# hooks.tseq -- wire-observable hook effects (TASK-096 baseline).
+# Profile: routing_hooks (before_handler short-circuit, after_handler
+# header mutation, custom 404/405 pages).
+profile routing_hooks
+
+case get_hello_hook_header
+# The after_handler hook stamps every dispatched response.
+send GET /hello HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header X-Hook: after
+expect header Content-Type: text/plain
+expect body "OK"
+expect framing content-length
+expect connection keep-alive
+
+case before_handler_403
+# Short-circuit: the resource handler never runs, and the after_handler
+# hook does NOT fire (no X-Hook header) -- pinned absence.
+send DELETE /admin HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send Content-Length: 0\r\n
+send \r\n
+expect status 403
+expect header ~X-Hook
+expect header Content-Type: text/plain
+expect header Content-Length: 9
+expect body "hooked403"
+expect framing content-length
+expect connection keep-alive
+
+case custom_404
+send GET /nope HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 404
+expect header X-Hook: after
+expect header Content-Type: text/plain
+expect header Content-Length: 16
+expect body "custom-not-found"
+expect framing content-length
+expect connection keep-alive
+
+case custom_405
+send POST /get_only HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send Content-Length: 0\r\n
+send \r\n
+expect status 405
+expect header Allow: GET
+expect header Content-Type: text/plain
+expect header Content-Length: 18
+expect body "custom-not-allowed"
+expect framing content-length
+expect connection keep-alive

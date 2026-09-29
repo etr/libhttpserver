@@ -1,0 +1,23 @@
+# tls.tseq -- TLS round-trip (TASK-096).
+# curl-mediated: byte-level raw-socket observation of a TLS stream is
+# out of scope for the baseline harness (recorded limitation in the
+# parity inventory; lifted when the v3 TLS engine lands).
+profile tls
+
+case get_hello_tls
+option transport curl
+option curl_tls true
+send GET /hello HTTP/1.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: text/plain
+expect body "OK"
+
+case smoke_tls
+option transport curl
+option curl_tls true
+send GET /__smoke HTTP/1.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: text/plain
+expect body "smoke-ok"

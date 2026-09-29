@@ -1,0 +1,80 @@
+# routing.tseq -- v2 documented routing behavior (TASK-096 baseline).
+# Profile: routing_basic (exact, parameterized, method-set routes and
+# 404/405 defaults). See specs/architecture/v3/v2-parity-inventory.md.
+profile routing_basic
+
+case get_hello
+send GET /hello HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: text/plain
+expect header Content-Length: 2
+expect body "OK"
+expect framing content-length
+expect header_order Content-Type Content-Length
+expect connection keep-alive
+
+case parameterized_path
+# {id}/{name} templates bind their captures as request args.
+send GET /params/42/name/jane HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Content-Type: text/plain
+expect header Content-Length: 15
+expect body "id=42;name=jane"
+expect framing content-length
+expect connection keep-alive
+
+case head_both_methods
+# HEAD registered via method_set GET+HEAD; v2 answers headers-only and
+# still declares the GET body length on the wire (RFC 7231 section 4.3.2
+# allows this; a v3 migration note must record any change).
+send HEAD /both HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Content-Length: 7
+expect body_len 0
+expect framing none
+expect connection keep-alive
+
+case method_not_allowed
+send POST /get_only HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send Content-Length: 0\r\n
+send \r\n
+expect status 405
+expect header Allow: GET
+expect header Content-Type: text/plain
+expect header Content-Length: 18
+expect body "Method not Allowed"
+expect framing content-length
+expect connection keep-alive
+
+case not_found
+send GET /definitely/not/there HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 404
+expect header Content-Type: text/plain
+expect header Content-Length: 9
+expect body "Not Found"
+expect framing content-length
+expect connection keep-alive
+
+case pipelined_keepalive
+# Two requests back-to-back on one connection; both answered in order
+# (TASK-105/107 consume this case for pipelined response ordering).
+send GET /hello HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+send GET /hello HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect body "OK"
+expect status 200
+expect body "OK"
+expect connection keep-alive
