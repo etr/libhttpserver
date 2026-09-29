@@ -52,8 +52,9 @@ constexpr const char* SMOKE_BODY = "smoke-ok";
 constexpr const char* BASIC_USER = "alice";
 constexpr const char* BASIC_PASS = "wonderland";
 constexpr const char* BASIC_REALM = "transcript";
+// The digest username ("bob") lives in the transcript's curl_user
+// option; only the server-side realm/password/seed are server inputs.
 constexpr const char* DIGEST_REALM = "transcript";
-constexpr const char* DIGEST_USER = "bob";
 constexpr const char* DIGEST_PASS = "builder";
 constexpr const char* DIGEST_SEED = "parity-seed-096";
 
