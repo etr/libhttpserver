@@ -19,8 +19,13 @@
      02110-1301 USA
 */
 
-#ifndef SRC_HTTPSERVER_HTTP_METHOD_HPP_
-#define SRC_HTTPSERVER_HTTP_METHOD_HPP_
+// Guard deliberately suffixed _V3_: the pure path-derived token
+// SRC_HTTPSERVER_HTTP_METHOD_HPP_ collides with the guard of the
+// unrelated v2 public header httpserver/http_method.hpp, which would
+// make this header a no-op in any TU that also includes the v2
+// umbrella <httpserver.hpp>.
+#ifndef SRC_HTTPSERVER_HTTP_METHOD_HPP_V3_  // NOLINT(build/header_guard)
+#define SRC_HTTPSERVER_HTTP_METHOD_HPP_V3_  // NOLINT(build/header_guard)
 
 #include <array>
 #include <cstddef>
@@ -199,4 +204,4 @@ inline constexpr std::string_view to_string(const method& m) noexcept {
 
 }  // namespace httpserver
 
-#endif  // SRC_HTTPSERVER_HTTP_METHOD_HPP_
+#endif  // SRC_HTTPSERVER_HTTP_METHOD_HPP_V3_  // NOLINT(build/header_guard)
