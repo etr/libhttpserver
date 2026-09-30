@@ -109,6 +109,50 @@ inline http::outcome parse_route_segment(std::string_view segment,
     return http::outcome::okay();
 }
 
+// Splits a path into its slash-delimited segments. The root and the
+// empty path have no segments (both denote the same resource).
+inline std::vector<std::string_view> split_path_segments(
+    std::string_view path) {
+    std::vector<std::string_view> segments;
+    if (path.size() < 2) return segments;  // "" and "/"
+    std::size_t pos = 1;  // skip the leading slash
+    while (pos < path.size()) {
+        const std::size_t slash = path.find('/', pos);
+        const std::size_t width =
+            slash == std::string_view::npos ? std::string_view::npos
+                                            : slash - pos;
+        segments.push_back(path.substr(pos, width));
+        if (slash == std::string_view::npos) break;
+        pos = slash + 1;
+    }
+    return segments;
+}
+
+// Segment-wise pattern match over an already-split path: a literal
+// pattern segment compares equal, a single {name} segment captures any
+// non-empty segment, and the segment counts must agree. Captures fill
+// in pattern order; a failed match leaves them unused.
+inline bool match_path_segments(
+    std::string_view pattern_text,
+    const std::vector<std::string_view>& path_segments,
+    std::vector<std::string>& captures) {
+    const std::vector<std::string_view> pattern_segments =
+        split_path_segments(pattern_text);
+    if (pattern_segments.size() != path_segments.size()) return false;
+    captures.clear();
+    for (std::size_t i = 0; i < pattern_segments.size(); ++i) {
+        const std::string_view& pattern = pattern_segments[i];
+        const std::string_view& segment = path_segments[i];
+        if (pattern.front() == '{') {
+            if (segment.empty()) return false;
+            captures.emplace_back(segment);
+            continue;
+        }
+        if (pattern != segment) return false;
+    }
+    return true;
+}
+
 }  // namespace detail
 
 // A validated route pattern: "/" or a slash-separated sequence of
@@ -259,6 +303,36 @@ class route_registry {
             }
         }
         return false;
+    }
+
+    // One lookup outcome: the registered handler (null on a miss) and
+    // the parameter captures in pattern order.
+    struct match_result {
+        const route_handler* handler = nullptr;
+        std::vector<std::string> parameters;
+    };
+
+    // Resolves a request head to its route. Segment-wise: literal
+    // segments compare equal, a {name} segment captures any non-empty
+    // segment, first match in registration order wins, a miss yields a
+    // null handler. Const and lock-free. No protocol dimension (REQ-009):
+    // one registration serves every enabled version.
+    match_result match(const http::method& m,
+                       std::string_view route_path) const {
+        match_result found;
+        const std::vector<std::string_view> path_segments =
+            detail::split_path_segments(route_path);
+        for (const entry& known : entries_) {
+            if (known.method_ != m) continue;
+            std::vector<std::string> captures;
+            if (detail::match_path_segments(known.pattern_.text(),
+                                            path_segments, captures)) {
+                found.handler = &known.handler_;
+                found.parameters = std::move(captures);
+                break;
+            }
+        }
+        return found;
     }
 
     std::size_t size() const noexcept { return entries_.size(); }

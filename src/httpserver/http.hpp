@@ -32,5 +32,6 @@
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/fields.hpp>
 #include <httpserver/http/request_head.hpp>
+#include <httpserver/http/status.hpp>
 
 #endif  // SRC_HTTPSERVER_HTTP_HPP_

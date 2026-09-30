@@ -73,6 +73,11 @@ const std::vector<const char*>& header_files() {
         "/server/options.hpp",
         "/server/routes.hpp",
         "/server/configuration.hpp",
+        // TASK-102: the exchange area joins the sentinel scan with the
+        // same rules (no config gates, no backend/OS tokens; engine and
+        // exchange vocabulary only).
+        "/exchange.hpp",
+        "/http/status.hpp",
     };
     return files;
 }
