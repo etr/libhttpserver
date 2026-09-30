@@ -203,6 +203,112 @@ class http1_response_framer {
         return http::outcome::okay();
     }
 
+    // Frames one body chunk into @p out, bounded by @p max_out_bytes.
+    // length: raw bytes; a chunk may split at the output bound (the
+    // caller re-pushes the rest), but a push that would exceed the
+    // declared total is a sticky protocol error that copies nothing.
+    // chunked: the push encodes exactly one chunk of the affordable
+    // prefix (lowercase hex size, CRLF, bytes, CRLF); when not even one
+    // payload byte fits, nothing is appended and ok is returned — the
+    // caller reads the appended delta and re-pushes. The no-body kinds
+    // reject body bytes strictly.
+    http::outcome push_body(std::string& out,
+                            std::span<const std::byte> data,
+                            std::size_t max_out_bytes) {
+        if (stage_ == stage::failed) return failure_;
+        if (stage_ == stage::done) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "http1_response_framer: body already finished");
+        }
+        if (stage_ == stage::head) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "http1_response_framer: head not started");
+        }
+        switch (mode_.kind) {
+            case http1_response_body_kind::length: {
+                const std::uint64_t remaining =
+                    mode_.content_length - body_written_;
+                if (data.size() > remaining) {
+                    return fail_with(http::outcome(
+                        http::outcome_code::protocol_error,
+                        "http1_response_framer: body exceeds the declared"
+                        " Content-Length"));
+                }
+                const std::size_t n = std::min(data.size(), max_out_bytes);
+                append_raw(out, data.first(n));
+                body_written_ += n;
+                return http::outcome::okay();
+            }
+            case http1_response_body_kind::chunked: {
+                const std::size_t n =
+                    chunked_affordable(data.size(), max_out_bytes);
+                if (n == 0) return http::outcome::okay();
+                append_hex(out, n);
+                out.append("\r\n");
+                append_raw(out, data.first(n));
+                out.append("\r\n");
+                return http::outcome::okay();
+            }
+            default:
+                return fail_with(http::outcome(
+                    http::outcome_code::protocol_error,
+                    "http1_response_framer: response kind declares no"
+                    " body"));
+        }
+    }
+
+    // Ends the body. chunked encodes the "0 CRLF" terminator, the
+    // trailers in entries() order, and the final CRLF; every other kind
+    // rejects trailers (they have no framing to ride) and appends
+    // nothing. A length body that has not seen its declared total is a
+    // sticky protocol error.
+    http::outcome finish_body(std::string& out,
+                              const http::fields& trailers) {
+        if (stage_ == stage::failed) return failure_;
+        if (stage_ == stage::done) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "http1_response_framer: body already finished");
+        }
+        if (stage_ == stage::head) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "http1_response_framer: head not started");
+        }
+        if (mode_.kind == http1_response_body_kind::length) {
+            if (body_written_ != mode_.content_length) {
+                return fail_with(http::outcome(
+                    http::outcome_code::protocol_error,
+                    "http1_response_framer: body shorter than the"
+                    " declared Content-Length"));
+            }
+        }
+        if (!trailers.empty()
+                && mode_.kind != http1_response_body_kind::chunked) {
+            // Strictness delta vs possible v2 tolerance: trailers
+            // without chunked framing have no wire form, so v3 fails
+            // the response typed instead of dropping them.
+            return fail_with(http::outcome(
+                http::outcome_code::protocol_error,
+                "http1_response_framer: trailers on a non-chunked"
+                " response"));
+        }
+        if (mode_.kind == http1_response_body_kind::chunked) {
+            out.append("0\r\n");
+            for (const http::fields::entry& e : trailers.entries()) {
+                out.append(e.name);
+                out.append(": ");
+                out.append(e.value);
+                out.append("\r\n");
+            }
+            out.append("\r\n");
+        }
+        stage_ = stage::done;
+        return http::outcome::okay();
+    }
+
     // The computed framing decision (valid after start_head).
     const http1_response_mode& mode() const noexcept { return mode_; }
 
@@ -214,6 +320,47 @@ class http1_response_framer {
     // body framing runs; done: the body ended; failed: a typed failure
     // is sticky.
     enum class stage : std::uint8_t { head, body, done, failed };
+
+    // Largest payload size whose one-chunk encoding (hex size, CRLF,
+    // bytes, CRLF) fits in @p max_out_bytes; 0 when not even one byte
+    // fits.
+    static std::size_t chunked_affordable(std::size_t available,
+                                          std::size_t max_out_bytes) {
+        if (max_out_bytes < 6 || available == 0) return 0;
+        std::size_t candidate = std::min(available, max_out_bytes - 4);
+        while (hex_width(candidate) + 4 + candidate > max_out_bytes) {
+            --candidate;
+        }
+        return candidate;
+    }
+
+    static void append_raw(std::string& out, std::span<const std::byte> data) {
+        out.append(reinterpret_cast<const char*>(data.data()), data.size());
+    }
+
+    static constexpr char hex_digit(std::size_t value) noexcept {
+        return value < 10 ? static_cast<char>('0' + value)
+                          : static_cast<char>('a' + value - 10);
+    }
+
+    static void append_hex(std::string& out, std::size_t value) {
+        char digits[16];
+        std::size_t count = 0;
+        do {
+            digits[count++] = hex_digit(value % 16);
+            value /= 16;
+        } while (value != 0);
+        while (count > 0) out.push_back(digits[--count]);
+    }
+
+    static std::size_t hex_width(std::size_t value) noexcept {
+        std::size_t width = 1;
+        while (value >= 16) {
+            value /= 16;
+            ++width;
+        }
+        return width;
+    }
 
     // Records @p failure as sticky and returns it.
     http::outcome fail_with(const http::outcome& failure) {
@@ -342,6 +489,7 @@ class http1_response_framer {
     std::string status_token_;
     http1_response_mode mode_;
     http::outcome failure_;
+    std::uint64_t body_written_ = 0;  // length framing: raw bytes so far
     stage stage_ = stage::head;
 };
 
