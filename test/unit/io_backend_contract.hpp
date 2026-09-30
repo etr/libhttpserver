@@ -61,6 +61,7 @@
 #ifndef TEST_UNIT_IO_BACKEND_CONTRACT_HPP_
 #define TEST_UNIT_IO_BACKEND_CONTRACT_HPP_
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -378,11 +379,14 @@ void wake_completes_all_wakes_once(littletest::test_runner* __lt_tr__,
     w1.submit(fx.backend());
     w2.submit(fx.backend());
     read_op.submit(fx.backend());
+    std::shared_ptr<hd::op_state> read_state = read_op.state();
     probe p1;
     probe p2;
+    probe p_read;
     std::vector<task<void>> tasks;
     launch_probe(r, std::move(w1), &p1, tasks);
     launch_probe(r, std::move(w2), &p2, tasks);
+    launch_probe(r, std::move(read_op), &p_read, tasks);
     r.ex.run_pending();
 
     fx.fire_wake();
@@ -394,6 +398,16 @@ void wake_completes_all_wakes_once(littletest::test_runner* __lt_tr__,
     LT_CHECK(p1.observed.code == hh::outcome_code::ok);
     LT_CHECK(p2.observed.code == hh::outcome_code::ok);
     LT_CHECK_EQ(fx.pending_count(), std::size_t{1});  // the read survives
+
+    // No awaiter-attached op may outlive the scenario: a driver's
+    // teardown sweep would resume its task after this stack frame (and
+    // the probe it points at) is gone.
+    LT_CHECK(fx.backend().request_cancel(*read_state)
+             == hh::outcome_code::ok);
+    LT_CHECK(wait_terminal(r, fx, p_read));
+    LT_CHECK_EQ(p_read.delivered.load(), 1);
+    LT_CHECK(p_read.observed.code == hh::outcome_code::cancelled);
+    LT_CHECK_EQ(fx.pending_count(), std::size_t{0});
 }
 
 // S5: a cancel op whose target is pending delivers the target
@@ -876,6 +890,199 @@ inline void read_hangup(littletest::test_runner* __lt_tr__,
     LT_CHECK_EQ(p_read.delivered.load(), 1);
     LT_CHECK(p_read.observed.code == hh::outcome_code::connection_closed);
     LT_CHECK_EQ(rig.backend.pending_count(), std::size_t{0});
+
+    rig.backend.release_connection(1);
+}
+
+// S16: write hangup. The peer closes without reading; repeated large
+// writes run until one reports the hangup. Every op is delivered
+// exactly once and each per-op outcome is ok or connection_closed; the
+// iteration count and the deadline are failure detectors only (the
+// platform decides how many sends the kernel still accepts after the
+// close).
+inline void write_hangup(littletest::test_runner* __lt_tr__,
+                         const char* __lt_name__, poll_rig& rig) {
+    (void)__lt_name__;
+    contract_rig& r = rig.rig;
+    io_loopback::pair conn = rig.adopt_pair(1);
+    conn.close_peer();  // no reader on the other side, ever
+
+    static constexpr std::size_t kChunkBytes = 256 * 1024;
+    static constexpr int kMaxWrites = 256;  // failure bound
+    const std::vector<std::byte> payload(kChunkBytes, std::byte{0x5A});
+    int ok_writes = 0;
+    bool hangup_seen = false;
+
+    for (int i = 0; i < kMaxWrites && !hangup_seen; ++i) {
+        hd::write_operation op(r.owner, 1,
+                               std::span<const std::byte>(payload));
+        op.submit(rig.backend);
+        probe p;
+        std::vector<task<void>> tasks;
+        launch_probe(r, std::move(op), &p, tasks);
+        r.ex.run_pending();
+        LT_CHECK(wait_terminal(r, p));
+
+        if (p.delivered.load() != 1) {
+            LT_FAIL("write hangup: op not delivered exactly once");
+        }
+        if (p.observed.code == hh::outcome_code::ok) {
+            ++ok_writes;
+        } else if (p.observed.code
+                   == hh::outcome_code::connection_closed) {
+            hangup_seen = true;
+        } else {
+            LT_FAIL("write hangup: unexpected outcome");
+        }
+    }
+    LT_CHECK(hangup_seen);
+    // ok_writes is platform-honest bookkeeping only: the kernel may
+    // still accept buffered sends after the close (TCP) or none at all
+    // (AF_UNIX reset family).
+    (void)ok_writes;
+    rig.backend.release_connection(1);
+}
+
+// S17: idle non-busy-loop bound. With one pending read and one 300 ms
+// timer, the driver must not iterate while it waits: the iteration
+// count over a quiet 250 ms window stays <= 2 and the timer has not
+// fired, then the timer fires at/after its deadline.
+inline void idle_iterations_stay_bounded(littletest::test_runner* __lt_tr__,
+                                         const char* __lt_name__,
+                                         poll_rig& rig) {
+    (void)__lt_name__;
+    contract_rig& r = rig.rig;
+    io_loopback::pair conn = rig.adopt_pair(1);
+
+    const auto start = std::chrono::steady_clock::now();
+    hd::read_operation read_op(r.owner, 1, std::span<std::byte>(r.buffer));
+    hd::timer_operation timer_op(r.owner, 1, start + 300ms);
+    read_op.submit(rig.backend);
+    timer_op.submit(rig.backend);
+    std::shared_ptr<hd::op_state> read_state = read_op.state();
+    probe p_read;
+    probe p_timer;
+    std::vector<task<void>> tasks;
+    launch_probe(r, std::move(read_op), &p_read, tasks);
+    launch_probe(r, std::move(timer_op), &p_timer, tasks);
+    r.ex.run_pending();
+
+    std::this_thread::sleep_for(30ms);  // let settle iterations land
+    const std::uint64_t before = rig.backend.poll_iterations();
+    std::this_thread::sleep_for(250ms);
+    const std::uint64_t after = rig.backend.poll_iterations();
+
+    LT_CHECK(after - before <= 2);  // no busy loop while idle
+    LT_CHECK_EQ(p_timer.delivered.load(), 0);  // 280 ms < 300 ms deadline
+    LT_CHECK_EQ(p_read.delivered.load(), 0);   // the idle read survives
+    LT_CHECK(wait_terminal(r, p_timer, start + kWaitBudget));
+    LT_CHECK(std::chrono::steady_clock::now() - start >= 290ms);
+
+    // Cancel the idle read so no awaiter-attached op outlives the
+    // scenario (same rule as S4); then the connection releases clean.
+    LT_CHECK(rig.backend.request_cancel(*read_state)
+             == hh::outcome_code::ok);
+    LT_CHECK(wait_terminal(r, p_read));
+    LT_CHECK_EQ(p_read.delivered.load(), 1);
+    LT_CHECK(p_read.observed.code == hh::outcome_code::cancelled);
+
+    rig.backend.release_connection(1);
+}
+
+// S18: slow reader + partial writes. 1 MiB pushed through repeated
+// write ops against a trickling client: every byte arrives in order,
+// and the driver's iteration count stays bounded by the resubmit count
+// (waking once per state change, never spinning).
+inline void slow_reader_no_busy_loop(littletest::test_runner* __lt_tr__,
+                                     const char* __lt_name__,
+                                     poll_rig& rig) {
+    (void)__lt_name__;
+    contract_rig& r = rig.rig;
+    io_loopback::pair conn = rig.adopt_pair(1);
+
+    static constexpr std::size_t kTotalBytes = 1u << 20;  // 1 MiB
+    static constexpr std::size_t kChunkBytes = 64 * 1024;
+
+    std::vector<std::byte> payload(kTotalBytes);
+    for (std::size_t i = 0; i < kTotalBytes; ++i) {
+        payload[i] = static_cast<std::byte>(i % 251u);
+    }
+
+    // Trickling client: 4 KiB every ~2 ms, verifying the byte pattern.
+    std::atomic<std::size_t> received{0};
+    std::atomic<bool> corrupt{false};
+    std::atomic<bool> stop_client{false};
+    std::thread client([&] {
+        std::vector<std::byte> buf(4096);
+        while (!stop_client.load(std::memory_order_acquire)
+               && received.load(std::memory_order_acquire) < kTotalBytes) {
+            const pollsys::sys_result rr = pollsys::read_some(
+                conn.peer(), buf.data(), buf.size());
+            if (rr.status != pollsys::sys_status::ok
+                || rr.transferred == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                continue;
+            }
+            const std::size_t base =
+                received.fetch_add(rr.transferred);
+            for (std::size_t j = 0; j < rr.transferred; ++j) {
+                const std::size_t index = base + j;
+                if (index < kTotalBytes
+                    && buf[j] != payload[index]) {
+                    corrupt.store(true, std::memory_order_release);
+                }
+            }
+        }
+    });
+
+    const std::uint64_t before = rig.backend.poll_iterations();
+    std::size_t sent = 0;
+    int resubmits = 0;
+    const auto give_up = std::chrono::steady_clock::now() + kWaitBudget;
+    while (sent < kTotalBytes
+           && std::chrono::steady_clock::now() < give_up) {
+        const std::size_t chunk =
+            std::min(kChunkBytes, kTotalBytes - sent);
+        hd::write_operation op(
+            r.owner, 1,
+            std::span<const std::byte>(payload).subspan(sent, chunk));
+        op.submit(rig.backend);
+        probe p;
+        std::vector<task<void>> tasks;
+        launch_probe(r, std::move(op), &p, tasks);
+        r.ex.run_pending();
+        if (!wait_terminal(r, p)) {
+            stop_client.store(true, std::memory_order_release);
+            client.join();
+            LT_FAIL("slow reader: write op did not complete");
+        }
+        if (p.delivered.load() != 1
+            || p.observed.code != hh::outcome_code::ok
+            || p.observed.transferred == 0) {
+            stop_client.store(true, std::memory_order_release);
+            client.join();
+            LT_FAIL("slow reader: bad write completion");
+        }
+        sent += p.observed.transferred;
+        ++resubmits;
+    }
+    const auto drained = std::chrono::steady_clock::now() + kWaitBudget;
+    while (received.load(std::memory_order_acquire) < kTotalBytes
+           && std::chrono::steady_clock::now() < drained) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    stop_client.store(true, std::memory_order_release);
+    client.join();
+
+    LT_CHECK_EQ(sent, kTotalBytes);
+    LT_CHECK_EQ(received.load(), kTotalBytes);
+    LT_CHECK(!corrupt.load());
+    const std::uint64_t after = rig.backend.poll_iterations();
+    // The driver wakes at most twice per state change (a submit that
+    // lands inside the rebuild-to-poll window costs one wake-only
+    // iteration); a busy loop would show thousands per resubmit.
+    LT_CHECK(after - before
+             <= 2 * static_cast<std::uint64_t>(resubmits) + 30);
 
     rig.backend.release_connection(1);
 }

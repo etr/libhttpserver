@@ -306,6 +306,22 @@ LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_read_hangup)
     io_contract::read_hangup(__lt_tr__, __lt_name__, rig);
 LT_END_AUTO_TEST(poll_read_hangup)
 
+// Backpressure and hangup bounds (S16-S18).
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_write_hangup)
+    io_contract::poll_rig rig;
+    io_contract::write_hangup(__lt_tr__, __lt_name__, rig);
+LT_END_AUTO_TEST(poll_write_hangup)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_idle_iterations_bounded)
+    io_contract::poll_rig rig;
+    io_contract::idle_iterations_stay_bounded(__lt_tr__, __lt_name__, rig);
+LT_END_AUTO_TEST(poll_idle_iterations_bounded)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_slow_reader_no_busy_loop)
+    io_contract::poll_rig rig;
+    io_contract::slow_reader_no_busy_loop(__lt_tr__, __lt_name__, rig);
+LT_END_AUTO_TEST(poll_slow_reader_no_busy_loop)
+
 // Pure unit suite for the monotonic deadline -> poll-timeout
 // conversion (plan deliverable 2b). Fully deterministic: the clock
 // reading is a parameter, so nothing here depends on wall-clock speed.
