@@ -78,6 +78,10 @@ const std::vector<const char*>& header_files() {
         // exchange vocabulary only).
         "/exchange.hpp",
         "/http/status.hpp",
+        // TASK-103: the body reader joins the sentinel scan with the
+        // same rules (no config gates, no backend/OS tokens; body
+        // delivery vocabulary only).
+        "/body_reader.hpp",
     };
     return files;
 }
