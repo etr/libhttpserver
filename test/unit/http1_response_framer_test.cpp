@@ -28,14 +28,20 @@
 //   entries() order, typed validation before any byte is appended),
 //   with a parse-back through the parity response-frame parser;
 //
-//   later steps pin the engine fields (Date/Connection/framing), the
-//   no-body strip rules, interim responses, the ICY status token, body
-//   framing and trailers, and the transcript-corpus replay.
+//   step 4 pins the engine fields (Date only with a clock source and
+//   in the exact IMF-fixdate form, Connection per the keep-alive
+//   verdict, the canonical framing field appended last), the no-body
+//   strip rules (204/1xx strip CL+TE, 304 strips TE, HEAD verbatim),
+//   the interim-response bytes, and the ICY status token;
+//
+//   later steps pin body framing and trailers and the transcript-corpus
+//   replay.
 //
 // Replay scope note (plan section 6): the corpus cases replayed here
 // are the response-head/field subset; out-of-scope cases (auth_digest,
 // tls/ip_controls, route-adapter cases) belong to TASK-108/110/114.
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -118,10 +124,15 @@ LT_BEGIN_AUTO_TEST(framer_suite, status_line_404_byte_exact)
 LT_END_AUTO_TEST(status_line_404_byte_exact)
 
 LT_BEGIN_AUTO_TEST(framer_suite, status_line_mirrors_request_version)
+    // HTTP/1.0 defaults to close, so the engine appends the Connection
+    // header in front of the framing field.
     http::fields f;
     f.append("Content-Length", "2");
     const std::string out = emit_head(get_10(), 200, f);
-    LT_CHECK(out == "HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n");
+    LT_CHECK(out == "HTTP/1.0 200 OK\r\n"
+                    "Connection: close\r\n"
+                    "Content-Length: 2\r\n"
+                    "\r\n");
 LT_END_AUTO_TEST(status_line_mirrors_request_version)
 
 LT_BEGIN_AUTO_TEST(framer_suite, reason_phrase_spot_checks)
@@ -282,6 +293,242 @@ LT_BEGIN_AUTO_TEST(framer_suite, parse_back_mirrored_10_version)
     LT_CHECK(r.framing == "content-length");
     LT_CHECK(r.body == "abc");
 LT_END_AUTO_TEST(parse_back_mirrored_10_version)
+
+LT_BEGIN_SUITE(engine_fields_suite)
+    void set_up() { }
+    void tear_down() { }
+LT_END_SUITE(engine_fields_suite)
+
+// The RFC 7231 section 7.1.1.1 example instant, whose IMF-fixdate is
+// the format pin below.
+http1_response_framer::clock_source fixed_clock() {
+    const std::chrono::system_clock::time_point instant{
+        std::chrono::seconds(784111777)};
+    return {[instant] { return instant; }};
+}
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, date_format_is_imf_fixdate)
+    const std::string date = httpserver::detail::format_imf_fixdate(
+        std::chrono::system_clock::time_point(
+            std::chrono::seconds(784111777)));
+    LT_CHECK(date == "Sun, 06 Nov 1994 08:49:37 GMT");
+LT_END_AUTO_TEST(date_format_is_imf_fixdate)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, date_before_framing_field)
+    // Engine order: Date, Connection, then exactly one framing field —
+    // the canonical Content-Length is emitted last and the handler's
+    // occurrence is suppressed (its validated value is re-emitted).
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", "5");
+    const std::string out = emit_head(get_11(), 200, f, fixed_clock());
+    LT_CHECK(out == "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n"
+                    "Content-Length: 5\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(date_before_framing_field)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, date_omitted_without_clock)
+    http::fields f;
+    f.append("Content-Length", "5");
+    const std::string out = emit_head(get_11(), 200, f);
+    LT_CHECK(out.find("Date:") == std::string::npos);
+    LT_CHECK(out == "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n");
+LT_END_AUTO_TEST(date_omitted_without_clock)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, handler_date_wins)
+    http::fields f;
+    f.append("Date", "Wed, 21 Oct 2015 07:28:00 GMT");
+    f.append("Content-Length", "0");
+    const std::string out = emit_head(get_11(), 200, f, fixed_clock());
+    LT_CHECK(out.find("Sun, 06 Nov 1994") == std::string::npos);
+    LT_CHECK(out == "HTTP/1.1 200 OK\r\n"
+                    "Date: Wed, 21 Oct 2015 07:28:00 GMT\r\n"
+                    "Content-Length: 0\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(handler_date_wins)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, connection_close_appended)
+    http::request_head req = get_11();
+    req.head_fields.append("Connection", "close");
+    http::fields f;
+    f.append("Content-Length", "5");
+    const std::string out = emit_head(req, 200, f, fixed_clock());
+    LT_CHECK(out == "HTTP/1.1 200 OK\r\n"
+                    "Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n"
+                    "Connection: close\r\n"
+                    "Content-Length: 5\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(connection_close_appended)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, http_10_keepalive_appended)
+    http::request_head req = get_10();
+    req.head_fields.append("Connection", "keep-alive");
+    http::fields f;
+    f.append("Content-Length", "2");
+    const std::string out = emit_head(req, 200, f, fixed_clock());
+    LT_CHECK(out == "HTTP/1.0 200 OK\r\n"
+                    "Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n"
+                    "Connection: keep-alive\r\n"
+                    "Content-Length: 2\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(http_10_keepalive_appended)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, http_11_keepalive_appends_nothing)
+    http::fields f;
+    f.append("Content-Length", "2");
+    const std::string out = emit_head(get_11(), 200, f, fixed_clock());
+    LT_CHECK(out.find("Connection") == std::string::npos);
+LT_END_AUTO_TEST(http_11_keepalive_appends_nothing)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, handler_connection_field_stripped)
+    // The engine owns the Connection header (documented v3 policy
+    // delta): handler occurrences are never emitted verbatim.
+    http::fields f;
+    f.append("Connection", "keep-alive, Upgrade");
+    f.append("Content-Length", "2");
+    const std::string out = emit_head(get_11(), 200, f);
+    LT_CHECK(out.find("Connection") == std::string::npos);
+    LT_CHECK(out == "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n");
+LT_END_AUTO_TEST(handler_connection_field_stripped)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, close_delimited_appends_close)
+    // HTTP/1.0, no CL: the body runs to EOF, so the verdict is close.
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    const std::string out = emit_head(get_10(), 200, f);
+    LT_CHECK(out == "HTTP/1.0 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Connection: close\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(close_delimited_appends_close)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, no_content_strips_cl_and_te)
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", "5");
+    f.append("Transfer-Encoding", "chunked");
+    const std::string out = emit_head(get_11(), 204, f);
+    LT_CHECK(out == "HTTP/1.1 204 No Content\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(no_content_strips_cl_and_te)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, not_modified_keeps_cl_strips_te)
+    http::fields f;
+    f.append("Content-Length", "5");
+    f.append("Transfer-Encoding", "chunked");
+    const std::string out = emit_head(get_11(), 304, f);
+    LT_CHECK(out == "HTTP/1.1 304 Not Modified\r\n"
+                    "Content-Length: 5\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(not_modified_keeps_cl_strips_te)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, head_response_is_verbatim)
+    http::request_head req = request(http::method_id::head,
+                                     http::protocol::http_1_1);
+    http::fields f;
+    f.append("Content-Length", "7");
+    f.append("Transfer-Encoding", "chunked");
+    const std::string out = emit_head(req, 200, f);
+    LT_CHECK(out == "HTTP/1.1 200 OK\r\n"
+                    "Content-Length: 7\r\n"
+                    "Transfer-Encoding: chunked\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(head_response_is_verbatim)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, engine_selected_te_appended_last)
+    // HTTP/1.1 body response the handler framed with nothing: the
+    // engine appends Transfer-Encoding: chunked as the framing field.
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    const std::string out = emit_head(get_11(), 200, f, fixed_clock());
+    LT_CHECK(out == "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n"
+                    "Transfer-Encoding: chunked\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(engine_selected_te_appended_last)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, handler_te_chunked_not_duplicated)
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Transfer-Encoding", "Chunked");
+    const std::string out = emit_head(get_11(), 200, f);
+    LT_CHECK(out == "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Transfer-Encoding: Chunked\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(handler_te_chunked_not_duplicated)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, upgrade_101_head_only)
+    // The websocket corpus's 101 handshake commits as a final head-only
+    // response: handler fields verbatim, Date engine field, no framing.
+    http::fields f;
+    f.append("Upgrade", "websocket");
+    f.append("Sec-WebSocket-Accept", "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
+    const std::string out = emit_head(get_11(), 101, f, fixed_clock());
+    LT_CHECK(out == "HTTP/1.1 101 Switching Protocols\r\n"
+                    "Upgrade: websocket\r\n"
+                    "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
+                    "Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(upgrade_101_head_only)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, interim_head_byte_exact)
+    http1_response_framer framer;
+    std::string out;
+    LT_CHECK(framer.interim_head(out, 100).ok());
+    LT_CHECK(out == "HTTP/1.1 100 Continue\r\n\r\n");
+
+    http1_response_framer other;
+    std::string out2;
+    LT_CHECK(other.interim_head(out2, 103).ok());
+    LT_CHECK(out2 == "HTTP/1.1 103 Early Hints\r\n\r\n");
+LT_END_AUTO_TEST(interim_head_byte_exact)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, interim_rejects_final_codes)
+    http1_response_framer framer;
+    std::string out;
+    LT_CHECK(framer.interim_head(out, 200).code()
+             == http::outcome_code::invalid_argument);
+    LT_CHECK(framer.interim_head(out, 99).code()
+             == http::outcome_code::invalid_argument);
+    LT_CHECK(framer.interim_head(out, 0).code()
+             == http::outcome_code::invalid_argument);
+    LT_CHECK(out.empty());
+LT_END_AUTO_TEST(interim_rejects_final_codes)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, icy_status_token_replaces_version)
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", "2");
+    const std::string out = emit_head(get_11(), 200, f, fixed_clock(),
+                                      "ICY");
+    LT_CHECK(out == "ICY 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n"
+                    "Content-Length: 2\r\n"
+                    "\r\n");
+LT_END_AUTO_TEST(icy_status_token_replaces_version)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, fields_never_mutated_by_emission)
+    // The strip rules apply to the emitted sequence only: the
+    // committed fields object still carries everything.
+    http::fields f;
+    f.append("Connection", "close");
+    f.append("Content-Length", "5");
+    f.append("Transfer-Encoding", "chunked");
+    http1_response_framer framer;
+    std::string out;
+    LT_CHECK(framer.start_head(out, get_11(),
+                               http::status::from_code(204), f).ok());
+    LT_CHECK_EQ(f.size(), 3u);
+    LT_CHECK(f.first("connection").has_value());
+    LT_CHECK(f.first("content-length").has_value());
+    LT_CHECK(f.first("transfer-encoding").has_value());
+LT_END_AUTO_TEST(fields_never_mutated_by_emission)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

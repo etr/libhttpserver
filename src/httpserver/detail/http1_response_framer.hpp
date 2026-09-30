@@ -69,8 +69,9 @@ inline std::string_view http1_reason_phrase(std::uint16_t code) noexcept {
         std::uint16_t code;
         std::string_view phrase;
     };
-    static constexpr std::array<phrase_entry, 58> table = {{
+    static constexpr std::array<phrase_entry, 59> table = {{
         {100, "Continue"},                     {101, "Switching Protocols"},
+        {103, "Early Hints"},                  {200, "OK"},
         {200, "OK"},                           {201, "Created"},
         {202, "Accepted"},                     {203, "Non-Authoritative Information"},
         {204, "No Content"},                   {205, "Reset Content"},
@@ -115,6 +116,21 @@ inline void append_decimal(std::string& out, std::uint64_t value) {
     while (count > 0) out.push_back(digits[--count]);
 }
 
+// IMF-fixdate (RFC 9110 section 5.6.7.1), the one HTTP/1.1 Date form:
+// "Sun, 06 Nov 1994 08:49:37 GMT". C-locale %a/%b spellings are the
+// IMF ones by construction; the tests pin the format.
+inline std::string format_imf_fixdate(
+    std::chrono::system_clock::time_point when) {
+    const std::time_t t = std::chrono::system_clock::to_time_t(when);
+    std::tm tm_value{};
+    gmtime_r(&t, &tm_value);
+    char buf[32];
+    const std::size_t n = std::strftime(buf, sizeof buf,
+                                        "%a, %d %b %Y %H:%M:%S GMT",
+                                        &tm_value);
+    return n > 0 ? std::string(buf, n) : std::string();
+}
+
 class http1_response_framer {
  public:
     // Engine seam for the emission clock. An empty now() omits the Date
@@ -155,11 +171,35 @@ class http1_response_framer {
         const http::outcome fields_ok = validate_fields(response_fields);
         if (!fields_ok.ok()) return fail_with(fields_ok);
         append_status_line(out, request, s);
-        append_handler_fields(out, response_fields);
-        // The head terminator: the engine fields (added in a later
-        // step) serialize before it.
+        append_handler_fields(out, response_fields, mode_.kind);
+        append_engine_fields(out, request, response_fields);
+        // The head terminator: the engine fields serialize before it.
         out.append("\r\n");
         stage_ = stage::body;
+        return http::outcome::okay();
+    }
+
+    // Interim response head ("HTTP/1.1 100 Continue CRLF CRLF" et
+    // cetera), appended ahead of the final head in the same buffer.
+    // Informational responses travel this path only; the version token
+    // is HTTP/1.1 (or the configured status token).
+    http::outcome interim_head(std::string& out, std::uint16_t code) {
+        if (code < 100 || code > 199) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "http1_response_framer: interim status must be 1xx");
+        }
+        if (!status_token_.empty()) {
+            out.append(status_token_);
+        } else {
+            out.append("HTTP/1.1");
+        }
+        out.push_back(' ');
+        append_decimal(out, code);
+        out.push_back(' ');
+        const std::string_view phrase = http1_reason_phrase(code);
+        if (!phrase.empty()) out.append(phrase);
+        out.append("\r\n\r\n");
         return http::outcome::okay();
     }
 
@@ -223,13 +263,78 @@ class http1_response_framer {
         out.append("\r\n");
     }
 
+    // Handler field occurrences in entries() order, minus the names the
+    // mode strips from the EMISSION only (the committed fields object
+    // is never mutated):
+    //   - "Connection" is always stripped: the engine owns the header
+    //     (documented v3 policy delta; the keep-alive verdict is
+    //     re-emitted as an engine field below).
+    //   - kind none (1xx/204): Content-Length and Transfer-Encoding are
+    //     stripped (RFC 9110 section 8.6/11.6 MUST NOT).
+    //   - kind metadata_only (304): Transfer-Encoding is stripped; a
+    //     Content-Length rides as metadata.
+    //   - kind head_no_body (HEAD): everything passes through verbatim.
+    //   - kind length: the handler Content-Length is stripped here and
+    //     re-emitted canonically as the engine framing field (same
+    //     validated value, fixed position).
     static void append_handler_fields(std::string& out,
-                                      const http::fields& fields) {
+                                      const http::fields& fields,
+                                      http1_response_body_kind kind) {
         for (const http::fields::entry& e : fields.entries()) {
+            if (detail_head::ascii_iequals(e.name, "connection")) continue;
+            if (kind == http1_response_body_kind::none
+                && (detail_head::ascii_iequals(e.name, "content-length")
+                    || detail_head::ascii_iequals(
+                        e.name, "transfer-encoding"))) {
+                continue;
+            }
+            if (kind == http1_response_body_kind::metadata_only
+                && detail_head::ascii_iequals(e.name,
+                                              "transfer-encoding")) {
+                continue;
+            }
+            if (kind == http1_response_body_kind::length
+                && detail_head::ascii_iequals(e.name, "content-length")) {
+                continue;
+            }
             out.append(e.name);
             out.append(": ");
             out.append(e.value);
             out.append("\r\n");
+        }
+    }
+
+    // The engine fields in fixed order: Date (only with a configured
+    // clock and no handler Date), Connection (only when the verdict or
+    // an HTTP/1.0 keep-alive requires the header), then exactly one
+    // framing field (the canonical Content-Length, or
+    // "Transfer-Encoding: chunked" when the engine selected chunked —
+    // a handler-pinned chunked occurrence is the framing field and
+    // passes through above).
+    void append_engine_fields(std::string& out,
+                              const http::request_head& request,
+                              const http::fields& fields) const {
+        const http1_keepalive keep = http1_response_keepalive(
+            request, mode_.kind, mode_.close_policy);
+        if (fields.first("date") == std::nullopt && clock_.now != nullptr) {
+            out.append("Date: ");
+            out.append(format_imf_fixdate(clock_.now()));
+            out.append("\r\n");
+        }
+        if (keep == http1_keepalive::close) {
+            out.append("Connection: close\r\n");
+        } else if (request.request_protocol
+                       == http::protocol::http_1_0) {
+            out.append("Connection: keep-alive\r\n");
+        }
+        if (mode_.kind == http1_response_body_kind::length) {
+            out.append("Content-Length: ");
+            append_decimal(out, mode_.content_length);
+            out.append("\r\n");
+        } else if (mode_.kind == http1_response_body_kind::chunked
+                   && fields.first("transfer-encoding")
+                          == std::nullopt) {
+            out.append("Transfer-Encoding: chunked\r\n");
         }
     }
 
