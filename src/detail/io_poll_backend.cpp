@@ -26,7 +26,9 @@
 // fake_io_backend: take the op out of the registry under the mutex,
 // then let op_state::claim_terminal() decide the single winner before
 // handing the record to the connection owner. The mutex is never held
-// across poll() or a socket syscall.
+// across poll() or a stream read/write/accept syscall; the one socket
+// operation that may run under it is close(), which is synchronous and
+// non-blocking by contract (no SO_LINGER is ever set).
 
 #include "httpserver/detail/io_poll_backend.hpp"
 
@@ -38,6 +40,7 @@
 #include <vector>
 
 #include "httpserver/detail/io_connection_owner.hpp"
+#include "httpserver/detail/io_timer_sweep.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -337,37 +340,9 @@ std::uint64_t io_poll_backend::poll_iterations() const {
 
 void io_poll_backend::expire_due_timers(
     std::chrono::steady_clock::time_point now) {
-    std::vector<std::pair<std::chrono::steady_clock::time_point,
-                          std::shared_ptr<op_state>>>
-        due;
-    {
-        std::lock_guard<std::mutex> lock(mu_);
-        for (auto it = pending_.begin(); it != pending_.end();) {
-            const op_state& entry = *it->second;
-            if (entry.kind() == io_op_kind::timer
-                && std::get<timer_payload>(entry.payload()).deadline
-                       <= now) {
-                due.emplace_back(
-                    std::get<timer_payload>(entry.payload()).deadline,
-                    it->second);
-                it = pending_.erase(it);
-                continue;
-            }
-            ++it;
-        }
-    }
-    std::sort(due.begin(), due.end(),
-              [](const auto& lhs, const auto& rhs) {
-                  if (lhs.first != rhs.first) {
-                      return lhs.first < rhs.first;
-                  }
-                  return lhs.second->sequence() < rhs.second->sequence();
-              });
-    for (const auto& entry : due) {
-        if (entry.second->claim_terminal()) {
-            entry.second->owner()->enqueue(entry.second, io_result{});
-        }
-    }
+    // Shared with fake_io_backend (io_timer_sweep.hpp) so both drivers
+    // keep identical (deadline, sequence) expiry semantics.
+    sweep_due_timers(pending_, mu_, now);
 }
 
 std::optional<std::chrono::steady_clock::time_point>

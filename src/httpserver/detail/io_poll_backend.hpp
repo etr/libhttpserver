@@ -37,13 +37,16 @@
 // Threading: submit / request_cancel / wake / close / adopt / release
 // are thread-safe and may be called from any thread. One mutex guards
 // the pending registry, the connection registry and the counters; the
-// mutex is never held across poll() or any socket syscall. Readiness is
-// level-triggered and the pollfd projection is rebuilt from the
-// registry at the top of every loop iteration (the registry IS the
-// mailbox; the wake byte is the doorbell), so a missed wake byte can
-// delay work at most to the next state change or the idle cap -- never
-// indefinitely. Timers expire in (deadline, sequence) order, byte-equal
-// to fake_io_backend::expire_timers semantics.
+// mutex is never held across poll() or a stream read/write/accept
+// syscall. The one socket operation that may run under the mutex is
+// close(): it is synchronous and non-blocking by contract (no
+// SO_LINGER is ever set), so it cannot stall a competing thread.
+// Readiness is level-triggered and the pollfd projection is rebuilt
+// from the registry at the top of every loop iteration (the registry
+// IS the mailbox; the wake byte is the doorbell), so a missed wake
+// byte can delay work at most to the next state change or the idle
+// cap -- never indefinitely. Timers expire in (deadline, sequence)
+// order, byte-equal to fake_io_backend::expire_timers semantics.
 //
 // Readiness dispatch drains each signalled direction to would-block and
 // re-arms the rest (§3.4): reads complete {ok, transferred} or, on
