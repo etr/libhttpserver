@@ -45,6 +45,7 @@
 #include <vector>
 
 #include <httpserver/body_reader.hpp>
+#include <httpserver/exchange.hpp>
 #include <httpserver/http/fields.hpp>
 #include <httpserver/http/outcome.hpp>
 
@@ -223,6 +224,21 @@ class scripted_body_source final : public httpserver::detail::body_source {
     httpserver::http::fields trailers_;
     httpserver::detail::body_wait* waiter_ = nullptr;
 };
+
+// Engine stand-in for disconnect bookkeeping. A real engine initiates
+// the exchange disconnect itself, so waking its own parked body reads
+// is local to it; this watcher reproduces exactly that: it awaits the
+// exchange's stop fan-out and completes the fake's parked waiter as
+// cancelled, exactly once. Spawn it on the handler's executor before
+// the read that may park.
+inline httpserver::task<void>
+watch_stop_and_cancel(httpserver::exchange& x, scripted_body_source& source) {
+    try {
+        co_await x.cancellation().cancelled();
+    } catch (const httpserver::cancelled_exception&) {
+        source.cancel();
+    }
+}
 
 }  // namespace httpserver_test
 

@@ -32,6 +32,7 @@
 // The suite runs against detail::recording_sink (decisions) and the
 // scripted_body_source fake (delivery), so no transport exists yet.
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -127,6 +128,17 @@ body_collect run_collect(exchange& x, manual_executor& ex,
           });
     ex.run_pending();
     return seen;
+}
+
+// Drains the executor until `flag` turns non-zero or the spin budget
+// (one millisecond per spin) runs out. Failure bound only, never a
+// pass condition.
+bool drain_until(manual_executor& ex, int& flag, int spins) {
+    for (int i = 0; i < spins && flag == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        ex.run_pending();
+    }
+    return flag != 0;
 }
 
 // Echo-loop handler: admits, reads through the bounded staging queue
@@ -467,6 +479,110 @@ LT_BEGIN_AUTO_TEST(body_reader_suite, body_collect_on_disconnected_fails_closed)
     LT_CHECK(seen.status.message().find("peer went away")
              != std::string::npos);
 LT_END_AUTO_TEST(body_collect_on_disconnected_fails_closed)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_disconnect_wakes_parked_read)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+
+    std::vector<std::byte> destination(8);
+    body_read seen;
+    int deliveries = 0;
+    spawn(ex, fake::watch_stop_and_cancel(x, source),
+          [&](task_result<void>) { });
+    spawn(ex, x.body().read_some(destination),
+          [&](task_result<body_read> r) {
+              ++deliveries;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();  // the watcher awaits the stop; the read parks
+    LT_CHECK(source.parked());
+    LT_CHECK_EQ(deliveries, 0);
+
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+    LT_CHECK(x.state() == exchange_state::cancelled);
+    LT_CHECK(drain_until(ex, deliveries, 400));
+
+    // Exactly one delivery, typed cancelled.
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::cancelled);
+LT_END_AUTO_TEST(body_disconnect_wakes_parked_read)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_disconnect_wakes_read_from_other_thread)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+
+    std::vector<std::byte> destination(8);
+    body_read seen;
+    int deliveries = 0;
+    spawn(ex, fake::watch_stop_and_cancel(x, source),
+          [&](task_result<void>) { });
+    spawn(ex, x.body().read_some(destination),
+          [&](task_result<body_read> r) {
+              ++deliveries;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();  // the watcher awaits the stop; the read parks
+    LT_CHECK(source.parked());
+
+    // Disconnect is engine-facing and may run on any thread while the
+    // handler is suspended.
+    std::thread waker([&x] {
+        static_cast<void>(x.disconnect(http::outcome_code::connection_closed,
+                                       "peer went away"));
+    });
+    waker.join();
+
+    LT_CHECK(drain_until(ex, deliveries, 400));
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::cancelled);
+LT_END_AUTO_TEST(body_disconnect_wakes_read_from_other_thread)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_read_after_disconnect_fails_closed)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+
+    std::vector<std::byte> destination(8);
+    const body_read seen = run_read(x, ex, destination);
+    LT_CHECK(seen.status.code() == http::outcome_code::connection_closed);
+    LT_CHECK(seen.status.message().find("peer went away")
+             != std::string::npos);
+LT_END_AUTO_TEST(body_read_after_disconnect_fails_closed)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_engine_failure_fails_read_sticky)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    source.stage_failure(http::outcome_code::protocol_error, "bad chunk");
+
+    std::vector<std::byte> destination(8);
+    const body_read first = run_read(x, ex, destination);
+    LT_CHECK(first.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK(first.status.message() == "bad chunk");
+
+    // Sticky: the second read returns the same failure without a new
+    // source pull (credit frozen at zero).
+    const body_read second = run_read(x, ex, destination);
+    LT_CHECK(second.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(0));
+LT_END_AUTO_TEST(body_engine_failure_fails_read_sticky)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
