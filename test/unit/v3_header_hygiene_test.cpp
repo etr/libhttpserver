@@ -82,6 +82,10 @@ const std::vector<const char*>& header_files() {
         // same rules (no config gates, no backend/OS tokens; body
         // delivery vocabulary only).
         "/body_reader.hpp",
+        // TASK-104: the response writer joins the sentinel scan with
+        // the same rules (no config gates, no backend/OS tokens;
+        // engine and body delivery vocabulary only).
+        "/response_writer.hpp",
     };
     return files;
 }

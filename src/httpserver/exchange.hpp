@@ -34,6 +34,7 @@
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/request_head.hpp>
 #include <httpserver/http/status.hpp>
+#include <httpserver/response_writer.hpp>
 
 namespace httpserver {
 
@@ -103,12 +104,19 @@ class exchange_sink {
 //
 // Decisions are legal only before body delivery, per state:
 //   respond(status, fields)  from head or admitted  -> responded
+//   start_response(s, f)     from head or admitted  -> responded
+//     (streaming: respond's head commit, then writer() becomes usable)
 //   admit_body(policy)       from head              -> admitted
 //   suspend(out)             from head or admitted  (state unchanged)
 //   upgrade(options)         from an HTTP/1.1 head  -> upgraded
 // Every decision returns http::outcome; a typed failure leaves the
 // state, the suspension flag, and the engine untouched (a double
 // terminal action therefore reaches the engine exactly once).
+//
+// respond() is the one-shot response: the whole body is known and the
+// writer stays inactive. start_response() is the streaming action: the
+// head commits the same way and exchange::writer() streams the body
+// afterwards. Both reach the engine's on_respond exactly once.
 //
 // Threading contract: decisions run on the handler's executor thread.
 // disconnect() is engine-facing and may run on any thread while the
@@ -121,12 +129,16 @@ class exchange {
     // Engine construction only. `sink` receives every committed
     // decision; `connection_id` identifies the underlying connection
     // for engine bookkeeping; `body_source` is the engine's delivery
-    // seam for the admitted body (null until an engine provides one).
+    // seam for the admitted body (null until an engine provides one);
+    // `response_sink` is the engine's delivery seam for the streaming
+    // response body (null until an engine provides one).
     exchange(const http::request_head& head, detail::exchange_sink* sink,
              std::uint64_t connection_id = 0,
-             detail::body_source* body_source = nullptr) noexcept
+             detail::body_source* body_source = nullptr,
+             detail::body_sink* response_sink = nullptr) noexcept
         : head_(head), sink_(sink), connection_id_(connection_id),
-          body_source_(body_source), body_(stop_.get_token()) { }
+          body_source_(body_source), body_(stop_.get_token()),
+          response_sink_(response_sink), writer_(stop_.get_token()) { }
 
     exchange(exchange&& other) noexcept = default;
     exchange& operator=(exchange&& other) noexcept = default;
@@ -161,6 +173,10 @@ class exchange {
     // successful admit_body() and fail typed otherwise.
     body_reader& body() noexcept { return body_; }
 
+    // The streaming response writer. Operations are legal only after a
+    // successful start_response() and fail typed otherwise.
+    response_writer& writer() noexcept { return writer_; }
+
     // Fan-out handle observing this exchange's disconnect.
     stop_token cancellation() const noexcept { return stop_.get_token(); }
 
@@ -179,6 +195,28 @@ class exchange {
         suspended_ = false;
         body_.close();
         if (sink_ != nullptr) sink_->on_respond(s, f);
+        return http::outcome::okay();
+    }
+
+    // Streaming response decision (head-time or after admission):
+    // commits the response head exactly like respond(), then activates
+    // the writer, so the handler streams the body through writer()
+    // with backpressure (architecture §3.1). The engine's on_respond
+    // still fires exactly once: afterwards the state is responded, so
+    // any second terminal decision fails invalid_state.
+    http::outcome start_response(const http::status& s, const http::fields& f) {
+        if (disconnected_) return closed_failure();
+        if (state_ != exchange_state::head
+                && state_ != exchange_state::admitted) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "exchange: start_response() after a terminal decision");
+        }
+        state_ = exchange_state::responded;
+        suspended_ = false;
+        body_.close();
+        if (sink_ != nullptr) sink_->on_respond(s, f);
+        writer_.activate(response_sink_);
         return http::outcome::okay();
     }
 
@@ -253,6 +291,7 @@ class exchange {
         disconnected_ = true;
         disconnect_reason_ = http::outcome(reason, std::move(detail));
         body_.note_disconnect(disconnect_reason_);
+        writer_.note_disconnect(disconnect_reason_);
         stop_.request_stop();
         for (resume_signal& sig : resume_signals_) {
             sig.cancel();
@@ -267,6 +306,10 @@ class exchange {
     // the connection per protocol rules instead of committing another
     // response. No state change: a terminal exchange stays terminal.
     http::outcome abort() {
+        // A streaming handler may have thrown mid-body; shut the
+        // writer down (idempotent) so no further write passes its
+        // gate, then let the engine reset per protocol rules.
+        writer_.close();
         if (sink_ != nullptr) sink_->on_abort();
         return http::outcome::okay();
     }
@@ -291,6 +334,10 @@ class exchange {
     // Declared after stop_: the reader's constructor copies the stop
     // token, so disconnects fan out to parked body reads.
     body_reader body_;
+    detail::body_sink* response_sink_ = nullptr;
+    // Declared after stop_: the writer's constructor copies the stop
+    // token, so disconnects fan out to parked response writes.
+    response_writer writer_;
     std::vector<resume_signal> resume_signals_;
 };
 
