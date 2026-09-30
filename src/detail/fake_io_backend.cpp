@@ -26,13 +26,13 @@
 
 #include "httpserver/detail/fake_io_backend.hpp"
 
-#include <algorithm>
 #include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 #include "httpserver/detail/io_connection_owner.hpp"
+#include "httpserver/detail/io_timer_sweep.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -105,39 +105,9 @@ bool fake_io_backend::complete(op_state& op, io_result result) {
 
 std::size_t fake_io_backend::expire_timers(
     std::chrono::steady_clock::time_point now) {
-    std::vector<std::pair<std::chrono::steady_clock::time_point,
-                          std::shared_ptr<op_state>>>
-        due;
-    {
-        std::lock_guard<std::mutex> lock(mu_);
-        for (auto it = pending_.begin(); it != pending_.end();) {
-            const op_state& entry = *it->second;
-            if (entry.kind() == io_op_kind::timer
-                && std::get<timer_payload>(entry.payload()).deadline <= now) {
-                due.emplace_back(
-                    std::get<timer_payload>(entry.payload()).deadline,
-                    it->second);
-                it = pending_.erase(it);
-                continue;
-            }
-            ++it;
-        }
-    }
-    std::sort(due.begin(), due.end(),
-              [](const auto& lhs, const auto& rhs) {
-                  if (lhs.first != rhs.first) {
-                      return lhs.first < rhs.first;
-                  }
-                  return lhs.second->sequence() < rhs.second->sequence();
-              });
-    std::size_t expired = 0;
-    for (const auto& entry : due) {
-        if (entry.second->claim_terminal()) {
-            entry.second->owner()->enqueue(entry.second, io_result{});
-            ++expired;
-        }
-    }
-    return expired;
+    // Shared with io_poll_backend (io_timer_sweep.hpp) so both drivers
+    // keep identical (deadline, sequence) expiry semantics.
+    return sweep_due_timers(pending_, mu_, now);
 }
 
 std::size_t fake_io_backend::fire_wake() {
