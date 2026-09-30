@@ -260,6 +260,45 @@ LT_BEGIN_AUTO_TEST(body_reader_suite, body_second_outstanding_read_fails)
     LT_CHECK(parked_result.status.ok());
     LT_CHECK(of(parked_result.data) == "abc");
     LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(3));
+
+    // Collect-while-read hits the same one-outstanding gate, typed,
+    // without touching the source.
+    body_read read_result;
+    int read_done = 0;
+    spawn(ex, x.body().read_some(destination),
+          [&](task_result<body_read> r) {
+              ++read_done;
+              if (r.has_value()) read_result = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK(source.parked());
+    LT_CHECK(run_collect(x, ex, 64).status.code()
+             == http::outcome_code::invalid_state);
+
+    // The parked read finishes; a parked collect then excludes reads.
+    LT_CHECK(source.stage(bytes("zz")));
+    ex.run_pending();
+    LT_CHECK_EQ(read_done, 1);
+    LT_CHECK(of(read_result.data) == "zz");
+
+    body_collect collect_result;
+    int collect_done = 0;
+    spawn(ex, x.body().collect(64),
+          [&](task_result<body_collect> r) {
+              ++collect_done;
+              if (r.has_value()) collect_result = std::move(r.value());
+          });
+    ex.run_pending();
+    LT_CHECK(source.parked());
+    LT_CHECK(run_read(x, ex, destination).status.code()
+             == http::outcome_code::invalid_state);
+
+    // Drain: end wakes the parked collect into a typed success.
+    source.stage_end();
+    ex.run_pending();
+    LT_CHECK_EQ(collect_done, 1);
+    LT_CHECK(collect_result.status.ok());
+    LT_CHECK(collect_result.data.empty());
 LT_END_AUTO_TEST(body_second_outstanding_read_fails)
 
 LT_BEGIN_AUTO_TEST(body_reader_suite, body_read_into_empty_buffer_fails)
