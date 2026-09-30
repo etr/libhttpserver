@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <httpserver/http/outcome.hpp>
@@ -181,6 +182,16 @@ constexpr bool valid_ipv6_group(std::string_view group) noexcept {
     return true;
 }
 
+// Weight of one ":"-run field: 1 for a hextet, 2 for a trailing
+// embedded IPv4, -1 when malformed.
+constexpr int ipv6_field_weight(std::string_view field,
+                                bool allow_ipv4_tail) noexcept {
+    const bool ipv4_tail = allow_ipv4_tail
+        && field.find('.') != std::string_view::npos;
+    if (ipv4_tail) return valid_ipv4(field) ? 2 : -1;
+    return valid_ipv6_group(field) ? 1 : -1;
+}
+
 // Group count of a ":"-separated run of groups; -1 when malformed. An
 // empty run (either side of "::") contributes 0. When allow_ipv4_tail
 // is set, a trailing dotted-quad field counts as two groups.
@@ -195,16 +206,11 @@ constexpr int count_ipv6_groups(std::string_view run,
             colon == std::string_view::npos ? std::string_view::npos
                                             : colon - pos;
         const std::string_view field = run.substr(pos, width);
-        const bool ipv4_tail = allow_ipv4_tail
-            && colon == std::string_view::npos
-            && field.find('.') != std::string_view::npos;
-        if (ipv4_tail) {
-            if (!valid_ipv4(field)) return -1;
-            groups += 2;
-        } else {
-            if (!valid_ipv6_group(field)) return -1;
-            groups += 1;
-        }
+        const bool tail = allow_ipv4_tail
+            && colon == std::string_view::npos;
+        const int weight = ipv6_field_weight(field, tail);
+        if (weight < 0) return -1;
+        groups += weight;
         if (colon == std::string_view::npos) break;
         pos = colon + 1;
         if (pos == run.size()) return -1;  // trailing ':' inside the run
