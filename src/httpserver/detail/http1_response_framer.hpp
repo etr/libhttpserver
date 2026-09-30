@@ -37,6 +37,7 @@
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP1_RESPONSE_FRAMER_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP1_RESPONSE_FRAMER_HPP_
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>

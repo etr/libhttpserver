@@ -43,6 +43,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <utility>
 #include <string_view>
 #include <system_error>
 
@@ -125,6 +126,16 @@ struct http1_response_mode {
             mode.kind = http1_response_body_kind::head_no_body;
             return mode;
         }
+        compute_body_framing(mode, request, fields);
+        return mode;
+    }
+
+ private:
+    // The framing branch over a body-carrying final response: TE vs CL
+    // reconciliation, then the version-based engine selection.
+    static void compute_body_framing(http1_response_mode& mode,
+                                     const http::request_head& request,
+                                     const http::fields& fields) {
         const std::span<const std::string> te =
             fields.all("transfer-encoding");
         const std::span<const std::string> cl =
@@ -132,9 +143,10 @@ struct http1_response_mode {
         // Both framings on a body response is ambiguous no matter what
         // the values say (the request-side smuggling rule, mirrored).
         if (!te.empty() && !cl.empty()) {
-            return reject(mode, http::outcome_code::protocol_error,
-                          "Transfer-Encoding together with Content-Length",
-                          http1_close_policy::close_now);
+            reject(mode, http::outcome_code::protocol_error,
+                   "Transfer-Encoding together with Content-Length",
+                   http1_close_policy::close_now);
+            return;
         }
         if (!te.empty()) {
             compute_from_te(mode, te);
@@ -147,10 +159,8 @@ struct http1_response_mode {
         } else {
             mode.kind = http1_response_body_kind::close_delimited;
         }
-        return mode;
     }
 
- private:
     // Records a typed rejection; the mode's failure is sticky.
     static http1_response_mode& reject(http1_response_mode& mode,
                                        http::outcome_code code,

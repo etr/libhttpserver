@@ -59,6 +59,7 @@
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP1_RESPONSE_OUTBOX_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP1_RESPONSE_OUTBOX_HPP_
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
