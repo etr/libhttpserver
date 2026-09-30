@@ -336,6 +336,113 @@ inline http::outcome check_listeners(
     return http::outcome::okay();
 }
 
+constexpr bool multi_version_enabled(const protocol_set& protocols) noexcept {
+    return protocols.contains(http::protocol::http_2)
+        || protocols.contains(http::protocol::http_3);
+}
+
+// V7 and V8: with no provider selected, neither HTTP/2 nor HTTP/3 can
+// be enabled, no profile may be named, and no listener may request TLS.
+inline http::outcome check_tls_off(
+        const tls_options& tls, const protocol_set& protocols,
+        const std::vector<listener_options>& listeners) {
+    if (tls.provider != tls_provider::none) {
+        return http::outcome::okay();
+    }
+    if (multi_version_enabled(protocols)) {
+        return http::outcome(
+            http::outcome_code::not_supported,
+            "server_options: HTTP/2 and HTTP/3 require a TLS provider,"
+            " which is not selected");
+    }
+    if (tls.profile != tls_profile::none) {
+        return http::outcome(
+            http::outcome_code::invalid_argument,
+            "server_options: a TLS profile requires a TLS provider");
+    }
+    for (std::size_t i = 0; i < listeners.size(); ++i) {
+        if (listeners[i].tls) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "server_options: listener " + std::to_string(i)
+                    + " requests TLS but no TLS provider is selected");
+        }
+    }
+    return http::outcome::okay();
+}
+
+// V9: selecting the system provider requires naming a profile.
+inline http::outcome check_provider_profile_pair(const tls_options& tls) {
+    if (tls.provider == tls_provider::system_default
+            && tls.profile == tls_profile::none) {
+        return http::outcome(
+            http::outcome_code::invalid_argument,
+            "server_options: the system_default TLS provider requires a"
+            " TLS profile");
+    }
+    return http::outcome::okay();
+}
+
+// V10: the external PSK profile negotiates only over HTTP/1 in v3.
+inline http::outcome check_psk_protocols(
+        const tls_options& tls, const protocol_set& protocols) {
+    if (tls.profile == tls_profile::external_psk
+            && multi_version_enabled(protocols)) {
+        return http::outcome(
+            http::outcome_code::not_supported,
+            "server_options: the external_psk TLS profile is limited to"
+            " HTTP/1 and cannot serve HTTP/2 or HTTP/3");
+    }
+    return http::outcome::okay();
+}
+
+// V11: a listener that does not speak TLS itself is reachable only over
+// HTTP/1.x, so the protocol set must leave some HTTP/1.x enabled.
+inline http::outcome check_plaintext_listeners(
+        const protocol_set& protocols,
+        const std::vector<listener_options>& listeners) {
+    const bool h1_available = protocols.contains(http::protocol::http_1_0)
+        || protocols.contains(http::protocol::http_1_1);
+    if (h1_available) {
+        return http::outcome::okay();
+    }
+    for (std::size_t i = 0; i < listeners.size(); ++i) {
+        if (!listeners[i].tls) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "server_options: listener " + std::to_string(i)
+                    + " does not use TLS and no HTTP/1.x protocol is"
+                    " enabled");
+        }
+    }
+    return http::outcome::okay();
+}
+
+// V7-V11: provider, profile, protocol, and per-listener TLS flags must
+// combine into a servable configuration.
+inline http::outcome check_tls_protocol_combination(
+        const tls_options& tls, const protocol_set& protocols,
+        const std::vector<listener_options>& listeners) {
+    if (const http::outcome result = check_tls_off(tls, protocols, listeners);
+        !result.ok()) {
+        return result;
+    }
+    if (const http::outcome result = check_provider_profile_pair(tls);
+        !result.ok()) {
+        return result;
+    }
+    if (const http::outcome result = check_psk_protocols(tls, protocols);
+        !result.ok()) {
+        return result;
+    }
+    if (const http::outcome result =
+            check_plaintext_listeners(protocols, listeners);
+        !result.ok()) {
+        return result;
+    }
+    return http::outcome::okay();
+}
+
 }  // namespace detail
 
 // The single backend-neutral configuration surface for a v3 server
@@ -414,6 +521,11 @@ class server_options {
             return result;
         }
         if (const http::outcome result = detail::check_budget(budgets_);
+            !result.ok()) {
+            return result;
+        }
+        if (const http::outcome result = detail::check_tls_protocol_combination(
+                tls_, protocols_, listeners_);
             !result.ok()) {
             return result;
         }

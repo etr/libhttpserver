@@ -22,9 +22,9 @@
 // TASK-101 Step 1: the backend-neutral server configuration surface
 // (PRD-V3N-REQ-014) and the pre-listen validation gate
 // (PRD-V3N-REQ-016): documented bounds, listener set shape, timeout
-// inventory, concurrency, budgets, and validation rules V1-V6 and V12
-// of the plan's taxonomy. The TLS / provider / protocol combination
-// rules (V7-V11) are covered in the step 2 tests.
+// inventory, concurrency, budgets, and validation rules V1-V12 of the
+// plan's taxonomy: bounds and listener shape (step 1) plus the TLS /
+// provider / protocol combination rules (step 2).
 
 #include <chrono>
 #include <cstddef>
@@ -200,6 +200,10 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, duplicate_listener_fails)
     srv::listener_options other_address = first;
     other_address.address = "127.0.0.2";
     distinct.add_listener(other_address);
+    // The TLS-listener variant of the set is legal only once a provider
+    // and profile are selected (rule V8, step 2).
+    distinct.tls().provider = srv::tls_provider::system_default;
+    distinct.tls().profile = srv::tls_profile::certificates;
     LT_CHECK(validates_ok(distinct));
 LT_END_AUTO_TEST(duplicate_listener_fails)
 
@@ -302,6 +306,96 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, validation_is_pure)
     const srv::server_options& view = bad;
     LT_CHECK(view.validate().code() == outcome_code::invalid_argument);
 LT_END_AUTO_TEST(validation_is_pure)
+
+// --- step 2: TLS / provider / protocol combinations -------------------------
+
+// V7: without a provider, HTTP/2 and HTTP/3 cannot be enabled.
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, tls_off_rejects_h2_h3)
+    for (const http::protocol version :
+         {http::protocol::http_2, http::protocol::http_3}) {
+        srv::server_options options = with_listener("*", 0, false);
+        options.protocols().enable(version);
+        LT_CHECK(fails_with(options, outcome_code::not_supported));
+    }
+    srv::server_options h1_only = with_listener("*", 0, false);
+    LT_CHECK(validates_ok(h1_only));
+LT_END_AUTO_TEST(tls_off_rejects_h2_h3)
+
+// V8: without a provider, neither a profile nor a TLS listener may be
+// configured.
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, tls_off_rejects_profiles)
+    srv::server_options profile_only = with_listener("*", 0, false);
+    profile_only.tls().profile = srv::tls_profile::certificates;
+    LT_CHECK(fails_with(profile_only, outcome_code::invalid_argument));
+
+    srv::server_options tls_listener = with_listener("*", 443, true);
+    LT_CHECK(fails_with(tls_listener, outcome_code::invalid_argument));
+LT_END_AUTO_TEST(tls_off_rejects_profiles)
+
+// V9: the system provider requires an explicit profile.
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, provider_requires_profile)
+    srv::server_options options = with_listener("*", 443, true);
+    options.tls().provider = srv::tls_provider::system_default;
+    LT_CHECK(fails_with(options, outcome_code::invalid_argument));
+    options.tls().profile = srv::tls_profile::mutual_tls;
+    LT_CHECK(validates_ok(options));
+LT_END_AUTO_TEST(provider_requires_profile)
+
+// V10: the external PSK profile is limited to HTTP/1 in v3.
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, psk_limited_to_http1)
+    for (const http::protocol version :
+         {http::protocol::http_2, http::protocol::http_3}) {
+        srv::server_options options = with_listener("*", 443, true);
+        options.tls().provider = srv::tls_provider::system_default;
+        options.tls().profile = srv::tls_profile::external_psk;
+        options.protocols().enable(version);
+        LT_CHECK(fails_with(options, outcome_code::not_supported));
+    }
+    srv::server_options options = with_listener("*", 443, true);
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::external_psk;
+    LT_CHECK(validates_ok(options));
+LT_END_AUTO_TEST(psk_limited_to_http1)
+
+// V11: a listener without TLS needs an HTTP/1.x protocol in the set.
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, plaintext_listener_needs_h1)
+    srv::server_options options = with_listener("*", 0, false);
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::certificates;
+    options.protocols().disable(http::protocol::http_1_0);
+    options.protocols().disable(http::protocol::http_1_1);
+    options.protocols().enable(http::protocol::http_2);
+    LT_CHECK(fails_with(options, outcome_code::invalid_argument));
+
+    // The same protocol set is fine when every listener speaks TLS.
+    srv::server_options all_tls = with_listener("*", 443, true);
+    all_tls.tls().provider = srv::tls_provider::system_default;
+    all_tls.tls().profile = srv::tls_profile::certificates;
+    all_tls.protocols().disable(http::protocol::http_1_0);
+    all_tls.protocols().disable(http::protocol::http_1_1);
+    all_tls.protocols().enable(http::protocol::http_2);
+    LT_CHECK(validates_ok(all_tls));
+LT_END_AUTO_TEST(plaintext_listener_needs_h1)
+
+// Valid combinations across provider, profile, and protocol axes.
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, tls_combination_controls)
+    srv::server_options certificates = with_listener("*", 443, true);
+    certificates.tls().provider = srv::tls_provider::system_default;
+    certificates.tls().profile = srv::tls_profile::certificates;
+    certificates.protocols().enable(http::protocol::http_2);
+    LT_CHECK(validates_ok(certificates));
+
+    srv::server_options mutual = with_listener("127.0.0.1", 443, true);
+    mutual.tls().provider = srv::tls_provider::system_default;
+    mutual.tls().profile = srv::tls_profile::mutual_tls;
+    LT_CHECK(validates_ok(mutual));
+
+    // external_psk with HTTP/1 is valid on TLS and plain listeners.
+    srv::server_options psk_tls = with_listener("*", 443, true);
+    psk_tls.tls().provider = srv::tls_provider::system_default;
+    psk_tls.tls().profile = srv::tls_profile::external_psk;
+    LT_CHECK(validates_ok(psk_tls));
+LT_END_AUTO_TEST(tls_combination_controls)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
