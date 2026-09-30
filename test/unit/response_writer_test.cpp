@@ -540,6 +540,157 @@ LT_BEGIN_AUTO_TEST(response_writer_suite, start_response_gates)
     LT_CHECK(admitted.state() == exchange_state::responded);
 LT_END_AUTO_TEST(start_response_gates)
 
+LT_BEGIN_AUTO_TEST(response_writer_suite, disconnect_wakes_parked_write)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(8);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+
+    const std::vector<std::byte> chunk = bytes("0123456789abcdef");
+    body_write seen;
+    int deliveries = 0;
+    spawn(ex, fake::watch_stop_and_resume(x, out),
+          [&](task_result<void>) { });
+    spawn(ex, x.writer().write(chunk),
+          [&](task_result<body_write> r) {
+              ++deliveries;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();  // the watcher awaits the stop; the write parks
+    LT_CHECK(out.parked());
+    LT_CHECK_EQ(deliveries, 0);
+
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+    // The streaming head is a terminal decision: the disconnect moves
+    // a non-terminal state to cancelled, but responded stays responded.
+    LT_CHECK(x.state() == exchange_state::responded);
+    LT_CHECK(x.disconnected());
+    LT_CHECK(drain_until(ex, deliveries, 400));
+
+    // Exactly one delivery, typed cancelled, carrying the partial
+    // prefix queued before the wake.
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::cancelled);
+    LT_CHECK_EQ(seen.accepted, static_cast<std::size_t>(8));
+    LT_CHECK_EQ(out.produced(), static_cast<std::size_t>(8));
+    LT_CHECK(!out.parked());
+LT_END_AUTO_TEST(disconnect_wakes_parked_write)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, disconnect_wakes_write_from_other_thread)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(8);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+
+    const std::vector<std::byte> chunk = bytes("0123456789abcdef");
+    body_write seen;
+    int deliveries = 0;
+    spawn(ex, fake::watch_stop_and_resume(x, out),
+          [&](task_result<void>) { });
+    spawn(ex, x.writer().write(chunk),
+          [&](task_result<body_write> r) {
+              ++deliveries;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();  // the watcher awaits the stop; the write parks
+    LT_CHECK(out.parked());
+
+    // Disconnect is engine-facing and may run on any thread while the
+    // handler is suspended.
+    std::thread waker([&x] {
+        static_cast<void>(x.disconnect(http::outcome_code::connection_closed,
+                                       "peer went away"));
+    });
+    waker.join();
+
+    LT_CHECK(drain_until(ex, deliveries, 400));
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::cancelled);
+    LT_CHECK_EQ(seen.accepted, static_cast<std::size_t>(8));
+LT_END_AUTO_TEST(disconnect_wakes_write_from_other_thread)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, finish_cancelled_by_disconnect)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+    const body_write chunk = run_write(x, ex, bytes(std::string(64, 'x')));
+    LT_CHECK(chunk.status.ok());
+
+    // The end marker has no queue slot: the finish parks.
+    body_finish seen;
+    int deliveries = 0;
+    spawn(ex, fake::watch_stop_and_resume(x, out),
+          [&](task_result<void>) { });
+    spawn(ex, x.writer().finish(http::fields()),
+          [&](task_result<body_finish> r) {
+              ++deliveries;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK(out.parked());
+    LT_CHECK_EQ(deliveries, 0);
+    LT_CHECK_EQ(out.end_calls(), 0);
+
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+    LT_CHECK(drain_until(ex, deliveries, 400));
+
+    // Exactly one delivery, typed cancelled — and the body was never
+    // half-ended: no end marker reached the sink.
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::cancelled);
+    LT_CHECK_EQ(out.end_calls(), 0);
+    LT_CHECK(!out.ended());
+LT_END_AUTO_TEST(finish_cancelled_by_disconnect)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, finish_is_exactly_once)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+    const body_write chunk = run_write(x, ex, bytes("abc"));
+    LT_CHECK(chunk.status.ok());
+
+    const body_finish first = run_finish(x, ex);
+    LT_CHECK(first.status.ok());
+    LT_CHECK(out.ended());
+    LT_CHECK_EQ(out.end_calls(), 1);
+
+    // A second finish fails typed; still exactly one end marker.
+    const body_finish second = run_finish(x, ex);
+    LT_CHECK(second.status.code() == http::outcome_code::invalid_state);
+    LT_CHECK_EQ(out.end_calls(), 1);
+
+    // abort() closes the writer (idempotent); no further write passes.
+    LT_CHECK(x.abort().ok());
+    LT_CHECK(x.abort().ok());
+    const body_write after_abort = run_write(x, ex, bytes("more"));
+    LT_CHECK(after_abort.status.code() == http::outcome_code::invalid_state);
+    LT_CHECK_EQ(out.end_calls(), 1);
+
+    // A disconnect after finish neither re-ends the body nor reopens
+    // the writer.
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "late peer").ok());
+    LT_CHECK_EQ(out.end_calls(), 1);
+    LT_CHECK(x.abort().ok());
+    LT_CHECK_EQ(out.end_calls(), 1);
+LT_END_AUTO_TEST(finish_is_exactly_once)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
