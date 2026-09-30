@@ -295,8 +295,10 @@ inline void http1_head_parser::parse_buffered_head() {
     while (pos < head_end_) {
         const std::size_t crlf = buffer_.find("\r\n", pos);
         if (crlf == std::string::npos || crlf >= head_end_) {
+            // Unreachable when head_end_ marks the first CRLFCRLF, but
+            // a guard keeps a future scan change from slicing past it.
             fail(http::outcome_code::protocol_error,
-                 "field line does not end with CRLF");
+                 "head line does not end with CRLF");
             return;
         }
         const std::string_view line = head.substr(pos, crlf - pos);
