@@ -428,9 +428,12 @@ inline http::outcome http1_response_sink::start(
             http::outcome_code::invalid_state,
             "http1_response_sink: response head already started");
     }
-    if (framer_ == nullptr) {
-        framer_ = std::make_unique<http1_response_framer>(clock);
-    }
+    // start() owns the final head's Date policy: rebuild the framer
+    // with the configured clock even when interim() already created a
+    // clock-less one. The swap is invisible — interim bytes live in
+    // bytes_, not the framer, whose stage is still head, and the sink
+    // never uses a status token.
+    framer_ = std::make_unique<http1_response_framer>(clock);
     started_ = true;
     const http::outcome head = framer_->start_head(bytes_, request, s, f);
     if (!head.ok()) {

@@ -449,6 +449,42 @@ httpserver::task<void> stream_through(httpserver::exchange& x,
     flag = 1;
 }
 
+// The fixed clock instant the Date pins below use (RFC 7231 example).
+httpserver::detail::http1_response_framer::clock_source fixed_clock() {
+    const std::chrono::system_clock::time_point instant{
+        std::chrono::seconds(784111777)};
+    return {[instant] { return instant; }};
+}
+
+LT_BEGIN_AUTO_TEST(seam_suite, start_with_clock_emits_date)
+    http1_response_outbox outbox;
+    http1_response_sink& slot = outbox.open(0, {});
+    LT_CHECK(slot.start(get_11(), http::status::from_code(200),
+                        length_fields(2), fixed_clock()).ok());
+    LT_CHECK(slot.push(as_bytes("hi")).kind == body_push::accepted);
+    LT_CHECK(slot.push_end(http::fields()).kind == body_push::accepted);
+    const std::string wire = drain_all(outbox);
+    LT_CHECK(wire.find("HTTP/1.1 200 OK\r\n") == 0);
+    LT_CHECK(wire.find("Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n")
+             != std::string::npos);
+LT_END_AUTO_TEST(start_with_clock_emits_date)
+
+LT_BEGIN_AUTO_TEST(seam_suite, interim_does_not_drop_the_start_clock)
+    // interim() creates a clock-less framer; start() still owns the
+    // final head's Date policy and must not lose the configured clock.
+    http1_response_outbox outbox;
+    http1_response_sink& slot = outbox.open(0, {});
+    LT_CHECK(slot.interim(100).ok());
+    LT_CHECK(slot.start(get_11(), http::status::from_code(200),
+                        length_fields(2), fixed_clock()).ok());
+    LT_CHECK(slot.push(as_bytes("hi")).kind == body_push::accepted);
+    LT_CHECK(slot.push_end(http::fields()).kind == body_push::accepted);
+    const std::string wire = drain_all(outbox);
+    LT_CHECK(wire.find("HTTP/1.1 100 Continue\r\n\r\n") == 0);
+    LT_CHECK(wire.find("Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n")
+             != std::string::npos);
+LT_END_AUTO_TEST(interim_does_not_drop_the_start_clock)
+
 LT_BEGIN_AUTO_TEST(seam_suite, writer_parks_until_drain_frees_room)
     // CL "195": the serialized head is 66 bytes, so the 190-byte direct
     // fill tops the 256-byte budget exactly while 5 declared body bytes

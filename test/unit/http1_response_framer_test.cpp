@@ -720,6 +720,35 @@ LT_BEGIN_AUTO_TEST(body_framing_suite, trailers_under_length_fail_at_finish)
     LT_CHECK(framer.failed());
 LT_END_AUTO_TEST(trailers_under_length_fail_at_finish)
 
+LT_BEGIN_AUTO_TEST(body_framing_suite, trailers_get_the_head_field_validation)
+    // Trailers are handler field occurrences: the head's wire-safe rule
+    // (token names, CTL-free values) applies unchanged, and the check
+    // runs before any terminator byte is appended.
+    http1_response_framer bad_name_framer;
+    std::string bad_name_wire;
+    LT_CHECK(bad_name_framer.start_head(
+                 bad_name_wire, get_11(), http::status::from_code(200),
+                 http::fields()).ok());
+    http::fields bad_name;
+    bad_name.append("X A", "v");  // SP is not a token byte
+    LT_CHECK(bad_name_framer.finish_body(bad_name_wire, bad_name).code()
+             == http::outcome_code::invalid_argument);
+    LT_CHECK(bad_name_framer.failed());
+    LT_CHECK(bad_name_wire.find("0\r\n") == std::string::npos);
+
+    http1_response_framer ctl_framer;
+    std::string ctl_wire;
+    LT_CHECK(ctl_framer.start_head(ctl_wire, get_11(),
+                                   http::status::from_code(200),
+                                   http::fields()).ok());
+    http::fields ctl_value;
+    ctl_value.append("X-Total", std::string("bad\rvalue"));
+    LT_CHECK(ctl_framer.finish_body(ctl_wire, ctl_value).code()
+             == http::outcome_code::invalid_argument);
+    LT_CHECK(ctl_framer.failed());
+    LT_CHECK(ctl_wire.find("0\r\n") == std::string::npos);
+LT_END_AUTO_TEST(trailers_get_the_head_field_validation)
+
 LT_BEGIN_AUTO_TEST(body_framing_suite, body_push_on_no_body_kinds_fails)
     // close_delimited: strictly no push (the v3 engine frames close-
     // delimited bodies only through the connection loop's EOF path).

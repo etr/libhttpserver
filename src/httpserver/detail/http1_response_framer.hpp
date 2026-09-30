@@ -70,10 +70,10 @@ inline std::string_view http1_reason_phrase(std::uint16_t code) noexcept {
         std::uint16_t code;
         std::string_view phrase;
     };
-    static constexpr std::array<phrase_entry, 59> table = {{
+    static constexpr std::array<phrase_entry, 55> table = {{
         {100, "Continue"},                     {101, "Switching Protocols"},
         {103, "Early Hints"},                  {200, "OK"},
-        {200, "OK"},                           {201, "Created"},
+        {201, "Created"},
         {202, "Accepted"},                     {203, "Non-Authoritative Information"},
         {204, "No Content"},                   {205, "Reset Content"},
         {206, "Partial Content"},              {300, "Multiple Choices"},
@@ -278,24 +278,8 @@ class http1_response_framer {
                 http::outcome_code::invalid_state,
                 "http1_response_framer: head not started");
         }
-        if (mode_.kind == http1_response_body_kind::length) {
-            if (body_written_ != mode_.content_length) {
-                return fail_with(http::outcome(
-                    http::outcome_code::protocol_error,
-                    "http1_response_framer: body shorter than the"
-                    " declared Content-Length"));
-            }
-        }
-        if (!trailers.empty()
-                && mode_.kind != http1_response_body_kind::chunked) {
-            // Strictness delta vs possible v2 tolerance: trailers
-            // without chunked framing have no wire form, so v3 fails
-            // the response typed instead of dropping them.
-            return fail_with(http::outcome(
-                http::outcome_code::protocol_error,
-                "http1_response_framer: trailers on a non-chunked"
-                " response"));
-        }
+        const http::outcome pre = validate_finish(trailers);
+        if (!pre.ok()) return fail_with(pre);
         if (mode_.kind == http1_response_body_kind::chunked) {
             out.append("0\r\n");
             for (const http::fields::entry& e : trailers.entries()) {
@@ -389,6 +373,33 @@ class http1_response_framer {
                     " value");
             }
         }
+        return http::outcome::okay();
+    }
+
+    // The pre-encode finish validation shared by every kind, in order:
+    // a length body that missed its declared total; trailers on a kind
+    // with no trailer framing (strictness delta vs possible v2
+    // tolerance: without chunked they have no wire form, so v3 fails
+    // the response typed instead of dropping them); and the head's
+    // wire-safe rule applied to the trailer occurrences unchanged —
+    // token names, CTL-free values (plan section 4 "same validation").
+    // All checks precede the first appended byte.
+    http::outcome validate_finish(const http::fields& trailers) const {
+        if (mode_.kind == http1_response_body_kind::length
+                && body_written_ != mode_.content_length) {
+            return http::outcome(
+                http::outcome_code::protocol_error,
+                "http1_response_framer: body shorter than the"
+                " declared Content-Length");
+        }
+        if (!trailers.empty()
+                && mode_.kind != http1_response_body_kind::chunked) {
+            return http::outcome(
+                http::outcome_code::protocol_error,
+                "http1_response_framer: trailers on a non-chunked"
+                " response");
+        }
+        if (!trailers.empty()) return validate_fields(trailers);
         return http::outcome::okay();
     }
 
