@@ -86,6 +86,7 @@ struct poll_fixture final : io_contract::backend_fixture {
     poll_fixture() {
         pair_ = io_loopback::pair::make();
         instance.adopt_connection(1, pair_.local());
+        (void)pair_.detach_local();  // backend owns the adopted end
     }
 
     hd::io_backend& backend() override { return instance; }
@@ -282,6 +283,28 @@ LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_cancel_vs_stimulus_race)
     poll_fixture fx;
     io_contract::cancel_vs_stimulus_race(__lt_tr__, __lt_name__, fx);
 LT_END_AUTO_TEST(poll_cancel_vs_stimulus_race)
+
+// Socket-only scenarios (S12-S15): the poll rig is scenario-local so
+// every test gets a fresh backend, pair and listener.
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_accept_round_trip)
+    io_contract::poll_rig rig;
+    io_contract::accept_round_trip(__lt_tr__, __lt_name__, rig);
+LT_END_AUTO_TEST(poll_accept_round_trip)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_http1_round_trip)
+    io_contract::poll_rig rig;
+    io_contract::http1_round_trip(__lt_tr__, __lt_name__, rig);
+LT_END_AUTO_TEST(poll_http1_round_trip)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_partial_read)
+    io_contract::poll_rig rig;
+    io_contract::partial_read(__lt_tr__, __lt_name__, rig);
+LT_END_AUTO_TEST(poll_partial_read)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_read_hangup)
+    io_contract::poll_rig rig;
+    io_contract::read_hangup(__lt_tr__, __lt_name__, rig);
+LT_END_AUTO_TEST(poll_read_hangup)
 
 // Pure unit suite for the monotonic deadline -> poll-timeout
 // conversion (plan deliverable 2b). Fully deterministic: the clock

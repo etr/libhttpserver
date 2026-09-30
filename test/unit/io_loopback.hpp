@@ -100,6 +100,15 @@ class pair {
     native_socket_t local() const { return local_; }
     native_socket_t peer() const { return peer_; }
 
+    // Relinquishes the adopted end WITHOUT closing it: from adoption on
+    // the backend record owns the handle, so exactly one close happens
+    // (release_connection or backend destruction), never two.
+    native_socket_t detach_local() {
+        native_socket_t taken = local_;
+        local_ = pollsys::k_invalid_socket;
+        return taken;
+    }
+
     void close_peer() {
         pollsys::close_socket(peer_);
         peer_ = pollsys::k_invalid_socket;
@@ -155,6 +164,10 @@ class listener {
     native_socket_t socket() const { return socket_; }
     std::uint16_t port() const { return port_; }
 
+    // Relinquishes the handle without closing it (backend ownership
+    // after adopt_listener); the port stays available for clients.
+    void detach() { socket_ = pollsys::k_invalid_socket; }
+
     // Closes without destroying (keeps the port value for logging).
     void close() {
         pollsys::close_socket(socket_);
@@ -166,17 +179,17 @@ class listener {
     std::uint16_t port_ = 0;
 };
 
-// Blocking connect to a loopback listener; returns a connected blocking
-// socket (k_invalid_socket on failure).
-inline native_socket_t connect_to(const listener& l) {
-    if (!l.ok()) {
+// Blocking connect to a loopback port (0 means "no listener"): returns
+// a connected blocking socket, or k_invalid_socket on failure.
+inline native_socket_t connect_to(std::uint16_t port) {
+    if (port == 0) {
         return pollsys::k_invalid_socket;
     }
     native_socket_t client = pollsys::open_stream();
     if (client == pollsys::k_invalid_socket) {
         return pollsys::k_invalid_socket;
     }
-    if (!pollsys::connect_loopback(client, l.port())) {
+    if (!pollsys::connect_loopback(client, port)) {
         pollsys::close_socket(client);
         return pollsys::k_invalid_socket;
     }

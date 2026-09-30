@@ -65,8 +65,10 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -76,6 +78,9 @@
 #include "./httpserver/detail/fake_io_backend.hpp"
 #include "./httpserver/detail/io_connection_owner.hpp"
 #include "./httpserver/detail/io_operation.hpp"
+#include "./httpserver/detail/io_poll_backend.hpp"
+
+#include "./io_loopback.hpp"
 
 #include "./littletest.hpp"
 
@@ -86,6 +91,7 @@ using httpserver::task_result;
 
 namespace hd = httpserver::detail;
 namespace hh = httpserver::http;
+namespace pollsys = httpserver::detail::pollsys;
 
 using std::chrono_literals::operator""ms;
 using std::chrono_literals::operator""us;
@@ -201,6 +207,25 @@ inline bool wait_terminal(contract_rig& r, backend_fixture& fx, probe& p,
 inline bool wait_terminal(contract_rig& r, backend_fixture& fx, probe& p) {
     return wait_terminal(r, fx, p, std::chrono::steady_clock::now()
                                        + kWaitBudget);
+}
+
+// Fixture-less wait for the poll-only scenarios: the driver thread owns
+// time, so there is nothing to pump.
+inline bool wait_terminal(contract_rig& r, probe& p,
+                          std::chrono::steady_clock::time_point give_up) {
+    while (std::chrono::steady_clock::now() < give_up) {
+        r.ex.run_pending();
+        if (p.delivered.load(std::memory_order_acquire) != 0) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
+}
+
+inline bool wait_terminal(contract_rig& r, probe& p) {
+    return wait_terminal(r, p, std::chrono::steady_clock::now()
+                                   + kWaitBudget);
 }
 
 template<typename Op>
@@ -639,6 +664,220 @@ void cancel_vs_stimulus_race(littletest::test_runner* __lt_tr__,
     }
     LT_CHECK(ok_count > 0);
     LT_CHECK(cancelled_count > 0);
+}
+
+// ---- poll-only scenarios (S12-S18) ----------------------------------------
+//
+// These pin the socket behavior the scripted fixture cannot express:
+// accept, byte-exact HTTP/1-shaped round trips, partial reads, hangups,
+// and the no-busy-loop bounds. They type against the concrete driver,
+// not the seam. Member order keeps the documented teardown: the backend
+// is destroyed before the executor/owner rig it enqueues into.
+
+struct poll_rig {
+    contract_rig rig;
+    hd::io_poll_backend backend;
+
+    // Adopts a fresh loopback pair under @p id; the peer end stays with
+    // the returned pair, the adopted end's handle moves to the backend
+    // (detach: exactly one close, via release_connection / dtor).
+    io_loopback::pair adopt_pair(std::uint64_t id) {
+        io_loopback::pair conn = io_loopback::pair::make();
+        backend.adopt_connection(id, conn.local());
+        (void)conn.detach_local();
+        return conn;
+    }
+
+    // Adopts a fresh loopback listener under @p id; the handle moves to
+    // the backend, the port stays on the returned listener.
+    io_loopback::listener adopt_listener(std::uint64_t id) {
+        io_loopback::listener l = io_loopback::listener::open();
+        backend.adopt_listener(id, l.socket());
+        l.detach();
+        return l;
+    }
+};
+
+// Byte-span helper for wire-shaped literals.
+inline std::span<const std::byte> as_bytes(const char* text) noexcept {
+    return std::span<const std::byte>(
+        reinterpret_cast<const std::byte*>(text),
+        std::char_traits<char>::length(text));
+}
+
+inline bool bytes_equal(const std::byte* lhs, const std::byte* rhs,
+                        std::size_t n) {
+    return std::memcmp(lhs, rhs, n) == 0;
+}
+
+// S12: accept round trip. A listener adopted under id 2 accepts one
+// connection; the fresh fabricated id carries a valid handle; read and
+// write ops work over it in both directions.
+inline void accept_round_trip(littletest::test_runner* __lt_tr__,
+                              const char* __lt_name__, poll_rig& rig) {
+    (void)__lt_name__;
+    contract_rig& r = rig.rig;
+    hd::io_poll_backend& backend = rig.backend;
+    const io_loopback::listener listener = rig.adopt_listener(2);
+    LT_CHECK(listener.port() != 0);
+
+    hd::accept_operation accept_op(r.owner, 2);
+    accept_op.submit(backend);
+    probe p_accept;
+    std::vector<task<void>> tasks;
+    launch_probe(r, std::move(accept_op), &p_accept, tasks);
+    r.ex.run_pending();
+
+    pollsys::native_socket_t client = io_loopback::connect_to(
+        listener.port());
+    LT_CHECK(client != pollsys::k_invalid_socket);
+    LT_CHECK(wait_terminal(r, p_accept));
+    LT_CHECK_EQ(p_accept.delivered.load(), 1);
+    LT_CHECK(p_accept.observed.code == hh::outcome_code::ok);
+    const std::uint64_t accepted_id = p_accept.observed.accepted_id;
+    LT_CHECK(accepted_id != 0);
+    LT_CHECK(accepted_id != 2);
+    LT_CHECK(backend.native_handle(accepted_id)
+             != pollsys::k_invalid_socket);
+
+    // Write op over the accepted connection; the client reads it.
+    hd::write_operation resp_op(r.owner, accepted_id,
+                                std::span<const std::byte>(r.cbuffer));
+    resp_op.submit(backend);
+    probe p_write;
+    launch_probe(r, std::move(resp_op), &p_write, tasks);
+    r.ex.run_pending();
+    LT_CHECK(wait_terminal(r, p_write));
+    LT_CHECK_EQ(p_write.observed.transferred, std::size_t{16});
+    std::byte seen[16]{};
+    LT_CHECK(io_loopback::read_exact(client, seen, sizeof(seen)));
+
+    // Read op over the accepted connection; the client writes.
+    hd::read_operation req_op(r.owner, accepted_id,
+                              std::span<std::byte>(r.buffer));
+    req_op.submit(backend);
+    probe p_read;
+    launch_probe(r, std::move(req_op), &p_read, tasks);
+    r.ex.run_pending();
+    io_loopback::write_all(client, "abcd", 4);
+    LT_CHECK(wait_terminal(r, p_read));
+    LT_CHECK_EQ(p_read.observed.transferred, std::size_t{4});
+
+    pollsys::close_socket(client);
+    backend.release_connection(accepted_id);
+    backend.release_connection(2);
+    LT_CHECK_EQ(backend.pending_count(), std::size_t{0});
+}
+
+// S13: the acceptance-criteria scenario. One HTTP/1-shaped round trip:
+// a write op pushes a response head while a read op receives a GET
+// request -- byte-exact in both directions over one loopback pair.
+inline void http1_round_trip(littletest::test_runner* __lt_tr__,
+                             const char* __lt_name__, poll_rig& rig) {
+    (void)__lt_name__;
+    contract_rig& r = rig.rig;
+    const io_loopback::pair conn = rig.adopt_pair(1);
+
+    static constexpr char kRequest[] =
+        "GET /index.html HTTP/1.1\r\nHost: example\r\n\r\n";
+    static constexpr char kResponse[] =
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi";
+    std::byte request_in[256]{};
+
+    hd::write_operation resp_op(r.owner, 1, as_bytes(kResponse));
+    hd::read_operation req_op(r.owner, 1,
+                              std::span<std::byte>(request_in));
+    resp_op.submit(rig.backend);
+    req_op.submit(rig.backend);
+    probe p_write;
+    probe p_read;
+    std::vector<task<void>> tasks;
+    launch_probe(r, std::move(resp_op), &p_write, tasks);
+    launch_probe(r, std::move(req_op), &p_read, tasks);
+    r.ex.run_pending();
+
+    io_loopback::write_all(conn.peer(), kRequest, sizeof(kRequest) - 1);
+    LT_CHECK(wait_terminal(r, p_read));
+    LT_CHECK(wait_terminal(r, p_write));
+
+    LT_CHECK_EQ(p_read.delivered.load(), 1);
+    LT_CHECK(p_read.observed.code == hh::outcome_code::ok);
+    LT_CHECK_EQ(p_read.observed.transferred, sizeof(kRequest) - 1);
+    LT_CHECK(bytes_equal(request_in, as_bytes(kRequest).data(),
+                         sizeof(kRequest) - 1));
+
+    LT_CHECK_EQ(p_write.delivered.load(), 1);
+    LT_CHECK(p_write.observed.code == hh::outcome_code::ok);
+    LT_CHECK_EQ(p_write.observed.transferred, sizeof(kResponse) - 1);
+    std::byte response_in[64]{};
+    LT_CHECK(io_loopback::read_exact(conn.peer(), response_in,
+                                     sizeof(kResponse) - 1));
+    LT_CHECK(bytes_equal(response_in, as_bytes(kResponse).data(),
+                         sizeof(kResponse) - 1));
+
+    rig.backend.release_connection(1);
+}
+
+// S14: partial read. A peer sending more than the op buffer completes
+// the op with transferred == buffer size; the next op receives the
+// remainder, byte-exact.
+inline void partial_read(littletest::test_runner* __lt_tr__,
+                         const char* __lt_name__, poll_rig& rig) {
+    (void)__lt_name__;
+    contract_rig& r = rig.rig;
+    const io_loopback::pair conn = rig.adopt_pair(1);
+    static constexpr char kPayload[] = "0123456789ABCDEFGHIJ";  // 20 bytes
+
+    std::byte first[16]{};
+    std::byte second[16]{};
+    hd::read_operation first_op(r.owner, 1, std::span<std::byte>(first));
+    hd::read_operation second_op(r.owner, 1, std::span<std::byte>(second));
+    first_op.submit(rig.backend);
+    second_op.submit(rig.backend);
+    probe p_first;
+    probe p_second;
+    std::vector<task<void>> tasks;
+    launch_probe(r, std::move(first_op), &p_first, tasks);
+    launch_probe(r, std::move(second_op), &p_second, tasks);
+    r.ex.run_pending();
+
+    io_loopback::write_all(conn.peer(), kPayload, sizeof(kPayload) - 1);
+    LT_CHECK(wait_terminal(r, p_first));
+    LT_CHECK(wait_terminal(r, p_second));
+
+    LT_CHECK_EQ(p_first.delivered.load(), 1);
+    LT_CHECK_EQ(p_first.observed.transferred, std::size_t{16});
+    LT_CHECK(bytes_equal(first, as_bytes(kPayload).data(), 16));
+    LT_CHECK_EQ(p_second.delivered.load(), 1);
+    LT_CHECK_EQ(p_second.observed.transferred, std::size_t{4});
+    LT_CHECK(bytes_equal(second, as_bytes(kPayload).data() + 16, 4));
+
+    rig.backend.release_connection(1);
+}
+
+// S15: read hangup. The peer closes while a read is pending: the read
+// completes connection_closed exactly once and nothing stays pending.
+inline void read_hangup(littletest::test_runner* __lt_tr__,
+                        const char* __lt_name__, poll_rig& rig) {
+    (void)__lt_name__;
+    contract_rig& r = rig.rig;
+    io_loopback::pair conn = rig.adopt_pair(1);
+
+    hd::read_operation read_op(r.owner, 1, std::span<std::byte>(r.buffer));
+    read_op.submit(rig.backend);
+    probe p_read;
+    std::vector<task<void>> tasks;
+    launch_probe(r, std::move(read_op), &p_read, tasks);
+    r.ex.run_pending();
+
+    conn.close_peer();  // hangup while the read is pending
+    LT_CHECK(wait_terminal(r, p_read));
+
+    LT_CHECK_EQ(p_read.delivered.load(), 1);
+    LT_CHECK(p_read.observed.code == hh::outcome_code::connection_closed);
+    LT_CHECK_EQ(rig.backend.pending_count(), std::size_t{0});
+
+    rig.backend.release_connection(1);
 }
 
 }  // namespace io_contract
