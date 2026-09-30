@@ -149,6 +149,14 @@ class body_sink {
 // Shared state of one parked response write. claim() resolves the wait
 // exactly once: a second completion, or a completion racing the
 // waiter's destruction, loses the CAS and is a no-op.
+//
+// Deliberately shaped after body_reader.hpp's wait_node/body_wait: the
+// near-duplication (flagged by the CPD lint next to that file's own
+// task.hpp baseline) unifies only when a third consumer justifies a
+// shared detail seam — the two nodes differ in result vocabulary
+// (body_wake vs body_room) and seam direction (pull vs push), and a
+// shared header would couple the request and response delivery areas
+// before the engines that own them exist.
 struct write_wait_node {
     std::atomic<bool> delivered{false};
     body_room result = body_room::cancelled;
