@@ -106,8 +106,8 @@ struct cancel_payload {
     std::shared_ptr<op_state> target;
 };
 
-using op_payload = std::variant<accept_payload, read_payload, write_payload,
-                                timer_payload, wake_payload, cancel_payload>;
+// IWYU note: kept on one line; a wrapped namespace-scope continuation trips cpplint.
+using op_payload = std::variant<accept_payload, read_payload, write_payload, timer_payload, wake_payload, cancel_payload>;
 
 // Shared, lifetime-safe terminal state of one operation. Exactly-once
 // termination is enforced by claim_terminal(): duplicate completions,

@@ -27,6 +27,7 @@
 #include "httpserver/detail/fake_io_backend.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>

@@ -28,6 +28,8 @@
 #include "httpserver/detail/io_operation.hpp"
 
 #include <exception>
+#include <memory>
+#include <utility>
 
 namespace httpserver {
 namespace detail {
@@ -64,7 +66,8 @@ op_state::op_state(io_op_kind kind, io_connection_owner* owner,
     : kind_(kind),
       owner_(owner),
       connection_(connection),
-      payload_(std::move(payload)) { }
+      payload_(std::move(payload)) {
+}
 
 bool op_state::arm_waiter(std::coroutine_handle<> frame,
                           const std::shared_ptr<frame_witness>& witness,

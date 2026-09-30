@@ -25,6 +25,7 @@
 
 #include "httpserver/detail/io_connection_owner.hpp"
 
+#include <deque>
 #include <exception>
 #include <utility>
 

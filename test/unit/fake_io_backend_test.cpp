@@ -347,84 +347,81 @@ LT_BEGIN_AUTO_TEST(fake_io_backend_suite, duplicate_completions_are_noops)
     LT_CHECK_EQ(p.observed.transferred, std::size_t{5});
 LT_END_AUTO_TEST(duplicate_completions_are_noops)
 
-// Family 4: cancel semantics on the three target states.
-LT_BEGIN_AUTO_TEST(fake_io_backend_suite, cancel_semantics)
-    // (a) pending target: target cancelled once, cancel op ok once.
-    {
-        rig r;
-        hd::fake_io_backend backend;
-        probe p_target;
-        probe p_cancel;
-        std::vector<task<void>> tasks;
+// Family 4a: cancel with a pending target -- target cancelled once,
+// cancel op ok once.
+LT_BEGIN_AUTO_TEST(fake_io_backend_suite, cancel_pending_target)
+    rig r;
+    hd::fake_io_backend backend;
+    probe p_target;
+    probe p_cancel;
+    std::vector<task<void>> tasks;
 
-        hd::read_operation target(r.owner, 1, std::span<std::byte>(r.buffer));
-        hd::cancel_operation cancel_op(r.owner, 1, target);
-        target.submit(backend);
-        cancel_op.submit(backend);
+    hd::read_operation target(r.owner, 1, std::span<std::byte>(r.buffer));
+    hd::cancel_operation cancel_op(r.owner, 1, target);
+    target.submit(backend);
+    cancel_op.submit(backend);
 
-        launch(r, std::move(target), &p_target, tasks);
-        launch(r, std::move(cancel_op), &p_cancel, tasks);
-        r.ex.run_pending();
+    launch(r, std::move(target), &p_target, tasks);
+    launch(r, std::move(cancel_op), &p_cancel, tasks);
+    r.ex.run_pending();
 
-        LT_CHECK_EQ(p_target.delivered.load(), 1);
-        LT_CHECK_EQ(p_cancel.delivered.load(), 1);
-        LT_CHECK(p_target.observed.code == hh::outcome_code::cancelled);
-        LT_CHECK(p_cancel.observed.code == hh::outcome_code::ok);
-    }
+    LT_CHECK_EQ(p_target.delivered.load(), 1);
+    LT_CHECK_EQ(p_cancel.delivered.load(), 1);
+    LT_CHECK(p_target.observed.code == hh::outcome_code::cancelled);
+    LT_CHECK(p_cancel.observed.code == hh::outcome_code::ok);
+LT_END_AUTO_TEST(cancel_pending_target)
 
-    // (b) already-terminal target: cancel op reports invalid_state once;
-    // the target keeps its original result.
-    {
-        rig r;
-        hd::fake_io_backend backend;
-        probe p_target;
-        probe p_cancel;
-        std::vector<task<void>> tasks;
+// Family 4b: already-terminal target -- cancel op reports invalid_state
+// once; the target keeps its original result.
+LT_BEGIN_AUTO_TEST(fake_io_backend_suite, cancel_terminal_target)
+    rig r;
+    hd::fake_io_backend backend;
+    probe p_target;
+    probe p_cancel;
+    std::vector<task<void>> tasks;
 
-        hd::read_operation target(r.owner, 1, std::span<std::byte>(r.buffer));
-        hd::cancel_operation cancel_op(r.owner, 1, target);
-        target.submit(backend);
-        const auto target_state = target.state();
-        launch(r, std::move(target), &p_target, tasks);
-        r.ex.run_pending();
-        LT_CHECK(backend.complete(
-            *target_state, hd::io_result{hh::outcome_code::ok, 3, 0}));
-        r.ex.run_pending();
+    hd::read_operation target(r.owner, 1, std::span<std::byte>(r.buffer));
+    hd::cancel_operation cancel_op(r.owner, 1, target);
+    target.submit(backend);
+    const auto target_state = target.state();
+    launch(r, std::move(target), &p_target, tasks);
+    r.ex.run_pending();
+    LT_CHECK(backend.complete(
+        *target_state, hd::io_result{hh::outcome_code::ok, 3, 0}));
+    r.ex.run_pending();
 
-        cancel_op.submit(backend);
-        launch(r, std::move(cancel_op), &p_cancel, tasks);
-        r.ex.run_pending();
+    cancel_op.submit(backend);
+    launch(r, std::move(cancel_op), &p_cancel, tasks);
+    r.ex.run_pending();
 
-        LT_CHECK_EQ(p_target.delivered.load(), 1);
-        LT_CHECK_EQ(p_target.observed.transferred, std::size_t{3});
-        LT_CHECK_EQ(p_cancel.delivered.load(), 1);
-        LT_CHECK(p_cancel.observed.code == hh::outcome_code::invalid_state);
-    }
+    LT_CHECK_EQ(p_target.delivered.load(), 1);
+    LT_CHECK_EQ(p_target.observed.transferred, std::size_t{3});
+    LT_CHECK_EQ(p_cancel.delivered.load(), 1);
+    LT_CHECK(p_cancel.observed.code == hh::outcome_code::invalid_state);
+LT_END_AUTO_TEST(cancel_terminal_target)
 
-    // (c) cancel after close: the backend is closed, so a submitted
-    // cancel op completes with the connection_closed family.
-    {
-        rig r;
-        hd::fake_io_backend backend;
-        probe p_cancel;
-        std::vector<task<void>> tasks;
+// Family 4c: cancel after close -- the backend is closed, so a
+// submitted cancel op completes with the connection_closed family.
+LT_BEGIN_AUTO_TEST(fake_io_backend_suite, cancel_after_close)
+    rig r;
+    hd::fake_io_backend backend;
+    probe p_cancel;
+    std::vector<task<void>> tasks;
 
-        hd::read_operation pending(r.owner, 1, std::span<std::byte>(r.buffer));
-        pending.submit(backend);
-        const auto pending_state = pending.state();
-        LT_CHECK_EQ(backend.close(), std::size_t{1});
-        backend.request_cancel(*pending_state);  // already swept: no-op
+    hd::read_operation pending(r.owner, 1, std::span<std::byte>(r.buffer));
+    pending.submit(backend);
+    const auto pending_state = pending.state();
+    LT_CHECK_EQ(backend.close(), std::size_t{1});
+    backend.request_cancel(*pending_state);  // already swept: no-op
 
-        hd::cancel_operation cancel_op(r.owner, 1, pending);
-        cancel_op.submit(backend);
-        launch(r, std::move(cancel_op), &p_cancel, tasks);
-        r.ex.run_pending();
+    hd::cancel_operation cancel_op(r.owner, 1, pending);
+    cancel_op.submit(backend);
+    launch(r, std::move(cancel_op), &p_cancel, tasks);
+    r.ex.run_pending();
 
-        LT_CHECK_EQ(p_cancel.delivered.load(), 1);
-        LT_CHECK(p_cancel.observed.code
-                 == hh::outcome_code::connection_closed);
-    }
-LT_END_AUTO_TEST(cancel_semantics)
+    LT_CHECK_EQ(p_cancel.delivered.load(), 1);
+    LT_CHECK(p_cancel.observed.code == hh::outcome_code::connection_closed);
+LT_END_AUTO_TEST(cancel_after_close)
 
 // Family 5: cancel-vs-complete race. The spin gate starts both threads
 // at the line; per iteration the target is terminal exactly once with
