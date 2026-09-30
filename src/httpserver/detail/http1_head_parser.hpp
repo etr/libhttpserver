@@ -60,6 +60,7 @@
 #include <utility>
 
 #include <httpserver/detail/http1_head_limits.hpp>
+#include <httpserver/detail/http1_target.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/protocol.hpp>
@@ -142,9 +143,8 @@ class http1_head_parser {
     // Parses "method SP request-target SP HTTP-version".
     bool parse_request_line(std::string_view line);
 
-    // Step-1 target handling: origin-form path prefix only. The full
-    // request-target grammar (four forms, strict percent-decoding,
-    // dot-segment resolution) lands with the target module.
+    // Form-selects and validates the request-target, stores it
+    // byte-exact, and derives route_path (http1_target.hpp).
     bool apply_target(std::string_view target);
 
     // Parses one "name: value" field line.
@@ -326,16 +326,12 @@ inline bool http1_head_parser::parse_request_line(std::string_view line) {
 }
 
 inline bool http1_head_parser::apply_target(std::string_view target) {
-    const std::size_t query = target.find('?');
-    const std::string_view path = target.substr(0, query);
-    if (path.empty() || path.front() != '/') {
-        // Migration note (delta 4): v2 canonicalized an empty target to
-        // "/"; v3 rejects origin-form targets not starting with '/'.
-        return fail(http::outcome_code::protocol_error,
-                    "request-target is not origin-form");
-    }
+    const http::outcome derived = http1_target::derive_route_path(
+        head_.request_method, target, head_.route_path);
+    if (!derived.ok()) return fail(derived.code(), derived.message());
+    // REQ-019: the received target is stored byte-exact and never
+    // rewritten; route_path is the derived matching input.
     head_.raw_target = std::string(target);
-    head_.route_path = std::string(path);
     return true;
 }
 

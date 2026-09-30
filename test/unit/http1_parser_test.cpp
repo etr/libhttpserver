@@ -48,6 +48,12 @@ using httpserver::http::outcome_code;
 using httpserver::http::protocol;
 using httpserver::http::request_head;
 
+// Samples exercising the request-target forms and normalization.
+constexpr char ABSOLUTE[] = "GET http://example.com/a?q HTTP/1.1\r\nHost: example.com\r\n\r\n";
+constexpr char CONNECT_AUTH[] = "CONNECT h:443 HTTP/1.0\r\n\r\n";
+constexpr char OPTIONS_STAR[] = "OPTIONS * HTTP/1.1\r\nHost: h\r\n\r\n";
+constexpr char NORMALIZE_HEAVY[] = "GET /a/./b/../c//d/?x=1 HTTP/1.1\r\nHost: h\r\n\r\n";
+
 // string_view over a string literal (including embedded NUL bytes:
 // the trailing implicit terminator is dropped).
 template <std::size_t N>
@@ -260,8 +266,20 @@ LT_BEGIN_AUTO_TEST(http1_split_suite, split_matrix_extension_method)
     LT_CHECK(parses_identically(lit(EXT_METHOD)));
 LT_END_AUTO_TEST(split_matrix_extension_method)
 
+LT_BEGIN_AUTO_TEST(http1_split_suite, split_matrix_repeated_fields)
+    LT_CHECK(parses_identically(lit(REPEATED)));
+LT_END_AUTO_TEST(split_matrix_repeated_fields)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, split_matrix_target_forms)
+    LT_CHECK(parses_identically(lit(ABSOLUTE)));
+    LT_CHECK(parses_identically(lit(CONNECT_AUTH)));
+    LT_CHECK(parses_identically(lit(OPTIONS_STAR)));
+    LT_CHECK(parses_identically(lit(NORMALIZE_HEAVY)));
+LT_END_AUTO_TEST(split_matrix_target_forms)
+
 LT_BEGIN_AUTO_TEST(http1_split_suite, three_way_split_two_smallest)
     LT_CHECK(parses_identically_three_way(lit(MIN_10)));
+    LT_CHECK(parses_identically_three_way(lit(CONNECT_AUTH)));
     LT_CHECK(parses_identically_three_way(lit(MIN_11)));
 LT_END_AUTO_TEST(three_way_split_two_smallest)
 
@@ -548,6 +566,154 @@ LT_BEGIN_AUTO_TEST(http1_fields_suite, nul_in_value_rejected)
                         http1_close_policy::close_now));
     LT_CHECK(rejects_as_split_before(bad, 20, outcome_code::protocol_error));
 LT_END_AUTO_TEST(nul_in_value_rejected)
+
+LT_BEGIN_SUITE(http1_target_suite)
+
+    void set_up() { }
+    void tear_down() { }
+
+LT_END_SUITE(http1_target_suite)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, query_is_dropped_from_route_path)
+    const request_head h =
+        parse_one("GET /a/b?x=1 HTTP/1.1\r\nHost: h\r\n\r\n");
+    LT_CHECK_EQ(h.raw_target, "/a/b?x=1");
+    LT_CHECK_EQ(h.route_path, "/a/b");
+LT_END_AUTO_TEST(query_is_dropped_from_route_path)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, fragment_in_target_rejected)
+    LT_CHECK(rejects_as("GET /a/b#f HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(fragment_in_target_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, percent_2f_decodes_to_slash)
+    const request_head h =
+        parse_one("GET /a%2Fb HTTP/1.1\r\nHost: h\r\n\r\n");
+    LT_CHECK_EQ(h.raw_target, "/a%2Fb");
+    LT_CHECK_EQ(h.route_path, "/a/b");
+LT_END_AUTO_TEST(percent_2f_decodes_to_slash)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, percent_20_decodes_to_space)
+    const request_head h =
+        parse_one("GET /a%20b HTTP/1.1\r\nHost: h\r\n\r\n");
+    LT_CHECK_EQ(h.route_path, "/a b");
+LT_END_AUTO_TEST(percent_20_decodes_to_space)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, plus_decodes_to_space)
+    // v2 parity, pinned: '+' in the path decodes to space.
+    const request_head h =
+        parse_one("GET /a+b HTTP/1.1\r\nHost: h\r\n\r\n");
+    LT_CHECK_EQ(h.route_path, "/a b");
+LT_END_AUTO_TEST(plus_decodes_to_space)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, invalid_escape_rejected)
+    // Migration note (delta 2): v2 passed invalid escapes through.
+    LT_CHECK(rejects_as("GET /%zz HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as("GET /a%2 HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(invalid_escape_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, decoded_nul_rejected)
+    const std::string bad = std::string("GET /%00 HTTP/1.1\r\n\r\n", 21);
+    LT_CHECK(rejects_as(bad, outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as_split_before(bad, 6, outcome_code::protocol_error));
+LT_END_AUTO_TEST(decoded_nul_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, dot_segments_resolved)
+    const request_head h = parse_one(lit(NORMALIZE_HEAVY));
+    LT_CHECK_EQ(h.raw_target, "/a/./b/../c//d/?x=1");
+    LT_CHECK_EQ(h.route_path, "/a/c/d");
+LT_END_AUTO_TEST(dot_segments_resolved)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, dot_dot_at_root_dropped)
+    const request_head h =
+        parse_one("GET /../x HTTP/1.1\r\nHost: h\r\n\r\n");
+    LT_CHECK_EQ(h.route_path, "/x");
+LT_END_AUTO_TEST(dot_dot_at_root_dropped)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, root_stays_root)
+    const request_head h = parse_one(lit(MIN_11));
+    LT_CHECK_EQ(h.route_path, "/a/b");
+    const request_head root = parse_one(lit(MIN_10));
+    LT_CHECK_EQ(root.route_path, "/");
+LT_END_AUTO_TEST(root_stays_root)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, empty_target_rejected)
+    // "GET" SP SP "HTTP/1.1": the empty origin-form target. Migration
+    // note (delta 4): v2 canonicalized "" to "/".
+    LT_CHECK(rejects_as("GET  HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(empty_target_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, absolute_form_processed_as_origin)
+    const request_head h = parse_one(lit(ABSOLUTE));
+    LT_CHECK_EQ(h.raw_target, "http://example.com/a?q");
+    LT_CHECK_EQ(h.route_path, "/a");
+    const request_head bare =
+        parse_one("GET http://h HTTP/1.1\r\nHost: h\r\n\r\n");
+    LT_CHECK_EQ(bare.route_path, "/");
+    const request_head query_only =
+        parse_one("GET http://h?q HTTP/1.1\r\nHost: h\r\n\r\n");
+    LT_CHECK_EQ(query_only.route_path, "/");
+LT_END_AUTO_TEST(absolute_form_processed_as_origin)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, absolute_scheme_case_insensitive)
+    const request_head h =
+        parse_one("GET HTTPS://h/a HTTP/1.1\r\nHost: h\r\n\r\n");
+    LT_CHECK_EQ(h.route_path, "/a");
+LT_END_AUTO_TEST(absolute_scheme_case_insensitive)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, absolute_bad_scheme_rejected)
+    LT_CHECK(rejects_as("GET ftp://h/a HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(absolute_bad_scheme_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, relative_target_rejected)
+    LT_CHECK(rejects_as("GET a/b HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(relative_target_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, asterisk_options_only)
+    const request_head h = parse_one(lit(OPTIONS_STAR));
+    LT_CHECK_EQ(h.raw_target, "*");
+    LT_CHECK_EQ(h.route_path, "/");
+    LT_CHECK(rejects_as("GET * HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(asterisk_options_only)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, connect_authority_form)
+    const request_head h = parse_one(lit(CONNECT_AUTH));
+    LT_CHECK(h.request_method == method::known(method_id::connect));
+    LT_CHECK_EQ(h.raw_target, "h:443");
+    LT_CHECK_EQ(h.route_path, "h:443");
+LT_END_AUTO_TEST(connect_authority_form)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, connect_rejects_other_forms)
+    LT_CHECK(rejects_as("CONNECT /a HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as("CONNECT * HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as("CONNECT http://h/a HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(connect_rejects_other_forms)
+
+LT_BEGIN_AUTO_TEST(http1_target_suite, authority_form_connect_only)
+    LT_CHECK(rejects_as("GET h:443 HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(authority_form_connect_only)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
