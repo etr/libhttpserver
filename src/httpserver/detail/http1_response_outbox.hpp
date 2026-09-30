@@ -59,6 +59,7 @@
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP1_RESPONSE_OUTBOX_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP1_RESPONSE_OUTBOX_HPP_
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -73,6 +74,8 @@
 #include <httpserver/concurrency/cancellation.hpp>
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/detail/http1_response_framer.hpp>
+#include <httpserver/detail/io_connection_owner.hpp>
+#include <httpserver/detail/io_operation.hpp>
 #include <httpserver/http/fields.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/request_head.hpp>
@@ -259,6 +262,17 @@ class http1_response_outbox {
         std::lock_guard<std::mutex> lock(mu_);
         return queued_bytes_;
     }
+
+    // Drains the front slot towards `backend`: copies into a
+    // coroutine-frame buffer, submits one write_operation at a time,
+    // consumes exactly the transferred prefix, and loops until the
+    // outbox empties or the front has nothing buffered. Non-ok io
+    // results return as-is — TASK-108 owns retry and close. Never
+    // parks: a still-open front with no buffered bytes ends the drain
+    // (the connection loop resumes it when the handler produced more).
+    task<io_result> write_front(io_backend& backend,
+                                io_connection_owner& owner,
+                                std::uint64_t connection);
 
     // Connection teardown: every sink — parked or not — fails with
     // connection_closed, parked waiters complete with failed, and slots
@@ -462,6 +476,34 @@ inline void http1_response_sink::unpark(body_write_wait& wait) {
 inline bool http1_response_sink::parked() const {
     std::lock_guard<std::mutex> lock(owner_->mu_);
     return waiter_ != nullptr;
+}
+
+inline task<io_result> http1_response_outbox::write_front(
+    io_backend& backend, io_connection_owner& owner,
+    std::uint64_t connection) {
+    std::array<std::byte, 4096> buffer;
+    io_result total;
+    for (;;) {
+        std::size_t n = 0;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            if (slots_.empty()) co_return total;
+            const http1_response_sink& front = *slots_.front();
+            const std::size_t available =
+                front.bytes_.size() - front.offset_;
+            if (available == 0) co_return total;
+            n = std::min(buffer.size(), available);
+            std::memcpy(buffer.data(), front.bytes_.data() + front.offset_,
+                        n);
+        }
+        write_operation op(owner, connection,
+                           std::span<const std::byte>(buffer.data(), n));
+        op.submit(backend);
+        const io_result piece = co_await std::move(op);
+        if (piece.code != http::outcome_code::ok) co_return piece;
+        consume_front(piece.transferred);
+        total.transferred += piece.transferred;
+    }
 }
 
 }  // namespace detail

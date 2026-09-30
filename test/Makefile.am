@@ -1146,6 +1146,9 @@ http1_response_framer_SOURCES = unit/http1_response_framer_test.cpp \
 http1_response_framer_LDADD =
 http1_response_framer_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"'
 
+# write_front exercises the real io_operation + fake backend seam, so
+# this program links libhttpserver.la (the TASK-099 convention) instead
+# of relying on the header-only default.
 http1_response_outbox_SOURCES = unit/http1_response_outbox_test.cpp \
 	parity/response_frame.cpp
-http1_response_outbox_LDADD =
+http1_response_outbox_LDADD = $(LDADD)

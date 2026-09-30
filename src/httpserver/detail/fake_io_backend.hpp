@@ -51,6 +51,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 #include <httpserver/detail/io_operation.hpp>
 #include <httpserver/http/outcome.hpp>
@@ -95,6 +96,11 @@ class fake_io_backend final : public io_backend {
 
     // Operations registered but not yet terminal.
     std::size_t pending_count() const;
+
+    // Snapshot of the pending operations, for scripting completions of
+    // operations a coroutine created inside its own frame (the driver
+    // holds no handle). Test-control surface, like complete()/close().
+    std::vector<std::shared_ptr<op_state>> pending_ops() const;
 
  private:
     // Shared cancel path: erases the target from the registry and, on
