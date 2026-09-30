@@ -715,6 +715,126 @@ LT_BEGIN_AUTO_TEST(http1_target_suite, authority_form_connect_only)
                         http1_close_policy::close_now));
 LT_END_AUTO_TEST(authority_form_connect_only)
 
+LT_BEGIN_SUITE(http1_limits_suite)
+
+    void set_up() { }
+    void tear_down() { }
+
+LT_END_SUITE(http1_limits_suite)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite, from_budget_limits_round_trips)
+    httpserver::server::budget_limits limits;
+    limits.set(httpserver::server::resource::header_bytes, 77);
+    limits.set(httpserver::server::resource::header_fields, 9);
+    const http1_head_budget custom =
+        http1_head_budget::from_budget_limits(limits);
+    LT_CHECK_EQ(custom.max_head_bytes, 77u);
+    LT_CHECK_EQ(custom.max_fields, 9u);
+    const http1_head_budget defaults =
+        http1_head_budget::from_budget_limits(
+            httpserver::server::budget_limits());
+    LT_CHECK_EQ(defaults.max_head_bytes, 1048576u);
+    LT_CHECK_EQ(defaults.max_fields, 256u);
+LT_END_AUTO_TEST(from_budget_limits_round_trips)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite, exact_byte_budget_parses)
+    // MIN_10 is exactly 18 bytes including the terminator.
+    http1_head_budget budget;
+    budget.max_head_bytes = sizeof(MIN_10) - 1;
+    http1_head_parser p(budget);
+    p.feed(lit(MIN_10));
+    LT_CHECK(p.state() == http1_head_state::complete);
+LT_END_AUTO_TEST(exact_byte_budget_parses)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite, byte_budget_one_over_rejects)
+    http1_head_budget budget;
+    budget.max_head_bytes = sizeof(MIN_10) - 2;
+    http1_head_parser p(budget);
+    p.feed(lit(MIN_10));
+    LT_CHECK(p.state() == http1_head_state::failed);
+    LT_CHECK(p.failure().code() == outcome_code::limit_exceeded);
+    LT_CHECK(p.close_policy() == http1_close_policy::respond_then_close);
+    p.feed(lit(MIN_10));  // sticky: ignored
+    LT_CHECK(p.state() == http1_head_state::failed);
+    LT_CHECK(p.failure().code() == outcome_code::limit_exceeded);
+LT_END_AUTO_TEST(byte_budget_one_over_rejects)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite, byte_budget_crossing_in_separate_feed)
+    const std::string_view head = lit(MIN_10);
+    http1_head_budget budget;
+    budget.max_head_bytes = head.size() - 1;  // one byte short
+    http1_head_parser p(budget);
+    p.feed(head.substr(0, 10));
+    LT_CHECK(p.state() == http1_head_state::partial);
+    p.feed(head.substr(10));
+    LT_CHECK(p.state() == http1_head_state::failed);
+    LT_CHECK(p.failure().code() == outcome_code::limit_exceeded);
+    // The boundary-riding byte must reject wherever it lands.
+    http1_head_parser q(budget);
+    q.feed(head.substr(0, head.size() - 1));
+    LT_CHECK(q.state() == http1_head_state::partial);
+    q.feed(head.substr(head.size() - 1));
+    LT_CHECK(q.state() == http1_head_state::failed);
+    LT_CHECK(q.failure().code() == outcome_code::limit_exceeded);
+LT_END_AUTO_TEST(byte_budget_crossing_in_separate_feed)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite, field_budget_two_parses_three_rejects)
+    http1_head_budget budget;
+    budget.max_fields = 2;
+    http1_head_parser ok(budget);
+    ok.feed("GET / HTTP/1.1\r\nA: 1\r\nB: 2\r\n\r\n");
+    LT_CHECK(ok.state() == http1_head_state::complete);
+    LT_CHECK_EQ(ok.take().head_fields.size(), 2u);
+
+    http1_head_parser p(budget);
+    p.feed("GET / HTTP/1.1\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\n");
+    LT_CHECK(p.state() == http1_head_state::failed);
+    LT_CHECK(p.failure().code() == outcome_code::limit_exceeded);
+    LT_CHECK(p.close_policy() == http1_close_policy::respond_then_close);
+LT_END_AUTO_TEST(field_budget_two_parses_three_rejects)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite, field_budget_under_every_split)
+    const std::string three =
+        "GET / HTTP/1.1\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\n";
+    http1_head_budget budget;
+    budget.max_fields = 2;
+    for (std::size_t split = 0; split <= three.size(); ++split) {
+        http1_head_parser p(budget);
+        p.feed(three.substr(0, split));
+        p.feed(three.substr(split));
+        const bool rejected =
+            p.state() == http1_head_state::failed
+            && p.failure().code() == outcome_code::limit_exceeded
+            && p.close_policy() == http1_close_policy::respond_then_close;
+        LT_CHECK(rejected);
+    }
+LT_END_AUTO_TEST(field_budget_under_every_split)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite, zero_capacity_refuses_everything)
+    http1_head_budget budget;
+    budget.max_head_bytes = 0;
+    http1_head_parser p(budget);
+    p.feed(lit(MIN_10));
+    LT_CHECK(p.state() == http1_head_state::failed);
+    LT_CHECK(p.failure().code() == outcome_code::limit_exceeded);
+    LT_CHECK(p.close_policy() == http1_close_policy::respond_then_close);
+LT_END_AUTO_TEST(zero_capacity_refuses_everything)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite, residue_gets_its_own_head_budget)
+    http1_head_budget budget;
+    budget.max_head_bytes = sizeof(MIN_10) - 1;
+    http1_head_parser p(budget);
+    p.feed(lit(MIN_10));
+    LT_CHECK(p.state() == http1_head_state::complete);
+    // A pipelined head is a head of its own: the second MIN_10 fits the
+    // byte budget again even before the first is taken.
+    p.feed(lit(MIN_10));
+    LT_CHECK(p.state() == http1_head_state::complete);
+    LT_CHECK(p.take().request_protocol == protocol::http_1_0);
+    LT_CHECK(p.state() == http1_head_state::complete);
+    LT_CHECK_EQ(p.take().route_path, "/");
+LT_END_AUTO_TEST(residue_gets_its_own_head_budget)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

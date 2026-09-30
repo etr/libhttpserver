@@ -107,7 +107,9 @@ class http1_head_parser {
 
     // Buffers more octets. Never loses bytes: after a complete head,
     // further octets accumulate as residue until take() consumes the
-    // head. After a failure the parser is sticky and feed() is a no-op.
+    // head. The byte and field budgets are enforced before any buffer
+    // growth or field allocation. After a failure the parser is sticky
+    // and feed() is a no-op.
     void feed(std::string_view bytes);
 
     http1_head_state state() const noexcept { return state_; }
@@ -132,6 +134,11 @@ class http1_head_parser {
     // Records a typed rejection (sticky). Returns false so callers can
     // write `return fail(...)`.
     bool fail(http::outcome_code code, std::string message);
+
+    // Budget admission for one feed: enforces header_bytes on the
+    // prospective buffer size BEFORE the append and header_fields via
+    // the streaming LF counter BEFORE any parse could append a field.
+    bool admit(std::string_view bytes);
 
     // Resumes the memoized terminator scan and parses the head once the
     // CRLFCRLF has fully arrived.
@@ -158,6 +165,7 @@ class http1_head_parser {
     http1_close_policy close_ = http1_close_policy::none;
     std::size_t head_end_ = 0;   // end of the completed head inside buffer_
     std::size_t next_scan_ = 0;  // first offset not yet ruled out as a terminator start
+    std::size_t lf_count_ = 0;   // LF bytes buffered for the head so far
 };
 
 namespace detail_head {
@@ -201,9 +209,38 @@ inline std::string_view trim_ows(std::string_view v) noexcept {
 
 inline void http1_head_parser::feed(std::string_view bytes) {
     if (state_ == http1_head_state::failed) return;
-    if (!bytes.empty()) buffer_.append(bytes);
+    if (!bytes.empty() && !admit(bytes)) return;
     if (state_ == http1_head_state::complete) return;
     scan_and_parse();
+}
+
+inline bool http1_head_parser::admit(std::string_view bytes) {
+    // header_bytes is enforced on the prospective buffer size BEFORE
+    // the append: a head may never outgrow max_head_bytes. Once a head
+    // is complete, at most one further head of pipelined residue may
+    // buffer behind it (take() re-arms the budget for the next head).
+    const std::size_t cap = state_ == http1_head_state::complete
+                                ? head_end_ + budget_.max_head_bytes
+                                : budget_.max_head_bytes;
+    if (bytes.size() > cap - buffer_.size()) {
+        return fail(http::outcome_code::limit_exceeded,
+                    "header_bytes budget exhausted");
+    }
+    buffer_.append(bytes);
+    // Streaming LF counter: a valid complete head carries at most
+    // max_fields + 2 line terminators (request line, field lines, the
+    // empty line). More LFs without a terminator means the field budget
+    // is already lost, so reject here — before the parse could append
+    // any field — and let parse time re-count exactly.
+    for (const char c : bytes) {
+        if (c == '\n') ++lf_count_;
+    }
+    if (state_ != http1_head_state::complete
+            && lf_count_ > budget_.max_fields + 2) {
+        return fail(http::outcome_code::limit_exceeded,
+                    "header_fields budget exhausted");
+    }
+    return true;
 }
 
 inline http::request_head http1_head_parser::take() {
@@ -212,6 +249,7 @@ inline http::request_head http1_head_parser::take() {
     buffer_.erase(0, head_end_);
     head_end_ = 0;
     next_scan_ = 0;
+    lf_count_ = 0;
     state_ = http1_head_state::empty;
     scan_and_parse();
     return out;
