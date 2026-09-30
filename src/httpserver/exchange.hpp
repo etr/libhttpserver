@@ -249,6 +249,16 @@ class exchange {
         return http::outcome::okay();
     }
 
+    // Engine-facing post-commit failure notification (architecture
+    // §3.1): the response was already committed but the exchange failed
+    // afterwards (e.g. a handler threw), so the engine resets or closes
+    // the connection per protocol rules instead of committing another
+    // response. No state change: a terminal exchange stays terminal.
+    http::outcome abort() {
+        if (sink_ != nullptr) sink_->on_abort();
+        return http::outcome::okay();
+    }
+
  private:
     // Decisions after a disconnect fail closed, carrying the stored
     // detail so the diagnostic names the original reason.

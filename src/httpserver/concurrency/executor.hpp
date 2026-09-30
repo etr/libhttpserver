@@ -66,7 +66,11 @@ class unique_function<R(Args...)> {
 
     explicit operator bool() const noexcept { return fn_ != nullptr; }
 
-    R operator()(Args... args) {
+    // Const like std::function: invoking a const unique_function
+    // invokes the target as non-const (the erased model owns the
+    // callable through a pointer, so no state is duplicated). Lets a
+    // registry hand out `const route_handler*` that callers invoke.
+    R operator()(Args... args) const {
         return fn_->invoke(std::forward<Args>(args)...);
     }
 
