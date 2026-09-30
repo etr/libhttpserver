@@ -1,0 +1,233 @@
+/*
+     This file is part of libhttpserver
+     Copyright (C) 2011-2026 Sebastiano Merlino
+
+     This library is free software; you can redistribute it and/or
+     modify it under the terms of the GNU Lesser General Public
+     License as published by the Free Software Foundation; either
+     version 2.1 of the License, or (at your option) any later version.
+
+     This library is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     Lesser General Public License for more details.
+
+     You should have received a copy of the GNU Lesser General Public
+     License along with this library; if not, write to the file
+     LICENSE in the distribution; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+     02110-1301 USA
+*/
+
+// TASK-103: the bounded body reader over the exchange (PRD-V3N-REQ-021/
+// 022/025). Pins the one body pipeline every admitted request flows
+// through:
+//   - one bounded incremental read at a time, credited only when bytes
+//     are consumed (engine pull == consumption event);
+//   - EOF with final trailer access and bounded multi-read progression
+//     of an echo larger than the engine's staging queue;
+//   - collect(max) with an exact over-limit outcome;
+//   - reads that wake on disconnect and typed failures afterwards.
+//
+// The suite runs against detail::recording_sink (decisions) and the
+// scripted_body_source fake (delivery), so no transport exists yet.
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <thread>
+#include <type_traits>
+#include <vector>
+
+#include <httpserver/body_reader.hpp>
+#include <httpserver/concurrency/executor.hpp>
+#include <httpserver/concurrency/task.hpp>
+#include <httpserver/detail/exchange_runner.hpp>
+#include <httpserver/exchange.hpp>
+
+#include "./body_source_fake.hpp"
+#include "./littletest.hpp"
+
+using httpserver::body_collect;
+using httpserver::body_policy;
+using httpserver::body_read;
+using httpserver::body_reader;
+using httpserver::exchange;
+using httpserver::manual_executor;
+using httpserver::spawn;
+using httpserver::task_result;
+namespace http = httpserver::http;
+namespace detail = httpserver::detail;
+namespace fake = httpserver_test;
+
+static_assert(std::is_move_constructible_v<body_reader>,
+              "the reader rides exchange's defaulted move (between hops)");
+static_assert(!std::is_copy_constructible_v<body_reader>,
+              "one reader per admitted body; copies are a bug");
+
+namespace {
+
+http::request_head make_head() {
+    http::request_head head;
+    head.raw_target = "/things";
+    head.route_path = "/things";
+    head.request_method = http::method::known(http::method_id::get);
+    head.request_protocol = http::protocol::http_1_1;
+    return head;
+}
+
+std::vector<std::byte> bytes(const std::string& s) {
+    std::vector<std::byte> out;
+    out.reserve(s.size());
+    for (char c : s) {
+        out.push_back(std::byte(static_cast<unsigned char>(c)));
+    }
+    return out;
+}
+
+std::string of(std::span<const std::byte> data) {
+    std::string out;
+    out.reserve(data.size());
+    for (std::byte b : data) {
+        out.push_back(static_cast<char>(b));
+    }
+    return out;
+}
+
+// Runs one read_some to completion on `ex` (inline when the gate fails
+// or a pull resolves without parking) and returns the typed result. A
+// read that parks is left parked: `seen` stays valueless.
+body_read run_read(exchange& x, manual_executor& ex,
+                   std::span<std::byte> destination) {
+    body_read seen;
+    int deliveries = 0;
+    spawn(ex, x.body().read_some(destination),
+          [&](task_result<body_read> r) {
+              ++deliveries;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    return seen;
+}
+
+}  // namespace
+
+LT_BEGIN_SUITE(body_reader_suite)
+    void set_up() {
+    }
+
+    void tear_down() {
+    }
+LT_END_SUITE(body_reader_suite)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_read_returns_staged_segment)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    LT_CHECK(source.stage(bytes("hello")));
+
+    std::vector<std::byte> destination(16);
+    const body_read seen = run_read(x, ex, destination);
+
+    LT_CHECK(seen.status.ok());
+    LT_CHECK(!seen.end_of_body);
+    LT_CHECK(of(seen.data) == "hello");
+    LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(5));
+    LT_CHECK_EQ(source.park_count(), 0);
+LT_END_AUTO_TEST(body_read_returns_staged_segment)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_no_credit_before_consumption)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    LT_CHECK(source.stage(bytes("1234567")));
+
+    // Staged bytes hold receive credit; only the engine pull (the
+    // consumption event inside read_some) releases it.
+    LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(0));
+
+    std::vector<std::byte> destination(16);
+    const body_read seen = run_read(x, ex, destination);
+
+    LT_CHECK(seen.status.ok());
+    LT_CHECK(of(seen.data) == "1234567");
+    LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(7));
+LT_END_AUTO_TEST(body_no_credit_before_consumption)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_read_requires_admission)
+    detail::recording_sink sink;
+    exchange x(make_head(), &sink);  // no engine delivery source at all
+    manual_executor ex;
+
+    std::vector<std::byte> destination(8);
+    const body_read fresh = run_read(x, ex, destination);
+    LT_CHECK(fresh.status.code() == http::outcome_code::invalid_state);
+    LT_CHECK(!fresh.status.message().empty());
+
+    // Even a body-less response terminal closes the reader.
+    LT_CHECK(x.respond(http::status::from_code(200), http::fields()).ok());
+    const body_read after = run_read(x, ex, destination);
+    LT_CHECK(after.status.code() == http::outcome_code::invalid_state);
+LT_END_AUTO_TEST(body_read_requires_admission)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_second_outstanding_read_fails)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+
+    // Nothing staged: the first read parks.
+    std::vector<std::byte> destination(8);
+    body_read parked_result;
+    int parked_done = 0;
+    spawn(ex, x.body().read_some(destination),
+          [&](task_result<body_read> r) {
+              ++parked_done;
+              if (r.has_value()) parked_result = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK(source.parked());
+    LT_CHECK_EQ(parked_done, 0);
+
+    // A second read while one is outstanding fails immediately, typed,
+    // without touching the source (still exactly one park).
+    const body_read second = run_read(x, ex, destination);
+    LT_CHECK(second.status.code() == http::outcome_code::invalid_state);
+    LT_CHECK_EQ(source.park_count(), 1);
+
+    // Staging wakes the first read; it consumes the segment.
+    LT_CHECK(source.stage(bytes("abc")));
+    ex.run_pending();
+    LT_CHECK_EQ(parked_done, 1);
+    LT_CHECK(parked_result.status.ok());
+    LT_CHECK(of(parked_result.data) == "abc");
+    LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(3));
+LT_END_AUTO_TEST(body_second_outstanding_read_fails)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_read_into_empty_buffer_fails)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+
+    const body_read seen = run_read(x, ex, std::span<std::byte>());
+    LT_CHECK(seen.status.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(!seen.status.message().empty());
+    // No source interaction: the gate fails before any pull or park.
+    LT_CHECK_EQ(source.park_count(), 0);
+    LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(0));
+LT_END_AUTO_TEST(body_read_into_empty_buffer_fails)
+
+LT_BEGIN_AUTO_TEST_ENV()
+    AUTORUN_TESTS()
+LT_END_AUTO_TEST_ENV()

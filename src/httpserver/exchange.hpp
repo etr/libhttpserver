@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include <httpserver/body_reader.hpp>
 #include <httpserver/concurrency/cancellation.hpp>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/http/fields.hpp>
@@ -119,10 +120,13 @@ class exchange {
  public:
     // Engine construction only. `sink` receives every committed
     // decision; `connection_id` identifies the underlying connection
-    // for engine bookkeeping.
+    // for engine bookkeeping; `body_source` is the engine's delivery
+    // seam for the admitted body (null until an engine provides one).
     exchange(const http::request_head& head, detail::exchange_sink* sink,
-             std::uint64_t connection_id = 0) noexcept
-        : head_(head), sink_(sink), connection_id_(connection_id) { }
+             std::uint64_t connection_id = 0,
+             detail::body_source* body_source = nullptr) noexcept
+        : head_(head), sink_(sink), connection_id_(connection_id),
+          body_source_(body_source), body_(stop_.get_token()) { }
 
     exchange(exchange&& other) noexcept = default;
     exchange& operator=(exchange&& other) noexcept = default;
@@ -153,6 +157,10 @@ class exchange {
 
     std::uint64_t connection_id() const noexcept { return connection_id_; }
 
+    // The admitted request body. Operations are legal only after a
+    // successful admit_body() and fail typed otherwise.
+    body_reader& body() noexcept { return body_; }
+
     // Fan-out handle observing this exchange's disconnect.
     stop_token cancellation() const noexcept { return stop_.get_token(); }
 
@@ -169,6 +177,7 @@ class exchange {
         }
         state_ = exchange_state::responded;
         suspended_ = false;
+        body_.close();
         if (sink_ != nullptr) sink_->on_respond(s, f);
         return http::outcome::okay();
     }
@@ -184,6 +193,7 @@ class exchange {
         }
         state_ = exchange_state::admitted;
         if (sink_ != nullptr) sink_->on_admit(policy);
+        body_.activate(body_source_);
         return http::outcome::okay();
     }
 
@@ -222,6 +232,7 @@ class exchange {
                 "exchange: upgrade requires an HTTP/1.1 request head");
         }
         state_ = exchange_state::upgraded;
+        body_.close();
         if (sink_ != nullptr) sink_->on_upgrade(options);
         return http::outcome::okay();
     }
@@ -275,6 +286,10 @@ class exchange {
     bool disconnected_ = false;
     http::outcome disconnect_reason_;
     stop_source stop_;
+    detail::body_source* body_source_ = nullptr;
+    // Declared after stop_: the reader's constructor copies the stop
+    // token, so disconnects fan out to parked body reads.
+    body_reader body_;
     std::vector<resume_signal> resume_signals_;
 };
 
