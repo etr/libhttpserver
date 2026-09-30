@@ -35,8 +35,10 @@
 
 #include <chrono>
 #include <cstddef>
+#include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <type_traits>
 #include <vector>
@@ -128,6 +130,28 @@ body_finish run_finish(exchange& x, manual_executor& ex,
         ex.run_pending();
     }
     return flag != 0;
+}
+
+// Streaming handler: commits the head with start_response, then
+// streams `payload` in `chunk_bytes` chunks and finishes with a total
+// trailer. A typed write failure ends the stream early; the test body
+// asserts (helpers carry no LT_CHECK context).
+task<void> stream_handler(exchange& x, const std::string& payload,
+                          std::size_t chunk_bytes) {
+    if (!x.start_response(http::status::from_code(200),
+                          http::fields()).ok()) {
+        co_return;
+    }
+    for (std::size_t offset = 0; offset < payload.size();
+         offset += chunk_bytes) {
+        const std::vector<std::byte> chunk =
+            bytes(payload.substr(offset, chunk_bytes));
+        const body_write r = co_await x.writer().write(chunk);
+        if (!r.status.ok()) co_return;
+    }
+    http::fields trailers;
+    trailers.append("X-Total", std::to_string(payload.size()));
+    static_cast<void>(co_await x.writer().finish(trailers));
 }
 
 }  // namespace
@@ -240,6 +264,161 @@ LT_BEGIN_AUTO_TEST(response_writer_suite, write_empty_chunk_fails)
     LT_CHECK_EQ(out.produced(), static_cast<std::size_t>(0));
     LT_CHECK_EQ(out.park_count(), 0);
 LT_END_AUTO_TEST(write_empty_chunk_fails)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, write_parks_when_full_and_resumes_on_capacity)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(16);  // 16-byte bounded output queue
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+
+    // One 64-byte write: accepted only as the queue drains.
+    const std::vector<std::byte> chunk = bytes(
+        "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP");
+    body_write seen;
+    int parked_done = 0;
+    spawn(ex, x.writer().write(chunk),
+          [&](task_result<body_write> r) {
+              ++parked_done;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK(out.parked());
+    LT_CHECK_EQ(out.queued(), static_cast<std::size_t>(16));
+    LT_CHECK_EQ(parked_done, 0);
+
+    // Engine progress: each drain wakes the outstanding write, which
+    // refills the bounded queue; the loop drives it to completion.
+    for (int i = 0; i < 1000 && parked_done == 0; ++i) {
+        out.drain(64);
+        ex.run_pending();
+    }
+
+    // Exactly one delivery of the one outstanding write, whole chunk.
+    LT_CHECK_EQ(parked_done, 1);
+    LT_CHECK(seen.status.ok());
+    LT_CHECK_EQ(seen.accepted, chunk.size());
+    LT_CHECK_EQ(out.produced(), chunk.size());
+    LT_CHECK(!out.parked());
+    LT_CHECK(out.park_count() >= 1);
+    // The engine finishes draining what the write queued.
+    out.drain(64);
+    LT_CHECK_EQ(out.drained(), chunk.size());
+    LT_CHECK(out.max_queued() <= static_cast<std::size_t>(16));
+LT_END_AUTO_TEST(write_parks_when_full_and_resumes_on_capacity)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, finish_accepts_trailers_and_ends)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+    const body_write chunk = run_write(x, ex, bytes("abc"));
+    LT_CHECK(chunk.status.ok());
+
+    http::fields trailers;
+    trailers.append("X-Checksum", "deadbeef");
+    const body_finish seen = run_finish(x, ex, trailers);
+
+    LT_CHECK(seen.status.ok());
+    LT_CHECK(out.ended());
+    LT_CHECK_EQ(out.end_calls(), 1);
+    const std::optional<std::string_view> checksum =
+        out.trailers().first("x-checksum");
+    LT_CHECK(checksum.has_value());
+    LT_CHECK(*checksum == "deadbeef");
+
+    // After finish the writer is closed: further operations fail typed
+    // and the sink never sees a second end marker.
+    const body_write over = run_write(x, ex, bytes("more"));
+    LT_CHECK(over.status.code() == http::outcome_code::invalid_state);
+    const body_finish again = run_finish(x, ex);
+    LT_CHECK(again.status.code() == http::outcome_code::invalid_state);
+    LT_CHECK_EQ(out.end_calls(), 1);
+LT_END_AUTO_TEST(finish_accepts_trailers_and_ends)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, finish_parks_until_queue_has_room)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+    // Fill the bounded queue exactly.
+    const body_write chunk = run_write(x, ex, bytes(std::string(64, 'x')));
+    LT_CHECK(chunk.status.ok());
+    LT_CHECK_EQ(out.queued(), static_cast<std::size_t>(64));
+
+    // The end marker needs one queue slot: the finish parks.
+    http::fields trailers;
+    trailers.append("X-Total", "64");
+    body_finish seen;
+    int parked_done = 0;
+    spawn(ex, x.writer().finish(trailers),
+          [&](task_result<body_finish> r) {
+              ++parked_done;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK(out.parked());
+    LT_CHECK_EQ(parked_done, 0);
+    LT_CHECK_EQ(out.end_calls(), 0);
+
+    // Room frees; the finish re-pushes and ends the body exactly once.
+    LT_CHECK_EQ(out.drain(16), static_cast<std::size_t>(16));
+    ex.run_pending();
+    LT_CHECK_EQ(parked_done, 1);
+    LT_CHECK(seen.status.ok());
+    LT_CHECK(out.ended());
+    LT_CHECK_EQ(out.end_calls(), 1);
+LT_END_AUTO_TEST(finish_parks_until_queue_has_room)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, stream_larger_than_queue_progresses)
+    // Acceptance: a 256-byte stream through a 64-byte bounded output
+    // queue progresses chunk by chunk; writes park on the full queue
+    // and resume on capacity, and finish ends the body exactly once.
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);  // 64-byte bounded output queue
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    const std::string pattern = "abcdefghijklmnopqrstuvwxyz012345";
+    std::string payload;
+    for (int i = 0; i < 8; ++i) payload += pattern;  // 256 bytes
+
+    int done = 0;
+    spawn(ex, stream_handler(x, payload, 32),
+          [&](task_result<void>) { ++done; });
+    ex.run_pending();  // the handler commits the head and fills the queue
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK(out.parked());
+
+    // Engine progress: drain the bounded queue, let the handler write.
+    for (int i = 0; i < 1000 && done == 0; ++i) {
+        out.drain(64);
+        ex.run_pending();
+    }
+
+    LT_CHECK_EQ(done, 1);
+    LT_CHECK_EQ(out.produced(), payload.size());
+    // The engine finishes draining what the stream queued.
+    out.drain(64);
+    LT_CHECK_EQ(out.drained(), payload.size());
+    LT_CHECK(out.max_queued() <= static_cast<std::size_t>(64));
+    LT_CHECK(out.ended());
+    LT_CHECK_EQ(out.end_calls(), 1);
+    const std::optional<std::string_view> total =
+        out.trailers().first("x-total");
+    LT_CHECK(total.has_value());
+    LT_CHECK(*total == "256");
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK(x.state() == exchange_state::responded);
+LT_END_AUTO_TEST(stream_larger_than_queue_progresses)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
