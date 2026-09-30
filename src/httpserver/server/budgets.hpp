@@ -23,9 +23,14 @@
 #define SRC_HTTPSERVER_SERVER_BUDGETS_HPP_
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string_view>
+#include <utility>
+
+#include <httpserver/http/outcome.hpp>
 
 namespace httpserver {
 
@@ -142,6 +147,223 @@ class budget_limits {
 
  private:
     std::array<std::size_t, resource_count> capacities_{};
+};
+
+namespace detail {
+
+// One accounting node in the server > listener > connection > stream
+// hierarchy. Nodes are shared (shared_ptr) between the budget handles
+// and reservations that refer to a scope, so accounting outlives any
+// single handle. Counters are lock-free; admission never blocks.
+class budget_node {
+ public:
+    budget_node(const budget_limits& limits,
+                std::shared_ptr<budget_node> parent) noexcept
+        : parent_(std::move(parent)), limits_(limits) { }
+
+    std::size_t capacity(resource kind) const noexcept {
+        return limits_.get(kind);
+    }
+
+    std::size_t in_use(resource kind) const noexcept {
+        return counters_[static_cast<std::size_t>(kind)].load(
+            std::memory_order_relaxed);
+    }
+
+    std::shared_ptr<budget_node> parent_;
+    budget_limits limits_;
+    std::array<std::atomic<std::size_t>, resource_count> counters_{};
+};
+
+// Charges `units` for `kind` on the chain from `leaf` up to the root.
+// Refusal at any level rolls back every partial charge, so a refused
+// admission leaves zero residue at every ancestor. Returns true when
+// the whole chain was charged.
+inline bool charge_chain(budget_node& leaf, resource kind,
+                         std::size_t units) noexcept {
+    const std::size_t index = static_cast<std::size_t>(kind);
+    std::size_t committed = 0;
+    bool refused = false;
+    for (budget_node* node = &leaf; node != nullptr;
+         node = node->parent_.get()) {
+        const std::size_t before =
+            node->counters_[index].fetch_add(units,
+                                             std::memory_order_relaxed);
+        const std::size_t capacity = node->limits_.get(kind);
+        if (before > capacity || units > capacity - before) {
+            refused = true;
+            break;
+        }
+        ++committed;
+    }
+    if (!refused) return true;
+    // The refused level holds a transient add; subtract it along with
+    // the committed levels below it.
+    budget_node* node = &leaf;
+    for (std::size_t level = 0; level <= committed; ++level,
+         node = node->parent_.get()) {
+        node->counters_[index].fetch_sub(units, std::memory_order_relaxed);
+    }
+    return false;
+}
+
+// Releases `units` for `kind` on the chain from `leaf` up to the root.
+// Must be called exactly once per committed charge chain.
+inline void release_chain(budget_node& leaf, resource kind,
+                          std::size_t units) noexcept {
+    const std::size_t index = static_cast<std::size_t>(kind);
+    for (budget_node* node = &leaf; node != nullptr;
+         node = node->parent_.get()) {
+        node->counters_[index].fetch_sub(units, std::memory_order_relaxed);
+    }
+}
+
+}  // namespace detail
+
+// Move-only RAII handle for units admitted against a resource_budget.
+// Destruction releases the charge; release() is the explicit terminal
+// path and is idempotent; a moved-from reservation owns nothing and
+// releases nothing. Release propagates to every ancestor of the scope
+// that admitted the units. Never throws.
+class reservation {
+ public:
+    reservation() noexcept = default;
+
+    reservation(reservation&& other) noexcept
+        : node_(std::move(other.node_)),
+          kind_(other.kind_),
+          units_(other.units_) {
+        other.node_ = nullptr;
+        other.units_ = 0;
+    }
+
+    reservation& operator=(reservation&& other) noexcept {
+        if (this != &other) {
+            release();
+            node_ = std::move(other.node_);
+            kind_ = other.kind_;
+            units_ = other.units_;
+            other.units_ = 0;
+        }
+        return *this;
+    }
+
+    reservation(const reservation&) = delete;
+    reservation& operator=(const reservation&) = delete;
+
+    ~reservation() {
+        release();
+    }
+
+    // Explicit terminal path; safe to call twice.
+    void release() noexcept {
+        if (node_ != nullptr) {
+            detail::release_chain(*node_, kind_, units_);
+            node_ = nullptr;
+            units_ = 0;
+        }
+    }
+
+    bool owns() const noexcept { return node_ != nullptr; }
+
+    resource kind() const noexcept { return kind_; }
+
+    std::size_t units() const noexcept { return units_; }
+
+ private:
+    friend class resource_budget;
+
+    std::shared_ptr<detail::budget_node> node_;
+    resource kind_ = resource::connections;  // meaningful only while owning
+    std::size_t units_ = 0;
+};
+
+// A scope of the hierarchical budget. Copies share one accounting node;
+// child() derives a nested scope whose capacities may not exceed the
+// parent's; reserve() admits units against this scope and every
+// ancestor, refusing before capacity is committed anywhere on the
+// chain. An empty budget (default construction) has no capacity and
+// refuses all admission.
+class resource_budget {
+ public:
+    resource_budget() noexcept = default;
+
+    // Root scope with the given capacities.
+    static resource_budget root(const budget_limits& limits) {
+        return resource_budget(
+            std::make_shared<detail::budget_node>(limits, nullptr));
+    }
+
+    bool valid() const noexcept { return node_ != nullptr; }
+
+    // Derives a child scope. invalid_argument when this budget is
+    // empty or any child capacity exceeds this scope's; `out` is
+    // untouched on failure.
+    http::outcome child(const budget_limits& limits,
+                        resource_budget& out) const {
+        if (node_ == nullptr) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "resource_budget: cannot derive a child budget from an"
+                " empty budget");
+        }
+        for (std::size_t i = 0; i < resource_count; ++i) {
+            const auto kind = static_cast<resource>(i);
+            if (limits.get(kind) > node_->limits_.get(kind)) {
+                return http::outcome(
+                    http::outcome_code::invalid_argument,
+                    "resource_budget: child '" + std::string(to_string(kind))
+                        + "' capacity " + std::to_string(limits.get(kind))
+                        + " exceeds the parent's "
+                        + std::to_string(node_->limits_.get(kind)));
+        }
+        }
+        out = resource_budget(
+            std::make_shared<detail::budget_node>(limits, node_));
+        return http::outcome::okay();
+    }
+
+    // Admits `units` of `kind`, charging this scope and every
+    // ancestor. limit_exceeded when the chain lacks room; the charge is
+    // rolled back and `out` is untouched on failure. invalid_argument
+    // for zero units or an out-of-range kind.
+    http::outcome reserve(resource kind, std::size_t units,
+                          reservation& out) const {
+        if (units == 0
+                || static_cast<std::size_t>(kind) >= resource_count) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "resource_budget: reserve requires a valid resource kind"
+                " and at least one unit");
+        }
+        if (node_ == nullptr
+                || !detail::charge_chain(*node_, kind, units)) {
+            return http::outcome(
+                http::outcome_code::limit_exceeded,
+                "resource_budget: '" + std::string(to_string(kind))
+                    + "' capacity exhausted in this scope or an ancestor");
+        }
+        out.release();
+        out.node_ = node_;
+        out.kind_ = kind;
+        out.units_ = units;
+        return http::outcome::okay();
+    }
+
+    std::size_t capacity(resource kind) const noexcept {
+        return node_ == nullptr ? 0 : node_->capacity(kind);
+    }
+
+    std::size_t in_use(resource kind) const noexcept {
+        return node_ == nullptr ? 0 : node_->in_use(kind);
+    }
+
+ private:
+    explicit resource_budget(
+        std::shared_ptr<detail::budget_node> node) noexcept
+        : node_(std::move(node)) { }
+
+    std::shared_ptr<detail::budget_node> node_;
 };
 
 }  // namespace server
