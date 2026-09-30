@@ -45,6 +45,8 @@
 
 namespace io_loopback {
 
+namespace pollsys = httpserver::detail::pollsys;
+
 using pollsys::native_socket_t;
 
 // Deadline budget for the blocking helpers below. A healthy loopback
@@ -59,6 +61,19 @@ class pair {
 
     pair(const pair&) = delete;
     pair& operator=(const pair&) = delete;
+
+    pair(pair&& other) noexcept
+        : local_(std::exchange(other.local_, pollsys::k_invalid_socket)),
+          peer_(std::exchange(other.peer_, pollsys::k_invalid_socket)) { }
+
+    pair& operator=(pair&& other) noexcept {
+        if (this != &other) {
+            close_both();
+            local_ = std::exchange(other.local_, pollsys::k_invalid_socket);
+            peer_ = std::exchange(other.peer_, pollsys::k_invalid_socket);
+        }
+        return *this;
+    }
 
     ~pair() { close_both(); }
 
@@ -114,6 +129,20 @@ class listener {
     listener(const listener&) = delete;
     listener& operator=(const listener&) = delete;
 
+    listener(listener&& other) noexcept
+        : socket_(std::exchange(other.socket_, pollsys::k_invalid_socket)),
+          port_(other.port_) { }
+
+    listener& operator=(listener&& other) noexcept {
+        if (this != &other) {
+            close();
+            socket_ = std::exchange(other.socket_,
+                                    pollsys::k_invalid_socket);
+            port_ = other.port_;
+        }
+        return *this;
+    }
+
     ~listener() { pollsys::close_socket(socket_); }
 
     static listener open() {
@@ -143,7 +172,7 @@ inline native_socket_t connect_to(const listener& l) {
     if (!l.ok()) {
         return pollsys::k_invalid_socket;
     }
-    const native_socket_t client = pollsys::open_stream();
+    native_socket_t client = pollsys::open_stream();
     if (client == pollsys::k_invalid_socket) {
         return pollsys::k_invalid_socket;
     }

@@ -139,7 +139,12 @@ class order_log {
 };
 
 // Executor + owner + buffers for one deterministic scenario (the same
-// shape fake_io_backend_test.cpp uses).
+// shape fake_io_backend_test.cpp uses). Lives INSIDE the fixture as the
+// base-class member on purpose: derived fixtures construct rig first
+// and their backend last, so the backend is destroyed before the rig --
+// the documented teardown order (backend close -> owner destruction).
+// A thread-backed driver outliving the executor would complete pending
+// ops into a destroyed owner.
 struct contract_rig {
     contract_rig() : owner(ex) { }
 
@@ -153,6 +158,8 @@ struct contract_rig {
 // one concrete fixture per driver and never touch the driver directly.
 struct backend_fixture {
     virtual ~backend_fixture() = default;
+
+    contract_rig rig;
 
     virtual hd::io_backend& backend() = 0;
 
@@ -234,7 +241,7 @@ template <typename FX>
 void read_delivers_bytes_exactly_once(littletest::test_runner* __lt_tr__,
                                       const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     hd::read_operation op(r.owner, 1, std::span<std::byte>(r.buffer));
     op.submit(fx.backend());
     std::shared_ptr<hd::op_state> state = op.state();
@@ -257,7 +264,7 @@ template <typename FX>
 void write_completes_with_transferred(littletest::test_runner* __lt_tr__,
                                       const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     hd::write_operation op(r.owner, 1,
                            std::span<const std::byte>(r.cbuffer));
     op.submit(fx.backend());
@@ -281,7 +288,7 @@ template <typename FX>
 void timer_fires_at_deadline_not_before(littletest::test_runner* __lt_tr__,
                                         const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     const auto start = std::chrono::steady_clock::now();
     hd::timer_operation op(r.owner, 1, start + 120ms);
     op.submit(fx.backend());
@@ -305,7 +312,7 @@ template <typename FX>
 void two_timers_earliest_first_sequence_tie(
     littletest::test_runner* __lt_tr__, const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     order_log log;
     const auto t0 = std::chrono::steady_clock::now();
     hd::timer_operation t1(r.owner, 1, t0 + 150ms);  // seq 1
@@ -339,7 +346,7 @@ template <typename FX>
 void wake_completes_all_wakes_once(littletest::test_runner* __lt_tr__,
                                    const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     hd::wake_operation w1(r.owner, 1);
     hd::wake_operation w2(r.owner, 1);
     hd::read_operation read_op(r.owner, 1, std::span<std::byte>(r.buffer));
@@ -370,7 +377,7 @@ template <typename FX>
 void cancel_pending_target(littletest::test_runner* __lt_tr__,
                            const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     hd::read_operation target(r.owner, 1, std::span<std::byte>(r.buffer));
     hd::cancel_operation cancel_op(r.owner, 1, target);
     target.submit(fx.backend());
@@ -398,7 +405,7 @@ template <typename FX>
 void cancel_terminal_target_reports_invalid_state(
     littletest::test_runner* __lt_tr__, const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     hd::read_operation target(r.owner, 1, std::span<std::byte>(r.buffer));
     hd::cancel_operation cancel_op(r.owner, 1, target);
     target.submit(fx.backend());
@@ -424,24 +431,29 @@ void cancel_terminal_target_reports_invalid_state(
 }
 
 // S7: close() sweeps every pending op connection_closed exactly once;
-// a double close is a no-op.
+// a double close is a no-op. The write op is completed through the
+// harness first: a thread-backed driver completes a write on a fresh
+// socket immediately, so the sweep also proves a terminal history is
+// not re-completed.
 template <typename FX>
 void close_sweeps_every_pending_once(littletest::test_runner* __lt_tr__,
                                      const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
-    const auto deadline = std::chrono::steady_clock::now() + 50ms;
+    contract_rig& r = fx.rig;
+    const auto far_deadline = std::chrono::steady_clock::now()
+                              + std::chrono::hours(1);
     hd::accept_operation accept_op(r.owner, 1);
     hd::read_operation read_op(r.owner, 1, std::span<std::byte>(r.buffer));
     hd::write_operation write_op(r.owner, 1,
                                  std::span<const std::byte>(r.cbuffer));
-    hd::timer_operation timer_op(r.owner, 1, deadline);
+    hd::timer_operation timer_op(r.owner, 1, far_deadline);
     hd::wake_operation wake_op(r.owner, 1);
     accept_op.submit(fx.backend());
     read_op.submit(fx.backend());
     write_op.submit(fx.backend());
     timer_op.submit(fx.backend());
     wake_op.submit(fx.backend());
+    std::shared_ptr<hd::op_state> write_state = write_op.state();
     probe p_accept;
     probe p_read;
     probe p_write;
@@ -455,11 +467,15 @@ void close_sweeps_every_pending_once(littletest::test_runner* __lt_tr__,
     launch_probe(r, std::move(wake_op), &p_wake, tasks);
     r.ex.run_pending();
 
-    LT_CHECK_EQ(fx.pending_count(), std::size_t{5});
-    LT_CHECK_EQ(fx.close_backend(), std::size_t{5});
+    fx.deliver_write(*write_state, sizeof(r.cbuffer));
+    LT_CHECK(wait_terminal(r, fx, p_write));
+    LT_CHECK(p_write.observed.code == hh::outcome_code::ok);
+    LT_CHECK_EQ(p_write.observed.transferred, std::size_t{16});
+
+    LT_CHECK_EQ(fx.pending_count(), std::size_t{4});
+    LT_CHECK_EQ(fx.close_backend(), std::size_t{4});
     LT_CHECK(wait_terminal(r, fx, p_accept));
     LT_CHECK(wait_terminal(r, fx, p_read));
-    LT_CHECK(wait_terminal(r, fx, p_write));
     LT_CHECK(wait_terminal(r, fx, p_timer));
     LT_CHECK(wait_terminal(r, fx, p_wake));
 
@@ -467,17 +483,16 @@ void close_sweeps_every_pending_once(littletest::test_runner* __lt_tr__,
     LT_CHECK(p_accept.observed.code == hh::outcome_code::connection_closed);
     LT_CHECK_EQ(p_read.delivered.load(), 1);
     LT_CHECK(p_read.observed.code == hh::outcome_code::connection_closed);
-    LT_CHECK_EQ(p_write.delivered.load(), 1);
-    LT_CHECK(p_write.observed.code == hh::outcome_code::connection_closed);
     LT_CHECK_EQ(p_timer.delivered.load(), 1);
     LT_CHECK(p_timer.observed.code == hh::outcome_code::connection_closed);
     LT_CHECK_EQ(p_wake.delivered.load(), 1);
     LT_CHECK(p_wake.observed.code == hh::outcome_code::connection_closed);
+    LT_CHECK_EQ(p_write.delivered.load(), 1);  // still exactly once
 
     LT_CHECK_EQ(fx.close_backend(), std::size_t{0});  // double close
     LT_CHECK_EQ(fx.pending_count(), std::size_t{0});
     r.ex.run_pending();
-    LT_CHECK_EQ(p_read.delivered.load(), 1);  // still exactly once
+    LT_CHECK_EQ(p_write.delivered.load(), 1);
 }
 
 // S8: a submit after close completes immediately with
@@ -486,7 +501,7 @@ template <typename FX>
 void submit_after_close_connection_closed(
     littletest::test_runner* __lt_tr__, const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     LT_CHECK_EQ(fx.close_backend(), std::size_t{0});
 
     hd::read_operation op(r.owner, 1, std::span<std::byte>(r.buffer));
@@ -507,7 +522,7 @@ template <typename FX>
 void late_request_cancel_reports_invalid_state(
     littletest::test_runner* __lt_tr__, const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     hd::read_operation op(r.owner, 1, std::span<std::byte>(r.buffer));
     op.submit(fx.backend());
     std::shared_ptr<hd::op_state> state = op.state();
@@ -532,7 +547,7 @@ void n_awaiter_resume_exactly_once(littletest::test_runner* __lt_tr__,
                                    const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
     constexpr int kTasks = 20;
-    contract_rig r;
+    contract_rig& r = fx.rig;
     std::vector<hd::read_operation> ops;
     // Shared ownership: completed spawned tasks self-destroy their
     // frames, so bare op_state pointers alone would dangle here.
@@ -579,8 +594,8 @@ void cancel_vs_stimulus_race(littletest::test_runner* __lt_tr__,
     int ok_count = 0;
     int cancelled_count = 0;
 
+    contract_rig& r = fx.rig;
     for (int i = 0; i < kIterations; ++i) {
-        contract_rig r;
         hd::read_operation op(r.owner, 1, std::span<std::byte>(r.buffer));
         op.submit(fx.backend());
         // The stimulus/cancel threads may complete the op (destroying

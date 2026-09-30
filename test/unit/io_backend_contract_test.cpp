@@ -211,77 +211,77 @@ LT_BEGIN_SUITE(poll_contract_suite)
     }
 LT_END_SUITE(poll_contract_suite)
 
-LT_BEGIN_AUTO_TEST(poll_contract_suite, read_delivers_bytes_exactly_once)
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_read_delivers_bytes_exactly_once)
     poll_fixture fx;
     io_contract::read_delivers_bytes_exactly_once(__lt_tr__, __lt_name__,
                                                   fx);
-LT_END_AUTO_TEST(read_delivers_bytes_exactly_once)
+LT_END_AUTO_TEST(poll_read_delivers_bytes_exactly_once)
 
-LT_BEGIN_AUTO_TEST(poll_contract_suite, write_completes_with_transferred)
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_write_completes_with_transferred)
     poll_fixture fx;
     io_contract::write_completes_with_transferred(__lt_tr__, __lt_name__,
                                                   fx);
-LT_END_AUTO_TEST(write_completes_with_transferred)
+LT_END_AUTO_TEST(poll_write_completes_with_transferred)
 
-LT_BEGIN_AUTO_TEST(poll_contract_suite, timer_fires_at_deadline_not_before)
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_timer_fires_at_deadline_not_before)
     poll_fixture fx;
     io_contract::timer_fires_at_deadline_not_before(__lt_tr__, __lt_name__,
                                                     fx);
-LT_END_AUTO_TEST(timer_fires_at_deadline_not_before)
+LT_END_AUTO_TEST(poll_timer_fires_at_deadline_not_before)
 
 LT_BEGIN_AUTO_TEST(poll_contract_suite,
-                   two_timers_earliest_first_sequence_tie)
+                   poll_two_timers_earliest_first_sequence_tie)
     poll_fixture fx;
     io_contract::two_timers_earliest_first_sequence_tie(__lt_tr__,
                                                         __lt_name__, fx);
-LT_END_AUTO_TEST(two_timers_earliest_first_sequence_tie)
+LT_END_AUTO_TEST(poll_two_timers_earliest_first_sequence_tie)
 
-LT_BEGIN_AUTO_TEST(poll_contract_suite, wake_completes_all_wakes_once)
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_wake_completes_all_wakes_once)
     poll_fixture fx;
     io_contract::wake_completes_all_wakes_once(__lt_tr__, __lt_name__, fx);
-LT_END_AUTO_TEST(wake_completes_all_wakes_once)
+LT_END_AUTO_TEST(poll_wake_completes_all_wakes_once)
 
-LT_BEGIN_AUTO_TEST(poll_contract_suite, cancel_pending_target)
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_cancel_pending_target)
     poll_fixture fx;
     io_contract::cancel_pending_target(__lt_tr__, __lt_name__, fx);
-LT_END_AUTO_TEST(cancel_pending_target)
+LT_END_AUTO_TEST(poll_cancel_pending_target)
 
 LT_BEGIN_AUTO_TEST(poll_contract_suite,
-                   cancel_terminal_target_reports_invalid_state)
+                   poll_cancel_terminal_target_reports_invalid_state)
     poll_fixture fx;
     io_contract::cancel_terminal_target_reports_invalid_state(
         __lt_tr__, __lt_name__, fx);
-LT_END_AUTO_TEST(cancel_terminal_target_reports_invalid_state)
+LT_END_AUTO_TEST(poll_cancel_terminal_target_reports_invalid_state)
 
-LT_BEGIN_AUTO_TEST(poll_contract_suite, close_sweeps_every_pending_once)
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_close_sweeps_every_pending_once)
     poll_fixture fx;
     io_contract::close_sweeps_every_pending_once(__lt_tr__, __lt_name__,
                                                  fx);
-LT_END_AUTO_TEST(close_sweeps_every_pending_once)
+LT_END_AUTO_TEST(poll_close_sweeps_every_pending_once)
 
 LT_BEGIN_AUTO_TEST(poll_contract_suite,
-                   submit_after_close_connection_closed)
+                   poll_submit_after_close_connection_closed)
     poll_fixture fx;
     io_contract::submit_after_close_connection_closed(__lt_tr__,
                                                       __lt_name__, fx);
-LT_END_AUTO_TEST(submit_after_close_connection_closed)
+LT_END_AUTO_TEST(poll_submit_after_close_connection_closed)
 
 LT_BEGIN_AUTO_TEST(poll_contract_suite,
-                   late_request_cancel_reports_invalid_state)
+                   poll_late_request_cancel_reports_invalid_state)
     poll_fixture fx;
     io_contract::late_request_cancel_reports_invalid_state(
         __lt_tr__, __lt_name__, fx);
-LT_END_AUTO_TEST(late_request_cancel_reports_invalid_state)
+LT_END_AUTO_TEST(poll_late_request_cancel_reports_invalid_state)
 
-LT_BEGIN_AUTO_TEST(poll_contract_suite, n_awaiter_resume_exactly_once)
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_n_awaiter_resume_exactly_once)
     poll_fixture fx;
     io_contract::n_awaiter_resume_exactly_once(__lt_tr__, __lt_name__, fx);
-LT_END_AUTO_TEST(n_awaiter_resume_exactly_once)
+LT_END_AUTO_TEST(poll_n_awaiter_resume_exactly_once)
 
-LT_BEGIN_AUTO_TEST(poll_contract_suite, cancel_vs_stimulus_race)
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_cancel_vs_stimulus_race)
     poll_fixture fx;
     io_contract::cancel_vs_stimulus_race(__lt_tr__, __lt_name__, fx);
-LT_END_AUTO_TEST(cancel_vs_stimulus_race)
+LT_END_AUTO_TEST(poll_cancel_vs_stimulus_race)
 
 // Pure unit suite for the monotonic deadline -> poll-timeout
 // conversion (plan deliverable 2b). Fully deterministic: the clock
