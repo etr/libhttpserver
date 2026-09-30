@@ -100,6 +100,7 @@ class scripted_body_sink final : public httpserver::detail::body_sink {
     httpserver::detail::body_push_result
     push(std::span<const std::byte> from) override {
         std::lock_guard<std::mutex> lock(mu_);
+        ++push_calls_;
         if (failure_.has_value()) {
             return {httpserver::detail::body_push::failed, 0};
         }
@@ -209,6 +210,11 @@ class scripted_body_sink final : public httpserver::detail::body_sink {
         return end_calls_;
     }
 
+    int push_calls() const {
+        std::lock_guard<std::mutex> lock(mu_);
+        return push_calls_;
+    }
+
     const httpserver::http::fields& trailers() const noexcept {
         return trailers_;
     }
@@ -236,6 +242,7 @@ class scripted_body_sink final : public httpserver::detail::body_sink {
     bool end_ = false;
     bool cancelled_ = false;
     int end_calls_ = 0;
+    int push_calls_ = 0;
     std::optional<httpserver::http::outcome> failure_;
     httpserver::http::fields trailers_;
     httpserver::detail::body_write_wait* waiter_ = nullptr;

@@ -53,6 +53,7 @@
 #include "./littletest.hpp"
 
 using httpserver::body_finish;
+using httpserver::body_policy;
 using httpserver::body_write;
 using httpserver::exchange;
 using httpserver::exchange_state;
@@ -419,6 +420,125 @@ LT_BEGIN_AUTO_TEST(response_writer_suite, stream_larger_than_queue_progresses)
     LT_CHECK_EQ(sink.respond_calls, 1);
     LT_CHECK(x.state() == exchange_state::responded);
 LT_END_AUTO_TEST(stream_larger_than_queue_progresses)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, engine_failure_fails_write_sticky)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+    out.stage_failure(http::outcome_code::protocol_error, "bad drain");
+
+    const body_write first = run_write(x, ex, bytes("hello"));
+    LT_CHECK(first.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK(first.status.message() == "bad drain");
+    LT_CHECK_EQ(first.accepted, static_cast<std::size_t>(0));
+    LT_CHECK_EQ(out.push_calls(), 1);
+
+    // Sticky: the second write returns the same failure without a new
+    // sink push (produced frozen at zero, the sink untouched).
+    const body_write second = run_write(x, ex, bytes("more"));
+    LT_CHECK(second.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK(second.status.message() == "bad drain");
+    LT_CHECK_EQ(out.push_calls(), 1);
+    LT_CHECK_EQ(out.produced(), static_cast<std::size_t>(0));
+    LT_CHECK_EQ(out.park_count(), 0);
+LT_END_AUTO_TEST(engine_failure_fails_write_sticky)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, finish_reports_engine_failure)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+    const body_write chunk = run_write(x, ex, bytes("abc"));
+    LT_CHECK(chunk.status.ok());
+    out.stage_failure(http::outcome_code::timeout, "timed out mid-body");
+
+    const body_finish first = run_finish(x, ex);
+    LT_CHECK(first.status.code() == http::outcome_code::timeout);
+    LT_CHECK(first.status.message() == "timed out mid-body");
+    // A failed finish never ends the body.
+    LT_CHECK(!out.ended());
+    LT_CHECK_EQ(out.end_calls(), 0);
+
+    // Sticky: a later finish reports the same failure, still no end,
+    // and the sink never sees another end attempt.
+    const body_finish again = run_finish(x, ex);
+    LT_CHECK(again.status.code() == http::outcome_code::timeout);
+    LT_CHECK_EQ(out.end_calls(), 0);
+    LT_CHECK_EQ(out.push_calls(), 1);  // only the pre-failure chunk
+LT_END_AUTO_TEST(finish_reports_engine_failure)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, write_after_disconnect_fails_closed)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+
+    const body_write seen = run_write(x, ex, bytes("hello"));
+    LT_CHECK(seen.status.code() == http::outcome_code::connection_closed);
+    LT_CHECK(seen.status.message().find("peer went away")
+             != std::string::npos);
+    // Nothing touched the engine after the disconnect.
+    LT_CHECK_EQ(out.produced(), static_cast<std::size_t>(0));
+    LT_CHECK_EQ(out.park_count(), 0);
+LT_END_AUTO_TEST(write_after_disconnect_fails_closed)
+
+LT_BEGIN_AUTO_TEST(response_writer_suite, start_response_gates)
+    detail::recording_sink sink;
+    fake::scripted_body_sink out(64);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    // First streaming decision commits the head.
+    LT_CHECK(x.start_response(http::status::from_code(200),
+                              http::fields()).ok());
+    LT_CHECK_EQ(sink.respond_calls, 1);
+
+    // A second terminal decision fails typed; the engine still saw
+    // exactly one respond.
+    const http::outcome again = x.start_response(
+        http::status::from_code(500), http::fields());
+    LT_CHECK(again.code() == http::outcome_code::invalid_state);
+    LT_CHECK(!again.message().empty());
+    LT_CHECK_EQ(sink.respond_calls, 1);
+
+    // The one-shot respond() is terminal the same way.
+    const http::outcome respond_gate = x.respond(
+        http::status::from_code(500), http::fields());
+    LT_CHECK(respond_gate.code() == http::outcome_code::invalid_state);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+
+    // After a disconnect the decision fails closed with the detail.
+    LT_CHECK(x.disconnect(http::outcome_code::timeout,
+                          "peer vanished").ok());
+    const http::outcome closed = x.start_response(
+        http::status::from_code(200), http::fields());
+    LT_CHECK(closed.code() == http::outcome_code::connection_closed);
+    LT_CHECK(closed.message().find("peer vanished") != std::string::npos);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+
+    // From admitted the streaming decision is legal.
+    detail::recording_sink sink2;
+    fake::scripted_body_sink out2(64);
+    exchange admitted(make_head(), &sink2, 0, nullptr, &out2);
+    LT_CHECK(admitted.admit_body(body_policy()).ok());
+    LT_CHECK_EQ(sink2.admit_calls, 1);
+    LT_CHECK(admitted.start_response(http::status::from_code(200),
+                                     http::fields()).ok());
+    LT_CHECK_EQ(sink2.respond_calls, 1);
+    LT_CHECK(admitted.state() == exchange_state::responded);
+LT_END_AUTO_TEST(start_response_gates)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
