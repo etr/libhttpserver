@@ -71,6 +71,70 @@ request_head parse_one(const std::string& bytes) {
     return p.take();
 }
 
+// Sample heads exercised under every split.
+const std::string MIN_10 = "GET / HTTP/1.0\r\n\r\n";
+const std::string MIN_11 =
+    "GET /a/b?q=1 HTTP/1.1\r\nHost: example.com\r\n\r\n";
+const std::string EXT_METHOD =
+    "PROPFIND /x HTTP/1.1\r\nHost: h\r\n\r\n";
+
+// True iff `bytes` yields the identical head single-shot, under a
+// two-way split at every offset (0..size inclusive), and bytewise.
+bool parses_identically(const std::string& bytes) {
+    const request_head reference = parse_one(bytes);
+    for (std::size_t split = 0; split <= bytes.size(); ++split) {
+        http1_head_parser p(default_budget());
+        p.feed(bytes.substr(0, split));
+        p.feed(bytes.substr(split));
+        if (p.state() != http1_head_state::complete) return false;
+        if (!heads_equal(p.take(), reference)) return false;
+    }
+    http1_head_parser p(default_budget());
+    for (const char c : bytes) p.feed(std::string(1, c));
+    if (p.state() != http1_head_state::complete) return false;
+    return heads_equal(p.take(), reference);
+}
+
+// True iff `bytes` yields the identical head under every three-way
+// split (i, j).
+bool parses_identically_three_way(const std::string& bytes) {
+    const request_head reference = parse_one(bytes);
+    for (std::size_t i = 0; i <= bytes.size(); ++i) {
+        for (std::size_t j = i; j <= bytes.size(); ++j) {
+            http1_head_parser p(default_budget());
+            p.feed(bytes.substr(0, i));
+            p.feed(bytes.substr(i, j - i));
+            p.feed(bytes.substr(j));
+            if (p.state() != http1_head_state::complete) return false;
+            if (!heads_equal(p.take(), reference)) return false;
+        }
+    }
+    return true;
+}
+
+// True iff a pipelined pair yields both heads in order under every
+// two-way split of the combined byte stream.
+bool pipelined_pair_under_every_split(const std::string& first,
+                                      const std::string& second) {
+    const std::string pair = first + second;
+    http1_head_parser reference(default_budget());
+    reference.feed(pair);
+    if (reference.state() != http1_head_state::complete) return false;
+    const request_head head1 = reference.take();
+    if (reference.state() != http1_head_state::complete) return false;
+    const request_head head2 = reference.take();
+    for (std::size_t split = 0; split <= pair.size(); ++split) {
+        http1_head_parser p(default_budget());
+        p.feed(pair.substr(0, split));
+        p.feed(pair.substr(split));
+        if (p.state() != http1_head_state::complete) return false;
+        if (!heads_equal(p.take(), head1)) return false;
+        if (p.state() != http1_head_state::complete) return false;
+        if (!heads_equal(p.take(), head2)) return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 LT_BEGIN_SUITE(http1_happy_suite)
@@ -132,6 +196,58 @@ LT_BEGIN_AUTO_TEST(http1_happy_suite, method_case_is_folded)
     request_head h = parse_one("get /x HTTP/1.1\r\nHost: h\r\n\r\n");
     LT_CHECK(h.request_method == method::known(method_id::get));
 LT_END_AUTO_TEST(method_case_is_folded)
+
+LT_BEGIN_SUITE(http1_split_suite)
+
+    void set_up() { }
+    void tear_down() { }
+
+LT_END_SUITE(http1_split_suite)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, split_matrix_minimal_10)
+    LT_CHECK(parses_identically(MIN_10));
+LT_END_AUTO_TEST(split_matrix_minimal_10)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, split_matrix_minimal_11)
+    LT_CHECK(parses_identically(MIN_11));
+LT_END_AUTO_TEST(split_matrix_minimal_11)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, split_matrix_extension_method)
+    LT_CHECK(parses_identically(EXT_METHOD));
+LT_END_AUTO_TEST(split_matrix_extension_method)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, three_way_split_two_smallest)
+    LT_CHECK(parses_identically_three_way(MIN_10));
+    LT_CHECK(parses_identically_three_way(MIN_11));
+LT_END_AUTO_TEST(three_way_split_two_smallest)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, pipelined_pair_under_every_split)
+    LT_CHECK(pipelined_pair_under_every_split(MIN_10, MIN_11));
+LT_END_AUTO_TEST(pipelined_pair_under_every_split)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, residue_size_tracks_residue)
+    http1_head_parser p(default_budget());
+    p.feed(MIN_10);
+    LT_CHECK(p.state() == http1_head_state::complete);
+    LT_CHECK_EQ(p.residue_size(), 0u);
+    p.feed(MIN_11);
+    LT_CHECK_EQ(p.residue_size(), MIN_11.size());
+    const request_head first = p.take();
+    LT_CHECK_EQ(first.raw_target, "/");
+    LT_CHECK(p.state() == http1_head_state::complete);
+    LT_CHECK_EQ(p.residue_size(), 0u);
+    const request_head second = p.take();
+    LT_CHECK_EQ(second.raw_target, "/a/b?q=1");
+    LT_CHECK(p.state() == http1_head_state::empty);
+LT_END_AUTO_TEST(residue_size_tracks_residue)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, bytewise_feed_matches_single_shot)
+    const request_head reference = parse_one(MIN_11);
+    http1_head_parser p(default_budget());
+    for (const char c : MIN_11) p.feed(std::string(1, c));
+    LT_CHECK(p.state() == http1_head_state::complete);
+    LT_CHECK(heads_equal(p.take(), reference));
+LT_END_AUTO_TEST(bytewise_feed_matches_single_shot)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
