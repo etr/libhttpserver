@@ -56,6 +56,7 @@ namespace {
 namespace http = httpserver::http;
 namespace detail = httpserver::detail;
 
+using httpserver::body_collect;
 using httpserver::body_read;
 using httpserver::exchange;
 using httpserver::manual_executor;
@@ -342,6 +343,104 @@ LT_BEGIN_AUTO_TEST(park_suite, feed_after_park_failure_wakes_failed_once)
     LT_CHECK_EQ(deliveries, 1);
     LT_CHECK(seen.status.code() == http::outcome_code::protocol_error);
 LT_END_AUTO_TEST(feed_after_park_failure_wakes_failed_once)
+
+LT_BEGIN_SUITE(stream_suite)
+
+    void set_up() { }
+    void tear_down() { }
+
+LT_END_SUITE(stream_suite)
+
+LT_BEGIN_AUTO_TEST(stream_suite, length_body_streams_splits_between_reads)
+    // Acceptance proof: a Content-Length body streams through the
+    // PUBLIC body_reader over real framing. The engine feeds in splits
+    // between the handler's reads; the payload reassembles and the
+    // third read reports the authoritative end.
+    detail::recording_sink sink;
+    detail::http1_body_source adapter(length_mode(5), default_budget());
+    exchange x(make_head(), &sink, 0, &adapter);
+    manual_executor ex;
+    LT_CHECK(x.admit_body({}).ok());
+
+    std::vector<std::byte> destination(4);
+    LT_CHECK_EQ(adapter.feed("hel"), 3u);
+    const body_read first = run_read(x, ex, destination);
+    LT_CHECK(first.status.ok());
+    LT_CHECK(!first.end_of_body);
+    LT_CHECK(of(first.data) == "hel");
+
+    LT_CHECK_EQ(adapter.feed("lo"), 2u);
+    const body_read second = run_read(x, ex, destination);
+    LT_CHECK(second.status.ok());
+    LT_CHECK(of(second.data) == "lo");
+
+    const body_read third = run_read(x, ex, destination);
+    LT_CHECK(third.status.ok());
+    LT_CHECK(third.end_of_body);
+    LT_CHECK(third.data.empty());
+LT_END_AUTO_TEST(length_body_streams_splits_between_reads)
+
+LT_BEGIN_AUTO_TEST(stream_suite, length_body_streams_bytewise)
+    detail::recording_sink sink;
+    detail::http1_body_source adapter(length_mode(4), default_budget());
+    exchange x(make_head(), &sink, 0, &adapter);
+    manual_executor ex;
+    LT_CHECK(x.admit_body({}).ok());
+
+    std::vector<std::byte> destination(8);
+    std::string payload;
+    for (const char c : std::string("abcd")) {
+        const std::size_t fed = adapter.feed(std::string(1, c));
+        LT_CHECK_EQ(fed, 1u);
+        const body_read r = run_read(x, ex, destination);
+        LT_CHECK(r.status.ok());
+        payload += of(r.data);
+    }
+    LT_CHECK(payload == "abcd");
+    const body_read end = run_read(x, ex, destination);
+    LT_CHECK(end.status.ok());
+    LT_CHECK(end.end_of_body);
+LT_END_AUTO_TEST(length_body_streams_bytewise)
+
+LT_BEGIN_AUTO_TEST(stream_suite, chunked_collect_returns_payload_and_trailers)
+    detail::recording_sink sink;
+    detail::http1_body_source adapter(chunked_mode(), default_budget());
+    exchange x(make_head(), &sink, 0, &adapter);
+    manual_executor ex;
+    LT_CHECK(x.admit_body({}).ok());
+
+    LT_CHECK_EQ(adapter.feed("5\r\nhello\r\n3\r\nabc\r\n"
+                             "0\r\nX-Trace: t1\r\nX-Trace: t2\r\n\r\n"),
+                49u);
+    body_collect seen;
+    spawn(ex, x.body().collect(16),
+          [&](task_result<body_collect> r) {
+              if (r.has_value()) seen = std::move(r.value());
+          });
+    ex.run_pending();
+    LT_CHECK(seen.status.ok());
+    LT_CHECK(of(seen.data) == "helloabc");
+    // Trailers are final after a successful collect.
+    http::fields expected;
+    expected.append("X-Trace", "t1");
+    expected.append("X-Trace", "t2");
+    LT_CHECK(x.body().trailers() == expected);
+LT_END_AUTO_TEST(chunked_collect_returns_payload_and_trailers)
+
+LT_BEGIN_AUTO_TEST(stream_suite, read_after_end_fails_typed)
+    detail::recording_sink sink;
+    detail::http1_body_source adapter(length_mode(2), default_budget());
+    exchange x(make_head(), &sink, 0, &adapter);
+    manual_executor ex;
+    LT_CHECK(x.admit_body({}).ok());
+
+    std::vector<std::byte> destination(8);
+    adapter.feed("hi");
+    LT_CHECK(run_read(x, ex, destination).status.ok());
+    LT_CHECK(run_read(x, ex, destination).end_of_body);
+    const body_read over = run_read(x, ex, destination);
+    LT_CHECK(over.status.code() == http::outcome_code::invalid_state);
+LT_END_AUTO_TEST(read_after_end_fails_typed)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
