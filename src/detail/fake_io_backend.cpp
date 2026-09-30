@@ -159,6 +159,16 @@ std::size_t fake_io_backend::pending_count() const {
     return pending_.size();
 }
 
+std::vector<std::shared_ptr<op_state>> fake_io_backend::pending_ops() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    std::vector<std::shared_ptr<op_state>> out;
+    out.reserve(pending_.size());
+    for (const auto& entry : pending_) {
+        out.push_back(entry.second);
+    }
+    return out;
+}
+
 bool fake_io_backend::try_cancel(const std::shared_ptr<op_state>& target) {
     {
         std::lock_guard<std::mutex> lock(mu_);
