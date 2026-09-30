@@ -226,17 +226,34 @@ inline bool http1_head_parser::admit(std::string_view bytes) {
         return fail(http::outcome_code::limit_exceeded,
                     "header_bytes budget exhausted");
     }
+    const std::size_t base = buffer_.size();
     buffer_.append(bytes);
-    // Streaming LF counter: a valid complete head carries at most
-    // max_fields + 2 line terminators (request line, field lines, the
-    // empty line). More LFs without a terminator means the field budget
-    // is already lost, so reject here — before the parse could append
-    // any field — and let parse time re-count exactly.
+    // S5: in a well-formed head every LF is the second byte of a CRLF
+    // pair, so an LF whose preceding buffered byte is not CR is a bare
+    // LF — malformed no matter what arrives later, and detectable the
+    // moment it is fed. buffer_ always starts at a head boundary, so
+    // the byte before the appended region (the tail of the previous
+    // feed, or the final byte of a completed head when buffering
+    // residue) is the correct predecessor to consult across splits.
+    char previous = base > 0 ? buffer_[base - 1] : '\0';
     for (const char c : bytes) {
-        if (c == '\n') ++lf_count_;
+        if (c == '\n') {
+            if (previous != '\r') {
+                return fail(http::outcome_code::protocol_error,
+                            "bare LF in head");
+            }
+            ++lf_count_;
+        }
+        previous = c;
     }
+    // Streaming LF counter: a valid complete head carries at most
+    // max_fields + 3 line terminators (the optional skipped leading
+    // blank line, the request line, the field lines, the empty line).
+    // More LFs without a terminator means the field budget is already
+    // lost, so reject here — before the parse could append any field —
+    // and let parse time re-count exactly.
     if (state_ != http1_head_state::complete
-            && lf_count_ > budget_.max_fields + 2) {
+            && lf_count_ > budget_.max_fields + 3) {
         return fail(http::outcome_code::limit_exceeded,
                     "header_fields budget exhausted");
     }
@@ -398,6 +415,15 @@ inline bool http1_head_parser::parse_field_line(std::string_view line) {
     if (detail_head::contains_field_value_ctl(value)) {
         return fail(http::outcome_code::protocol_error,
                     "CTL byte in field value");
+    }
+    // H7 exact re-count at parse time: the streaming counter is
+    // conservative (it cannot distinguish a field line from the
+    // optional skipped leading blank), so the authoritative
+    // per-occurrence check runs here — still BEFORE the append that
+    // would allocate the next field occurrence.
+    if (head_.head_fields.size() >= budget_.max_fields) {
+        return fail(http::outcome_code::limit_exceeded,
+                    "header_fields budget exhausted");
     }
     head_.head_fields.append(name, value);
     return true;

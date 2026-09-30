@@ -399,15 +399,23 @@ LT_BEGIN_AUTO_TEST(http1_startline_suite, lone_lf_inside_head_rejected)
                         http1_close_policy::close_now));
 LT_END_AUTO_TEST(lone_lf_inside_head_rejected)
 
-LT_BEGIN_AUTO_TEST(http1_startline_suite, lone_lf_head_never_completes)
-    // A purely LF-terminated head never presents a CRLFCRLF terminator:
-    // it stays partial (the engine's header timeout closes it) and is
-    // never misparsed as a resyncable failure.
-    http1_head_parser p(default_budget());
-    p.feed("GET / HTTP/1.1\nHost: h\n\n");
-    LT_CHECK(p.state() == http1_head_state::partial);
-    LT_CHECK(p.failure().ok());
-LT_END_AUTO_TEST(lone_lf_head_never_completes)
+LT_BEGIN_AUTO_TEST(http1_startline_suite, lone_lf_terminated_head_rejected)
+    // S5: in a well-formed head every LF is the second byte of a CRLF
+    // pair, so the first bare LF — however it arrives and wherever it
+    // sits — is a typed close-now rejection. Migration note (delta 1):
+    // v2 tolerated lone-LF termination.
+    LT_CHECK(rejects_as("GET / HTTP/1.1\nHost: h\n\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as_split_before("GET / HTTP/1.1\nHost: h\n\n", 14,
+                                     outcome_code::protocol_error));
+    LT_CHECK(rejects_as("GET / HTTP/1.1\r\nHost: h\n\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as("\nGET / HTTP/1.1\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(lone_lf_terminated_head_rejected)
 
 LT_BEGIN_AUTO_TEST(http1_startline_suite, double_blank_line_rejected)
     // S7: at most one leading bare CRLF is ignored. Migration note
@@ -809,6 +817,26 @@ LT_BEGIN_AUTO_TEST(http1_limits_suite, field_budget_under_every_split)
         LT_CHECK(rejected);
     }
 LT_END_AUTO_TEST(field_budget_under_every_split)
+
+LT_BEGIN_AUTO_TEST(http1_limits_suite,
+                   leading_blank_at_exact_field_budget_parses)
+    // The one skippable leading blank line (S7) contributes an LF of
+    // its own on the wire: a head carrying exactly the field budget
+    // behind it is within budget and must parse, while one field more
+    // must still reject (via the parse-time exact count).
+    http1_head_budget budget;
+    budget.max_fields = 2;
+    http1_head_parser ok(budget);
+    ok.feed("\r\nGET / HTTP/1.1\r\nA: 1\r\nB: 2\r\n\r\n");
+    LT_CHECK(ok.state() == http1_head_state::complete);
+    LT_CHECK_EQ(ok.take().head_fields.size(), 2u);
+
+    http1_head_parser p(budget);
+    p.feed("\r\nGET / HTTP/1.1\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\n");
+    LT_CHECK(p.state() == http1_head_state::failed);
+    LT_CHECK(p.failure().code() == outcome_code::limit_exceeded);
+    LT_CHECK(p.close_policy() == http1_close_policy::respond_then_close);
+LT_END_AUTO_TEST(leading_blank_at_exact_field_budget_parses)
 
 LT_BEGIN_AUTO_TEST(http1_limits_suite, zero_capacity_refuses_everything)
     http1_head_budget budget;
