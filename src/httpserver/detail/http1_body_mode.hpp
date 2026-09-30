@@ -239,19 +239,7 @@ struct http1_body_mode {
     // ASCII case-insensitive equality (transfer-coding comparison).
     static bool ascii_iequals(std::string_view a,
                               std::string_view b) noexcept {
-        if (a.size() != b.size()) return false;
-        for (std::size_t i = 0; i < a.size(); ++i) {
-            const char left = ascii_lower(a[i]);
-            const char right = ascii_lower(b[i]);
-            if (left != right) return false;
-        }
-        return true;
-    }
-
-    static constexpr char ascii_lower(const char c) noexcept {
-        const auto u = static_cast<unsigned char>(c);
-        return (u >= 'A' && u <= 'Z') ? static_cast<char>(u - 'A' + 'a')
-                                      : c;
+        return detail_head::ascii_iequals(a, b);
     }
 };
 

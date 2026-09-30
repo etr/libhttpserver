@@ -92,6 +92,12 @@ http1_body_mode length_mode(std::uint64_t n) {
     return m;
 }
 
+http1_body_mode chunked_mode() {
+    http1_body_mode m;
+    m.kind = http1_body_kind::chunked;
+    return m;
+}
+
 // Everything one decode run observed. The reference and every split
 // discipline must produce equal values.
 struct decoded {
@@ -252,6 +258,48 @@ LT_BEGIN_AUTO_TEST(split_suite, split_matrix_length_across_full_wire)
     LT_CHECK(decodes_identically(length_mode(3), "abcGET / HTTP/1.1\r\n\r\n"));
 LT_END_AUTO_TEST(split_matrix_length_across_full_wire)
 
+// The full chunked corpus: one extension, two data chunks, and two
+// trailers with a repeated name (order and repeats must survive).
+constexpr char CHUNK_2[] =
+    "5;ext=a=1\r\nhello\r\n3\r\nabc\r\n0\r\nX-Trace: t1\r\nX-Trace: t2\r\n\r\n";
+constexpr char CHUNK_MIN[] = "0\r\n\r\n";
+
+LT_BEGIN_AUTO_TEST(split_suite, split_matrix_chunked_with_ext_and_trailers)
+    LT_CHECK(decodes_identically(chunked_mode(), CHUNK_2));
+LT_END_AUTO_TEST(split_matrix_chunked_with_ext_and_trailers)
+
+LT_BEGIN_AUTO_TEST(split_suite, chunked_decodes_payload_and_ordered_trailers)
+    const decoded d = decode_all(chunked_mode(), CHUNK_2);
+    LT_CHECK(d.complete);
+    LT_CHECK(d.payload == "helloabc");
+    LT_CHECK(!d.failed);
+    // Trailer order and repeats preserved (PRD-V3N-REQ-017).
+    LT_CHECK_EQ(d.trailers.size(), 2u);
+    const std::span<const http::fields::entry> entries = d.trailers.entries();
+    LT_CHECK(entries[0].name == "X-Trace");
+    LT_CHECK(entries[0].value == "t1");
+    LT_CHECK(entries[1].name == "X-Trace");
+    LT_CHECK(entries[1].value == "t2");
+LT_END_AUTO_TEST(chunked_decodes_payload_and_ordered_trailers)
+
+LT_BEGIN_AUTO_TEST(split_suite, split_matrix_chunked_minimal)
+    const decoded d = decode_all(chunked_mode(), CHUNK_MIN);
+    LT_CHECK(d.complete);
+    LT_CHECK(d.payload.empty());
+    LT_CHECK(d.trailers.empty());
+    LT_CHECK(!d.failed);
+    LT_CHECK(decodes_identically(chunked_mode(), CHUNK_MIN));
+    LT_CHECK(decodes_identically_three_way(chunked_mode(), CHUNK_MIN));
+LT_END_AUTO_TEST(split_matrix_chunked_minimal)
+
+LT_BEGIN_AUTO_TEST(split_suite, split_matrix_chunked_multi_hex)
+    // Several chunks with hex sizes in both letter cases.
+    LT_CHECK(decodes_identically(chunked_mode(),
+                                 "A\r\n0123456789\r\n2\r\nab\r\n0\r\n\r\n"));
+    LT_CHECK(decodes_identically(chunked_mode(),
+                                 "1\r\nx\r\n2\r\nyz\r\n0\r\n\r\n"));
+LT_END_AUTO_TEST(split_matrix_chunked_multi_hex)
+
 LT_BEGIN_SUITE(contract_suite)
 
     void set_up() { }
@@ -336,6 +384,44 @@ LT_BEGIN_AUTO_TEST(contract_suite, trailers_empty_without_trailers)
     LT_CHECK(d.decode("hi").kind == http1_body_decode::complete);
     LT_CHECK(d.trailers().empty());
 LT_END_AUTO_TEST(trailers_empty_without_trailers)
+
+LT_BEGIN_AUTO_TEST(contract_suite, trailers_after_end_are_final)
+    http1_body_decoder d(chunked_mode(), default_budget());
+    const http1_body_progress p =
+        d.decode("3\r\nabc\r\n0\r\nX-T: v\r\n\r\n");
+    LT_CHECK(p.kind == http1_body_decode::complete);
+    std::vector<std::byte> sink(8);
+    const detail::body_pull_result data = d.pull(sink);
+    LT_CHECK(data.kind == detail::body_pull::data);
+    LT_CHECK(of(std::span(sink.data(), data.copied)) == "abc");
+    LT_CHECK(d.pull(sink).kind == detail::body_pull::end);
+    // Idempotent after end: the verdict repeats and the trailers stay
+    // final and stable.
+    LT_CHECK(d.pull(sink).kind == detail::body_pull::end);
+    http::fields expected;
+    expected.append("X-T", "v");
+    LT_CHECK(d.trailers() == expected);
+    const http::fields& stable = d.trailers();
+    LT_CHECK(stable == expected);
+    // A decode after the end is a no-op {complete, 0} — the pipelined
+    // bytes stay with the caller.
+    const http::fields before = d.trailers();
+    const http1_body_progress after = d.decode("GET / HTTP/1.1\r\n\r\n");
+    LT_CHECK(after.kind == http1_body_decode::complete);
+    LT_CHECK_EQ(after.consumed, 0u);
+    LT_CHECK(d.trailers() == before);
+LT_END_AUTO_TEST(trailers_after_end_are_final)
+
+LT_BEGIN_AUTO_TEST(contract_suite, chunk_ext_forms_accepted)
+    // Grammar-exact chunk-ext: BWS around ';' and '=', multiple
+    // extensions, quoted-string values with spaces and a quoted-pair —
+    // parsed and discarded.
+    const decoded d = decode_all(chunked_mode(),
+        "3 ; a=1 ; b=\"x y\" ; c=\"q\\\"z\"\r\nabc\r\n0\r\n\r\n");
+    LT_CHECK(d.complete);
+    LT_CHECK(d.payload == "abc");
+    LT_CHECK(!d.failed);
+LT_END_AUTO_TEST(chunk_ext_forms_accepted)
 
 LT_BEGIN_AUTO_TEST(contract_suite, truncation_is_not_an_error)
     // A truncated body never completes and never fails: mapping the

@@ -205,6 +205,21 @@ inline std::string_view trim_ows(std::string_view v) noexcept {
     return v;
 }
 
+constexpr char ascii_lower(const char c) noexcept {
+    const auto u = static_cast<unsigned char>(c);
+    return (u >= 'A' && u <= 'Z') ? static_cast<char>(u - 'A' + 'a') : c;
+}
+
+// ASCII case-insensitive equality (field-name and transfer-coding
+// comparisons across the HTTP/1 engine).
+inline bool ascii_iequals(std::string_view a, std::string_view b) noexcept {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (ascii_lower(a[i]) != ascii_lower(b[i])) return false;
+    }
+    return true;
+}
+
 }  // namespace detail_head
 
 inline void http1_head_parser::feed(std::string_view bytes) {
