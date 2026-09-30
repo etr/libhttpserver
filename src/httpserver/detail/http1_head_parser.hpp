@@ -181,6 +181,15 @@ inline bool contains_ctl(std::string_view v) noexcept {
     return false;
 }
 
+// True iff any byte of v is a CTL other than HTAB: field values may
+// carry HTAB as interior OWS.
+inline bool contains_field_value_ctl(std::string_view v) noexcept {
+    for (const char c : v) {
+        if (c != '\t' && is_ctl(c)) return true;
+    }
+    return false;
+}
+
 // Trims leading and trailing OWS; interior OWS is preserved verbatim.
 inline std::string_view trim_ows(std::string_view v) noexcept {
     while (!v.empty() && is_ows(v.front())) v.remove_prefix(1);
@@ -336,9 +345,24 @@ inline bool http1_head_parser::parse_field_line(std::string_view line) {
         return fail(http::outcome_code::protocol_error,
                     "field line has no colon");
     }
+    // H1/H2/H3: the name must be an RFC 9110 token. That single check
+    // rejects the whitespace-before-colon form "Host : x" (RFC 9112
+    // section 5.1 MUST), any CTL in the name, and every obs-fold
+    // continuation line (it would start with SP/HTAB, which no leading
+    // token byte may be; RFC 9112 section 5.2 MUST).
     const std::string_view name = line.substr(0, colon);
+    if (!http::detail::is_token(name)) {
+        return fail(http::outcome_code::protocol_error,
+                    "field name is not an RFC 9110 token");
+    }
+    // H5/H8: no CTL in the value except HTAB, which is OWS. Migration
+    // note (delta 3): v2 truncated at NUL; v3 rejects.
     const std::string_view value =
         detail_head::trim_ows(line.substr(colon + 1));
+    if (detail_head::contains_field_value_ctl(value)) {
+        return fail(http::outcome_code::protocol_error,
+                    "CTL byte in field value");
+    }
     head_.head_fields.append(name, value);
     return true;
 }

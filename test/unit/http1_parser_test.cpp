@@ -425,6 +425,130 @@ LT_BEGIN_AUTO_TEST(http1_startline_suite, truncated_head_never_fails)
     LT_CHECK(p.close_policy() == http1_close_policy::none);
 LT_END_AUTO_TEST(truncated_head_never_fails)
 
+LT_BEGIN_SUITE(http1_fields_suite)
+
+    void set_up() { }
+    void tear_down() { }
+
+LT_END_SUITE(http1_fields_suite)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, repeated_fields_keep_received_order)
+    // REQ-017: wire order and repeated names are preserved.
+    const request_head h = parse_one(lit(REPEATED));
+    const auto entries = h.head_fields.entries();
+    LT_CHECK_EQ(entries.size(), 3u);
+    LT_CHECK_EQ(entries[0].name, "X-A");
+    LT_CHECK_EQ(entries[0].value, "1");
+    LT_CHECK_EQ(entries[1].name, "X-B");
+    LT_CHECK_EQ(entries[1].value, "2");
+    // The third occurrence keeps the first-seen spelling of the name
+    // (fields preserves it); the value sequence stays in wire order.
+    LT_CHECK_EQ(entries[2].name, "X-A");
+    LT_CHECK_EQ(entries[2].value, "3");
+LT_END_AUTO_TEST(repeated_fields_keep_received_order)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, all_and_first_follow_received_order)
+    const request_head h = parse_one(lit(REPEATED));
+    const auto all_a = h.head_fields.all("X-A");
+    LT_CHECK_EQ(all_a.size(), 2u);
+    LT_CHECK_EQ(all_a[0], "1");
+    LT_CHECK_EQ(all_a[1], "3");
+    LT_CHECK_EQ(*h.head_fields.first("X-A"), "1");
+    LT_CHECK_EQ(h.head_fields.count("x-a"), 2u);
+LT_END_AUTO_TEST(all_and_first_follow_received_order)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, equality_distinguishes_order)
+    httpserver::http::fields wire_order;
+    httpserver::http::fields other_order;
+    wire_order.append("X", "1");
+    wire_order.append("Y", "2");
+    other_order.append("Y", "2");
+    other_order.append("X", "1");
+    LT_CHECK(wire_order == wire_order);
+    LT_CHECK(!(wire_order == other_order));
+LT_END_AUTO_TEST(equality_distinguishes_order)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, ows_is_trimmed_from_value)
+    // H5: leading/trailing OWS is not part of the value.
+    const request_head h =
+        parse_one("GET / HTTP/1.1\r\nX:   v\t \r\n\r\n");
+    LT_CHECK_EQ(*h.head_fields.first("X"), "v");
+LT_END_AUTO_TEST(ows_is_trimmed_from_value)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, interior_ows_preserved)
+    // H5 / REQ-017 fidelity: interior OWS is preserved verbatim.
+    const request_head h =
+        parse_one("GET / HTTP/1.1\r\nX: a  b\tc\r\n\r\n");
+    LT_CHECK_EQ(*h.head_fields.first("X"), "a  b\tc");
+LT_END_AUTO_TEST(interior_ows_preserved)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, empty_value_allowed)
+    const request_head h = parse_one("GET / HTTP/1.1\r\nX:\r\n\r\n");
+    LT_CHECK_EQ(*h.head_fields.first("X"), "");
+LT_END_AUTO_TEST(empty_value_allowed)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, whitespace_before_colon_rejected)
+    // H2 (RFC 9112 section 5.1 MUST): no whitespace between the field
+    // name and the colon.
+    LT_CHECK(rejects_as("GET / HTTP/1.1\r\nHost : h\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as_split_before("GET / HTTP/1.1\r\nHost : h\r\n\r\n",
+                                     20, outcome_code::protocol_error));
+LT_END_AUTO_TEST(whitespace_before_colon_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, obs_fold_rejected)
+    // H3 (RFC 9112 section 5.2 MUST): a field line may not begin with
+    // SP or HTAB.
+    LT_CHECK(rejects_as("GET / HTTP/1.1\r\nHost: h\r\n  folded\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as_split_before(
+        "GET / HTTP/1.1\r\nHost: h\r\n  folded\r\n\r\n", 25,
+        outcome_code::protocol_error));
+    LT_CHECK(rejects_as("GET / HTTP/1.1\r\nHost: h\r\n\tfolded\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(obs_fold_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, sp_in_name_rejected)
+    // H1: the field name must be a token.
+    LT_CHECK(rejects_as("GET / HTTP/1.1\r\nHo st: v\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(sp_in_name_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, ctl_in_name_rejected)
+    // H1: CTL bytes are not tchars.
+    const std::string bad = std::string("GET / HTTP/1.1\r\nX\x01: v\r\n\r\n");
+    LT_CHECK(rejects_as(bad, outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as_split_before(bad, 17, outcome_code::protocol_error));
+LT_END_AUTO_TEST(ctl_in_name_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, field_without_colon_rejected)
+    LT_CHECK(rejects_as("GET / HTTP/1.1\r\nbadline\r\n\r\n",
+                        outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(field_without_colon_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, ctl_in_value_rejected)
+    // H5: no CTL in the field value except HTAB.
+    const std::string bad = std::string("GET / HTTP/1.1\r\nX: a\x01b\r\n\r\n");
+    LT_CHECK(rejects_as(bad, outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as_split_before(bad, 20, outcome_code::protocol_error));
+LT_END_AUTO_TEST(ctl_in_value_rejected)
+
+LT_BEGIN_AUTO_TEST(http1_fields_suite, nul_in_value_rejected)
+    // H8. Migration note (delta 3): v2 truncated at NUL; v3 rejects.
+    const std::string bad =
+        std::string("GET / HTTP/1.1\r\nX: a\0b\r\n\r\n", 26);
+    LT_CHECK(rejects_as(bad, outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as_split_before(bad, 20, outcome_code::protocol_error));
+LT_END_AUTO_TEST(nul_in_value_rejected)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
