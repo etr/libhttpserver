@@ -66,6 +66,13 @@ const std::vector<const char*>& header_files() {
         "/concurrency/executor.hpp",
         "/concurrency/resume_signal.hpp",
         "/concurrency/task.hpp",
+        // TASK-101: the v3 server configuration area joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; "listener" vocabulary only).
+        "/server/budgets.hpp",
+        "/server/options.hpp",
+        "/server/routes.hpp",
+        "/server/configuration.hpp",
     };
     return files;
 }
