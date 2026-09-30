@@ -33,9 +33,11 @@
 //     metadata only -- never as delivery order).
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <random>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
@@ -372,6 +374,71 @@ LT_BEGIN_AUTO_TEST(io_operation_suite, arm_stop_cancels_once)
     ex.run_pending();
     LT_CHECK(done_state->stored_result().code == hh::outcome_code::ok);
 LT_END_AUTO_TEST(arm_stop_cancels_once)
+
+// Test 8: the applied flag and the waiter slot linearize under the
+// state mutex. Once apply() has run, no waiter can arm: arm_waiter
+// refuses and the awaiting frame completes via symmetric transfer with
+// the already-stored result (the other half of the suspend-vs-apply
+// contract; apply itself pins the resume half).
+LT_BEGIN_AUTO_TEST(io_operation_suite, arm_waiter_refuses_after_apply)
+    manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    std::byte buffer[8];
+
+    hd::read_operation op(owner, 1, std::span<std::byte>(buffer));
+    const auto state = op.state();
+    LT_CHECK(state->claim_terminal());
+    state->apply(hd::io_result{hh::outcome_code::ok, 2, 0});
+    LT_CHECK(state->applied());
+
+    const auto witness = std::make_shared<httpserver::detail::frame_witness>();
+    LT_CHECK(!state->arm_waiter(std::noop_coroutine(), witness, &ex));
+    LT_CHECK_EQ(state->stored_result().transferred, std::size_t{2});
+LT_END_AUTO_TEST(arm_waiter_refuses_after_apply)
+
+// Test 9: a task's suspension races the apply side across threads. The
+// executor runner starts (and suspends) the awaiting task while another
+// thread applies the terminal result directly on the op state seam --
+// the exact call the owner drain makes. Whichever side linearizes
+// first, the awaiter is delivered exactly once: resumed by apply, or
+// completed inline/via symmetric transfer. Bounded spin caps turn a
+// lost wakeup into a failure instead of a hang.
+LT_BEGIN_AUTO_TEST(io_operation_suite, suspend_races_cross_thread_apply)
+    std::byte buffer[8];
+    constexpr int kRounds = 400;
+    std::mt19937 rng(0xD00Du);
+    std::atomic<int> total_delivered{0};
+
+    for (int i = 0; i < kRounds; ++i) {
+        manual_executor ex;
+        hd::io_connection_owner owner(ex);
+        hd::io_result observed{};
+        std::atomic<int> once{0};
+        hd::read_operation op(owner, 1, std::span<std::byte>(buffer));
+        const auto state = op.state();
+        spawn(ex, await_read(std::move(op), &observed, &once),
+              [](task_result<void>) { });
+
+        std::thread applier([&] {
+            std::this_thread::sleep_for(
+                std::chrono::microseconds(rng() % 100));
+            state->apply(hd::io_result{hh::outcome_code::ok, 1, 0});
+        });
+        for (int spin = 0; spin < 100000 && once.load() == 0; ++spin) {
+            if (!ex.run_one()) std::this_thread::yield();
+        }
+        applier.join();
+
+        if (once.load() != 1) {
+            LT_FAIL("cross-thread suspend/apply: not delivered exactly once");
+        }
+        if (observed.transferred != 1) {
+            LT_FAIL("cross-thread suspend/apply: foreign result");
+        }
+        total_delivered += once.load();
+    }
+    LT_CHECK_EQ(total_delivered.load(), kRounds);
+LT_END_AUTO_TEST(suspend_races_cross_thread_apply)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

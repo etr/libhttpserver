@@ -96,11 +96,19 @@ void op_state::apply(io_result result) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         result_ = result;
+        // The applied flag is part of the same critical section as the
+        // slot consumption, exactly like resume_waiter's trigger-before-
+        // unlink ordering: arm_waiter checks the flag under this mutex,
+        // so it either runs first (its frame is consumed below and
+        // resumed) or observes applied == true and completes via
+        // symmetric transfer. Storing the flag after the unlock would
+        // let a suspending awaiter install into a slot this apply had
+        // already consumed and never be resumed -- a lost completion.
+        applied_.store(true, std::memory_order_release);
         frame = std::exchange(frame_, {});
         witness = std::move(witness_);
         resume_ex = std::exchange(resume_ex_, nullptr);
     }
-    applied_.store(true, std::memory_order_release);
     if (frame) {
         resume_guarded(resume_ex, witness, frame);
     }
