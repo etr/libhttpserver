@@ -244,6 +244,51 @@ inline void release_winsock() {
 
 // ---- stream syscalls ------------------------------------------------------
 
+#if !defined(_WIN32)
+// Shared POSIX errno -> status mapping after a stream syscall. EPIPE
+// and ENOBUFS are classified for the send path; recv never reports
+// them, so the shared table is honest for both directions.
+inline sys_result posix_status(ssize_t seen) {
+    if (seen > 0) {
+        return sys_result{sys_status::ok, static_cast<std::size_t>(seen)};
+    }
+    if (seen == 0) {
+        return sys_result{sys_status::closed_reset, 0};
+    }
+    switch (errno) {
+        case EAGAIN:
+#if EAGAIN != EWOULDBLOCK
+        case EWOULDBLOCK:
+#endif
+        case ENOBUFS:
+            return sys_result{sys_status::would_block, 0};
+        case EPIPE:
+        case ECONNRESET:
+            return sys_result{sys_status::closed_reset, 0};
+        default:
+            return sys_result{sys_status::error, 0};
+    }
+}
+#endif  // !defined(_WIN32)
+
+#if defined(_WIN32)
+// Shared WSA error -> status mapping after a stream syscall.
+inline sys_result wsa_error_status(int error) {
+    switch (error) {
+        case WSAEWOULDBLOCK:
+        case WSAEINPROGRESS:
+            return sys_result{sys_status::would_block, 0};
+        case WSAECONNRESET:
+        case WSAECONNABORTED:
+        case WSAESHUTDOWN:
+        case WSAENETRESET:
+            return sys_result{sys_status::closed_reset, 0};
+        default:
+            return sys_result{sys_status::error, 0};
+    }
+}
+#endif  // defined(_WIN32)
+
 // recv() into @p data; empty sizes complete immediately with 0 bytes.
 inline sys_result read_some(native_socket_t socket, std::byte* data,
                             std::size_t size) {
@@ -259,18 +304,7 @@ inline sys_result read_some(native_socket_t socket, std::byte* data,
     if (seen == 0) {
         return sys_result{sys_status::closed_reset, 0};
     }
-    switch (::WSAGetLastError()) {
-        case WSAEWOULDBLOCK:
-        case WSAEINPROGRESS:
-            return sys_result{sys_status::would_block, 0};
-        case WSAECONNRESET:
-        case WSAECONNABORTED:
-        case WSAESHUTDOWN:
-        case WSAENETRESET:
-            return sys_result{sys_status::closed_reset, 0};
-        default:
-            return sys_result{sys_status::error, 0};
-    }
+    return wsa_error_status(::WSAGetLastError());
 #else
     ssize_t seen = 0;
     do {
@@ -280,24 +314,7 @@ inline sys_result read_some(native_socket_t socket, std::byte* data,
         seen = ::recv(socket, data, size, 0);
 #endif
     } while (seen < 0 && errno == EINTR);
-    if (seen > 0) {
-        return sys_result{sys_status::ok, static_cast<std::size_t>(seen)};
-    }
-    if (seen == 0) {
-        return sys_result{sys_status::closed_reset, 0};
-    }
-    switch (errno) {
-        case EAGAIN:
-#if EAGAIN != EWOULDBLOCK
-        case EWOULDBLOCK:
-#endif
-        case ENOBUFS:
-            return sys_result{sys_status::would_block, 0};
-        case ECONNRESET:
-            return sys_result{sys_status::closed_reset, 0};
-        default:
-            return sys_result{sys_status::error, 0};
-    }
+    return posix_status(seen);
 #endif
 }
 
@@ -316,18 +333,7 @@ inline sys_result write_some(native_socket_t socket, const std::byte* data,
     if (sent >= 0) {
         return sys_result{sys_status::ok, static_cast<std::size_t>(sent)};
     }
-    switch (::WSAGetLastError()) {
-        case WSAEWOULDBLOCK:
-        case WSAEINPROGRESS:
-            return sys_result{sys_status::would_block, 0};
-        case WSAECONNRESET:
-        case WSAECONNABORTED:
-        case WSAESHUTDOWN:
-        case WSAENETRESET:
-            return sys_result{sys_status::closed_reset, 0};
-        default:
-            return sys_result{sys_status::error, 0};
-    }
+    return wsa_error_status(::WSAGetLastError());
 #else
     ssize_t sent = 0;
     do {
@@ -337,22 +343,7 @@ inline sys_result write_some(native_socket_t socket, const std::byte* data,
         sent = ::send(socket, data, size, 0);
 #endif
     } while (sent < 0 && errno == EINTR);
-    if (sent >= 0) {
-        return sys_result{sys_status::ok, static_cast<std::size_t>(sent)};
-    }
-    switch (errno) {
-        case EAGAIN:
-#if EAGAIN != EWOULDBLOCK
-        case EWOULDBLOCK:
-#endif
-        case ENOBUFS:
-            return sys_result{sys_status::would_block, 0};
-        case EPIPE:
-        case ECONNRESET:
-            return sys_result{sys_status::closed_reset, 0};
-        default:
-            return sys_result{sys_status::error, 0};
-    }
+    return posix_status(sent);
 #endif
 }
 
@@ -395,6 +386,16 @@ inline sys_result accept_one(native_socket_t listener,
 
 // ---- loopback plumbing (wake source + test harness) -----------------------
 
+// Shared failure cleanup for make_listener (no-op close is fine for a
+// fresh handle that never opened).
+inline native_socket_t listener_failure(native_socket_t socket) {
+    close_socket(socket);
+#if defined(_WIN32)
+    release_winsock();
+#endif
+    return k_invalid_socket;
+}
+
 // A listening stream socket bound to the loopback address with an
 // ephemeral port (reported host-order via @p port), left nonblocking.
 // On Windows the socket pins one Winsock reference for the process
@@ -405,32 +406,20 @@ inline native_socket_t make_listener(std::uint16_t& port) {
         return k_invalid_socket;
     }
 #endif
-    const native_socket_t opened = open_stream();
-    if (opened == k_invalid_socket) {
-#if defined(_WIN32)
-        release_winsock();
-#endif
-        return k_invalid_socket;
+    native_socket_t socket = open_stream();
+    if (socket == k_invalid_socket) {
+        return listener_failure(socket);
     }
-    native_socket_t socket = opened;
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = 0;
     if (::inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) != 1) {
-        close_socket(socket);
-#if defined(_WIN32)
-        release_winsock();
-#endif
-        return k_invalid_socket;
+        return listener_failure(socket);
     }
     if (::bind(socket, reinterpret_cast<sockaddr*>(&address),
                sizeof(address)) != 0
         || ::listen(socket, 16) != 0) {
-        close_socket(socket);
-#if defined(_WIN32)
-        release_winsock();
-#endif
-        return k_invalid_socket;
+        return listener_failure(socket);
     }
     sockaddr_in bound{};
 #if defined(_WIN32)
@@ -440,11 +429,7 @@ inline native_socket_t make_listener(std::uint16_t& port) {
 #endif
     if (::getsockname(socket, reinterpret_cast<sockaddr*>(&bound),
                       &length) != 0) {
-        close_socket(socket);
-#if defined(_WIN32)
-        release_winsock();
-#endif
-        return k_invalid_socket;
+        return listener_failure(socket);
     }
     port = ntohs(bound.sin_port);
     set_nonblocking(socket, true);

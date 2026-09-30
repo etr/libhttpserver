@@ -335,23 +335,6 @@ std::uint64_t io_poll_backend::poll_iterations() const {
     return poll_iterations_;
 }
 
-std::optional<std::chrono::steady_clock::time_point>
-io_poll_backend::earliest_timer_locked() {
-    std::optional<std::chrono::steady_clock::time_point> earliest;
-    for (const auto& entry : pending_) {
-        const op_state& op = *entry.second;
-        if (op.kind() != io_op_kind::timer) {
-            continue;
-        }
-        const auto deadline =
-            std::get<timer_payload>(op.payload()).deadline;
-        if (!earliest || deadline < *earliest) {
-            earliest = deadline;
-        }
-    }
-    return earliest;
-}
-
 void io_poll_backend::expire_due_timers(
     std::chrono::steady_clock::time_point now) {
     std::vector<std::pair<std::chrono::steady_clock::time_point,
@@ -387,66 +370,108 @@ void io_poll_backend::expire_due_timers(
     }
 }
 
+std::optional<std::chrono::steady_clock::time_point>
+io_poll_backend::scan_interest_locked(
+    std::unordered_map<std::uint64_t, pollsys::event_mask>& interest) {
+    std::optional<std::chrono::steady_clock::time_point> next_deadline;
+    for (const auto& entry : pending_) {
+        const op_state& op = *entry.second;
+        pollsys::event_mask bits = 0;
+        if (op.kind() == io_op_kind::read
+            || op.kind() == io_op_kind::accept) {
+            bits = pollsys::k_readable;
+        } else if (op.kind() == io_op_kind::write) {
+            bits = pollsys::k_writable;
+        } else if (op.kind() == io_op_kind::timer) {
+            const auto deadline =
+                std::get<timer_payload>(op.payload()).deadline;
+            if (!next_deadline || deadline < *next_deadline) {
+                next_deadline = deadline;
+            }
+        }
+        if (bits != 0) {
+            interest[op.connection()] |= bits;
+        }
+    }
+    return next_deadline;
+}
+
+void io_poll_backend::project_connections_locked(
+    const std::unordered_map<std::uint64_t, pollsys::event_mask>& interest,
+    std::vector<pollsys::poll_slot>& fds,
+    std::vector<std::uint64_t>& ids) {
+    std::vector<std::uint64_t> prunable;
+    for (auto& entry : connections_) {
+        const connection_record& record = entry.second;
+        if (record.dead) {
+            if (interest.count(entry.first) == 0) {
+                prunable.push_back(entry.first);
+            }
+            continue;
+        }
+        const auto mask = interest.find(entry.first);
+        if (mask == interest.end()) {
+            continue;
+        }
+        fds.push_back(pollsys::poll_slot{record.socket, mask->second, 0});
+        ids.push_back(entry.first);
+    }
+    for (const std::uint64_t id : prunable) {
+        auto it = connections_.find(id);
+        pollsys::close_socket(it->second.socket);
+        connections_.erase(it);
+    }
+}
+
+std::optional<std::chrono::steady_clock::time_point>
+io_poll_backend::build_projection(std::vector<pollsys::poll_slot>& fds,
+                                  std::vector<std::uint64_t>& ids) {
+    fds.push_back(
+        pollsys::poll_slot{wake_.read_handle(), pollsys::k_readable, 0});
+    ids.push_back(0);  // 0 marks the wake slot in the parallel id vector
+    std::lock_guard<std::mutex> lock(mu_);
+    std::unordered_map<std::uint64_t, pollsys::event_mask> interest;
+    const std::optional<std::chrono::steady_clock::time_point> next_deadline =
+        scan_interest_locked(interest);
+    project_connections_locked(interest, fds, ids);
+    return next_deadline;
+}
+
+void io_poll_backend::dispatch_revents(
+    const std::vector<pollsys::poll_slot>& fds,
+    const std::vector<std::uint64_t>& ids) {
+    for (std::size_t i = 1; i < fds.size(); ++i) {
+        const pollsys::event_mask revents = fds[i].revents;
+        if (revents == 0) {
+            continue;
+        }
+        if ((revents & (pollsys::k_poll_error
+                        | pollsys::k_poll_invalid)) != 0) {
+            hangup_connection(ids[i]);  // use-after-close defense
+            continue;
+        }
+        if ((revents & pollsys::k_readable) != 0) {
+            dispatch_readable(ids[i]);
+        }
+        if ((revents & pollsys::k_writable) != 0) {
+            dispatch_writable(ids[i]);
+        } else if ((revents & pollsys::k_poll_hangup) != 0) {
+            // HUP without readable data (WSAPoll never reports a
+            // reliable HUP, so on Windows the recv()/send() results
+            // carry this decision instead).
+            hangup_connection(ids[i]);
+        }
+    }
+}
+
 void io_poll_backend::run_loop() {
     std::vector<pollsys::poll_slot> fds;
-    std::vector<std::uint64_t> ids;  // parallel to fds; 0 marks the wake
+    std::vector<std::uint64_t> ids;  // parallel to fds
     while (!stop_.load(std::memory_order_acquire)) {
         fds.clear();
         ids.clear();
-        fds.push_back(
-            pollsys::poll_slot{wake_.read_handle(), pollsys::k_readable, 0});
-        ids.push_back(0);
-
-        std::optional<std::chrono::steady_clock::time_point> next_deadline;
-        {
-            // Projection build: one entry per live connection with
-            // pending fd work, plus the earliest timer deadline. Dead
-            // records with no pending ops are pruned here.
-            std::lock_guard<std::mutex> lock(mu_);
-            std::unordered_map<std::uint64_t, pollsys::event_mask>
-                interest;
-            for (const auto& entry : pending_) {
-                const op_state& op = *entry.second;
-                pollsys::event_mask bits = 0;
-                if (op.kind() == io_op_kind::read
-                    || op.kind() == io_op_kind::accept) {
-                    bits = pollsys::k_readable;
-                } else if (op.kind() == io_op_kind::write) {
-                    bits = pollsys::k_writable;
-                } else if (op.kind() == io_op_kind::timer) {
-                    const auto deadline =
-                        std::get<timer_payload>(op.payload()).deadline;
-                    if (!next_deadline || deadline < *next_deadline) {
-                        next_deadline = deadline;
-                    }
-                }
-                if (bits != 0) {
-                    interest[op.connection()] |= bits;
-                }
-            }
-            std::vector<std::uint64_t> prunable;
-            for (auto& entry : connections_) {
-                const connection_record& record = entry.second;
-                if (record.dead) {
-                    if (interest.count(entry.first) == 0) {
-                        prunable.push_back(entry.first);
-                    }
-                    continue;
-                }
-                const auto mask = interest.find(entry.first);
-                if (mask == interest.end()) {
-                    continue;
-                }
-                fds.push_back(
-                    pollsys::poll_slot{record.socket, mask->second, 0});
-                ids.push_back(entry.first);
-            }
-            for (const std::uint64_t id : prunable) {
-                auto it = connections_.find(id);
-                pollsys::close_socket(it->second.socket);
-                connections_.erase(it);
-            }
-        }
+        const std::optional<std::chrono::steady_clock::time_point>
+            next_deadline = build_projection(fds, ids);
 
         // The only blocking point: no locks held, bounded by the
         // nearest timer deadline or the idle cap.
@@ -459,53 +484,128 @@ void io_poll_backend::run_loop() {
             ++poll_iterations_;
         }
         wake_.drain();
-        if (ready < 0) {
-            continue;  // EINTR and friends: re-arm the projection
+        if (ready >= 0) {
+            dispatch_revents(fds, ids);  // EINTR and friends: just re-arm
         }
-
-        for (std::size_t i = 1; i < fds.size(); ++i) {
-            const pollsys::event_mask revents = fds[i].revents;
-            if (revents == 0) {
-                continue;
-            }
-            if ((revents & (pollsys::k_poll_error
-                            | pollsys::k_poll_invalid)) != 0) {
-                hangup_connection(ids[i]);  // use-after-close defense
-                continue;
-            }
-            if ((revents & pollsys::k_readable) != 0) {
-                dispatch_readable(ids[i]);
-            }
-            if ((revents & pollsys::k_writable) != 0) {
-                dispatch_writable(ids[i]);
-            } else if ((revents & pollsys::k_poll_hangup) != 0) {
-                // HUP without readable data (WSAPoll never reports a
-                // reliable HUP, so on Windows the recv()/send() results
-                // carry this decision instead).
-                hangup_connection(ids[i]);
-            }
-        }
-
         expire_due_timers(std::chrono::steady_clock::now());
     }
 }
 
-void io_poll_backend::dispatch_readable(std::uint64_t id) {
-    std::vector<std::shared_ptr<op_state>> batch;
-    {
-        std::lock_guard<std::mutex> lock(mu_);
-        for (auto it = pending_.begin(); it != pending_.end();) {
-            const op_state& op = *it->second;
-            if (op.connection() == id
-                && (op.kind() == io_op_kind::read
-                    || op.kind() == io_op_kind::accept)) {
-                batch.push_back(it->second);
-                it = pending_.erase(it);
-            } else {
-                ++it;
-            }
+void io_poll_backend::take_direction_locked(
+    std::uint64_t id, bool reads_and_accepts,
+    std::vector<std::shared_ptr<op_state>>& batch) {
+    for (auto it = pending_.begin(); it != pending_.end();) {
+        const std::shared_ptr<op_state>& op = it->second;
+        const io_op_kind kind = op->kind();
+        const io_op_kind wanted =
+            reads_and_accepts ? io_op_kind::read : io_op_kind::write;
+        const bool matches = op->connection() == id
+                             && (kind == wanted
+                                 || (reads_and_accepts
+                                     && kind == io_op_kind::accept));
+        if (matches) {
+            batch.push_back(op);
+            it = pending_.erase(it);
+        } else {
+            ++it;
         }
     }
+}
+
+void io_poll_backend::finish_batch_from(
+    const std::vector<std::shared_ptr<op_state>>& batch, std::size_t from,
+    io_result result) {
+    for (std::size_t i = from; i < batch.size(); ++i) {
+        finish_now(batch[i], result);
+    }
+}
+
+step_outcome io_poll_backend::accept_step(
+    pollsys::native_socket_t socket,
+    const std::shared_ptr<op_state>& state) {
+    pollsys::native_socket_t fresh = pollsys::k_invalid_socket;
+    const pollsys::sys_result r = pollsys::accept_one(socket, &fresh);
+    if (r.status == pollsys::sys_status::ok) {
+        finish_now(state, io_result{http::outcome_code::ok, 0,
+                                    register_accepted_socket(fresh)});
+        return step_outcome::completed;
+    }
+    if (r.status == pollsys::sys_status::would_block) {
+        return step_outcome::pending_again;  // spurious readiness
+    }
+    finish_now(state, closed_result());
+    return step_outcome::hangup;
+}
+
+step_outcome io_poll_backend::read_step(
+    pollsys::native_socket_t socket,
+    const std::shared_ptr<op_state>& state) {
+    const read_payload& payload = std::get<read_payload>(state->payload());
+    std::span<std::byte> buffer = payload.buffer;
+    if (buffer.size() == 0) {
+        finish_now(state, io_result{http::outcome_code::ok, 0});
+        return step_outcome::completed;
+    }
+    std::size_t filled = 0;
+    bool hangup = false;
+    while (filled < buffer.size()) {
+        const pollsys::sys_result r = pollsys::read_some(
+            socket, buffer.data() + filled, buffer.size() - filled);
+        if (r.status == pollsys::sys_status::ok) {
+            if (r.transferred == 0) {
+                break;
+            }
+            filled += r.transferred;
+            continue;
+        }
+        if (r.status == pollsys::sys_status::would_block) {
+            break;
+        }
+        hangup = true;  // EOF/reset/error for this direction
+        break;
+    }
+    if (filled == 0) {
+        if (!hangup) {
+            return step_outcome::pending_again;  // spurious readiness
+        }
+        finish_now(state, closed_result());
+        return step_outcome::hangup;
+    }
+    // Full read, or bytes drained before the would-block / the hangup:
+    // those bytes are delivered.
+    finish_now(state, io_result{http::outcome_code::ok, filled});
+    return hangup ? step_outcome::hangup : step_outcome::completed;
+}
+
+step_outcome io_poll_backend::write_step(
+    pollsys::native_socket_t socket,
+    const std::shared_ptr<op_state>& state) {
+    const write_payload& payload = std::get<write_payload>(state->payload());
+    std::span<const std::byte> bytes = payload.bytes;
+    std::size_t sent = 0;
+    while (sent < bytes.size()) {
+        const pollsys::sys_result r = pollsys::write_some(
+            socket, bytes.data() + sent, bytes.size() - sent);
+        if (r.status == pollsys::sys_status::ok) {
+            sent += r.transferred;
+            if (r.transferred == 0) {
+                break;
+            }
+            continue;
+        }
+        if (r.status != pollsys::sys_status::would_block) {
+            finish_now(state, closed_result());
+            return step_outcome::hangup;
+        }
+        break;  // partial send: transferred is the backpressure semantic
+    }
+    finish_now(state, io_result{http::outcome_code::ok, sent});
+    return step_outcome::completed;
+}
+
+void io_poll_backend::dispatch_batch(
+    std::uint64_t id, std::vector<std::shared_ptr<op_state>>& batch,
+    bool readable) {
     if (batch.empty()) {
         return;
     }
@@ -517,151 +617,49 @@ void io_poll_backend::dispatch_readable(std::uint64_t id) {
         const auto cit = connections_.find(id);
         if (cit == connections_.end() || cit->second.dead) {
             // Released underneath us: the batch cannot make progress.
-            for (const auto& state : batch) {
-                finish_now(state, closed_result());
-            }
+            finish_batch_from(batch, 0, closed_result());
             return;
         }
         socket = cit->second.socket;
     }
 
     for (std::size_t i = 0; i < batch.size(); ++i) {
-        std::shared_ptr<op_state>& state = batch[i];
-        if (state->kind() == io_op_kind::accept) {
-            pollsys::native_socket_t fresh = pollsys::k_invalid_socket;
-            const pollsys::sys_result r =
-                pollsys::accept_one(socket, &fresh);
-            if (r.status == pollsys::sys_status::ok) {
-                finish_now(state,
-                           io_result{http::outcome_code::ok, 0,
-                                     register_accepted_socket(fresh)});
-                continue;
-            }
-            if (r.status == pollsys::sys_status::would_block) {
-                rearm_after_would_block(batch, i);  // spurious readiness
-                return;
-            }
-            finish_now(state, closed_result());
-            for (std::size_t j = i + 1; j < batch.size(); ++j) {
-                finish_now(batch[j], closed_result());
-            }
-            hangup_connection(id);
-            return;
-        }
-
-        const read_payload& payload =
-            std::get<read_payload>(state->payload());
-        std::span<std::byte> buffer = payload.buffer;
-        if (buffer.size() == 0) {
-            finish_now(state, io_result{http::outcome_code::ok, 0});
+        const step_outcome outcome =
+            !readable ? write_step(socket, batch[i])
+                      : (batch[i]->kind() == io_op_kind::accept
+                             ? accept_step(socket, batch[i])
+                             : read_step(socket, batch[i]));
+        if (outcome == step_outcome::completed) {
             continue;
         }
-        std::size_t filled = 0;
-        bool hangup = false;
-        while (filled < buffer.size()) {
-            const pollsys::sys_result r = pollsys::read_some(
-                socket, buffer.data() + filled, buffer.size() - filled);
-            if (r.status == pollsys::sys_status::ok) {
-                if (r.transferred == 0) {
-                    break;
-                }
-                filled += r.transferred;
-                continue;
-            }
-            if (r.status == pollsys::sys_status::would_block) {
-                break;
-            }
-            hangup = true;  // EOF/reset/error for this direction
-            break;
-        }
-        if (!hangup && filled == 0) {
-            // Would-block with nothing drained: spurious readiness --
-            // this op and the rest of the batch stay pending.
+        if (outcome == step_outcome::pending_again) {
             rearm_after_would_block(batch, i);
             return;
         }
-        if (hangup && filled == 0) {
-            finish_now(state, closed_result());
-        } else {
-            // Full read, or bytes drained before the would-block / the
-            // hangup: those bytes are delivered.
-            finish_now(state, io_result{http::outcome_code::ok, filled});
-        }
-        if (hangup) {
-            for (std::size_t j = i + 1; j < batch.size(); ++j) {
-                finish_now(batch[j], closed_result());
-            }
-            hangup_connection(id);
-            return;
-        }
+        // Hangup: the step completed the op; the rest of the batch and
+        // everything else pending on the connection follows it.
+        finish_batch_from(batch, i + 1, closed_result());
+        hangup_connection(id);
+        return;
     }
+}
+
+void io_poll_backend::dispatch_readable(std::uint64_t id) {
+    std::vector<std::shared_ptr<op_state>> batch;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        take_direction_locked(id, true, batch);
+    }
+    dispatch_batch(id, batch, true);
 }
 
 void io_poll_backend::dispatch_writable(std::uint64_t id) {
     std::vector<std::shared_ptr<op_state>> batch;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        for (auto it = pending_.begin(); it != pending_.end();) {
-            const op_state& op = *it->second;
-            if (op.connection() == id && op.kind() == io_op_kind::write) {
-                batch.push_back(it->second);
-                it = pending_.erase(it);
-            } else {
-                ++it;
-            }
-        }
+        take_direction_locked(id, false, batch);
     }
-    if (batch.empty()) {
-        return;
-    }
-    std::sort(batch.begin(), batch.end(), sequence_before);
-
-    pollsys::native_socket_t socket = pollsys::k_invalid_socket;
-    {
-        std::lock_guard<std::mutex> lock(mu_);
-        const auto cit = connections_.find(id);
-        if (cit == connections_.end() || cit->second.dead) {
-            for (const auto& state : batch) {
-                finish_now(state, closed_result());
-            }
-            return;
-        }
-        socket = cit->second.socket;
-    }
-
-    for (std::size_t i = 0; i < batch.size(); ++i) {
-        std::shared_ptr<op_state>& state = batch[i];
-        const write_payload& payload =
-            std::get<write_payload>(state->payload());
-        std::span<const std::byte> bytes = payload.bytes;
-        std::size_t sent = 0;
-        bool hangup = false;
-        while (sent < bytes.size()) {
-            const pollsys::sys_result r = pollsys::write_some(
-                socket, bytes.data() + sent, bytes.size() - sent);
-            if (r.status == pollsys::sys_status::ok) {
-                sent += r.transferred;
-                if (r.transferred == 0) {
-                    break;
-                }
-                continue;
-            }
-            if (r.status == pollsys::sys_status::would_block) {
-                break;  // partial send: transferred is the backpressure
-            }
-            hangup = true;
-            break;
-        }
-        if (hangup) {
-            finish_now(state, closed_result());
-            for (std::size_t j = i + 1; j < batch.size(); ++j) {
-                finish_now(batch[j], closed_result());
-            }
-            hangup_connection(id);
-            return;
-        }
-        finish_now(state, io_result{http::outcome_code::ok, sent});
-    }
+    dispatch_batch(id, batch, false);
 }
 
 }  // namespace detail

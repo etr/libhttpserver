@@ -78,6 +78,16 @@
 namespace httpserver {
 namespace detail {
 
+// Outcome of one per-op socket step inside the readiness dispatch:
+// completed means the op reached its terminal result; pending_again
+// means spurious readiness returned the op to the registry; hangup
+// means the op (and the connection's other pending ops) are done.
+enum class step_outcome {
+    completed,
+    pending_again,
+    hangup,
+};
+
 // Idle poll cap in milliseconds: how long the driver blocks when it has
 // no nearer timer deadline. One wake-less iteration per second is the
 // deliberate price for making a lost wake byte impossible to turn into
@@ -173,8 +183,46 @@ class io_poll_backend final : public io_backend {
     void adopt_socket(std::uint64_t id, pollsys::native_socket_t socket,
                       bool listener);
     void run_loop();
+    // Rebuilds the pollfd projection from the registries (wake slot
+    // plus one entry per live connection with pending fd work); dead
+    // records without pending ops are pruned. Returns the earliest
+    // pending timer deadline, if any.
+    std::optional<std::chrono::steady_clock::time_point> build_projection(
+        std::vector<pollsys::poll_slot>& fds, std::vector<std::uint64_t>& ids);
+    std::optional<std::chrono::steady_clock::time_point> scan_interest_locked(
+        std::unordered_map<std::uint64_t, pollsys::event_mask>& interest);
+    void project_connections_locked(
+        const std::unordered_map<std::uint64_t, pollsys::event_mask>&
+            interest,
+        std::vector<pollsys::poll_slot>& fds,
+        std::vector<std::uint64_t>& ids);
+    // Routes one iteration's readiness bits to the per-direction
+    // dispatchers (driver thread, no locks held).
+    void dispatch_revents(const std::vector<pollsys::poll_slot>& fds,
+                          const std::vector<std::uint64_t>& ids);
     void dispatch_readable(std::uint64_t id);
     void dispatch_writable(std::uint64_t id);
+    // Runs one direction's batch against its socket: sorted by
+    // sequence, one syscall per op until would-block or hangup.
+    void dispatch_batch(std::uint64_t id,
+                        std::vector<std::shared_ptr<op_state>>& batch,
+                        bool readable);
+    // One syscall for one op; completes it (or returns pending_again
+    // for spurious readiness with nothing drained).
+    step_outcome accept_step(pollsys::native_socket_t socket,
+                             const std::shared_ptr<op_state>& state);
+    step_outcome read_step(pollsys::native_socket_t socket,
+                           const std::shared_ptr<op_state>& state);
+    step_outcome write_step(pollsys::native_socket_t socket,
+                            const std::shared_ptr<op_state>& state);
+    // Takes every pending op of @p id in the requested direction out of
+    // the registry. Caller holds mu_.
+    void take_direction_locked(std::uint64_t id, bool reads_and_accepts,
+                               std::vector<std::shared_ptr<op_state>>& batch);
+    // Completes batch[from..] with @p result.
+    void finish_batch_from(const std::vector<std::shared_ptr<op_state>>&
+                               batch,
+                           std::size_t from, io_result result);
     // Puts a batch whose head would-block back into the registry
     // (spurious readiness); ops raced by close() complete
     // connection_closed instead.
@@ -188,8 +236,6 @@ class io_poll_backend final : public io_backend {
     std::uint64_t register_accepted_socket(pollsys::native_socket_t socket);
     // Fake-parity primitives.
     bool try_cancel(const std::shared_ptr<op_state>& target);
-    std::optional<std::chrono::steady_clock::time_point>
-    earliest_timer_locked();
     void expire_due_timers(std::chrono::steady_clock::time_point now);
 
     mutable std::mutex mu_;
