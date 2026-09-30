@@ -90,11 +90,11 @@ struct http1_body_budget {
     }
 };
 
-// Verdict of one decode() call. progressed: `consumed` wire bytes were
-// framed (the caller re-feeds the unconsumed remainder); need_more:
-// nothing was consumable — feed more wire; complete: the message
-// boundary was reached (or had been reached before); failed: sticky
-// rejection recorded.
+// Verdict of one decode() call. progressed: the staging queue is full —
+// `consumed` wire bytes were framed; pull to release room. need_more:
+// the wire ran out mid-framing — feed more (`consumed` reports what was
+// framed in this call). complete: the message boundary was reached (or
+// had been reached before). failed: sticky rejection recorded.
 enum class http1_body_decode : std::uint8_t {
     progressed, need_more, complete, failed,
 };
@@ -143,12 +143,13 @@ class http1_body_decoder {
         if (total.complete) {
             return {http1_body_decode::complete, total.consumed};
         }
-        // A full staging queue blocks with zero consumed — progressed
-        // (pull to release room), never need_more (more wire will not
-        // help).
-        const bool stalled = total.blocked || total.consumed > 0;
-        return {stalled ? http1_body_decode::progressed
-                        : http1_body_decode::need_more, total.consumed};
+        // A full staging queue blocks with zero further progress —
+        // progressed (pull to release room), never need_more (more
+        // wire will not help). Otherwise the wire simply ran out
+        // mid-framing: feed more.
+        if (total.blocked) return {http1_body_decode::progressed,
+                                   total.consumed};
+        return {http1_body_decode::need_more, total.consumed};
     }
 
     // THE consumption event: copies staged bytes into `into` and

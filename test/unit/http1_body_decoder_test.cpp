@@ -223,6 +223,34 @@ decoded decode_all(const http1_body_mode& mode, std::string_view wire,
     return run_decode(mode, {std::string(wire)}, budget, false);
 }
 
+// True iff `wire` is rejected with the expected typed outcome and close
+// posture — single-shot (and sticky afterwards), and under a split that
+// stops just before `offending` (the first byte that makes the stream
+// invalid), so the benign prefix must leave the decoder unfailed.
+bool rejects_as(std::string_view wire, std::size_t offending,
+                http::outcome_code code, http1_close_policy policy) {
+    http1_body_decoder single(chunked_mode(), default_budget());
+    const http1_body_progress one = single.decode(wire);
+    if (one.kind != http1_body_decode::failed) return false;
+    if (single.failure().code() != code) return false;
+    if (single.close_policy() != policy) return false;
+    // Sticky: a later decode is a {failed, 0} no-op.
+    const http1_body_progress again = single.decode("more");
+    if (again.kind != http1_body_decode::failed) return false;
+    if (again.consumed != 0) return false;
+    std::vector<std::byte> sink(1);
+    if (single.pull(sink).kind != detail::body_pull::failed) return false;
+
+    http1_body_decoder split(chunked_mode(), default_budget());
+    const http1_body_progress prefix =
+        split.decode(wire.substr(0, offending));
+    if (!split.failure().ok()) return false;  // benign prefix: no failure
+    const http1_body_progress rest = split.decode(wire.substr(offending));
+    return rest.kind == http1_body_decode::failed
+        && split.failure().code() == code
+        && split.close_policy() == policy;
+}
+
 }  // namespace
 
 LT_BEGIN_SUITE(split_suite)
@@ -425,10 +453,11 @@ LT_END_AUTO_TEST(chunk_ext_forms_accepted)
 
 LT_BEGIN_AUTO_TEST(contract_suite, truncation_is_not_an_error)
     // A truncated body never completes and never fails: mapping the
-    // premature EOF to a typed failure is the engine's job.
+    // premature EOF to a typed failure is the engine's job. The wire
+    // ran out mid-body: need_more with the consumed count.
     http1_body_decoder d(length_mode(5), default_budget());
     const http1_body_progress p = d.decode("hel");
-    LT_CHECK(p.kind == http1_body_decode::progressed);
+    LT_CHECK(p.kind == http1_body_decode::need_more);
     LT_CHECK_EQ(p.consumed, 3u);
     LT_CHECK(!d.message_complete());
     LT_CHECK(d.failure().ok());
@@ -510,6 +539,139 @@ LT_BEGIN_AUTO_TEST(limits_suite, decode_with_full_queue_consumes_nothing)
     LT_CHECK_EQ(blocked.consumed, 0u);
     LT_CHECK_EQ(d.staged_bytes(), 2u);
 LT_END_AUTO_TEST(decode_with_full_queue_consumes_nothing)
+
+LT_BEGIN_SUITE(rejects_suite)
+
+    void set_up() { }
+    void tear_down() { }
+
+LT_END_SUITE(rejects_suite)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, wire_out_without_final_line_needs_more)
+    // Not a rejection: the last chunk's trailer section just ran out of
+    // wire. need_more with the consumed count, message incomplete.
+    http1_body_decoder d(chunked_mode(), default_budget());
+    const http1_body_progress p = d.decode("0\r\n");
+    LT_CHECK(p.kind == http1_body_decode::need_more);
+    LT_CHECK_EQ(p.consumed, 3u);
+    LT_CHECK(!d.message_complete());
+    LT_CHECK(d.failure().ok());
+LT_END_AUTO_TEST(wire_out_without_final_line_needs_more)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, chunk_size_malformed_syntax)
+    // Not 1*HEXDIG: a bad hex digit, a sign, and leading whitespace.
+    LT_CHECK(rejects_as("Z\r\n", 0, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as("+5\r\n", 0, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as(" 5\r\n", 0, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(chunk_size_malformed_syntax)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, chunk_size_hex_overflow)
+    // 17 hex digits can never be framed in a uint64 count.
+    const std::string wire = std::string(17, 'a') + "\r\n";
+    LT_CHECK(rejects_as(wire, 0, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(chunk_size_hex_overflow)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, chunk_size_line_too_long)
+    // The 1025th size-line byte trips the 1024-byte cap; the 1024-byte
+    // prefix stays benign.
+    const std::string wire = std::string(1025, 'a') + "\r\n";
+    LT_CHECK(rejects_as(wire, 1024, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(chunk_size_line_too_long)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, chunk_ext_malformed_syntax)
+    LT_CHECK(rejects_as("5;=\r\n", 2, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as("5;;\r\n", 3, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    // Unterminated quoted-string value.
+    LT_CHECK(rejects_as("5;a=\"x\r\n", 7,
+                        http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    // Junk where the next ';' must be.
+    LT_CHECK(rejects_as("5 a\r\n", 2, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(chunk_ext_malformed_syntax)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, bare_lf_rejected_split_safe)
+    // A bare LF is malformed the moment it is fed, in the size line or
+    // after chunk data.
+    LT_CHECK(rejects_as("3\nabc\r\n0\r\n\r\n", 1,
+                        http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    LT_CHECK(rejects_as("3\r\nabc\n0\r\n\r\n", 6,
+                        http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(bare_lf_rejected_split_safe)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, chunk_data_end_strict)
+    // Anything but the exact CRLF after chunk data is a protocol error.
+    LT_CHECK(rejects_as("3\r\nabcXY", 6, http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(chunk_data_end_strict)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, trailer_line_malformed_syntax)
+    // No colon: not a field line at all.
+    LT_CHECK(rejects_as("0\r\nBadHeader\r\n", 13,
+                        http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+    // Bare LF inside the trailer section.
+    LT_CHECK(rejects_as("0\r\nBad\n\r\n", 6,
+                        http::outcome_code::protocol_error,
+                        http1_close_policy::close_now));
+LT_END_AUTO_TEST(trailer_line_malformed_syntax)
+
+LT_BEGIN_AUTO_TEST(rejects_suite, forbidden_trailer_names)
+    // Framing, routing, and security-sensitive fields may not arrive as
+    // trailers (case-insensitive).
+    const char* const forbidden[] = {
+        "Content-Length: 5", "transfer-encoding: chunked", "Host: h",
+        "TE: trailers", "Connection: close", "Expect: 100-continue",
+        "Upgrade: websocket", "AUTHORIZATION: Basic xyz",
+    };
+    for (const char* const field : forbidden) {
+        const std::string wire =
+            "0\r\n" + std::string(field) + "\r\n\r\n";
+        // The trailer line's own LF completes the rejection; the final
+        // empty line never arrives.
+        LT_CHECK(rejects_as(wire, wire.size() - 3,
+                            http::outcome_code::protocol_error,
+                            http1_close_policy::close_now));
+    }
+LT_END_AUTO_TEST(forbidden_trailer_names)
+
+LT_BEGIN_AUTO_TEST(limits_suite, trailer_fields_budget)
+    // The third trailer occurrence trips a two-field budget.
+    http1_body_budget tight = default_budget();
+    tight.max_trailer_fields = 2;
+    http1_body_decoder d(chunked_mode(), tight);
+    const http1_body_progress p =
+        d.decode("0\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\n");
+    LT_CHECK(p.kind == http1_body_decode::failed);
+    LT_CHECK(d.failure().code() == http::outcome_code::limit_exceeded);
+    LT_CHECK(d.close_policy() == http1_close_policy::respond_then_close);
+LT_END_AUTO_TEST(trailer_fields_budget)
+
+LT_BEGIN_AUTO_TEST(limits_suite, trailer_bytes_budget)
+    // A trailer line longer than the byte cap trips the budget; a line
+    // of exactly the cap decodes.
+    http1_body_budget tight = default_budget();
+    tight.max_trailer_bytes = 4;
+    http1_body_decoder fit(chunked_mode(), tight);
+    const http1_body_progress ok = fit.decode("0\r\na: b\r\n\r\n");
+    LT_CHECK(ok.kind == http1_body_decode::complete);
+    LT_CHECK_EQ(fit.trailers().size(), 1u);
+
+    http1_body_decoder over(chunked_mode(), tight);
+    const http1_body_progress p = over.decode("0\r\nab: c\r\n\r\n");
+    LT_CHECK(p.kind == http1_body_decode::failed);
+    LT_CHECK(over.failure().code() == http::outcome_code::limit_exceeded);
+    LT_CHECK(over.close_policy() == http1_close_policy::respond_then_close);
+LT_END_AUTO_TEST(trailer_bytes_budget)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
