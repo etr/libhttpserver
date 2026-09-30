@@ -35,7 +35,9 @@
 #include <string_view>
 
 #include "./httpserver/detail/fake_io_backend.hpp"
+#include "./httpserver/detail/io_poll_backend.hpp"
 #include "./io_backend_contract.hpp"
+#include "./io_loopback.hpp"
 
 #include "./littletest.hpp"
 
@@ -74,6 +76,46 @@ struct fake_fixture final : io_contract::backend_fixture {
     }
 
     hd::fake_io_backend instance;
+};
+
+// Real-driver fixture for poll_contract_suite: connection id 1 is a
+// live loopback pair adopted by the io_poll_backend, deliver_read
+// pushes bytes through the peer socket, and timers/wakes run on the
+// driver's own thread (pump is a no-op -- the loop owns time).
+struct poll_fixture final : io_contract::backend_fixture {
+    poll_fixture() {
+        pair_ = io_loopback::pair::make();
+        instance.adopt_connection(1, pair_.local());
+    }
+
+    hd::io_backend& backend() override { return instance; }
+
+    void pump() override { }
+
+    void deliver_read(hd::op_state& state,
+                      std::string_view bytes) override {
+        (void)state;
+        io_loopback::write_all(pair_.peer(), bytes.data(), bytes.size());
+    }
+
+    // No scripted write stimulus: real writability decides, so the
+    // write op completes through the driver alone.
+    void deliver_write(hd::op_state& state,
+                       std::size_t transferred) override {
+        (void)state;
+        (void)transferred;
+    }
+
+    void fire_wake() override { instance.wake(); }
+
+    std::size_t close_backend() override { return instance.close(); }
+
+    std::size_t pending_count() override {
+        return instance.pending_count();
+    }
+
+    hd::io_poll_backend instance;
+    io_loopback::pair pair_;
 };
 
 }  // namespace
@@ -157,6 +199,124 @@ LT_BEGIN_AUTO_TEST(fake_contract_suite, cancel_vs_stimulus_race)
     fake_fixture fx;
     io_contract::cancel_vs_stimulus_race(__lt_tr__, __lt_name__, fx);
 LT_END_AUTO_TEST(cancel_vs_stimulus_race)
+
+// The same shared scenarios against the poll/WSAPoll driver. These are
+// the "one contract, two drivers" instantiations; S12-S18 below pin the
+// socket-only behavior the scripted fixture cannot express.
+LT_BEGIN_SUITE(poll_contract_suite)
+    void set_up() {
+    }
+
+    void tear_down() {
+    }
+LT_END_SUITE(poll_contract_suite)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, read_delivers_bytes_exactly_once)
+    poll_fixture fx;
+    io_contract::read_delivers_bytes_exactly_once(__lt_tr__, __lt_name__,
+                                                  fx);
+LT_END_AUTO_TEST(read_delivers_bytes_exactly_once)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, write_completes_with_transferred)
+    poll_fixture fx;
+    io_contract::write_completes_with_transferred(__lt_tr__, __lt_name__,
+                                                  fx);
+LT_END_AUTO_TEST(write_completes_with_transferred)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, timer_fires_at_deadline_not_before)
+    poll_fixture fx;
+    io_contract::timer_fires_at_deadline_not_before(__lt_tr__, __lt_name__,
+                                                    fx);
+LT_END_AUTO_TEST(timer_fires_at_deadline_not_before)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite,
+                   two_timers_earliest_first_sequence_tie)
+    poll_fixture fx;
+    io_contract::two_timers_earliest_first_sequence_tie(__lt_tr__,
+                                                        __lt_name__, fx);
+LT_END_AUTO_TEST(two_timers_earliest_first_sequence_tie)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, wake_completes_all_wakes_once)
+    poll_fixture fx;
+    io_contract::wake_completes_all_wakes_once(__lt_tr__, __lt_name__, fx);
+LT_END_AUTO_TEST(wake_completes_all_wakes_once)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, cancel_pending_target)
+    poll_fixture fx;
+    io_contract::cancel_pending_target(__lt_tr__, __lt_name__, fx);
+LT_END_AUTO_TEST(cancel_pending_target)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite,
+                   cancel_terminal_target_reports_invalid_state)
+    poll_fixture fx;
+    io_contract::cancel_terminal_target_reports_invalid_state(
+        __lt_tr__, __lt_name__, fx);
+LT_END_AUTO_TEST(cancel_terminal_target_reports_invalid_state)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, close_sweeps_every_pending_once)
+    poll_fixture fx;
+    io_contract::close_sweeps_every_pending_once(__lt_tr__, __lt_name__,
+                                                 fx);
+LT_END_AUTO_TEST(close_sweeps_every_pending_once)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite,
+                   submit_after_close_connection_closed)
+    poll_fixture fx;
+    io_contract::submit_after_close_connection_closed(__lt_tr__,
+                                                      __lt_name__, fx);
+LT_END_AUTO_TEST(submit_after_close_connection_closed)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite,
+                   late_request_cancel_reports_invalid_state)
+    poll_fixture fx;
+    io_contract::late_request_cancel_reports_invalid_state(
+        __lt_tr__, __lt_name__, fx);
+LT_END_AUTO_TEST(late_request_cancel_reports_invalid_state)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, n_awaiter_resume_exactly_once)
+    poll_fixture fx;
+    io_contract::n_awaiter_resume_exactly_once(__lt_tr__, __lt_name__, fx);
+LT_END_AUTO_TEST(n_awaiter_resume_exactly_once)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, cancel_vs_stimulus_race)
+    poll_fixture fx;
+    io_contract::cancel_vs_stimulus_race(__lt_tr__, __lt_name__, fx);
+LT_END_AUTO_TEST(cancel_vs_stimulus_race)
+
+// Pure unit suite for the monotonic deadline -> poll-timeout
+// conversion (plan deliverable 2b). Fully deterministic: the clock
+// reading is a parameter, so nothing here depends on wall-clock speed.
+LT_BEGIN_SUITE(deadline_conversion_suite)
+    void set_up() {
+    }
+
+    void tear_down() {
+    }
+LT_END_SUITE(deadline_conversion_suite)
+
+LT_BEGIN_AUTO_TEST(deadline_conversion_suite, idle_cap_without_deadline)
+    namespace sc = std::chrono;
+    const auto now = sc::steady_clock::now();
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, std::nullopt), 1000);
+LT_END_AUTO_TEST(idle_cap_without_deadline)
+
+LT_BEGIN_AUTO_TEST(deadline_conversion_suite, past_deadline_is_zero)
+    namespace sc = std::chrono;
+    const auto now = sc::steady_clock::now();
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, now), 0);
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, now - 1ms), 0);
+LT_END_AUTO_TEST(past_deadline_is_zero)
+
+LT_BEGIN_AUTO_TEST(deadline_conversion_suite, ceils_up_and_clamps)
+    namespace sc = std::chrono;
+    const auto now = sc::steady_clock::now();
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, now + 1ms), 1);
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, now + 999us), 1);
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, now + 1001us), 2);
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, now + 1500us), 2);
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, now + 1s), 1000);
+    LT_CHECK_EQ(hd::poll_timeout_ms(now, now + 5s), 1000);
+LT_END_AUTO_TEST(ceils_up_and_clamps)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

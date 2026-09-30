@@ -851,7 +851,7 @@ task_race_LDADD =
 task_stop_inside_handler_SOURCES = unit/task_stop_inside_handler_test.cpp
 task_stop_inside_handler_LDADD =
 
-noinst_HEADERS = littletest.hpp parity/transcript.hpp parity/response_frame.hpp parity/normalize.hpp parity/server_fixture.hpp parity/v2_fixture.hpp parity/socket_io.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp integ/digest_client.hpp integ/stream_capture_helpers.hpp integ/log_capture.hpp unit/throw_probe.hpp unit/io_backend_contract.hpp
+noinst_HEADERS = littletest.hpp parity/transcript.hpp parity/response_frame.hpp parity/normalize.hpp parity/server_fixture.hpp parity/v2_fixture.hpp parity/socket_io.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp integ/digest_client.hpp integ/stream_capture_helpers.hpp integ/log_capture.hpp unit/throw_probe.hpp unit/io_backend_contract.hpp unit/io_loopback.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
 
 if COND_GCOV

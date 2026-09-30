@@ -88,6 +88,7 @@ namespace hd = httpserver::detail;
 namespace hh = httpserver::http;
 
 using std::chrono_literals::operator""ms;
+using std::chrono_literals::operator""us;
 using std::chrono_literals::operator""s;
 
 namespace io_contract {
