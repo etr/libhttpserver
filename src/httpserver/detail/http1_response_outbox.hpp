@@ -314,7 +314,12 @@ class http1_response_outbox {
                 " head")));
             return failed_result();
         }
-        const std::size_t room = budget_.max_queue_bytes - queued_bytes_;
+        // Floored: the end marker may have pushed the queue past the
+        // budget (documented overshoot), and a plain subtraction would
+        // wrap into a phantom huge room.
+        const std::size_t room =
+            budget_.max_queue_bytes
+            - std::min(queued_bytes_, budget_.max_queue_bytes);
         if (room == 0) return body_push_result{body_push::full, 0};
         const std::size_t before = sink.bytes_.size();
         const http::outcome framed =
@@ -340,7 +345,9 @@ class http1_response_outbox {
                 " head")));
             return failed_result();
         }
-        const std::size_t room = budget_.max_queue_bytes - queued_bytes_;
+        const std::size_t room =
+            budget_.max_queue_bytes
+            - std::min(queued_bytes_, budget_.max_queue_bytes);
         if (room == 0) return body_push_result{body_push::full, 0};
         const std::size_t before = sink.bytes_.size();
         const http::outcome framed =

@@ -751,6 +751,38 @@ LT_BEGIN_AUTO_TEST(seam_suite, pipelined_keepalive_replay)
     }
 LT_END_AUTO_TEST(pipelined_keepalive_replay)
 
+LT_BEGIN_AUTO_TEST(outbox_suite, end_marker_overshoot_keeps_budget_floored)
+    // The end marker may overshoot the budget by its trailer size
+    // (documented delta); the room computation must floor at zero so a
+    // later sink never sees a wrapped "huge room".
+    http1_response_outbox outbox(http1_outbox_budget{128, 128});
+    http1_response_sink& first = outbox.open(0, {});
+    // Chunked framing: the head is 71 bytes; one 40-byte chunk costs
+    // 45 wire bytes, leaving 12 budget bytes of room for the end
+    // marker, whose big trailer then overshoots the budget.
+    http::fields handler;
+    handler.append("Content-Type", "text/plain");
+    handler.append("Transfer-Encoding", "chunked");
+    LT_CHECK(first.start(get_11(), http::status::from_code(200),
+                         handler).ok());
+    // The copied count is the wire-byte delta the budget charges: the
+    // 40-byte payload rides in one "28" chunk (6 overhead bytes).
+    LT_CHECK(first.push(as_bytes(std::string(40, 'a'))).copied == 46);
+    http::fields big_trailers;
+    big_trailers.append("X-Big", std::string(100, 'b'));
+    LT_CHECK(first.push_end(big_trailers).kind == body_push::accepted);
+    LT_CHECK(outbox.queued_bytes() > 128u);
+
+    http1_response_sink& second = outbox.open(1, {});
+    LT_CHECK(second.start(get_11(), http::status::from_code(200),
+                          handler).ok());
+    const std::size_t before = outbox.queued_bytes();
+    const body_push_result pushed = second.push(as_bytes("x"));
+    LT_CHECK(pushed.kind == body_push::full);
+    LT_CHECK_EQ(pushed.copied, 0u);
+    LT_CHECK_EQ(outbox.queued_bytes(), before);
+LT_END_AUTO_TEST(end_marker_overshoot_keeps_budget_floored)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
