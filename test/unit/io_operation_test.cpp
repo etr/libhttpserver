@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <stop_token>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -107,6 +108,14 @@ class sequence_backend final : public hd::io_backend {
  private:
     std::uint64_t next_ = 0;
 };
+
+// Awaits one read operation and records the observed io_result and how
+// many times the await completed.
+task<void> await_read(hd::read_operation op, hd::io_result* out,
+                      std::atomic<int>* delivered) {
+    *out = co_await std::move(op);
+    ++*delivered;
+}
 
 }  // namespace
 
@@ -227,6 +236,141 @@ LT_BEGIN_AUTO_TEST(io_operation_suite, sequence_and_connection_metadata)
     LT_CHECK(write_op.kind() == hd::io_op_kind::write);
     LT_CHECK(accept_op.kind() == hd::io_op_kind::accept);
 LT_END_AUTO_TEST(sequence_and_connection_metadata)
+
+// Test 4: the awaiter. A suspended task resumes exactly once with the
+// right io_result after the owner drain applies the completion; an
+// already-applied op completes inline on the awaiting frame's thread.
+LT_BEGIN_AUTO_TEST(io_operation_suite, awaiter_resumes_once_with_result)
+    manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    std::byte buffer[8];
+
+    // Suspended path: completion applied via owner drain.
+    hd::io_result observed;
+    std::atomic<int> delivered{0};
+    hd::read_operation op(owner, 5, std::span<std::byte>(buffer));
+    const auto state = op.state();
+    task<void> body = await_read(std::move(op), &observed, &delivered);
+    spawn(ex, std::move(body), [](task_result<void>) { });
+    ex.run_pending();  // task suspends at co_await
+    LT_CHECK_EQ(delivered.load(), 0);
+
+    owner.enqueue(state, hd::io_result{hh::outcome_code::ok, 9, 0});
+    LT_CHECK_EQ(delivered.load(), 0);  // queued, not applied
+    ex.run_pending();                  // drain applies and resumes
+
+    LT_CHECK_EQ(delivered.load(), 1);
+    LT_CHECK(observed.code == hh::outcome_code::ok);
+    LT_CHECK_EQ(observed.transferred, std::size_t{9});
+
+    // Inline path: a terminal-and-applied op never suspends.
+    hd::io_result inline_observed;
+    std::atomic<int> inline_delivered{0};
+    hd::read_operation done_op(owner, 6, std::span<std::byte>(buffer));
+    const auto done_state = done_op.state();
+    LT_CHECK(done_state->claim_terminal());
+    owner.enqueue(done_state, hd::io_result{hh::outcome_code::ok, 3, 0});
+    ex.run_pending();  // applied without any waiter
+    task<void> done_body =
+        await_read(std::move(done_op), &inline_observed, &inline_delivered);
+    spawn(ex, std::move(done_body), [](task_result<void>) { });
+    ex.run_pending();  // body runs; await_ready completes it inline
+
+    LT_CHECK_EQ(inline_delivered.load(), 1);
+    LT_CHECK_EQ(inline_observed.transferred, std::size_t{3});
+LT_END_AUTO_TEST(awaiter_resumes_once_with_result)
+
+// Test 5: abandoned await. The mechanism a destroyed awaiting frame
+// relies on: the frame-resident awaiter's destructor disarms the waiter
+// slot, so a completion delivered afterwards resumes nothing. Pinned at
+// the op_state waiter-slot seam (arm_waiter/disarm_waiter are exactly
+// the calls op_awaiter makes), plus a destroy-before-start task.
+LT_BEGIN_AUTO_TEST(io_operation_suite, abandoned_await_is_safe)
+    manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    std::byte buffer[8];
+    hd::io_result observed;
+    std::atomic<int> delivered{0};
+
+    hd::read_operation op(owner, 7, std::span<std::byte>(buffer));
+    const auto state = op.state();
+
+    // Arm exactly as op_awaiter::await_suspend does, then disarm exactly
+    // as ~op_awaiter does when the awaiting frame is torn down.
+    const auto witness = std::make_shared<httpserver::detail::frame_witness>();
+    LT_CHECK(state->arm_waiter(std::noop_coroutine(), witness, &ex));
+    state->disarm_waiter();
+
+    LT_CHECK(state->claim_terminal());
+    owner.enqueue(state, hd::io_result{hh::outcome_code::ok, 1, 0});
+    ex.run_pending();  // applies with no waiter: no resume, no crash
+
+    LT_CHECK_EQ(delivered.load(), 0);
+    LT_CHECK(state->applied());
+    LT_CHECK_EQ(state->stored_result().transferred, std::size_t{1});
+
+    // Destroy-before-start variant: an unconsumed task is a documented
+    // cancellation at the task layer; completing its op afterwards
+    // delivers nothing and does not crash.
+    hd::io_result ignored{};
+    hd::read_operation op2(owner, 7, std::span<std::byte>(buffer));
+    const auto state2 = op2.state();
+    {
+        task<void> never_started =
+            await_read(std::move(op2), &ignored, &delivered);
+    }  // lazy frame destroyed before any consumption
+    LT_CHECK(state2->claim_terminal());
+    owner.enqueue(state2, hd::io_result{});
+    ex.run_pending();
+    LT_CHECK_EQ(delivered.load(), 0);
+    LT_CHECK(state2->applied());
+LT_END_AUTO_TEST(abandoned_await_is_safe)
+
+// Test 6: arm_stop. request_stop() cancels a pending op exactly once
+// with outcome cancelled; arming after a terminal result is a no-op.
+LT_BEGIN_AUTO_TEST(io_operation_suite, arm_stop_cancels_once)
+    manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    std::byte buffer[8];
+    sequence_backend backend;
+    hd::io_result observed;
+    std::atomic<int> delivered{0};
+
+    hd::read_operation op(owner, 3, std::span<std::byte>(buffer));
+    const auto state = op.state();
+    op.submit(backend);
+    std::stop_source source;
+    op.arm_stop(source.get_token());
+
+    task<void> body = await_read(std::move(op), &observed, &delivered);
+    spawn(ex, std::move(body), [](task_result<void>) { });
+    ex.run_pending();  // suspended
+
+    LT_CHECK(source.request_stop());
+    ex.run_pending();  // cancel delivered through the owner drain
+
+    LT_CHECK_EQ(delivered.load(), 1);
+    LT_CHECK(observed.code == hh::outcome_code::cancelled);
+
+    // A second stop request is a no-op (the op already reached terminal).
+    source.request_stop();
+    ex.run_pending();
+    LT_CHECK_EQ(delivered.load(), 1);
+
+    // Arming after terminal: no callback is registered, request_stop
+    // cannot change anything.
+    hd::read_operation done_op(owner, 3, std::span<std::byte>(buffer));
+    done_op.submit(backend);
+    const auto done_state = done_op.state();
+    LT_CHECK(done_state->claim_terminal());
+    owner.enqueue(done_state, hd::io_result{});
+    ex.run_pending();
+    std::stop_source late_source;
+    done_op.arm_stop(late_source.get_token());
+    late_source.request_stop();
+    ex.run_pending();
+    LT_CHECK(done_state->stored_result().code == hh::outcome_code::ok);
+LT_END_AUTO_TEST(arm_stop_cancels_once)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -50,9 +50,11 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <random>
 #include <span>
+#include <stop_token>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -714,6 +716,174 @@ LT_BEGIN_AUTO_TEST(fake_io_backend_suite, cross_owner_linearity)
     LT_CHECK_COLLECTIONS_EQ(got1.begin(), got1.end(), want1.begin());
     LT_CHECK_COLLECTIONS_EQ(got2.begin(), got2.end(), want2.begin());
 LT_END_AUTO_TEST(cross_owner_linearity)
+
+// Family 6: stop-token race. request_stop() (which fires arm_stop's
+// callback -> request_cancel) races a scripted completion through the
+// spin gate; the target is terminal exactly once with outcome ok or
+// cancelled, and both classes must occur across the loop.
+LT_BEGIN_AUTO_TEST(fake_io_backend_suite, stop_token_vs_completion_race)
+    constexpr int kIterations = 200;
+    int ok_count = 0;
+    int cancelled_count = 0;
+
+    for (int i = 0; i < kIterations; ++i) {
+        rig r;
+        hd::fake_io_backend backend;
+        probe p;
+        std::vector<task<void>> tasks;
+        std::atomic<int> arrivals{0};
+        gate g(&arrivals);
+        std::stop_source source;
+
+        hd::read_operation op(r.owner, 1, std::span<std::byte>(r.buffer));
+        op.submit(backend);
+        const auto state = op.state();
+        op.arm_stop(source.get_token());
+        launch(r, std::move(op), &p, tasks);
+        r.ex.run_pending();  // suspended
+
+        std::thread stopper([&] {
+            g.arrive();
+            g.wait(2);
+            source.request_stop();
+        });
+        std::thread completer([&] {
+            g.arrive();
+            g.wait(2);
+            backend.complete(*state,
+                             hd::io_result{hh::outcome_code::ok, 1, 0});
+        });
+        stopper.join();
+        completer.join();
+        r.ex.run_pending();
+
+        if (p.delivered.load() != 1) {
+            LT_FAIL("stop-token race: target not terminal exactly once");
+        }
+        if (p.observed.code == hh::outcome_code::ok) {
+            ++ok_count;
+        } else if (p.observed.code == hh::outcome_code::cancelled) {
+            ++cancelled_count;
+        } else {
+            LT_FAIL("stop-token race: unexpected outcome");
+        }
+    }
+    LT_CHECK(ok_count > 0);
+    LT_CHECK(cancelled_count > 0);
+LT_END_AUTO_TEST(stop_token_vs_completion_race)
+
+// Family 12: cross-thread chaos (time-boxed, the tsan-lane canary).
+// Two workers hammer one backend/owner/executor pair for ~100ms each:
+// they submit awaited probes, complete or cancel random pending ops,
+// and run the executor concurrently; the main thread closes the backend
+// mid-run. Global invariant afterwards: every submitted op ended with
+// exactly one terminal outcome.
+LT_BEGIN_AUTO_TEST(fake_io_backend_suite, cross_thread_chaos)
+    rig r;
+    hd::fake_io_backend backend;
+    constexpr auto kDuration = 100ms;
+    constexpr int kWorkers = 2;
+    std::atomic<int> submitted{0};
+    std::atomic<bool> closed{false};
+
+    struct chaos_entry {
+        std::shared_ptr<hd::op_state> state;
+        std::unique_ptr<probe> observed;
+    };
+    std::mutex registry_mu;
+    std::vector<chaos_entry> registry;
+
+    std::atomic<unsigned> seed{
+        static_cast<unsigned>(std::chrono::steady_clock::now()
+                                  .time_since_epoch()
+                                  .count())};
+
+    auto worker = [&](int) {
+        std::mt19937 rng(seed.fetch_add(1));
+        const auto deadline = std::chrono::steady_clock::now() + kDuration;
+        while (std::chrono::steady_clock::now() < deadline) {
+            // Submit a small awaited batch.
+            for (int j = 0; j < 5; ++j) {
+                hd::read_operation op(r.owner, 1, std::span<std::byte>(r.buffer));
+                auto observed = std::make_unique<probe>();
+                probe* p = observed.get();
+                auto state = op.state();
+                op.submit(backend);
+                task<void> body = await_into(std::move(op), p);
+                spawn(r.ex, std::move(body), [](task_result<void>) { });
+                {
+                    std::lock_guard<std::mutex> lock(registry_mu);
+                    registry.push_back(chaos_entry{state, std::move(observed)});
+                }
+                ++submitted;
+            }
+            // Complete or cancel a random pending op.
+            std::shared_ptr<hd::op_state> pick;
+            {
+                std::lock_guard<std::mutex> lock(registry_mu);
+                if (!registry.empty()) {
+                    pick = registry[rng() % registry.size()].state;
+                }
+            }
+            if (pick && !pick->is_terminal()) {
+                if ((rng() % 2) == 0) {
+                    backend.request_cancel(*pick);
+                } else {
+                    backend.complete(
+                        *pick, hd::io_result{hh::outcome_code::ok, 1, 0});
+                }
+            }
+            if (rng() % 8 == 0) backend.fire_wake();
+            r.ex.run_one();  // drain concurrently from this thread
+        }
+    };
+
+    std::vector<std::thread> threads;
+    for (int t = 0; t < kWorkers; ++t) threads.emplace_back(worker, t);
+
+    // Close the backend mid-run while the workers keep submitting.
+    std::this_thread::sleep_for(kDuration / 2);
+    backend.close();
+    closed.store(true, std::memory_order_release);
+
+    for (auto& thread : threads) thread.join();
+
+    // Post-close submissions complete immediately; a second close is a
+    // no-op. Drain everything that is left.
+    LT_CHECK(closed.load());
+    LT_CHECK_EQ(backend.close(), std::size_t{0});
+    const int total = submitted.load();
+    for (int spin = 0; spin < 200000; ++spin) {
+        std::size_t delivered_now = 0;
+        {
+            std::lock_guard<std::mutex> lock(registry_mu);
+            for (const auto& entry : registry) {
+                delivered_now += static_cast<std::size_t>(
+                    entry.observed->delivered.load());
+            }
+        }
+        if (delivered_now == static_cast<std::size_t>(total)) break;
+        if (!r.ex.run_one()) std::this_thread::yield();
+    }
+
+    // Global invariant: every submitted op terminal exactly once.
+    std::lock_guard<std::mutex> lock(registry_mu);
+    LT_CHECK_EQ(registry.size(), static_cast<std::size_t>(total));
+    for (const auto& entry : registry) {
+        if (entry.observed->delivered.load() != 1) {
+            LT_FAIL("chaos: op not delivered exactly once");
+        }
+        const hh::outcome_code code = entry.observed->observed.code;
+        if (code != hh::outcome_code::ok
+            && code != hh::outcome_code::cancelled
+            && code != hh::outcome_code::connection_closed) {
+            LT_FAIL("chaos: unexpected terminal outcome");
+        }
+        if (!entry.state->is_terminal()) {
+            LT_FAIL("chaos: op state not terminal");
+        }
+    }
+LT_END_AUTO_TEST(cross_thread_chaos)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
