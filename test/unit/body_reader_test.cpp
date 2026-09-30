@@ -34,7 +34,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <type_traits>
 #include <vector>
@@ -53,8 +55,10 @@ using httpserver::body_policy;
 using httpserver::body_read;
 using httpserver::body_reader;
 using httpserver::exchange;
+using httpserver::exchange_state;
 using httpserver::manual_executor;
 using httpserver::spawn;
+using httpserver::task;
 using httpserver::task_result;
 namespace http = httpserver::http;
 namespace detail = httpserver::detail;
@@ -108,6 +112,24 @@ body_read run_read(exchange& x, manual_executor& ex,
           });
     ex.run_pending();
     return seen;
+}
+
+// Echo-loop handler: admits, reads through the bounded staging queue
+// until the body ends, responds 200. Verdicts land in the out-
+// parameters; the test body asserts (helpers carry no LT_CHECK
+// context).
+task<void> echo_handler(exchange& x, std::vector<std::byte>& echo,
+                        int& reads) {
+    if (!x.admit_body(body_policy()).ok()) co_return;
+    std::vector<std::byte> buffer(48);
+    for (;;) {
+        const body_read r = co_await x.body().read_some(buffer);
+        ++reads;
+        if (!r.status.ok() || r.end_of_body) break;
+        echo.insert(echo.end(), r.data.begin(), r.data.end());
+    }
+    static_cast<void>(x.respond(http::status::from_code(200),
+                                http::fields()));
 }
 
 }  // namespace
@@ -227,6 +249,99 @@ LT_BEGIN_AUTO_TEST(body_reader_suite, body_read_into_empty_buffer_fails)
     LT_CHECK_EQ(source.park_count(), 0);
     LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(body_read_into_empty_buffer_fails)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_eof_read_returns_end_and_trailers)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    LT_CHECK(source.stage(bytes("abc")));
+    http::fields trailers;
+    trailers.append("X-Checksum", "deadbeef");
+    source.stage_end(trailers);
+
+    std::vector<std::byte> destination(8);
+    const body_read first = run_read(x, ex, destination);
+    LT_CHECK(first.status.ok());
+    LT_CHECK(!first.end_of_body);
+    LT_CHECK(of(first.data) == "abc");
+
+    // Terminal read: authoritative end, trailers final.
+    const body_read last = run_read(x, ex, destination);
+    LT_CHECK(last.status.ok());
+    LT_CHECK(last.end_of_body);
+    LT_CHECK(last.data.empty());
+    LT_CHECK_EQ(source.credit_released(), static_cast<std::size_t>(3));
+
+    const std::optional<std::string_view> checksum =
+        x.body().trailers().first("x-checksum");
+    LT_CHECK(checksum.has_value());
+    LT_CHECK(*checksum == "deadbeef");
+
+    // At end the reader is finished: further reads fail typed.
+    const body_read over = run_read(x, ex, destination);
+    LT_CHECK(over.status.code() == http::outcome_code::invalid_state);
+LT_END_AUTO_TEST(body_eof_read_returns_end_and_trailers)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_echo_larger_than_queue_progresses)
+    // Acceptance: an echo larger than the engine's bounded staging
+    // queue progresses through reads, releasing receive credit only as
+    // bytes are consumed.
+    detail::recording_sink sink;
+    fake::scripted_body_source source(64);  // 64-byte bounded queue
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    const std::string pattern = "abcdefghijklmnopqrstuvwxyz012345";
+    std::string payload;
+    for (int i = 0; i < 8; ++i) payload += pattern;  // 256 bytes
+
+    std::vector<std::byte> echo;
+    int reads = 0;
+    int done = 0;
+    spawn(ex, echo_handler(x, echo, reads),
+          [&](task_result<void>) { ++done; });
+    ex.run_pending();  // the handler admits and issues the first read
+    LT_CHECK(source.parked());
+
+    // Producer: stages 32-byte segments only when they fit the queue,
+    // interleaved with executor progress.
+    for (std::size_t offset = 0; offset < payload.size(); offset += 32) {
+        const std::vector<std::byte> segment = bytes(payload.substr(offset, 32));
+        while (!source.stage(segment)) ex.run_pending();
+        ex.run_pending();
+    }
+    source.stage_end();
+    for (int i = 0; i < 1000 && done == 0; ++i) ex.run_pending();
+
+    LT_CHECK_EQ(done, 1);
+    LT_CHECK(of(echo) == payload);
+    LT_CHECK(reads >= 6);
+    LT_CHECK_EQ(source.credit_released(), payload.size());
+    LT_CHECK(source.max_queued() <= static_cast<std::size_t>(64));
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(sink.respond_code, static_cast<std::uint16_t>(200));
+    LT_CHECK(x.state() == exchange_state::responded);
+LT_END_AUTO_TEST(body_echo_larger_than_queue_progresses)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_empty_body_reads_end_immediately)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    source.stage_end();  // no data, no trailers
+
+    std::vector<std::byte> destination(16);
+    const body_read seen = run_read(x, ex, destination);
+    LT_CHECK(seen.status.ok());
+    LT_CHECK(seen.end_of_body);
+    LT_CHECK(seen.data.empty());
+    LT_CHECK_EQ(x.body().trailers().size(), static_cast<std::size_t>(0));
+LT_END_AUTO_TEST(body_empty_body_reads_end_immediately)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

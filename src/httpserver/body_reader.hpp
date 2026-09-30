@@ -306,6 +306,14 @@ class body_reader {
         }
     }
 
+    // The received trailers; final once a read returned end_of_body
+    // (or a collect succeeded). Empty when none were received.
+    const http::fields& trailers() const noexcept {
+        if (source_ != nullptr) return source_->trailers();
+        static const http::fields none;
+        return none;
+    }
+
     body_reader(body_reader&& other) noexcept = default;
     body_reader& operator=(body_reader&& other) noexcept = default;
     body_reader(const body_reader&) = delete;
