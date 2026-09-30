@@ -302,7 +302,9 @@ inline sys_result read_some(native_socket_t socket, std::byte* data,
 }
 
 // send() the leading slice; the caller re-arms from the transferred
-// count (partial sends are the backpressure semantic).
+// count (partial sends are the backpressure semantic). Sizes beyond
+// INT_MAX are truncated by the Winsock int parameter on the _WIN32
+// branch; HTTP operation buffers are bounded far below that.
 inline sys_result write_some(native_socket_t socket, const std::byte* data,
                              std::size_t size) {
     if (size == 0) {
