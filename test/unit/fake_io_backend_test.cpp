@@ -445,15 +445,22 @@ LT_BEGIN_AUTO_TEST(fake_io_backend_suite, cancel_vs_complete_race)
         launch(r, std::move(op), &p, tasks);
         r.ex.run_pending();  // suspended
 
+        // Alternate which contender is biased to lose: the claim CAS
+        // still decides each iteration, but this guarantees both
+        // outcome classes occur across the loop even on a scheduler
+        // that would otherwise always pick the same winner.
+        const auto loser_delay = std::chrono::microseconds(50);
         std::thread completer([&] {
             g.arrive();
             g.wait(2);
+            if (i % 2 == 1) std::this_thread::sleep_for(loser_delay);
             backend.complete(*state,
                              hd::io_result{hh::outcome_code::ok, 1, 0});
         });
         std::thread canceler([&] {
             g.arrive();
             g.wait(2);
+            if (i % 2 == 0) std::this_thread::sleep_for(loser_delay);
             backend.request_cancel(*state);
         });
         completer.join();
@@ -739,14 +746,20 @@ LT_BEGIN_AUTO_TEST(fake_io_backend_suite, stop_token_vs_completion_race)
         launch(r, std::move(op), &p, tasks);
         r.ex.run_pending();  // suspended
 
+        // Alternate the biased loser: the terminal claim still decides
+        // every iteration; the bias makes both outcome classes occur
+        // across the loop on any scheduler.
+        const auto loser_delay = std::chrono::microseconds(50);
         std::thread stopper([&] {
             g.arrive();
             g.wait(2);
+            if (i % 2 == 1) std::this_thread::sleep_for(loser_delay);
             source.request_stop();
         });
         std::thread completer([&] {
             g.arrive();
             g.wait(2);
+            if (i % 2 == 0) std::this_thread::sleep_for(loser_delay);
             backend.complete(*state,
                              hd::io_result{hh::outcome_code::ok, 1, 0});
         });
