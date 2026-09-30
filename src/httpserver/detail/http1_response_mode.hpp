@@ -19,8 +19,9 @@
      02110-1301 USA
 */
 
-// TASK-107: authoritative HTTP/1 response framing decision
-// (PRD-V3N-REQ-004/026, DR-V3-006). NOT part of the installed surface.
+// TASK-107: authoritative HTTP/1 response framing decision and
+// keep-alive computation (PRD-V3N-REQ-004/026, DR-V3-006). NOT part of
+// the installed surface.
 //
 // The response-side mirror of http1_body_mode.hpp: one decision,
 // evaluated top to bottom over the committed status, the request head,
@@ -75,6 +76,11 @@ enum class http1_response_body_kind : std::uint8_t {
     chunked,
     close_delimited,
 };
+
+// Keep-alive verdict of one response. Emission policy (framer): close
+// appends "Connection: close"; HTTP/1.0 keep-alive appends
+// "Connection: keep-alive"; HTTP/1.1 keep-alive appends nothing.
+enum class http1_keepalive : std::uint8_t { keep_alive, close };
 
 struct http1_response_mode {
     http1_response_body_kind kind = http1_response_body_kind::none;
@@ -230,6 +236,49 @@ struct http1_response_mode {
                    .ec == std::errc();
     }
 };
+
+// True iff any Connection value's comma-separated token list contains
+// `token` (case-insensitive, OWS-trimmed).
+inline bool has_connection_token(const std::span<const std::string>& values,
+                                 std::string_view token) {
+    for (const std::string& value : values) {
+        std::string_view rest = value;
+        for (;;) {
+            const std::size_t comma = rest.find(',');
+            const std::string_view element =
+                detail_head::trim_ows(rest.substr(0, comma));
+            if (detail_head::ascii_iequals(element, token)) return true;
+            if (comma == std::string_view::npos) break;
+            rest.remove_prefix(comma + 1);
+        }
+    }
+    return false;
+}
+
+// The keep-alive verdict of one response (RFC 9112 section 9.3):
+// close-delimited bodies always close; a request that announced close
+// gets close; HTTP/1.0 defaults to close unless it announced
+// keep-alive; otherwise keep-alive. A nonzero hint (the engine's
+// respond_then_close / close_now posture) forces close.
+inline http1_keepalive http1_response_keepalive(
+    const http::request_head& request, http1_response_body_kind kind,
+    http1_close_policy hint) {
+    if (hint != http1_close_policy::none
+            || kind == http1_response_body_kind::close_delimited) {
+        return http1_keepalive::close;
+    }
+    const std::span<const std::string> connection =
+        request.head_fields.all("connection");
+    if (has_connection_token(connection, "close")) {
+        return http1_keepalive::close;
+    }
+    if (request.request_protocol == http::protocol::http_1_0) {
+        return has_connection_token(connection, "keep-alive")
+                   ? http1_keepalive::keep_alive
+                   : http1_keepalive::close;
+    }
+    return http1_keepalive::keep_alive;
+}
 
 }  // namespace detail
 

@@ -30,6 +30,12 @@
 //     posture (DR-V3-006): protocol_error and close_now for framing
 //     ambiguity, invalid_argument and respond_then_close for a status
 //     the response path must never see.
+//
+// TASK-107 step 2: keep-alive computation. Pins
+// detail::http1_response_keepalive over the RFC 9112 section 9.3 matrix:
+// close-delimited always closes, a request close token forces close,
+// HTTP/1.0 defaults to close unless it announced keep-alive, and the
+// engine's close hint overrides everything.
 
 #include <cstdint>
 #include <string>
@@ -45,6 +51,7 @@ namespace {
 namespace http = httpserver::http;
 
 using httpserver::detail::http1_close_policy;
+using httpserver::detail::http1_keepalive;
 using httpserver::detail::http1_response_body_kind;
 using httpserver::detail::http1_response_mode;
 using httpserver::http::outcome_code;
@@ -323,6 +330,113 @@ LT_BEGIN_AUTO_TEST(response_mode_suite, rejection_carries_engine_prefix)
     LT_CHECK(m.failure.message().find("http1_response_mode")
              != std::string::npos);
 LT_END_AUTO_TEST(rejection_carries_engine_prefix)
+
+LT_BEGIN_SUITE(keepalive_suite)
+    void set_up() { }
+    void tear_down() { }
+LT_END_SUITE(keepalive_suite)
+
+// True iff the keep-alive verdict for (request, kind, hint) is `want`.
+bool keepalive_is(const http::request_head& req,
+                  http1_response_body_kind kind, http1_close_policy hint,
+                  http1_keepalive want) {
+    return httpserver::detail::http1_response_keepalive(req, kind, hint)
+        == want;
+}
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, http_11_defaults_to_keep_alive)
+    LT_CHECK(keepalive_is(get_11(), http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::keep_alive));
+    LT_CHECK(keepalive_is(get_11(), http1_response_body_kind::chunked,
+                          http1_close_policy::none,
+                          http1_keepalive::keep_alive));
+    LT_CHECK(keepalive_is(get_11(), http1_response_body_kind::none,
+                          http1_close_policy::none,
+                          http1_keepalive::keep_alive));
+LT_END_AUTO_TEST(http_11_defaults_to_keep_alive)
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, request_close_token_forces_close)
+    http::request_head req = get_11();
+    req.head_fields.append("Connection", "close");
+    LT_CHECK(keepalive_is(req, http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::close));
+LT_END_AUTO_TEST(request_close_token_forces_close)
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, close_token_scan_is_case_insensitive)
+    http::request_head req = get_11();
+    req.head_fields.append("Connection", "Close");
+    LT_CHECK(keepalive_is(req, http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::close));
+    http::request_head list = get_11();
+    list.head_fields.append("Connection", "keep-alive, close");
+    LT_CHECK(keepalive_is(list, http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::close));
+LT_END_AUTO_TEST(close_token_scan_is_case_insensitive)
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, close_token_scan_is_whole_token)
+    // Substring proximity is not a token match.
+    http::request_head req = get_11();
+    req.head_fields.append("Connection", "keep-alive, closeness");
+    LT_CHECK(keepalive_is(req, http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::keep_alive));
+LT_END_AUTO_TEST(close_token_scan_is_whole_token)
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, close_token_scan_spans_occurrences)
+    http::request_head req = get_11();
+    req.head_fields.append("Connection", "keep-alive");
+    req.head_fields.append("Connection", "close");
+    LT_CHECK(keepalive_is(req, http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::close));
+LT_END_AUTO_TEST(close_token_scan_spans_occurrences)
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, http_10_defaults_to_close)
+    LT_CHECK(keepalive_is(get_10(), http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::close));
+    LT_CHECK(keepalive_is(get_10(), http1_response_body_kind::chunked,
+                          http1_close_policy::none,
+                          http1_keepalive::close));
+LT_END_AUTO_TEST(http_10_defaults_to_close)
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, http_10_keepalive_token_keeps_alive)
+    http::request_head req = get_10();
+    req.head_fields.append("Connection", "keep-alive");
+    LT_CHECK(keepalive_is(req, http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::keep_alive));
+    http::request_head mixed = get_10();
+    mixed.head_fields.append("Connection", "Keep-Alive");
+    LT_CHECK(keepalive_is(mixed, http1_response_body_kind::length,
+                          http1_close_policy::none,
+                          http1_keepalive::keep_alive));
+LT_END_AUTO_TEST(http_10_keepalive_token_keeps_alive)
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, close_delimited_always_closes)
+    // Even an HTTP/1.0 keep-alive announcement cannot keep a
+    // close-delimited body's connection open: EOF is the terminator.
+    http::request_head req = get_10();
+    req.head_fields.append("Connection", "keep-alive");
+    LT_CHECK(keepalive_is(req, http1_response_body_kind::close_delimited,
+                          http1_close_policy::none,
+                          http1_keepalive::close));
+LT_END_AUTO_TEST(close_delimited_always_closes)
+
+LT_BEGIN_AUTO_TEST(keepalive_suite, engine_hint_forces_close)
+    http::request_head keep_10 = get_10();
+    keep_10.head_fields.append("Connection", "keep-alive");
+    LT_CHECK(keepalive_is(keep_10, http1_response_body_kind::length,
+                          http1_close_policy::respond_then_close,
+                          http1_keepalive::close));
+    LT_CHECK(keepalive_is(get_11(), http1_response_body_kind::length,
+                          http1_close_policy::close_now,
+                          http1_keepalive::close));
+LT_END_AUTO_TEST(engine_hint_forces_close)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
