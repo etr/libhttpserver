@@ -252,6 +252,7 @@ class exchange {
         if (disconnected_) return http::outcome::okay();
         disconnected_ = true;
         disconnect_reason_ = http::outcome(reason, std::move(detail));
+        body_.note_disconnect(disconnect_reason_);
         stop_.request_stop();
         for (resume_signal& sig : resume_signals_) {
             sig.cancel();

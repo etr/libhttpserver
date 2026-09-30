@@ -314,6 +314,61 @@ class body_reader {
         return none;
     }
 
+    // Fully buffers the remaining body, at most `maximum` bytes. Fails
+    // limit_exceeded (diagnostic naming the cap) exactly when the body
+    // exceeds it; exactly-at-cap succeeds. On success the reader is at
+    // end of body and trailers() is final.
+    task<body_collect> collect(std::uint64_t maximum) {
+        const http::outcome gate = enter(false);
+        if (!gate.ok()) {
+            co_return body_collect{gate, {}};
+        }
+        pending_ = true;
+        std::vector<std::byte> out;
+        std::byte scratch[COLLECT_CHUNK_BYTES];
+        for (;;) {
+            const std::uint64_t room =
+                maximum - static_cast<std::uint64_t>(out.size());
+            const detail::body_pull_result pulled = source_->pull(
+                std::span<std::byte>(scratch, collect_want(room)));
+            if (pulled.kind == detail::body_pull::data && pulled.copied > 0) {
+                if (pulled.copied > room) {
+                    // Exact outcome: the bytes beyond the cap prove the
+                    // over-limit body; the tripping pull is discarded,
+                    // never appended.
+                    fail_sticky(http::outcome(
+                        http::outcome_code::limit_exceeded,
+                        "body_reader: body exceeds the collect() cap of "
+                        + std::to_string(maximum) + " bytes"));
+                    pending_ = false;
+                    co_return body_collect{failure_, {}};
+                }
+                out.insert(out.end(), scratch, scratch + pulled.copied);
+                continue;
+            }
+            if (pulled.kind == detail::body_pull::end) {
+                at_end_ = true;
+                pending_ = false;
+                co_return body_collect{http::outcome::okay(), std::move(out)};
+            }
+            if (pulled.kind == detail::body_pull::failed) {
+                fail_sticky(source_->failure());
+                pending_ = false;
+                co_return body_collect{failure_, {}};
+            }
+            // Nothing staged: park until the first of bytes staged,
+            // end, failure, or exchange disconnect.
+            detail::body_wait wait(source_, cancel_token_);
+            if (co_await wait == detail::body_wake::cancelled) {
+                pending_ = false;
+                co_return body_collect{
+                    http::outcome(http::outcome_code::cancelled,
+                                  "body_reader: read cancelled by disconnect"),
+                    {}};
+            }
+        }
+    }
+
     body_reader(body_reader&& other) noexcept = default;
     body_reader& operator=(body_reader&& other) noexcept = default;
     body_reader(const body_reader&) = delete;
@@ -335,6 +390,13 @@ class body_reader {
     // exchange::respond/upgrade, before committing: the exchange is
     // terminal and the body is over.
     void close() noexcept { closed_ = true; }
+
+    // exchange::disconnect, before the stop fan-out: stores the detail
+    // that reads issued after the disconnect report with their typed
+    // connection_closed failure.
+    void note_disconnect(const http::outcome& reason) noexcept {
+        disconnect_reason_ = reason;
+    }
 
     // Shared entry gate of the read operations: fails typed and
     // touches nothing when a pull may not start.
@@ -375,6 +437,18 @@ class body_reader {
         failed_ = true;
         failure_ = reason;
     }
+
+    // Pull size for collect: never more than the remaining cap room,
+    // plus one probe byte that proves an over-limit body exactly. The
+    // probe may consume one byte of the tripping pull, which is
+    // discarded; the outcome stays exact.
+    static std::size_t collect_want(std::uint64_t room) noexcept {
+        return room < COLLECT_CHUNK_BYTES
+            ? static_cast<std::size_t>(room) + 1
+            : COLLECT_CHUNK_BYTES;
+    }
+
+    static constexpr std::size_t COLLECT_CHUNK_BYTES = 512;
 
     detail::body_source* source_ = nullptr;
     stop_token cancel_token_;

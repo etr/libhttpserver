@@ -114,6 +114,21 @@ body_read run_read(exchange& x, manual_executor& ex,
     return seen;
 }
 
+// Runs one collect(maximum) to completion on `ex` and returns the
+// typed result.
+body_collect run_collect(exchange& x, manual_executor& ex,
+                         std::uint64_t maximum) {
+    body_collect seen;
+    int deliveries = 0;
+    spawn(ex, x.body().collect(maximum),
+          [&](task_result<body_collect> r) {
+              ++deliveries;
+              if (r.has_value()) seen = std::move(r.value());
+          });
+    ex.run_pending();
+    return seen;
+}
+
 // Echo-loop handler: admits, reads through the bounded staging queue
 // until the body ends, responds 200. Verdicts land in the out-
 // parameters; the test body asserts (helpers carry no LT_CHECK
@@ -342,6 +357,116 @@ LT_BEGIN_AUTO_TEST(body_reader_suite, body_empty_body_reads_end_immediately)
     LT_CHECK(seen.data.empty());
     LT_CHECK_EQ(x.body().trailers().size(), static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(body_empty_body_reads_end_immediately)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_collect_within_cap_returns_whole)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    LT_CHECK(source.stage(bytes("abc")));
+    LT_CHECK(source.stage(bytes("def")));
+    http::fields trailers;
+    trailers.append("X-Total", "6");
+    source.stage_end(trailers);
+
+    const body_collect seen = run_collect(x, ex, 64);
+    LT_CHECK(seen.status.ok());
+    LT_CHECK(of(seen.data) == "abcdef");
+    // A successful collect leaves the reader at end of body, with the
+    // trailers final.
+    const std::optional<std::string_view> total =
+        x.body().trailers().first("x-total");
+    LT_CHECK(total.has_value());
+    LT_CHECK(*total == "6");
+LT_END_AUTO_TEST(body_collect_within_cap_returns_whole)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_collect_fails_exactly_at_cap)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange over(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(over.admit_body(body_policy()).ok());
+    LT_CHECK(source.stage(bytes("0123456789")));  // 10 bytes staged
+
+    // One byte under: exact over-limit outcome, diagnostic names the cap.
+    const body_collect refused = run_collect(over, ex, 9);
+    LT_CHECK(refused.status.code() == http::outcome_code::limit_exceeded);
+    LT_CHECK(refused.status.message().find("9") != std::string::npos);
+    LT_CHECK(refused.data.empty());
+
+    // Exactly at cap succeeds (fresh exchange: a refused collect left
+    // the previous reader sticky).
+    fake::scripted_body_source source2;
+    exchange at_cap(make_head(), &sink, 0, &source2);
+    LT_CHECK(at_cap.admit_body(body_policy()).ok());
+    LT_CHECK(source2.stage(bytes("0123456789")));
+    source2.stage_end();
+    const body_collect seen = run_collect(at_cap, ex, 10);
+    LT_CHECK(seen.status.ok());
+    LT_CHECK(of(seen.data) == "0123456789");
+LT_END_AUTO_TEST(body_collect_fails_exactly_at_cap)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_collect_zero_cap)
+    detail::recording_sink sink;
+    manual_executor ex;
+
+    // Zero cap over an immediately-ending body: ok, empty.
+    fake::scripted_body_source empty_source;
+    exchange empty_body(make_head(), &sink, 0, &empty_source);
+    LT_CHECK(empty_body.admit_body(body_policy()).ok());
+    empty_source.stage_end();
+    const body_collect nothing = run_collect(empty_body, ex, 0);
+    LT_CHECK(nothing.status.ok());
+    LT_CHECK(nothing.data.empty());
+
+    // Zero cap with any data staged: limit_exceeded.
+    fake::scripted_body_source data_source;
+    exchange data_body(make_head(), &sink, 0, &data_source);
+    LT_CHECK(data_body.admit_body(body_policy()).ok());
+    LT_CHECK(data_source.stage(bytes("x")));
+    const body_collect refused = run_collect(data_body, ex, 0);
+    LT_CHECK(refused.status.code() == http::outcome_code::limit_exceeded);
+LT_END_AUTO_TEST(body_collect_zero_cap)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_collect_over_limit_is_sticky)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    LT_CHECK(source.stage(bytes("0123456789")));
+
+    LT_CHECK(run_collect(x, ex, 9).status.code()
+             == http::outcome_code::limit_exceeded);
+    const std::size_t credit_after_trip = source.credit_released();
+
+    // Sticky: later reads return the same failure without touching the
+    // source (credit frozen — the unconsumed remainder gets none).
+    std::vector<std::byte> destination(16);
+    const body_read after = run_read(x, ex, destination);
+    LT_CHECK(after.status.code() == http::outcome_code::limit_exceeded);
+    LT_CHECK_EQ(source.credit_released(), credit_after_trip);
+LT_END_AUTO_TEST(body_collect_over_limit_is_sticky)
+
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_collect_on_disconnected_fails_closed)
+    detail::recording_sink sink;
+    fake::scripted_body_source source;
+    exchange x(make_head(), &sink, 0, &source);
+    manual_executor ex;
+
+    LT_CHECK(x.admit_body(body_policy()).ok());
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+
+    const body_collect seen = run_collect(x, ex, 64);
+    LT_CHECK(seen.status.code() == http::outcome_code::connection_closed);
+    LT_CHECK(seen.status.message().find("peer went away")
+             != std::string::npos);
+LT_END_AUTO_TEST(body_collect_on_disconnected_fails_closed)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
