@@ -32,6 +32,8 @@
 // only after the flush), the 404 miss path with its end-marker
 // synthesis, the clean EOF close before any request, and the
 // connections-budget refusal that reports the stop without a response.
+// TASK-109 adds the Expect-admission, drain-or-close, and suspension
+// deadline scenarios on the same rig.
 
 #include <atomic>
 #include <chrono>
@@ -45,6 +47,7 @@
 #include <thread>
 #include <utility>
 
+#include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
@@ -74,6 +77,8 @@ using httpserver::detail::worker_pool;
 using httpserver::body_collect;
 using httpserver::body_policy;
 using httpserver::exchange;
+using httpserver::resume_outcome;
+using httpserver::resume_signal;
 using httpserver::task;
 using parity::observed_response;
 using parity::response_frame_parser;
@@ -149,6 +154,57 @@ task<void> one_shot_handler(exchange& x) {
     f.append("Content-Length", "0");
     static_cast<void>(x.respond(http::status::from_code(200), f));
     co_return;
+}
+
+// TASK-109 scenario state. The tests run sequentially (AUTORUN_TESTS),
+// and each resets what it reads before starting its engine.
+resume_signal late_gate;   // /late_admit parks here before admitting
+std::atomic<bool> suspend_entered{false};
+std::atomic<int> suspend_wait_done{0};
+std::atomic<int> suspend_outcome{-1};   // resume_outcome as int
+
+// POST /late_admit: parks on the shared gate BEFORE admitting, then
+// admits + collects + echoes. The test thread releases the gate, so the
+// interim-vs-admission ordering is observable on the wire.
+task<void> late_admit_handler(exchange& x) {
+    const resume_outcome gate = co_await late_gate.wait_for(kBudget);
+    if (gate != resume_outcome::resumed) co_return;
+    const http::outcome admitted = x.admit_body(body_policy{});
+    if (!admitted.ok()) co_return;
+    const body_collect collected = co_await x.body().collect(1 << 20);
+    if (!collected.status.ok()) co_return;
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", std::to_string(collected.data.size()));
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::byte* raw =
+        reinterpret_cast<const std::byte*>(collected.data.data());
+    co_await x.writer().write(
+        std::span<const std::byte>(raw, collected.data.size()));
+    co_await x.writer().finish();
+}
+
+// POST /reject: answers 403 straight from the head -- the body is never
+// admitted, so no interim may ride ahead of the rejection.
+task<void> reject_handler(exchange& x) {
+    http::fields f;
+    f.append("Content-Length", "0");
+    static_cast<void>(x.respond(http::status::from_code(403), f));
+    co_return;
+}
+
+// POST /suspend_head: suspends the exchange at head state and parks on
+// the resume signal; the engine resolves the wait (a disconnect cancels
+// it, the suspension deadline ends the exchange). Records how many
+// waits completed and with which outcome.
+task<void> suspend_head_handler(exchange& x) {
+    resume_signal wait;
+    if (!x.suspend(wait).ok()) co_return;
+    suspend_entered.store(true);
+    const resume_outcome outcome = co_await wait.wait_for(kBudget);
+    suspend_outcome.store(static_cast<int>(outcome));
+    suspend_wait_done.fetch_add(1);
+    co_return;   // a cancelled exchange must not respond
 }
 
 // One scenario rig: pool + poll backend + registry + one loopback
@@ -260,6 +316,24 @@ bool reaches_eof(pollsys::native_socket_t peer) {
         return false;
     }
     return false;
+}
+
+// Deadline-bounded absence probe: true when NOT one byte arrives on the
+// peer within @p window (a byte or a close fails it immediately).
+bool no_bytes_within(pollsys::native_socket_t peer,
+                     std::chrono::milliseconds window) {
+    std::byte buf[64];
+    const auto deadline = std::chrono::steady_clock::now() + window;
+    for (;;) {
+        const pollsys::sys_result r =
+            pollsys::read_some(peer, buf, sizeof buf);
+        if (r.status == pollsys::sys_status::would_block) {
+            if (std::chrono::steady_clock::now() >= deadline) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            continue;
+        }
+        return false;   // data arrived, or the peer closed
+    }
 }
 
 }  // namespace
@@ -439,6 +513,120 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, expect_continue_interim)
     s.pair.close_peer();
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
 LT_END_AUTO_TEST(expect_continue_interim)
+
+// The interim follows ADMISSION, not head arrival: while the handler
+// holds the body unadmitted, nothing may hit the wire -- then the 100
+// rides ahead of the final head the moment admission happens.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, expect_no_interim_before_admit)
+    scenario s;
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/late_admit",
+        late_admit_handler));
+    late_gate = resume_signal{};   // fresh one-shot, engine not running yet
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /late_admit HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\n"
+        "Content-Length: 4\r\n\r\nping";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    LT_CHECK(no_bytes_within(s.pair.peer(), std::chrono::milliseconds(400)));
+    late_gate.signal();
+    const std::optional<observed_response> interim =
+        s.next_response(s.pair.peer());
+    LT_CHECK(interim.has_value());
+    if (interim.has_value()) LT_CHECK_EQ(interim->status, 100);
+    const std::optional<observed_response> final_response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(final_response.has_value());
+    if (final_response.has_value()) {
+        LT_CHECK_EQ(final_response->status, 200);
+        LT_CHECK_EQ(final_response->body, std::string("ping"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(expect_no_interim_before_admit)
+
+// A rejection from the head never admits the body, so no interim may
+// precede the 403 (the interim would be the slot's first response).
+LT_BEGIN_AUTO_TEST(connection_engine_suite, expect_rejection_no_interim)
+    scenario s;
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/reject",
+        reject_handler));
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /reject HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\n"
+        "Content-Length: 4\r\n\r\nping";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 403);
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(expect_rejection_no_interim)
+
+// Expect on HTTP/1.0: the 100-continue interim is a 1.1-only posture;
+// the final response arrives alone.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, expect_http10_no_interim)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /echo HTTP/1.0\r\nExpect: 100-continue\r\n"
+        "Content-Length: 4\r\n\r\nping";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) {
+        LT_CHECK_EQ(response->status, 200);
+        LT_CHECK_EQ(response->body, std::string("ping"));
+    }
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(expect_http10_no_interim)
+
+// An unknown Expect value is ignored (no 417, no interim): the request
+// is simply served.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, expect_unknown_value_no_interim)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /echo HTTP/1.1\r\nHost: h\r\nExpect: widgets\r\n"
+        "Content-Length: 4\r\n\r\nping";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) {
+        LT_CHECK_EQ(response->status, 200);
+        LT_CHECK_EQ(response->body, std::string("ping"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(expect_unknown_value_no_interim)
+
+// A peer hangup while the exchange is suspended cancels the resume
+// wait exactly once; the engine unwinds and stops promptly.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, suspension_head_disconnect_cancels)
+    scenario s;
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/suspend_head",
+        suspend_head_handler));
+    suspend_entered.store(false);
+    suspend_wait_done.store(0);
+    suspend_outcome.store(-1);
+    LT_CHECK(s.start_engine());
+    const std::string head =
+        "POST /suspend_head HTTP/1.1\r\nHost: h\r\nContent-Length: 1000\r\n"
+        "\r\n";
+    io_loopback::write_all(s.pair.peer(), head.data(), head.size());
+    LT_CHECK(wait_until([] { return suspend_entered.load(); }));
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+    LT_CHECK_EQ(suspend_wait_done.load(), 1);
+    LT_CHECK_EQ(suspend_outcome.load(),
+                static_cast<int>(resume_outcome::cancelled));
+LT_END_AUTO_TEST(suspension_head_disconnect_cancels)
 
 // A body the handler never reads blocks keep-alive: the handler
 // one-shot responds and the body arrives afterwards -- the connection
