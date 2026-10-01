@@ -53,6 +53,7 @@
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP1_HEAD_PARSER_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP1_HEAD_PARSER_HPP_
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -129,6 +130,19 @@ class http1_head_parser {
     // Octets buffered past the head terminator; nonzero only in the
     // complete state.
     std::size_t residue_size() const noexcept;
+
+    // View of the same octets residue_size() counts: the buffered bytes
+    // after the head terminator (a pipelined next head, or the leading
+    // octets of this request's body once the framing mode says there is
+    // one). Empty outside the complete state. The view is invalidated
+    // by take(), feed(), and consume_residue().
+    std::string_view residue_view() const noexcept;
+
+    // Erases the leading @p n bytes of the buffered residue (clamped to
+    // residue_size()). The engine drains a complete head's residue into
+    // its body path here, so the drained body prefix never re-enters
+    // the next head. No-op outside the complete state.
+    void consume_residue(std::size_t n);
 
  private:
     // Records a typed rejection (sticky). Returns false so callers can
@@ -291,6 +305,16 @@ inline std::size_t http1_head_parser::residue_size() const noexcept {
     return state_ == http1_head_state::complete
                ? buffer_.size() - head_end_
                : 0;
+}
+
+inline std::string_view http1_head_parser::residue_view() const noexcept {
+    if (state_ != http1_head_state::complete) return std::string_view();
+    return std::string_view(buffer_).substr(head_end_);
+}
+
+inline void http1_head_parser::consume_residue(std::size_t n) {
+    if (state_ != http1_head_state::complete) return;
+    buffer_.erase(head_end_, std::min(n, buffer_.size() - head_end_));
 }
 
 inline bool http1_head_parser::fail(http::outcome_code code,
