@@ -34,6 +34,7 @@
 #include <vector>
 
 #include <httpserver/detail/connection_engine.hpp>
+#include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/listener_engine.hpp>
 #include <httpserver/detail/worker_pool.hpp>
@@ -47,7 +48,8 @@ namespace engine = httpserver::detail;
 class native_server::impl {
  public:
     explicit impl(server_options options)
-        : options_(std::move(options)),
+        : scope_(std::make_shared<engine::drain_scope>()),
+          options_(std::move(options)),
           budget_(resource_budget::root(options_.budgets())),
           pool_(options_.concurrency().workers) {
         registry_state_ = route_registry::create(budget_, registry_);
@@ -88,7 +90,7 @@ class native_server::impl {
 
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             listeners_.push_back(std::make_shared<engine::listener_engine>(
-                backend_, pool_, registry_, budget_, config));
+                backend_, pool_, registry_, budget_, *scope_, config));
             const http::outcome bound =
                 listeners_.back()->listen(options_.listener(i), i);
             if (!bound.ok()) {
@@ -133,9 +135,13 @@ class native_server::impl {
  private:
     // Destruction order (reverse declaration): the flags, the transport
     // engine (close), the pool (drain), the listeners, the registry,
-    // the budget, the options. The engine tasks that the close enqueues
-    // run during the pool's implicit drain; every listener record is
-    // erased before the listeners die.
+    // the budget, the options, the drain scope. The engine tasks that
+    // the close enqueues run during the pool's implicit drain; every
+    // listener record is erased before the listeners die, and the scope
+    // outlives them all so a finalizing engine's leave() is always
+    // in-bounds (a ticket holding a shared_ptr copy may outlive even
+    // this).
+    std::shared_ptr<engine::drain_scope> scope_;
     server_options options_;
     resource_budget budget_;
     route_registry registry_;

@@ -32,6 +32,7 @@
 #include <string>
 #include <utility>
 
+#include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/exchange_runner.hpp>
 #include <httpserver/detail/http1_body_mode.hpp>
 #include <httpserver/detail/http1_response_mode.hpp>
@@ -49,7 +50,13 @@ task<bool> connection_engine::wait_for_head(
         wake_operation op(self->owner_, self->id_);
         {
             std::lock_guard<std::mutex> lock(self->mu_);
-            if (self->shutdown_) co_return false;
+            // The close mark ends the head wait even with a parked
+            // complete head: a quiescing (or closing) engine drops
+            // pipelined-unstarted heads instead of serving them
+            // (TASK-110).
+            if (self->shutdown_ || self->close_after_drain_) {
+                co_return false;
+            }
             if (self->parser_.state() == http1_head_state::complete) {
                 co_return true;
             }
@@ -117,6 +124,10 @@ task<bool> connection_engine::serve_one(
                                                    routed.cancellation());
     engine_sink.bind(slot);
     forwarding.bind(slot);
+    // The exchange's counted unit spans the live window -- current_
+    // binding through finish and the rejection-drain await -- so work
+    // the drain counts is literally the calling handler (TASK-110).
+    drain_scope::unit exchange_unit{self->scope_};
     {
         std::lock_guard<std::mutex> lock(self->mu_);
         self->current_ = &routed;
@@ -174,16 +185,23 @@ bool connection_engine::finish_exchange(wake_body_sink& forwarding,
     return keep;
 }
 
-void connection_engine::settle_exchange_state(bool& keep,
-                                              const http1_body_mode& mode) {
-    std::lock_guard<std::mutex> lock(mu_);
-    // Undrained: the exchange ends with body octets nobody consumed --
-    // the decoder unfed (never admitted) or fed but incomplete.
-    const bool undrained = mode.kind != http1_body_kind::none
+bool connection_engine::body_undrained_locked(
+        const http1_body_mode& mode) const {
+    return mode.kind != http1_body_kind::none
         && (gate_ == body_gate::pending
             || (gate_ == body_gate::admitted
                 && (body_ == nullptr || !body_->message_complete())));
-    if (undrained) decide_drain_locked(keep, mode);
+}
+
+void connection_engine::settle_exchange_state(bool& keep,
+                                              const http1_body_mode& mode) {
+    std::lock_guard<std::mutex> lock(mu_);
+    // A quiescing engine closes after the in-flight exchange whatever
+    // the response said about persistence: the next head (parked or
+    // still on the wire) is dropped, and no rejection drain may hold
+    // the connection for a remainder it will never serve (TASK-110).
+    if (quiescing_) keep = false;
+    if (body_undrained_locked(mode)) decide_drain_locked(keep, mode);
     // A kept verdict implies the body (if any) is accounted for, so
     // parked pipelined bytes are exactly the next head: recycle them
     // into the parser. The per-exchange gate closes unless a drain

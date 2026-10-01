@@ -38,12 +38,14 @@ namespace detail {
 listener_engine::listener_engine(io_poll_backend& backend, worker_pool& pool,
                                  const server::route_registry& routes,
                                  const server::resource_budget& budget,
+                                 drain_scope& scope,
                                  connection_engine_config config)
     : backend_(backend),
       pool_(pool),
       routes_(routes),
       owner_(pool),
       budget_(budget),
+      scope_(scope),
       config_(std::move(config)) {
 }
 
@@ -120,7 +122,7 @@ void listener_engine::adopt_accepted(std::uint64_t connection) {
             return;
         }
         engine = std::make_shared<connection_engine>(
-            backend_, pool_, routes_, budget_, config_, connection,
+            backend_, pool_, routes_, budget_, scope_, config_, connection,
             [this, connection] { erase(connection); });
         connections_.emplace(connection, engine);
     }

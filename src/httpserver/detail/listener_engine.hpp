@@ -62,13 +62,15 @@ namespace httpserver {
 
 namespace detail {
 
+class drain_scope;
+
 class listener_engine final
     : public std::enable_shared_from_this<listener_engine> {
  public:
     listener_engine(io_poll_backend& backend, worker_pool& pool,
                     const server::route_registry& routes,
                     const server::resource_budget& budget,
-                    connection_engine_config config);
+                    drain_scope& scope, connection_engine_config config);
 
     listener_engine(const listener_engine&) = delete;
     listener_engine& operator=(const listener_engine&) = delete;
@@ -106,6 +108,7 @@ class listener_engine final
     const server::route_registry& routes_;
     io_connection_owner owner_;
     const server::resource_budget& budget_;
+    drain_scope& scope_;
     connection_engine_config config_;
     std::uint64_t id_ = 0;
     std::uint16_t bound_port_ = 0;

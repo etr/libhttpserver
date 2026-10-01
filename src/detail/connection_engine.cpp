@@ -32,6 +32,7 @@
 #include <string>
 #include <utility>
 
+#include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/http/outcome.hpp>
 
 namespace httpserver {
@@ -41,6 +42,7 @@ namespace detail {
 connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool,
                                      const server::route_registry& routes,
                                      const server::resource_budget& budget,
+                                     drain_scope& scope,
                                      connection_engine_config config,
                                      std::uint64_t id,
                                      stopped_callback on_stopped)
@@ -49,6 +51,7 @@ connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool
       routes_(routes),
       owner_(pool),
       budget_(budget),
+      scope_(scope),
       config_(std::move(config)),
       id_(id),
       on_stopped_(std::move(on_stopped)),
@@ -76,6 +79,10 @@ void connection_engine::start() {
         if (done) done();
         return;
     }
+    // The engine's counted unit spans its whole live window; the drain
+    // completion condition rides on it (finalize drops it only after
+    // every loop finished and the writer flushed).
+    scope_.enter();
     std::shared_ptr<connection_engine> self = shared_from_this();
     spawn(pool_, reader_loop(self),
           [self](task_result<void>) { self->loop_finished(); });
@@ -97,6 +104,22 @@ void connection_engine::shutdown() noexcept {
                        "http1 connection engine: server stop");
     outbox_.abandon();
     backend_.release_connection(id_);
+    wake_loops();
+}
+
+void connection_engine::quiesce() noexcept {
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        // A shutdown (before or after) is the harder state: it already
+        // owns the close; a second quiesce changes nothing.
+        if (shutdown_ || quiescing_) return;
+        quiescing_ = true;
+        // Idle: mark the close now (the parked route loop's head wait
+        // bails and the writer flushes-and-releases). With a live
+        // exchange the settle step closes instead, so the in-flight
+        // response is never disturbed.
+        if (current_ == nullptr) close_after_drain_ = true;
+    }
     wake_loops();
 }
 
@@ -618,6 +641,10 @@ void connection_engine::loop_finished() {
 }
 
 void connection_engine::finalize() {
+    // The engine's counted unit drops first: by the time the listener
+    // erases its record, a drain waiting on the scope observes
+    // completion with every loop finished and the writer flushed.
+    scope_.leave();
     backend_.release_connection(id_);
     stopped_callback done;
     {
