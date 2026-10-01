@@ -519,8 +519,9 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     // drain anchors, so a suspended exchange and a stalled rejection
     // drain both reach their deadlines; the sliding candidates still
     // win whenever they are genuinely nearer. While an exchange is
-    // routed and no candidate applies, the plan defers (TASK-110's
-    // drain semantics bound it instead).
+    // routed and no candidate applies, the plan defers -- the drain
+    // ticket's deadline (or a stop) bounds that window instead
+    // (TASK-110).
     std::chrono::steady_clock::time_point candidates[4];
     std::size_t candidate_count = 0;
     if (body_decode_pending_locked()) {

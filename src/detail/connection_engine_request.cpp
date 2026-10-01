@@ -311,7 +311,8 @@ bool http1_exchange_sink::upgraded() const noexcept {
 }
 
 void http1_exchange_sink::on_admit(const body_policy& policy) {
-    static_cast<void>(policy);  // delivery knobs arrive with TASK-110
+    static_cast<void>(policy);  // delivery knobs arrive with M9 bounded
+                                // admission (TASK-111)
     // The admission transition first (TASK-109): the parked early
     // bytes seed the decoder and the gated reader resumes; a seed that
     // already fails framing disconnects the exchange and never earns
