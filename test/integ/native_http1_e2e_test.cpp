@@ -202,6 +202,73 @@ task<void> suspend_head_handler(exchange& x) {
     e2e_suspend_outcome.store(static_cast<int>(outcome));
 }
 
+// TASK-110 drain scenario state. Same sequential-suite discipline as
+// the TASK-109 state above: each scenario resets what it reads before
+// connecting (the previous fixture's stop joined its handlers).
+resume_signal e2e_drain_gate;   // /drain_gated parks here pre-response
+std::atomic<bool> e2e_drain_entered{false};
+std::atomic<bool> e2e_hang_entered{false};
+std::atomic<int> e2e_hang_outcome{-1};   // resume_outcome as int
+std::atomic<bool> e2e_caller_began_ok{false};
+std::atomic<int> e2e_caller_wait_code{-1};   // outcome_code as int
+std::atomic<bool> e2e_caller_returned{false};
+srv::native_server* drain_begin_target = nullptr;
+srv::drain_ticket* drain_begin_ticket = nullptr;
+
+// GET /drain_gated: parks on the shared gate before responding, so the
+// drain scenarios can hold the in-flight exchange open.
+task<void> drain_gated_handler(exchange& x) {
+    e2e_drain_entered.store(true);
+    const resume_outcome gate =
+        co_await e2e_drain_gate.wait_for(raw::kExchangeBudget);
+    if (gate != resume_outcome::resumed) co_return;
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", "5");
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::string body = "gated";
+    const std::byte* raw = reinterpret_cast<const std::byte*>(body.data());
+    co_await x.writer().write(std::span<const std::byte>(raw, body.size()));
+    co_await x.writer().finish();
+}
+
+// GET /hang_forever: suspends and parks on a never-signaled gate --
+// work only a drain's deadline expiry (or a plain stop) can end. The
+// suspension registration is what lets the hard stop cancel the park.
+task<void> hang_forever_handler(exchange& x) {
+    resume_signal wait;
+    if (!x.suspend(wait).ok()) co_return;
+    e2e_hang_entered.store(true);
+    const resume_outcome outcome =
+        co_await wait.wait_for(std::chrono::seconds(30));
+    e2e_hang_outcome.store(static_cast<int>(outcome));
+    co_return;   // cancelled: no response
+}
+
+// GET /drain_caller: commits its response first, then begins a drain
+// and waits on the ticket from inside the handler. The wait must
+// refuse would_deadlock at once (the handler is counted work), leaving
+// the ticket itself usable for the external waiter.
+task<void> drain_caller_handler(exchange& x) {
+    http::fields f;
+    f.append("Content-Length", "2");
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::string body = "ok";
+    const std::byte* raw = reinterpret_cast<const std::byte*>(body.data());
+    co_await x.writer().write(std::span<const std::byte>(raw, body.size()));
+    co_await x.writer().finish();
+    if (drain_begin_target != nullptr && drain_begin_ticket != nullptr) {
+        const http::outcome began = drain_begin_target->begin_drain(
+            std::chrono::milliseconds(5000), *drain_begin_ticket);
+        e2e_caller_began_ok.store(began.ok());
+        srv::drain_result observed;
+        const http::outcome waited =
+            drain_begin_ticket->wait(observed);
+        e2e_caller_wait_code.store(static_cast<int>(waited.code()));
+    }
+    e2e_caller_returned.store(true);
+}
+
 // -- fixtures ----------------------------------------------------------------
 
 srv::server_options base_options() {
@@ -246,6 +313,15 @@ class server_fixture {
         static_cast<void>(server_.route(
             http::method::known(http::method_id::post), "/suspend_head",
             suspend_head_handler));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::get), "/drain_gated",
+            drain_gated_handler));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::get), "/hang_forever",
+            hang_forever_handler));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::get), "/drain_caller",
+            drain_caller_handler));
         static_cast<void>(server_.listen());
     }
 
@@ -278,6 +354,15 @@ LT_BEGIN_SUITE(native_http1_e2e_suite)
         stopper_returned.store(false);
         e2e_late_gate = resume_signal{};
         e2e_suspend_outcome.store(-1);
+        e2e_drain_gate = resume_signal{};
+        e2e_drain_entered.store(false);
+        e2e_hang_entered.store(false);
+        e2e_hang_outcome.store(-1);
+        e2e_caller_began_ok.store(false);
+        e2e_caller_wait_code.store(-1);
+        e2e_caller_returned.store(false);
+        drain_begin_target = nullptr;
+        drain_begin_ticket = nullptr;
     }
 
     void tear_down() {
@@ -671,6 +756,172 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, connections_budget_refuses_second)
     LT_CHECK(refused.peer_closed());
     LT_CHECK(none.empty());
 LT_END_AUTO_TEST(connections_budget_refuses_second)
+
+// (19) TASK-110: a drain over a live in-flight exchange completes once
+// that work ends -- the held-open response flushes in full, the client
+// observes the whole body then the close, and the ticket reports
+// completed with nothing remaining.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, drain_completes_after_inflight_work_ends)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /drain_gated HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(wait_until(e2e_drain_entered));
+    srv::drain_ticket ticket;
+    const http::outcome began = s.server().begin_drain(
+        std::chrono::milliseconds(5000), ticket);
+    LT_CHECK(began.ok());
+    e2e_drain_gate.signal();
+    srv::drain_result observed;
+    const http::outcome waited = ticket.wait(observed);
+    LT_CHECK(waited.ok());
+    LT_CHECK(observed.status == srv::drain_status::completed);
+    LT_CHECK_EQ(observed.remaining, std::size_t{0});
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK(client.receive_close(seen));
+    LT_CHECK(client.peer_closed());
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string("gated"));
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    const auto began_stop = std::chrono::steady_clock::now();
+    s.server().stop();
+    const auto elapsed = std::chrono::steady_clock::now() - began_stop;
+    LT_CHECK(elapsed < std::chrono::milliseconds(5000));
+LT_END_AUTO_TEST(drain_completes_after_inflight_work_ends)
+
+// (20) TASK-110: a drain whose work never ends expires at its
+// deadline -- the pre-cancel remaining is reported, the cancel hook
+// hard-stops the hung exchange (its parked wait resolves cancelled),
+// and the client observes the close.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, drain_deadline_expires_and_cancels_hung_work)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /hang_forever HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(wait_until(e2e_hang_entered));
+    srv::drain_ticket ticket;
+    const http::outcome began = s.server().begin_drain(
+        std::chrono::milliseconds(300), ticket);
+    LT_CHECK(began.ok());
+    srv::drain_result observed;
+    const http::outcome waited = ticket.wait(observed);
+    LT_CHECK(waited.ok());
+    LT_CHECK(observed.status == srv::drain_status::deadline_expired);
+    LT_CHECK(observed.remaining >= 1);
+    std::deque<observed_response> none;
+    LT_CHECK(client.receive_close(none));
+    LT_CHECK(client.peer_closed());
+    LT_CHECK(none.empty());
+    const auto cancelled_by = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(5000);
+    while (e2e_hang_outcome.load()
+               != static_cast<int>(resume_outcome::cancelled)) {
+        if (std::chrono::steady_clock::now() >= cancelled_by) break;
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+    LT_CHECK_EQ(e2e_hang_outcome.load(),
+                static_cast<int>(resume_outcome::cancelled));
+    s.server().stop();
+LT_END_AUTO_TEST(drain_deadline_expires_and_cancels_hung_work)
+
+// (21) TASK-110: a handler may begin a drain and try to wait on it --
+// begin_drain returns ok (nonblocking), the wait refuses
+// would_deadlock at once, the handler returns, and the very same
+// ticket waited externally afterwards reports completed.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, drain_wait_from_handler_is_would_deadlock)
+    server_fixture s(base_options());
+    srv::drain_ticket ticket;
+    drain_begin_target = &s.server();
+    drain_begin_ticket = &ticket;
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /drain_caller HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(wait_until(e2e_caller_returned));
+    drain_begin_target = nullptr;
+    drain_begin_ticket = nullptr;
+    LT_CHECK(e2e_caller_began_ok.load());
+    LT_CHECK_EQ(e2e_caller_wait_code.load(),
+                static_cast<int>(http::outcome_code::would_deadlock));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK(client.receive_close(seen));
+    LT_CHECK(client.peer_closed());
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string("ok"));
+    }
+    srv::drain_result observed;
+    const http::outcome waited = ticket.wait(observed);
+    LT_CHECK(waited.ok());
+    LT_CHECK(observed.status == srv::drain_status::completed);
+    LT_CHECK_EQ(observed.remaining, std::size_t{0});
+    s.server().stop();
+LT_END_AUTO_TEST(drain_wait_from_handler_is_would_deadlock)
+
+// (22) TASK-110: one drain closes both shapes at once -- the idle
+// keep-alive connection (nothing in flight) and the busy one (an
+// exchange held open until released); both observe their close, the
+// held response arrives in full first, and the ticket completes.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, drain_closes_idle_and_busy_connections)
+    server_fixture s(base_options());
+    raw::connection idle_client;
+    LT_CHECK(idle_client.connect(s.port()));
+    LT_CHECK(idle_client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> idle_seen;
+    LT_CHECK(idle_client.receive(1, idle_seen));
+    LT_CHECK_EQ(idle_seen.size(), 1u);
+    if (idle_seen.size() == 1) LT_CHECK_EQ(idle_seen[0].body,
+                                           std::string("hello"));
+    raw::connection busy_client;
+    LT_CHECK(busy_client.connect(s.port()));
+    LT_CHECK(busy_client.send("GET /drain_gated HTTP/1.1\r\nHost: h\r\n"
+                              "\r\n"));
+    LT_CHECK(wait_until(e2e_drain_entered));
+    srv::drain_ticket ticket;
+    const http::outcome began = s.server().begin_drain(
+        std::chrono::milliseconds(5000), ticket);
+    LT_CHECK(began.ok());
+    e2e_drain_gate.signal();
+    std::deque<observed_response> idle_close;
+    LT_CHECK(idle_client.receive_close(idle_close));
+    LT_CHECK(idle_client.peer_closed());
+    LT_CHECK(idle_close.empty());
+    std::deque<observed_response> busy_seen;
+    LT_CHECK(busy_client.receive(1, busy_seen));
+    LT_CHECK(busy_client.receive_close(busy_seen));
+    LT_CHECK(busy_client.peer_closed());
+    LT_CHECK_EQ(busy_seen.size(), 1u);
+    if (busy_seen.size() == 1) {
+        LT_CHECK_EQ(busy_seen[0].status, 200);
+        LT_CHECK_EQ(busy_seen[0].body, std::string("gated"));
+    }
+    srv::drain_result observed;
+    const http::outcome waited = ticket.wait(observed);
+    LT_CHECK(waited.ok());
+    LT_CHECK(observed.status == srv::drain_status::completed);
+    LT_CHECK_EQ(observed.remaining, std::size_t{0});
+    s.server().stop();
+LT_END_AUTO_TEST(drain_closes_idle_and_busy_connections)
+
+// (23) TASK-110: the stop halves stay split -- after a request_stop()
+// no drain may begin, and the failed begin leaves the ticket empty.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, begin_drain_after_request_stop_invalid_state)
+    server_fixture s(base_options());
+    s.server().request_stop();
+    srv::drain_ticket ticket;
+    const http::outcome began = s.server().begin_drain(
+        std::chrono::milliseconds(1000), ticket);
+    LT_CHECK(began.code() == http::outcome_code::invalid_state);
+    srv::drain_result observed;
+    LT_CHECK(ticket.wait(observed).code()
+             == http::outcome_code::invalid_state);
+    s.server().stop();
+LT_END_AUTO_TEST(begin_drain_after_request_stop_invalid_state)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
