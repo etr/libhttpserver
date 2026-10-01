@@ -35,6 +35,7 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -159,6 +160,10 @@ task<void> stopper_handler(exchange& x) {
 // connecting (the previous fixture's stop joined its handlers).
 resume_signal e2e_late_gate;   // /late_admit parks here, pre-admission
 std::atomic<int> e2e_suspend_outcome{-1};   // resume_outcome as int
+
+// TASK-111 sync-route state: /sync-echo counts its invocations so the
+// over-cap case can prove the handler never ran.
+std::atomic<int> sync_echo_invocations{0};
 
 // POST /late_admit: parks on the shared gate BEFORE admitting (the
 // wire must stay silent until admission), then collects + echoes. The
@@ -322,6 +327,24 @@ class server_fixture {
         static_cast<void>(server_.route(
             http::method::known(http::method_id::get), "/drain_caller",
             drain_caller_handler));
+        // TASK-111: the bounded sync value route -- a plain lambda, no
+        // coroutine code -- with a 16-byte body cap.
+        static_cast<void>(server_.route_sync(
+            http::method::known(http::method_id::post), "/sync-echo",
+            [](const http::request_head& h,
+               std::span<const std::byte> body) -> srv::sync_response {
+                ++sync_echo_invocations;
+                const std::string text(
+                    reinterpret_cast<const char*>(body.data()), body.size());
+                const std::string echo = h.route_path + ":" + text;
+                srv::sync_response out;
+                out.status = http::status::from_code(200);
+                const std::byte* raw =
+                    reinterpret_cast<const std::byte*>(echo.data());
+                out.body.assign(raw, raw + echo.size());
+                return out;
+            },
+            16));
         static_cast<void>(server_.listen());
     }
 
@@ -354,6 +377,7 @@ LT_BEGIN_SUITE(native_http1_e2e_suite)
         stopper_returned.store(false);
         e2e_late_gate = resume_signal{};
         e2e_suspend_outcome.store(-1);
+        sync_echo_invocations.store(0);
         e2e_drain_gate = resume_signal{};
         e2e_drain_entered.store(false);
         e2e_hang_entered.store(false);
@@ -922,6 +946,60 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, begin_drain_after_request_stop_invali
              == http::outcome_code::invalid_state);
     s.server().stop();
 LT_END_AUTO_TEST(begin_drain_after_request_stop_invalid_state)
+
+// (24) TASK-111: a synchronous value-returning route -- a plain
+// lambda, no coroutine code -- serves a POST within its cap over the
+// wire (head fidelity and body echo included) and the connection stays
+// keep-alive for the next request.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_sync_route_within_cap)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /sync-echo HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Length: 11\r\n\r\nhello sync!"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        // The handler saw the head and the exact body bytes.
+        LT_CHECK_EQ(seen[0].body, std::string("/sync-echo:hello sync!"));
+        // The adapter pinned the value's Content-Length.
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(sync_echo_invocations.load(), 1);
+    // Keep-alive: the same connection answers the next request.
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
+    LT_CHECK_EQ(sync_echo_invocations.load(), 1);
+LT_END_AUTO_TEST(http11_post_sync_route_within_cap)
+
+// (25) TASK-111: a body over the sync route's cap answers 413 without
+// invoking the handler; the admitted-undrained settle (TASK-109)
+// discards the remainder and the connection is reused.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_sync_route_over_cap_413)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /sync-echo HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Length: 32\r\n\r\n"
+                         + std::string(32, 'x')));   // cap is 16
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) LT_CHECK_EQ(seen[0].status, 413);
+    // The handler is provably never invoked.
+    LT_CHECK_EQ(sync_echo_invocations.load(), 0);
+    // The settle drained the counted remainder: the same connection
+    // answers the next request.
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
+    LT_CHECK_EQ(sync_echo_invocations.load(), 0);
+LT_END_AUTO_TEST(http11_post_sync_route_over_cap_413)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
