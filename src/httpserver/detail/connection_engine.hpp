@@ -67,10 +67,17 @@
 // server-stop path: disconnect the live exchange (handler-safe per
 // DR-V3-008), abandon the outbox, release the connection -- all
 // non-blocking, callable from any thread including inside a handler.
+// quiesce() is the drain path's graceful half (TASK-110): the live
+// exchange finishes and commits, the writer flushes the whole outbox,
+// pipelined-unstarted heads die with the connection, and idle
+// connections close at once. The engine and each of its exchanges are
+// counted units on the server's drain_scope (one engine unit from
+// start() to finalize(), one exchange unit across serve_one's live
+// window), so a completing drain proves every response flushed.
 //
 // Deliberate TASK-108 posture: exchanges on one connection run
 // sequentially (the outbox ordering design supports a later concurrent
-// refinement); the drain-ticket semantics of stop stay with TASK-110.
+// refinement).
 #if !defined(HTTPSERVER_COMPILATION)
 #error "connection_engine.hpp is internal; only reachable when compiling libhttpserver."
 #endif
@@ -109,6 +116,7 @@ namespace httpserver {
 namespace detail {
 
 class connection_engine;
+class drain_scope;
 class http1_exchange_sink;
 class wake_body_sink;
 
@@ -147,12 +155,13 @@ class connection_engine final
     using stopped_callback = concurrency::unique_function<void()>;
 
     // @p budget is the scope the connection reserves its seat against
-    // (the server root at TASK-108).
+    // (the server root at TASK-108); @p scope is the server's drain
+    // counter, entered for the engine's whole live window (TASK-110).
     connection_engine(io_poll_backend& backend, worker_pool& pool,
                       const server::route_registry& routes,
                       const server::resource_budget& budget,
-                      connection_engine_config config, std::uint64_t id,
-                      stopped_callback on_stopped);
+                      drain_scope& scope, connection_engine_config config,
+                      std::uint64_t id, stopped_callback on_stopped);
 
     connection_engine(const connection_engine&) = delete;
     connection_engine& operator=(const connection_engine&) = delete;
@@ -166,6 +175,20 @@ class connection_engine final
     // abandons the outbox, releases the connection. Idempotent,
     // non-blocking, handler-safe (DR-V3-008).
     void shutdown() noexcept;
+
+    // Drain path (begin_drain, TASK-110): finish the in-flight
+    // exchange -- the response commits and the writer flushes the
+    // entire outbox before releasing the transport; pipelined-unstarted
+    // heads are dropped; an idle connection closes at once. Idempotent,
+    // non-blocking, handler-safe; a shutdown() before or after wins
+    // (the harder state closes regardless).
+    void quiesce() noexcept;
+
+    // Marks the connection close-once-drained (the error, abort, and
+    // upgrade paths): the writer still flushes the outbox before the
+    // release. Public for the same callers as quiesce() -- the engine's
+    // own close-mark verb, safe from any thread.
+    void request_close() noexcept;
 
     std::uint64_t id() const noexcept { return id_; }
 
@@ -301,9 +324,6 @@ class connection_engine final
     void disconnect_current(http::outcome_code reason,
                             std::string detail) noexcept;
 
-    // Marks the connection close-once-drained (error and abort paths).
-    void request_close() noexcept;
-
     // Emits a bare synthesized error (http1_error_synth wire form)
     // through the outbox and marks the close. For the no-routing paths:
     // a failed head, a rejected framing, an exhausted budget.
@@ -319,9 +339,13 @@ class connection_engine final
                          const exchange& routed,
                          http1_exchange_sink& engine_sink,
                          const http1_body_mode& mode);
+    // True while this exchange's body ends undrained -- the decoder
+    // unfed (never admitted) or fed but incomplete. mu_ must be held.
+    bool body_undrained_locked(const http1_body_mode& mode) const;
     // The mutex-guarded half: budget the keep verdict against undrained
     // bodies (drain-or-close, TASK-109), recycle parked pipelined
-    // bytes, record the close verdict.
+    // bytes, record the close verdict. A quiescing engine closes
+    // regardless of the verdict (TASK-110).
     void settle_exchange_state(bool& keep, const http1_body_mode& mode);
     // The drain-or-close verdict for an undrained body at settle time.
     // Length framing with a healthy peer and a keep verdict reuses the
@@ -341,6 +365,7 @@ class connection_engine final
     const server::route_registry& routes_;
     io_connection_owner owner_;
     const server::resource_budget& budget_;
+    drain_scope& scope_;
     connection_engine_config config_;
     const std::uint64_t id_;
     stopped_callback on_stopped_;
@@ -369,6 +394,7 @@ class connection_engine final
         suspension_anchor_;
     bool eof_ = false;
     bool shutdown_ = false;
+    bool quiescing_ = false;
     bool route_done_ = false;
     bool close_after_drain_ = false;
     bool started_ = false;

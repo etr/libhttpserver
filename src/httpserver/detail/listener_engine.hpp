@@ -31,10 +31,11 @@
 // releases the listener transport (a pending accept completes
 // connection_closed and the loop exits) and shuts every live
 // connection engine down -- non-blocking, idempotent, safe from any
-// thread including inside a handler. Engine stop callbacks erase their
-// records; the server's stop() drains the pool so every record is
-// erased before the members die. Full drain-ticket semantics stay with
-// TASK-110; TASK-108 ships the stop-initiation half.
+// thread including inside a handler. quiesce() is the drain path's
+// graceful half (TASK-110): the listener stops accepting and every
+// live engine finishes its in-flight exchange before the close.
+// Engine stop callbacks erase their records; the server's stop()
+// drains the pool so every record is erased before the members die.
 #if !defined(HTTPSERVER_COMPILATION)
 #error "listener_engine.hpp is internal; only reachable when compiling libhttpserver."
 #endif
@@ -62,13 +63,15 @@ namespace httpserver {
 
 namespace detail {
 
+class drain_scope;
+
 class listener_engine final
     : public std::enable_shared_from_this<listener_engine> {
  public:
     listener_engine(io_poll_backend& backend, worker_pool& pool,
                     const server::route_registry& routes,
                     const server::resource_budget& budget,
-                    connection_engine_config config);
+                    drain_scope& scope, connection_engine_config config);
 
     listener_engine(const listener_engine&) = delete;
     listener_engine& operator=(const listener_engine&) = delete;
@@ -85,8 +88,17 @@ class listener_engine final
     // The resolved host-order port (0 until listen() succeeds).
     std::uint16_t bound_port() const noexcept { return bound_port_; }
 
+    // The drain path (begin_drain, TASK-110): stop accepting (the
+    // listener releases; racing accepts release their own transports)
+    // and quiesce every live connection engine -- each in-flight
+    // exchange finishes and flushes before its close. Non-blocking,
+    // handler-safe; a later request_stop() still hard-stops whatever
+    // is live (the harder call wins at each engine).
+    void quiesce() noexcept;
+
     // Stop initiation: release the listener transport, shut every live
-    // connection engine down. Non-blocking, idempotent, handler-safe.
+    // connection engine down. Non-blocking, idempotent, handler-safe;
+    // it hard-stops even after a quiesce().
     void request_stop() noexcept;
 
  private:
@@ -94,6 +106,10 @@ class listener_engine final
     // Builds and registers the engine for one accepted connection (the
     // backend already registered its transport under @p connection).
     void adopt_accepted(std::uint64_t connection);
+    // Snapshots the live connection engines into @p out (mu_ must be
+    // held) so a stop-side pass can act on them outside the lock.
+    void collect_live_locked(
+            std::vector<std::shared_ptr<connection_engine>>& out);
     // A connection engine's stopped callback: erases its record.
     void erase(std::uint64_t connection) noexcept;
 
@@ -106,6 +122,7 @@ class listener_engine final
     const server::route_registry& routes_;
     io_connection_owner owner_;
     const server::resource_budget& budget_;
+    drain_scope& scope_;
     connection_engine_config config_;
     std::uint64_t id_ = 0;
     std::uint16_t bound_port_ = 0;

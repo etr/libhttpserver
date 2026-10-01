@@ -38,12 +38,14 @@ namespace detail {
 listener_engine::listener_engine(io_poll_backend& backend, worker_pool& pool,
                                  const server::route_registry& routes,
                                  const server::resource_budget& budget,
+                                 drain_scope& scope,
                                  connection_engine_config config)
     : backend_(backend),
       pool_(pool),
       routes_(routes),
       owner_(pool),
       budget_(budget),
+      scope_(scope),
       config_(std::move(config)) {
 }
 
@@ -79,21 +81,49 @@ http::outcome listener_engine::listen(
     return http::outcome::okay();
 }
 
-void listener_engine::request_stop() noexcept {
+void listener_engine::collect_live_locked(
+        std::vector<std::shared_ptr<connection_engine>>& out) {
+    out.reserve(out.size() + connections_.size());
+    for (const auto& entry : connections_) {
+        out.push_back(entry.second);
+    }
+}
+
+// The drain path (TASK-110): stop accepting and hand every live
+// engine its graceful close. The listener release follows the same
+// first-caller rule as request_stop(); the engine-side quiesce guard
+// sorts out whatever a racing request_stop() already did.
+void listener_engine::quiesce() noexcept {
+    bool release = false;
     std::vector<std::shared_ptr<connection_engine>> live;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        if (stopped_) return;
+        release = !stopped_;
         stopped_ = true;
-        live.reserve(connections_.size());
-        for (const auto& entry : connections_) {
-            live.push_back(entry.second);
-        }
+        collect_live_locked(live);
     }
     // Listener first (a pending accept completes connection_closed and
     // the loop exits; a racing accept that slips through releases its
     // own transport in adopt_accepted), then every live engine.
-    backend_.release_connection(id_);
+    if (release) backend_.release_connection(id_);
+    for (const std::shared_ptr<connection_engine>& engine : live) {
+        engine->quiesce();
+    }
+}
+
+void listener_engine::request_stop() noexcept {
+    bool release = false;
+    std::vector<std::shared_ptr<connection_engine>> live;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        release = !stopped_;
+        stopped_ = true;
+        collect_live_locked(live);
+    }
+    // Same release-once rule as quiesce(); the shutdown pass itself
+    // always runs (each engine's own guard makes it idempotent), so a
+    // drain's deadline expiry hard-stops even already-quiesced engines.
+    if (release) backend_.release_connection(id_);
     for (const std::shared_ptr<connection_engine>& engine : live) {
         engine->shutdown();
     }
@@ -120,7 +150,7 @@ void listener_engine::adopt_accepted(std::uint64_t connection) {
             return;
         }
         engine = std::make_shared<connection_engine>(
-            backend_, pool_, routes_, budget_, config_, connection,
+            backend_, pool_, routes_, budget_, scope_, config_, connection,
             [this, connection] { erase(connection); });
         connections_.emplace(connection, engine);
     }

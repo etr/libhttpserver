@@ -27,7 +27,9 @@
 // through the listener) is the step-9 end-to-end suite's subject.
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <utility>
 
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/method.hpp>
@@ -137,6 +139,114 @@ LT_BEGIN_AUTO_TEST(native_server_suite, destructor_stops_running_server)
     LT_CHECK(reborn.listen().ok());
     LT_CHECK(reborn.get_bound_port(0) != 0);
 LT_END_AUTO_TEST(destructor_stops_running_server)
+
+// TASK-110: begin_drain() before listen() is invalid_state (nothing to
+// run down yet) and leaves the ticket empty.
+LT_BEGIN_AUTO_TEST(native_server_suite, begin_drain_before_listen_invalid_state)
+    srv::native_server server(loopback_options());
+    srv::drain_ticket ticket;
+    const http::outcome began =
+        server.begin_drain(std::chrono::milliseconds(1000), ticket);
+    LT_CHECK(began.code() == http::outcome_code::invalid_state);
+    LT_CHECK(!began.message().empty());
+    srv::drain_result observed;
+    LT_CHECK(ticket.wait(observed).code()
+             == http::outcome_code::invalid_state);
+LT_END_AUTO_TEST(begin_drain_before_listen_invalid_state)
+
+// TASK-110: after a stop the object is spent -- begin_drain() refuses.
+LT_BEGIN_AUTO_TEST(native_server_suite, begin_drain_after_stop_invalid_state)
+    srv::native_server server(loopback_options());
+    LT_CHECK(server.listen().ok());
+    server.stop();
+    srv::drain_ticket ticket;
+    const http::outcome began =
+        server.begin_drain(std::chrono::milliseconds(1000), ticket);
+    LT_CHECK(began.code() == http::outcome_code::invalid_state);
+LT_END_AUTO_TEST(begin_drain_after_stop_invalid_state)
+
+// TASK-110: one drain per server object; the second is invalid_state
+// and the first ticket stays usable.
+LT_BEGIN_AUTO_TEST(native_server_suite, begin_drain_twice_invalid_state)
+    srv::native_server server(loopback_options());
+    LT_CHECK(server.listen().ok());
+    srv::drain_ticket first;
+    LT_CHECK(server.begin_drain(std::chrono::milliseconds(5000), first)
+                 .ok());
+    srv::drain_ticket second;
+    const http::outcome again =
+        server.begin_drain(std::chrono::milliseconds(5000), second);
+    LT_CHECK(again.code() == http::outcome_code::invalid_state);
+    server.stop();
+    srv::drain_result observed;
+    LT_CHECK(first.wait(observed).ok());
+    LT_CHECK(observed.status == srv::drain_status::completed);
+    LT_CHECK_EQ(observed.remaining, std::size_t{0});
+LT_END_AUTO_TEST(begin_drain_twice_invalid_state)
+
+// TASK-110: a non-positive budget is invalid_argument (the ticket's
+// wait needs a deadline to be bounded by).
+LT_BEGIN_AUTO_TEST(native_server_suite, begin_drain_zero_budget_invalid_argument)
+    srv::native_server server(loopback_options());
+    LT_CHECK(server.listen().ok());
+    srv::drain_ticket ticket;
+    const http::outcome began =
+        server.begin_drain(std::chrono::milliseconds(0), ticket);
+    LT_CHECK(began.code() == http::outcome_code::invalid_argument);
+    server.stop();
+LT_END_AUTO_TEST(begin_drain_zero_budget_invalid_argument)
+
+// TASK-110: a drain over a listening server with no live work reports
+// completion at once. is_running() keeps its meaning across the drain
+// (a run-down is not a stop); stop() still closes the object out.
+LT_BEGIN_AUTO_TEST(native_server_suite, begin_drain_completes_with_no_work)
+    srv::native_server server(loopback_options());
+    LT_CHECK(server.listen().ok());
+    srv::drain_ticket ticket;
+    const http::outcome began =
+        server.begin_drain(std::chrono::milliseconds(5000), ticket);
+    LT_CHECK(began.ok());
+    LT_CHECK(server.is_running());
+    srv::drain_result observed;
+    const http::outcome waited = ticket.wait(observed);
+    LT_CHECK(waited.ok());
+    LT_CHECK(observed.status == srv::drain_status::completed);
+    LT_CHECK_EQ(observed.remaining, std::size_t{0});
+    server.stop();
+    LT_CHECK(!server.is_running());
+LT_END_AUTO_TEST(begin_drain_completes_with_no_work)
+
+// TASK-110: a default (or moved-from) ticket has nothing to wait on.
+LT_BEGIN_AUTO_TEST(native_server_suite, empty_ticket_wait_invalid_state)
+    srv::drain_ticket ticket;
+    srv::drain_result observed;
+    const http::outcome waited = ticket.wait(observed);
+    LT_CHECK(waited.code() == http::outcome_code::invalid_state);
+    LT_CHECK(!waited.message().empty());
+LT_END_AUTO_TEST(empty_ticket_wait_invalid_state)
+
+// TASK-110: the ticket is move-only state -- waiting through a moved
+// ticket works, the moved-from one reports invalid_state, and
+// move-assign re-homes the drain.
+LT_BEGIN_AUTO_TEST(native_server_suite, wait_on_default_ticket_moves)
+    srv::native_server server(loopback_options());
+    LT_CHECK(server.listen().ok());
+    srv::drain_ticket ticket;
+    LT_CHECK(server.begin_drain(std::chrono::milliseconds(5000), ticket)
+                 .ok());
+    srv::drain_ticket moved = std::move(ticket);
+    srv::drain_result observed;
+    LT_CHECK(moved.wait(observed).ok());
+    LT_CHECK(observed.status == srv::drain_status::completed);
+    const http::outcome from_empty = ticket.wait(observed);
+    LT_CHECK(from_empty.code() == http::outcome_code::invalid_state);
+    server.stop();
+    srv::drain_ticket target;
+    target = std::move(moved);
+    srv::drain_result after_move;
+    LT_CHECK(target.wait(after_move).ok());
+    LT_CHECK(after_move.status == srv::drain_status::completed);
+LT_END_AUTO_TEST(wait_on_default_ticket_moves)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

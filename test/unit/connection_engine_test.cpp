@@ -50,6 +50,7 @@
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/detail/connection_engine.hpp>
+#include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/body_reader.hpp>
@@ -72,6 +73,7 @@ namespace http = httpserver::http;
 
 using httpserver::detail::connection_engine;
 using httpserver::detail::connection_engine_config;
+using httpserver::detail::drain_scope;
 using httpserver::detail::io_poll_backend;
 using httpserver::detail::worker_pool;
 using httpserver::body_collect;
@@ -238,6 +240,31 @@ task<void> suspend_admit_handler(exchange& x) {
     co_return;
 }
 
+// TASK-110 scenario state (the suite runs sequentially, AUTORUN_TESTS;
+// every prior engine reported its stop before the next test starts).
+drain_scope scenario_scope;   // the counted-unit scope the rig wires in
+resume_signal gated_gate;     // /gated parks here before responding
+std::atomic<bool> gated_entered{false};
+std::atomic<int> gated_active{-1};   // scope units seen inside /gated
+
+// GET /gated: records the live drain-scope units, parks on the shared
+// gate, then streams a five-byte response (the quiesce scenarios hold
+// the in-flight exchange open until the test releases it).
+task<void> gated_handler(exchange& x) {
+    gated_active.store(static_cast<int>(scenario_scope.active()));
+    gated_entered.store(true);
+    const resume_outcome gate = co_await gated_gate.wait_for(kBudget);
+    if (gate != resume_outcome::resumed) co_return;
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", "5");
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::string body = "gated";
+    const std::byte* raw = reinterpret_cast<const std::byte*>(body.data());
+    co_await x.writer().write(std::span<const std::byte>(raw, body.size()));
+    co_await x.writer().finish();
+}
+
 // One scenario rig: pool + poll backend + registry + one loopback
 // connection. Declaration order is the teardown order's reverse: the
 // engine dies first, then the pair, then the pool, then the
@@ -254,6 +281,9 @@ struct scenario {
         static_cast<void>(registry.route(
             http::method::known(http::method_id::post), "/echo",
             echo_handler));
+        static_cast<void>(registry.route(
+            http::method::known(http::method_id::get), "/gated",
+            gated_handler));
         pair = io_loopback::pair::make();
         if (pair.ok()) {
             pollsys::set_nonblocking(pair.peer(), true);
@@ -270,7 +300,8 @@ struct scenario {
         if (!pair.ok()) return false;
         backend.adopt_connection(kConnId, pair.detach_local());
         engine = std::make_shared<connection_engine>(backend, pool, registry,
-                                                    root, config, kConnId,
+                                                    root, scenario_scope,
+                                                    config, kConnId,
                                                     [this] {
                                                         stopped.store(true);
                                                     });
@@ -364,6 +395,32 @@ bool no_bytes_within(pollsys::native_socket_t peer,
             continue;
         }
         return false;   // data arrived, or the peer closed
+    }
+}
+
+// Reads to the peer's close (deadline-bounded), feeding the scenario
+// parser; the observed responses stay queued in s.completed so a test
+// can count exactly what arrived before the FIN.
+void read_to_close(scenario& s, pollsys::native_socket_t peer) {
+    const auto deadline = std::chrono::steady_clock::now() + kBudget;
+    while (std::chrono::steady_clock::now() < deadline) {
+        const pollsys::sys_result r =
+            pollsys::read_some(peer, s.wire_buf, sizeof s.wire_buf);
+        if (r.status == pollsys::sys_status::ok && r.transferred > 0) {
+            for (observed_response& done : s.wire_parser.feed(
+                     as_view(s.wire_buf, r.transferred))) {
+                s.completed.push_back(done);
+            }
+            continue;
+        }
+        if (r.status == pollsys::sys_status::closed_reset) {
+            for (observed_response& done : s.wire_parser.finish()) {
+                s.completed.push_back(done);
+            }
+            return;
+        }
+        if (r.status != pollsys::sys_status::would_block) return;
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
     }
 }
 
@@ -1081,6 +1138,111 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, body_idle_disconnects)
     LT_CHECK(reaches_eof(s.pair.peer()));
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
 LT_END_AUTO_TEST(body_idle_disconnects)
+
+// TASK-110: quiesce during a live exchange completes the in-flight
+// response (nothing truncated, nothing synthesized) and closes only
+// after every byte flushed.
+LT_BEGIN_AUTO_TEST(connection_engine_suite,
+                   quiesce_completes_inflight_response_then_closes)
+    scenario s;
+    gated_gate = resume_signal{};
+    gated_entered.store(false);
+    LT_CHECK(s.start_engine());
+    const std::string request = "GET /gated HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    LT_CHECK(wait_until([] { return gated_entered.load(); }));
+    s.engine->quiesce();
+    gated_gate.signal();
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) {
+        LT_CHECK_EQ(response->status, 200);
+        LT_CHECK_EQ(response->body, std::string("gated"));
+        LT_CHECK_EQ(response->framing, std::string("content-length"));
+    }
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+    LT_CHECK_EQ(scenario_scope.active(), std::size_t{0});
+LT_END_AUTO_TEST(quiesce_completes_inflight_response_then_closes)
+
+// TASK-110: a pipelined-unstarted head behind the in-flight exchange is
+// dropped -- exactly one response reaches the peer before the close.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, quiesce_drops_pipelined_unstarted)
+    scenario s;
+    gated_gate = resume_signal{};
+    gated_entered.store(false);
+    LT_CHECK(s.start_engine());
+    const std::string batch =
+        "GET /gated HTTP/1.1\r\nHost: h\r\n\r\n"
+        "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), batch.data(), batch.size());
+    LT_CHECK(wait_until([] { return gated_entered.load(); }));
+    s.engine->quiesce();
+    gated_gate.signal();
+    read_to_close(s, s.pair.peer());
+    LT_CHECK_EQ(s.completed.size(), std::size_t{1});
+    if (s.completed.size() == 1) {
+        LT_CHECK_EQ(s.completed.front().status, 200);
+        LT_CHECK_EQ(s.completed.front().body, std::string("gated"));
+    }
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+    LT_CHECK_EQ(scenario_scope.active(), std::size_t{0});
+LT_END_AUTO_TEST(quiesce_drops_pipelined_unstarted)
+
+// TASK-110: an idle keep-alive connection closes at quiesce (observed
+// within a tight deadline), not at the header timeout.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, quiesce_idle_connection_closes_promptly)
+    srv::timeout_options timeouts;
+    timeouts.header = std::chrono::milliseconds(10000);
+    scenario s(timeouts);
+    LT_CHECK(s.start_engine());
+    const auto began = std::chrono::steady_clock::now();
+    s.engine->quiesce();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+    const auto elapsed = std::chrono::steady_clock::now() - began;
+    LT_CHECK(elapsed < std::chrono::milliseconds(5000));
+    LT_CHECK(reaches_eof(s.pair.peer()));
+LT_END_AUTO_TEST(quiesce_idle_connection_closes_promptly)
+
+// TASK-110: the counted units bracket the exchange -- the handler runs
+// between the connection unit and its own exchange unit (2 live), and
+// the count returns to zero once the engine finalized.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, counted_units_bracket_exchange)
+    scenario s;
+    gated_gate = resume_signal{};
+    gated_entered.store(false);
+    gated_active.store(-1);
+    LT_CHECK(s.start_engine());
+    const std::string request = "GET /gated HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    LT_CHECK(wait_until([] { return gated_entered.load(); }));
+    LT_CHECK_EQ(gated_active.load(), 2);
+    gated_gate.signal();
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 200);
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+    LT_CHECK_EQ(scenario_scope.active(), std::size_t{0});
+LT_END_AUTO_TEST(counted_units_bracket_exchange)
+
+// TASK-110 pin: the quiesce-time close mark also makes a direct
+// request_close() on an idle connection prompt (the wait_for_head bail
+// is load-bearing for both callers).
+LT_BEGIN_AUTO_TEST(connection_engine_suite, request_close_on_idle_is_prompt)
+    srv::timeout_options timeouts;
+    timeouts.header = std::chrono::milliseconds(10000);
+    scenario s(timeouts);
+    LT_CHECK(s.start_engine());
+    const auto began = std::chrono::steady_clock::now();
+    s.engine->request_close();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+    const auto elapsed = std::chrono::steady_clock::now() - began;
+    LT_CHECK(elapsed < std::chrono::milliseconds(5000));
+    LT_CHECK(reaches_eof(s.pair.peer()));
+LT_END_AUTO_TEST(request_close_on_idle_is_prompt)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

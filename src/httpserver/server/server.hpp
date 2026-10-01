@@ -31,8 +31,11 @@
 // it flips the state, releases the listeners, and disconnects every
 // live exchange; it never blocks and is safe to call from inside a
 // handler. stop() additionally closes the transport engine and joins
-// the workers. Full drain-ticket semantics arrive with TASK-110;
-// v3.0.0 ships the stop-initiation half.
+// the workers. begin_drain() is the graceful half (TASK-110): it
+// stops the accepting side, applies the HTTP/1 close behavior --
+// in-flight work finishes and flushes, pipelined-unstarted heads are
+// dropped, idle connections close -- and returns a deadline-bound
+// ticket reporting completion or expiry (PRD-V3N-REQ-032).
 //
 // This header is NOT part of the v2 umbrella <httpserver.hpp>: the
 // native server is an additive surface and v2 consumers are unaffected.
@@ -40,6 +43,7 @@
 #ifndef SRC_HTTPSERVER_SERVER_SERVER_HPP_
 #define SRC_HTTPSERVER_SERVER_SERVER_HPP_
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -53,6 +57,50 @@
 namespace httpserver {
 
 namespace server {
+
+// The two-state outcome of a drain ticket wait (PRD-V3N-REQ-032):
+// every counted unit completed, or the drain's deadline expired with
+// work still counted. A stop-driven completion reports completed --
+// the two-state result is the documented posture.
+enum class drain_status : std::uint8_t { completed, deadline_expired };
+
+// What one ticket wait observed. remaining is the unit count still
+// live at expiry (a pre-cancellation snapshot; 0 when completed).
+struct drain_result {
+    drain_status status = drain_status::completed;
+    std::size_t remaining = 0;
+};
+
+// The deadline-bound half of the stop split: begin_drain() hands one
+// out. The blocking wait reports what the counted work did -- every
+// unit completed, or the budget expired with work still live. The
+// ticket shares ownership of the counted scope, so it stays safe to
+// wait on even after the server object is destroyed.
+class drain_ticket {
+ public:
+    drain_ticket() noexcept;
+    ~drain_ticket();
+
+    drain_ticket(drain_ticket&&) noexcept;
+    drain_ticket& operator=(drain_ticket&&) noexcept;
+
+    // Blocking wait bounded by the drain's budget: ok with the
+    // observed result; would_deadlock when the calling thread runs
+    // work this drain counts (a handler of the same server waiting on
+    // its own drain); invalid_state on an empty (default-constructed
+    // or moved-from) ticket. request_stop()/stop() racing the wait
+    // drive it to completed -- the two-state result is the documented
+    // posture.
+    http::outcome wait(drain_result& out);
+
+ private:
+    friend class native_server;
+    class impl;
+
+    explicit drain_ticket(std::unique_ptr<impl> inner);
+
+    std::unique_ptr<impl> impl_;
+};
 
 // The owned-engine HTTP/1 server. All methods are thread-safe unless
 // noted; lifecycle calls (listen/stop) are expected from one
@@ -88,6 +136,18 @@ class native_server {
     // request_stop() plus closing the transport engine and joining the
     // workers. Returns once every engine task finished.
     void stop();
+
+    // Drain initiation (PRD-V3N-REQ-032): stop accepting new work,
+    // apply the HTTP/1 close behavior to active and pipelined work,
+    // and fill @p out with a ticket whose wait() is bounded by
+    // @p budget. Nonblocking and handler-safe like request_stop(); it
+    // never waits. budget <= 0 is invalid_argument; before listen(),
+    // after a stop, or on a second drain it is invalid_state. One
+    // drain per server object. is_running() keeps its meaning (a
+    // drain is a run-down, not a stop); request_stop()/stop() during
+    // the drain drive the ticket to completed.
+    http::outcome begin_drain(std::chrono::milliseconds budget,
+                              drain_ticket& out);
 
     // True from a successful listen() until request_stop() (or the
     // destructor) runs.
