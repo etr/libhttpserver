@@ -87,6 +87,39 @@ int shape_of_native_server() {
                                         srv::server_options>::value,
                   "native_server constructs from server_options alone");
 
+    // TASK-110: the drain surface. Everything stays unevaluated (no
+    // ticket object is ever destroyed here -- its special members live
+    // in the library this sentinel deliberately does not link).
+    using ticket_ref = srv::drain_ticket&;
+    static_assert(
+        std::is_same<decltype(std::declval<ticket_ref>().wait(
+                         std::declval<srv::drain_result&>())),
+                     http::outcome>::value,
+        "drain_ticket::wait returns the typed outcome");
+    static_assert(
+        std::is_same<decltype(std::declval<server_ref>().begin_drain(
+                         std::chrono::milliseconds(100),
+                         std::declval<srv::drain_ticket&>())),
+                     http::outcome>::value,
+        "begin_drain returns the typed outcome");
+    static_assert(!std::is_copy_constructible<srv::drain_ticket>::value,
+                  "drain_ticket is not copyable");
+    static_assert(std::is_move_constructible<srv::drain_ticket>::value,
+                  "drain_ticket is move-constructible");
+    static_assert(std::is_move_assignable<srv::drain_ticket>::value,
+                  "drain_ticket is move-assignable");
+    static_assert(std::is_default_constructible<srv::drain_ticket>::value,
+                  "drain_ticket is default-constructible (the empty shape)");
+    static_assert(
+        std::is_same<decltype(std::declval<srv::drain_result>().status),
+                     srv::drain_status>::value
+            && std::is_same<
+                decltype(std::declval<srv::drain_result>().remaining),
+                std::size_t>::value,
+        "drain_result reports status and remaining");
+    static_assert(std::is_enum<srv::drain_status>::value,
+                  "drain_status is the two-state enumeration");
+
     return count == 1 ? 0 : 1;
 }
 

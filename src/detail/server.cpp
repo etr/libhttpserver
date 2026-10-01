@@ -29,6 +29,7 @@
 #include <httpserver/server/server.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -123,6 +124,61 @@ class native_server::impl {
         pool_.drain_and_join();
     }
 
+    // TASK-110: drain initiation (PRD-V3N-REQ-032). Arms the counted
+    // scope (deadline + the would_deadlock predicate + the hard-stop
+    // cancel hook), then quiesces every listener -- no accepting, live
+    // exchanges finish and flush. Never waits; the ticket owns the
+    // blocking half.
+    http::outcome begin_drain(std::chrono::milliseconds budget) {
+        if (budget <= std::chrono::milliseconds::zero()) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "native_server: begin_drain needs a positive budget");
+        }
+        if (stop_requested_.load(std::memory_order_acquire)) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "native_server: this server was stopped; no drain");
+        }
+        if (!running_.load(std::memory_order_acquire)) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "native_server: begin_drain() before listen() is not"
+                " allowed");
+        }
+        if (drain_begun_.exchange(true)) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "native_server: begin_drain() ran twice");
+        }
+        // The cancel hook copies the listener shared_ptrs by value: it
+        // fires on a waiter's thread at deadline expiry, possibly long
+        // after this impl's members began dying, and must not touch
+        // them. The counted-thread predicate may capture this: the
+        // scope's ordering contract keeps it reachable only while
+        // counted work is live, which keeps impl alive.
+        std::vector<std::shared_ptr<engine::listener_engine>> listeners =
+            listeners_;
+        scope_->arm(std::chrono::steady_clock::now() + budget,
+                    [this] { return pool_.is_current(); },
+                    [listeners] {
+                        for (const std::shared_ptr<engine::listener_engine>&
+                                 listener : listeners) {
+                            listener->request_stop();
+                        }
+                    });
+        for (const std::shared_ptr<engine::listener_engine>& listener :
+             listeners_) {
+            listener->quiesce();
+        }
+        static_cast<void>(backend_.wake());
+        return http::outcome::okay();
+    }
+
+    const std::shared_ptr<engine::drain_scope>& scope() const noexcept {
+        return scope_;
+    }
+
     bool is_running() const noexcept {
         return running_.load(std::memory_order_acquire);
     }
@@ -151,7 +207,39 @@ class native_server::impl {
     engine::io_poll_backend backend_;
     std::atomic<bool> running_{false};
     std::atomic<bool> stop_requested_{false};
+    std::atomic<bool> drain_begun_{false};
 };
+
+// TASK-110: the ticket's pimpl. It holds the counted scope by shared
+// ownership, so a ticket may outlive the server and still wait; the
+// scope's own ordering contract makes that late wait well-defined.
+class drain_ticket::impl {
+ public:
+    explicit impl(std::shared_ptr<engine::drain_scope> scope)
+        : scope_(std::move(scope)) { }
+
+    std::shared_ptr<engine::drain_scope> scope_;
+};
+
+drain_ticket::drain_ticket() noexcept = default;
+
+drain_ticket::drain_ticket(std::unique_ptr<impl> inner)
+    : impl_(std::move(inner)) { }
+
+drain_ticket::~drain_ticket() = default;
+
+drain_ticket::drain_ticket(drain_ticket&&) noexcept = default;
+
+drain_ticket& drain_ticket::operator=(drain_ticket&&) noexcept = default;
+
+http::outcome drain_ticket::wait(drain_result& out) {
+    if (impl_ == nullptr) {
+        return http::outcome(
+            http::outcome_code::invalid_state,
+            "native_server: wait() on an empty drain ticket");
+    }
+    return impl_->scope_->wait(out);
+}
 
 native_server::native_server(server_options options)
     : impl_(std::make_unique<impl>(std::move(options))) {
@@ -172,6 +260,15 @@ http::outcome native_server::listen() { return impl_->listen(); }
 void native_server::request_stop() noexcept { impl_->request_stop(); }
 
 void native_server::stop() { impl_->stop(); }
+
+http::outcome native_server::begin_drain(std::chrono::milliseconds budget,
+                                         drain_ticket& out) {
+    const http::outcome began = impl_->begin_drain(budget);
+    if (!began.ok()) return began;
+    out = drain_ticket(std::make_unique<drain_ticket::impl>(
+        impl_->scope()));
+    return began;
+}
 
 bool native_server::is_running() const noexcept {
     return impl_->is_running();
