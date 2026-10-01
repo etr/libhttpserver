@@ -217,10 +217,18 @@ void connection_engine::decide_drain_locked(bool& keep,
         std::string().swap(early_bytes_);
         remaining = early < remaining ? remaining - early : 0;
     } else {
-        // Admitted: never-fed octets plus the decoder's refused tail
-        // (staged-but-unread octets die with the decoder).
-        remaining = body_->length_remaining() + pending_tail_.size();
-        pending_tail_.clear();
+        // Admitted: length_remaining() counts the octets the decoder
+        // framed (staged-but-unread octets die with the decoder); the
+        // refused tail parked in pending_tail_ also already arrived, so
+        // only the difference is still due on the wire -- never the
+        // sum. A tail parked past the counted body is the next
+        // pipelined head: leave it for the settle recycle.
+        remaining = body_->length_remaining();
+        const std::uint64_t parked = pending_tail_.size();
+        const std::uint64_t parked_body = parked < remaining ? parked
+                                                             : remaining;
+        pending_tail_.erase(0, static_cast<std::size_t>(parked_body));
+        remaining -= parked_body;
     }
     if (remaining == 0) return;   // the whole body already arrived
     gate_ = body_gate::draining;

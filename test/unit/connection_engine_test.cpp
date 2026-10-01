@@ -194,6 +194,19 @@ task<void> reject_handler(exchange& x) {
     co_return;
 }
 
+// POST /admit_ignore: admits the body, then answers without reading it
+// -- the admitted-undrained settle: the drain decision must count only
+// the octets still due on the wire, never the refused tail the engine
+// already holds.
+task<void> admit_ignore_handler(exchange& x) {
+    const http::outcome admitted = x.admit_body(body_policy{});
+    if (!admitted.ok()) co_return;
+    http::fields f;
+    f.append("Content-Length", "0");
+    static_cast<void>(x.respond(http::status::from_code(200), f));
+    co_return;
+}
+
 // POST /suspend_head: suspends the exchange at head state and parks on
 // the resume signal; the engine resolves the wait (a disconnect cancels
 // it, the suspension deadline ends the exchange). Records how many
@@ -820,6 +833,45 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite,
     s.pair.close_peer();
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
 LT_END_AUTO_TEST(undrained_length_body_drains_and_reuses)
+
+// An admitted body the handler answers without reading still counts
+// only its socket-side remainder at settle: with the staging cap far
+// below the content length, the decoder's refused tail (and the staged
+// queue) hold octets that already arrived -- the whole-body-arrived
+// case drains zero and reuses the connection at once. An over-counting
+// drain would instead arm for bytes that will never come and swallow
+// the follow-up request until its deadline closed the connection.
+LT_BEGIN_AUTO_TEST(connection_engine_suite,
+                   admitted_undrained_fully_arrived_reuses)
+    srv::budget_limits limits;
+    limits.set(srv::resource::body_buffer_bytes, 2048);
+    scenario s(limits);
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/admit_ignore",
+        admit_ignore_handler));
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /admit_ignore HTTP/1.1\r\nHost: h\r\n"
+        "Content-Length: 8192\r\n\r\n" + std::string(8192, 'a');
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 200);
+    // The follow-up exchange answers on the same connection: nothing of
+    // it may feed an over-counted drain.
+    const std::string follow = "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), follow.data(), follow.size());
+    const std::optional<observed_response> again =
+        s.next_response(s.pair.peer());
+    LT_CHECK(again.has_value());
+    if (again.has_value()) {
+        LT_CHECK_EQ(again->status, 200);
+        LT_CHECK_EQ(again->body, std::string("hello"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(admitted_undrained_fully_arrived_reuses)
 
 // A rejected chunked body has no counted remainder to drain: the
 // connection closes rather than guess the framing (the pinned
