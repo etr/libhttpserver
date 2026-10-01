@@ -31,6 +31,8 @@
 #include <string>
 #include <utility>
 
+#include <cstdio>
+
 #include <httpserver/http/outcome.hpp>
 
 namespace httpserver {
@@ -156,6 +158,17 @@ void connection_engine::absorb(std::string_view data) {
     }
 }
 
+bool connection_engine::stage_body(const http1_body_mode& mode,
+                                   std::string seed) {
+    std::lock_guard<std::mutex> lock(mu_);
+    body_ = std::make_unique<http1_body_source>(mode, config_.body);
+    body_active_ = true;
+    if (seed.empty()) return false;
+    const std::size_t consumed = body_->feed(seed);
+    pending_tail_.assign(seed, consumed, seed.size() - consumed);
+    return body_->failed();
+}
+
 void connection_engine::absorb_head_locked(std::string_view data) {
     // A complete untaken head accepts nothing: park the bytes for the
     // route loop (they are the body seed or the next head).
@@ -196,10 +209,20 @@ task<void> connection_engine::reader_loop(
             continue;
         }
         if (r.code == http::outcome_code::connection_closed) {
-            // Peer hangup: the route loop observes the flag and closes
-            // cleanly; a mid-exchange disconnect happens there too.
-            std::lock_guard<std::mutex> lock(self->mu_);
-            self->eof_ = true;
+            // Peer hangup: the route loop closes cleanly between
+            // requests; a mid-exchange hangup disconnects the live
+            // exchange so a parked body read unwinds.
+            bool routing = false;
+            {
+                std::lock_guard<std::mutex> lock(self->mu_);
+                self->eof_ = true;
+                routing = self->current_ != nullptr;
+            }
+            if (routing) {
+                self->disconnect_current(
+                    http::outcome_code::connection_closed,
+                    "http1 connection engine: peer hangup mid-exchange");
+            }
         } else {
             self->disconnect_current(http::outcome_code::connection_closed,
                                      "http1 connection engine: transport"

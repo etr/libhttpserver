@@ -159,6 +159,11 @@ class connection_engine final
     static task<void> route_loop(std::shared_ptr<connection_engine> self);
     static task<bool> serve_one(std::shared_ptr<connection_engine> self);
 
+    // Stages one exchange's body decoder: seeds it with the drained
+    // residue (backpressure leftovers return to the pending tail) and
+    // reports a framing failure already visible in the seed.
+    bool stage_body(const http1_body_mode& mode, std::string seed);
+
     // Reader-side byte admission: feeds the active body decoder or the
     // head parser, parking unhandable bytes in the pending tail.
     void absorb(std::string_view data);

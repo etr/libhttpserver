@@ -35,6 +35,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -48,6 +49,7 @@
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
+#include <httpserver/body_reader.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/status.hpp>
@@ -68,6 +70,8 @@ using httpserver::detail::connection_engine;
 using httpserver::detail::connection_engine_config;
 using httpserver::detail::io_poll_backend;
 using httpserver::detail::worker_pool;
+using httpserver::body_collect;
+using httpserver::body_policy;
 using httpserver::exchange;
 using httpserver::task;
 using parity::observed_response;
@@ -103,6 +107,42 @@ task<void> hello_handler(exchange& x) {
     co_await x.writer().finish();
 }
 
+// POST /echo admits the body, collects it bounded, and echoes it back
+// with an explicit Content-Length framing.
+task<void> echo_handler(exchange& x) {
+    const http::outcome admitted = x.admit_body(body_policy{});
+    if (!admitted.ok()) co_return;
+    const body_collect collected = co_await x.body().collect(1 << 20);
+    if (!collected.status.ok()) co_return;
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", std::to_string(collected.data.size()));
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::byte* raw =
+        reinterpret_cast<const std::byte*>(collected.data.data());
+    co_await x.writer().write(
+        std::span<const std::byte>(raw, collected.data.size()));
+    co_await x.writer().finish();
+}
+
+// POST /ignore commits a one-shot 200 without reading the body (the
+// undrained-body close posture scenario).
+task<void> ignore_body_handler(exchange& x) {
+    http::fields f;
+    f.append("Content-Length", "0");
+    static_cast<void>(x.respond(http::status::from_code(200), f));
+    co_return;
+}
+
+// POST /oneshot: the same one-shot shape with the body fully staged
+// before the handler even runs.
+task<void> one_shot_handler(exchange& x) {
+    http::fields f;
+    f.append("Content-Length", "0");
+    static_cast<void>(x.respond(http::status::from_code(200), f));
+    co_return;
+}
+
 // One scenario rig: pool + poll backend + registry + one loopback
 // connection. Declaration order is the teardown order's reverse: the
 // engine dies first, then the pair, then the pool, then the
@@ -114,6 +154,9 @@ struct scenario {
         static_cast<void>(registry.route(
             http::method::known(http::method_id::get), "/hello",
             hello_handler));
+        static_cast<void>(registry.route(
+            http::method::known(http::method_id::post), "/echo",
+            echo_handler));
         pair = io_loopback::pair::make();
         if (pair.ok()) {
             pollsys::set_nonblocking(pair.peer(), true);
@@ -135,33 +178,52 @@ struct scenario {
     srv::resource_budget root;
     srv::route_registry registry;
     io_loopback::pair pair;
-    io_poll_backend backend;
+    // Teardown is the reverse declaration order: the engine dies first,
+    // then the thread-backed backend (close + driver join), then the
+    // pool drains what the close enqueued (the documented order).
     worker_pool pool{2};
+    io_poll_backend backend;
     std::atomic<bool> stopped{false};
     std::shared_ptr<connection_engine> engine;
-};
 
-// Reads one complete response off the peer, deadline-bounded.
-std::optional<observed_response> receive_response(
-    pollsys::native_socket_t peer) {
-    response_frame_parser parser;
-    std::byte buf[1024];
-    const auto deadline = std::chrono::steady_clock::now() + kBudget;
-    while (std::chrono::steady_clock::now() < deadline && !parser.failed()) {
-        const pollsys::sys_result r =
-            pollsys::read_some(peer, buf, sizeof buf);
-        if (r.status == pollsys::sys_status::ok && r.transferred > 0) {
-            for (observed_response& done :
-                 parser.feed(as_view(buf, r.transferred))) {
+    // Stateful response reader: the parity parser buffers across
+    // segments and every completed response is queued, so several
+    // responses in one segment (an interim followed by the final head)
+    // are observed in order.
+    std::optional<observed_response> next_response(
+        pollsys::native_socket_t peer) {
+        const auto deadline = std::chrono::steady_clock::now() + kBudget;
+        while (std::chrono::steady_clock::now() < deadline
+               && !wire_parser.failed()) {
+            if (!completed.empty()) {
+                observed_response done = completed.front();
+                completed.pop_front();
                 return done;
             }
-            continue;
+            const pollsys::sys_result r =
+                pollsys::read_some(peer, wire_buf, sizeof wire_buf);
+            if (r.status == pollsys::sys_status::ok && r.transferred > 0) {
+                for (observed_response& done : wire_parser.feed(
+                         as_view(wire_buf, r.transferred))) {
+                    completed.push_back(done);
+                }
+                continue;
+            }
+            if (r.status != pollsys::sys_status::would_block) {
+                for (observed_response& done : wire_parser.finish()) {
+                    completed.push_back(done);
+                }
+                continue;
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(200));
         }
-        if (r.status != pollsys::sys_status::would_block) break;
-        std::this_thread::sleep_for(std::chrono::microseconds(200));
+        return std::nullopt;
     }
-    return std::nullopt;
-}
+
+    response_frame_parser wire_parser;
+    std::deque<observed_response> completed;
+    std::byte wire_buf[1024];
+};
 
 // Deadline-bounded wait for the peer's FIN (drains trailing bytes).
 bool reaches_eof(pollsys::native_socket_t peer) {
@@ -198,14 +260,15 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, get_round_trip_streams_body)
     const std::string request = "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
     io_loopback::write_all(s.pair.peer(), request.data(), request.size());
     const std::optional<observed_response> response =
-        receive_response(s.pair.peer());
+        s.next_response(s.pair.peer());
     LT_CHECK(response.has_value());
     if (response.has_value()) {
         LT_CHECK_EQ(response->status, 200);
         LT_CHECK_EQ(response->body, std::string("hello"));
         LT_CHECK_EQ(response->framing, std::string("content-length"));
     }
-    LT_CHECK(reaches_eof(s.pair.peer()));
+    // Keep-alive: the client owns the close of a healthy connection.
+    s.pair.close_peer();
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
     LT_CHECK(!s.engine->running());
 LT_END_AUTO_TEST(get_round_trip_streams_body)
@@ -217,13 +280,13 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, miss_404_then_close)
     const std::string request = "GET /missing HTTP/1.1\r\nHost: h\r\n\r\n";
     io_loopback::write_all(s.pair.peer(), request.data(), request.size());
     const std::optional<observed_response> response =
-        receive_response(s.pair.peer());
+        s.next_response(s.pair.peer());
     LT_CHECK(response.has_value());
     if (response.has_value()) {
         LT_CHECK_EQ(response->status, 404);
         LT_CHECK(response->body.empty());
     }
-    LT_CHECK(reaches_eof(s.pair.peer()));
+    s.pair.close_peer();
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
 LT_END_AUTO_TEST(miss_404_then_close)
 
@@ -247,6 +310,152 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, budget_refusal_reports_stop)
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
     LT_CHECK(!s.engine->running());
 LT_END_AUTO_TEST(budget_refusal_reports_stop)
+
+// One connection serves two keep-alive GETs in order.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, keepalive_two_gets)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string first = "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), first.data(), first.size());
+    const std::optional<observed_response> one =
+        s.next_response(s.pair.peer());
+    LT_CHECK(one.has_value());
+    if (one.has_value()) LT_CHECK_EQ(one->status, 200);
+    const std::string second =
+        "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), second.data(), second.size());
+    const std::optional<observed_response> two =
+        s.next_response(s.pair.peer());
+    LT_CHECK(two.has_value());
+    if (two.has_value()) LT_CHECK_EQ(two->status, 200);
+    // The client owns the close on a healthy keep-alive connection.
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(keepalive_two_gets)
+
+// A Content-Length POST round-trips through admit + collect.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, post_content_length_echo)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /echo HTTP/1.1\r\nHost: h\r\nContent-Length: 4\r\n\r\n"
+        "ping";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) {
+        LT_CHECK_EQ(response->status, 200);
+        LT_CHECK_EQ(response->body, std::string("ping"));
+        LT_CHECK_EQ(response->framing, std::string("content-length"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(post_content_length_echo)
+
+// A chunked POST decodes through the same exchange body.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, post_chunked_echo)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /echo HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n"
+        "\r\n4\r\nping\r\n3\r\npon\r\n0\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) {
+        LT_CHECK_EQ(response->status, 200);
+        LT_CHECK_EQ(response->body, std::string("pingpon"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(post_chunked_echo)
+
+// Expect: 100-continue emits the interim ahead of the final head when
+// the handler admits the body.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, expect_continue_interim)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /echo HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\n"
+        "Content-Length: 4\r\n\r\nping";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> interim =
+        s.next_response(s.pair.peer());
+    LT_CHECK(interim.has_value());
+    if (interim.has_value()) LT_CHECK_EQ(interim->status, 100);
+    const std::optional<observed_response> final_response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(final_response.has_value());
+    if (final_response.has_value()) {
+        LT_CHECK_EQ(final_response->status, 200);
+        LT_CHECK_EQ(final_response->body, std::string("ping"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(expect_continue_interim)
+
+// A body the handler never reads blocks keep-alive: the handler
+// one-shot responds and the body arrives afterwards -- the connection
+// closes instead of misframing the next head.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, undrained_body_closes)
+    scenario s;
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/ignore",
+        ignore_body_handler));
+    LT_CHECK(s.start_engine());
+    const std::string head_only =
+        "POST /ignore HTTP/1.1\r\nHost: h\r\nContent-Length: 8\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), head_only.data(),
+                           head_only.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 200);
+    // The late body never gets a reader: the server closes anyway.
+    const std::string body = "12345678";
+    io_loopback::write_all(s.pair.peer(), body.data(), body.size());
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(undrained_body_closes)
+
+// The one-shot shape: head and body in one segment, the handler
+// responds without ever touching the writer or the body.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, one_shot_respond_with_body)
+    scenario s;
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/oneshot",
+        one_shot_handler));
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /oneshot HTTP/1.1\r\nHost: h\r\nContent-Length: 8\r\n\r\n"
+        "12345678";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 200);
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(one_shot_respond_with_body)
+
+// POST to a missing route: run_route's own 404 synthesis answers a
+// request whose body is already fully staged.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, post_miss_404_with_staged_body)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /missing HTTP/1.1\r\nHost: h\r\nContent-Length: 4\r\n\r\n"
+        "ping";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 404);
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(post_miss_404_with_staged_body)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

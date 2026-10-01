@@ -83,11 +83,16 @@ task<bool> connection_engine::serve_one(
         self->pending_tail_.clear();
     }
     const http1_body_mode mode = http1_body_mode::compute(head);
-    if (mode.kind != http1_body_kind::none) {
-        // Step 5 wires the body path (admit/collect + seed feed); the
-        // step-4 skeleton closes instead of misframing the stream.
-        self->request_close();
-        co_return false;
+    const bool body_present = mode.kind != http1_body_kind::none;
+    if (body_present) {
+        const bool seed_failed = self->stage_body(mode, std::move(seed));
+        if (seed_failed) {
+            self->disconnect_current(
+                http::outcome_code::protocol_error,
+                "http1 connection engine: request body framing failed");
+            self->request_close();
+            co_return false;
+        }
     }
     const std::uint64_t sequence = [&self] {
         std::lock_guard<std::mutex> lock(self->mu_);
@@ -95,7 +100,8 @@ task<bool> connection_engine::serve_one(
     }();
     http1_exchange_sink engine_sink(self, self->outbox_, head);
     wake_body_sink forwarding(*self);
-    exchange routed(head, &engine_sink, self->id_, nullptr, &forwarding);
+    exchange routed(head, &engine_sink, self->id_,
+                    body_present ? self->body_.get() : nullptr, &forwarding);
     http1_response_sink& slot = self->outbox_.open(sequence,
                                                    routed.cancellation());
     engine_sink.bind(slot);
@@ -110,7 +116,7 @@ task<bool> connection_engine::serve_one(
         self->current_ = nullptr;
     }
     const bool keep = self->finish_exchange(forwarding, routed, engine_sink,
-                                            false);
+                                            body_present);
     co_return keep;
 }
 
@@ -150,13 +156,19 @@ void connection_engine::settle_exchange_state(bool& keep,
 
 task<void> connection_engine::route_loop(
     std::shared_ptr<connection_engine> self) {
-    // Step 5 wraps the keep-alive iteration around this exchange; the
-    // step-4 skeleton serves one request and closes, so the parked
-    // reader always unwinds with the route loop.
-    if (co_await wait_for_head(self)) {
-        static_cast<void>(co_await serve_one(self));
+    // Sequential exchanges per connection (the deliberate TASK-108
+    // posture); handlers across connections interleave on the pool.
+    // Pipelined heads buffer in the parser and the outbox ordering, so
+    // order is preserved without re-entry.
+    for (;;) {
+        if (!(co_await wait_for_head(self))) {
+            // EOF, shutdown, or a failed head: close (the error-status
+            // synthesis for a failed head arrives in step 6).
+            self->request_close();
+            break;
+        }
+        if (!(co_await serve_one(self))) break;
     }
-    self->request_close();
     {
         std::lock_guard<std::mutex> lock(self->mu_);
         self->route_done_ = true;
