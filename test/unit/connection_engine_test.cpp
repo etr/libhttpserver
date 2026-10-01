@@ -353,6 +353,30 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, keepalive_two_gets)
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
 LT_END_AUTO_TEST(keepalive_two_gets)
 
+// Two requests pipelined in ONE segment: both answered, in order, on
+// the single connection (the parked tail recycles into the parser).
+LT_BEGIN_AUTO_TEST(connection_engine_suite, pipelined_pair_answered_in_order)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string batch =
+        "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"
+        "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), batch.data(), batch.size());
+    const std::optional<observed_response> one =
+        s.next_response(s.pair.peer());
+    LT_CHECK(one.has_value());
+    if (one.has_value()) LT_CHECK_EQ(one->status, 200);
+    const std::optional<observed_response> two =
+        s.next_response(s.pair.peer());
+    LT_CHECK(two.has_value());
+    if (two.has_value()) {
+        LT_CHECK_EQ(two->status, 200);
+        LT_CHECK_EQ(two->body, std::string("hello"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(pipelined_pair_answered_in_order)
+
 // A Content-Length POST round-trips through admit + collect.
 LT_BEGIN_AUTO_TEST(connection_engine_suite, post_content_length_echo)
     scenario s;

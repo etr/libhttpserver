@@ -98,6 +98,12 @@ task<bool> connection_engine::serve_one(
             self->request_close();
             co_return false;
         }
+    } else {
+        // No framing: every seed byte belongs to the next pipelined
+        // head. Park it where the settle recycle and the head-phase
+        // absorb both look.
+        std::lock_guard<std::mutex> lock(self->mu_);
+        self->pending_tail_.append(seed);
     }
     const std::uint64_t sequence = [&self] {
         std::lock_guard<std::mutex> lock(self->mu_);
@@ -152,9 +158,11 @@ void connection_engine::settle_exchange_state(bool& keep,
     if (body_present && (body_ == nullptr || !body_->message_complete())) {
         keep = false;
     }
-    if (keep && !body_active_ && !pending_tail_.empty()) {
-        // Pipelined bytes parked during the exchange re-enter the
-        // parser for the next head.
+    // A kept verdict implies the body (if any) completed, so parked
+    // pipelined bytes are exactly the next head: recycle them into the
+    // parser. (body_active_ stays set for the connection's life; it is
+    // the per-exchange completion keep carries, not that flag.)
+    if (keep && !pending_tail_.empty()) {
         std::string back = std::move(pending_tail_);
         pending_tail_.clear();
         parser_.feed(back);
