@@ -17,6 +17,7 @@
 libhttpserver.iml
 build/*
 build-v3/
+build-asan/
 build-debug/
 _build/
 aclocal.m4

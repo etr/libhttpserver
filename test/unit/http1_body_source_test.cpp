@@ -317,6 +317,40 @@ LT_BEGIN_AUTO_TEST(park_suite, unpark_forgets_a_destroyed_wait)
     LT_CHECK(of(std::span(destination.data(), pulled.copied)) == "ab");
 LT_END_AUTO_TEST(unpark_forgets_a_destroyed_wait)
 
+LT_BEGIN_AUTO_TEST(park_suite, disconnect_then_cancel_parked_wakes_read)
+    // The seam contract: a read parked with nothing staged wakes on the
+    // FIRST of bytes, end, failure, or the exchange disconnecting. The
+    // stop arm is engine-driven as a pairing -- disconnect() makes the
+    // stop sticky, THEN the engine calls cancel_parked(): a read parked
+    // before wakes here, one parking after fails at park's own table.
+    // The engine's watchdog and stop paths rely on exactly this.
+    detail::recording_sink sink;
+    detail::http1_body_source adapter(length_mode(8), default_budget());
+    exchange x(make_head(), &sink, 0, &adapter);
+    manual_executor ex;
+    LT_CHECK(x.admit_body({}).ok());
+
+    std::vector<std::byte> destination(16);
+    body_read seen;
+    int deliveries = 0;
+    spawn(ex, x.body().read_some(destination),
+          [&](task_result<body_read> r) {
+              ++deliveries;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK(adapter.parked());
+    LT_CHECK_EQ(deliveries, 0);
+
+    static_cast<void>(x.disconnect(http::outcome_code::timeout,
+                                   "test: body idle"));
+    adapter.cancel_parked();
+    ex.run_pending();
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::cancelled);
+    LT_CHECK(!adapter.parked());
+LT_END_AUTO_TEST(disconnect_then_cancel_parked_wakes_read)
+
 LT_BEGIN_AUTO_TEST(park_suite, feed_after_park_failure_wakes_failed_once)
     // A waiter parked before any wire: when the first feed fails the
     // framing, the waiter wakes failed exactly once.

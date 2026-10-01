@@ -252,6 +252,14 @@ class http1_response_framer {
                 out.append("\r\n");
                 return http::outcome::okay();
             }
+            case http1_response_body_kind::close_delimited: {
+                // The body runs to EOF: raw bytes, no per-chunk framing.
+                // The connection close after the drain is the response's
+                // terminator (the keep-alive verdict already says close).
+                const std::size_t n = std::min(data.size(), max_out_bytes);
+                append_raw(out, data.first(n));
+                return http::outcome::okay();
+            }
             default:
                 return fail_with(http::outcome(
                     http::outcome_code::protocol_error,

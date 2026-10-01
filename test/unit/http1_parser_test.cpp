@@ -863,6 +863,62 @@ LT_BEGIN_AUTO_TEST(http1_limits_suite, residue_gets_its_own_head_budget)
     LT_CHECK_EQ(p.take().route_path, "/");
 LT_END_AUTO_TEST(residue_gets_its_own_head_budget)
 
+// TASK-108 step 3: the engine's residue drain seam. residue_view()
+// exposes the buffered post-terminator bytes in the complete state (the
+// bytes that belong to the request body once the framing mode says
+// there is one); consume_residue() erases a leading prefix so a drained
+// body prefix never re-enters the next head. The engine order is:
+// copy residue_view, consume_residue(all), take() -- pinned here.
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, residue_view_exposes_pipelined_bytes)
+    http1_head_parser p(default_budget());
+    p.feed(lit(MIN_10));
+    p.feed(lit(MIN_11));
+    LT_CHECK(p.state() == http1_head_state::complete);
+    const std::string_view residue = p.residue_view();
+    LT_CHECK_EQ(residue.size(), sizeof(MIN_11) - 1);
+    LT_CHECK(residue.substr(0, 3) == "GET");
+    LT_CHECK(residue == std::string_view(MIN_11, sizeof(MIN_11) - 1));
+LT_END_AUTO_TEST(residue_view_exposes_pipelined_bytes)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, residue_view_empty_outside_complete)
+    http1_head_parser p(default_budget());
+    LT_CHECK_EQ(p.residue_view().size(), 0u);
+    p.feed("GET / HT");
+    LT_CHECK(p.state() == http1_head_state::partial);
+    LT_CHECK_EQ(p.residue_view().size(), 0u);
+LT_END_AUTO_TEST(residue_view_empty_outside_complete)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, consume_residue_erases_leading_prefix)
+    http1_head_parser p(default_budget());
+    p.feed(lit(MIN_10));
+    p.feed(lit(MIN_11));
+    p.consume_residue(6);
+    LT_CHECK_EQ(p.residue_size(), sizeof(MIN_11) - 7);
+    LT_CHECK(p.residue_view() == std::string_view(MIN_11 + 6, sizeof(MIN_11) - 7));
+    // Over-consumption clamps: the buffer never loses head bytes.
+    p.consume_residue(p.residue_size() + 100);
+    LT_CHECK_EQ(p.residue_size(), 0u);
+    LT_CHECK(p.state() == http1_head_state::complete);
+LT_END_AUTO_TEST(consume_residue_erases_leading_prefix)
+
+LT_BEGIN_AUTO_TEST(http1_split_suite, drained_residue_never_reenters_next_head)
+    http1_head_parser p(default_budget());
+    p.feed(lit(MIN_10));
+    p.feed(lit(MIN_11));
+    const std::string drained(p.residue_view());
+    p.consume_residue(p.residue_size());
+    const request_head first = p.take();
+    LT_CHECK_EQ(first.raw_target, "/");
+    // The pipelined head was drained into the body path, so the parser
+    // holds nothing: the engine re-feeds drained bytes deliberately.
+    LT_CHECK(p.state() == http1_head_state::empty);
+    LT_CHECK_EQ(p.residue_size(), 0u);
+    p.feed(drained);
+    LT_CHECK(p.state() == http1_head_state::complete);
+    LT_CHECK_EQ(p.take().raw_target, "/a/b?q=1");
+LT_END_AUTO_TEST(drained_residue_never_reenters_next_head)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

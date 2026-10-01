@@ -83,7 +83,7 @@ class io_connection_owner final {
 
     // True while a drain is applying records (reentrancy probe).
     bool draining() const noexcept {
-        return draining_.load(std::memory_order_acquire);
+        return state_->draining.load(std::memory_order_acquire);
     }
 
  private:
@@ -92,13 +92,25 @@ class io_connection_owner final {
         io_result result;
     };
 
-    void drain();
+    // Queue, coalescing flag, and drain marker live in a block shared
+    // with the posted drain jobs. TASK-108: a wake is globally
+    // coalesced across connections, so a completion can arrive for a
+    // connection whose drain job already ran and whose engine is
+    // unwinding; that late drain job must find live (empty) state
+    // instead of freed memory. By the time the owner dies the backend
+    // released the connection (every op claimed), so a post-mortem
+    // drain is always a no-op sweep.
+    struct shared_state {
+        mutable std::mutex mu;
+        std::deque<record> queue;
+        bool drain_posted = false;  // guarded by mu; coalesces jobs
+        std::atomic<bool> draining{false};
+    };
+
+    static void drain(std::shared_ptr<shared_state> pending);
 
     executor& ex_;
-    mutable std::mutex mu_;
-    std::deque<record> queue_;      // guarded by mu_
-    bool drain_posted_ = false;     // guarded by mu_; coalesces drain jobs
-    std::atomic<bool> draining_{false};
+    std::shared_ptr<shared_state> state_;
 };
 
 }  // namespace detail

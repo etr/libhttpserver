@@ -239,6 +239,15 @@ class op_awaiter final {
     explicit op_awaiter(std::shared_ptr<op_state> state) noexcept
         : state_(std::move(state)) { }
 
+    // Awaiter pre-bound to the awaiting task frame (see
+    // op_handle::bind_frame). The op's waiter then arms with the
+    // frame's witness and executor.
+    op_awaiter(std::shared_ptr<op_state> state,
+               task_frame_base* frame) noexcept
+        : state_(std::move(state)) {
+        if (frame != nullptr) bind_frame(frame);
+    }
+
     op_awaiter(const op_awaiter&) = delete;
     op_awaiter& operator=(const op_awaiter&) = delete;
     op_awaiter(op_awaiter&&) = delete;
@@ -282,6 +291,16 @@ class op_awaiter final {
 // single-consumer; both violations are std::logic_error.
 class op_handle {
  public:
+    // Installed by the task promise's await_transform when the handle
+    // itself is the co_await operand (`co_await std::move(op)`): the
+    // produced awaiter then arms the waiter with this frame's witness
+    // and executor, so a late posted resumption of a finished frame is
+    // a guarded no-op instead of a raw resume.
+    op_handle& bind_frame(task_frame_base* frame) noexcept {
+        frame_ = frame;
+        return *this;
+    }
+
     // One-shot: binds the backend and hands the op state over. A second
     // submit is a std::logic_error (task's single-consumer discipline).
     void submit(io_backend& backend) {
@@ -302,12 +321,17 @@ class op_handle {
     void arm_stop(std::stop_token token);
 
     // Single-consumer await; a second await is a std::logic_error.
-    op_awaiter operator co_await() && {
+    // Unqualified on purpose: the task promise's await_transform binds
+    // the frame and returns the handle as an lvalue, so the awaiter
+    // extraction must accept it (the one-shot mark still enforces the
+    // single consumer at runtime).
+    op_awaiter operator co_await() {
         if (state_ == nullptr || !state_->mark_awaited()) {
             throw std::logic_error(
                 "httpserver::io operation awaited twice");
         }
-        return op_awaiter(state_);
+        return frame_ != nullptr ? op_awaiter(state_, frame_)
+                                 : op_awaiter(state_);
     }
 
     io_op_kind kind() const noexcept { return state_->kind(); }
@@ -335,6 +359,7 @@ class op_handle {
 
     std::shared_ptr<op_state> state_;
     io_backend* backend_ = nullptr;
+    task_frame_base* frame_ = nullptr;  // awaiting frame, when bound
     // Type-erased holder for the heap-allocated std::stop_callback
     // (stop_callback itself is neither copyable nor movable).
     std::shared_ptr<void> stop_registration_;

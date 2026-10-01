@@ -30,8 +30,11 @@
 // framing failure, newly staged bytes, or the message end. park()
 // mirrors the immediate-completion table (already failed, already
 // staged, already complete, stop requested — else register; at most one
-// waiter per source). The engine never re-feeds the bytes feed()
-// reports consumed.
+// waiter per source); the stop arm is engine-driven: the engine calls
+// cancel_parked() after disconnecting the exchange, so a read parked
+// before the disconnect wakes cancelled and one parking after sees the
+// sticky stop at park's own table. The engine never re-feeds the bytes
+// feed() reports consumed.
 
 #if !defined(HTTPSERVER_COMPILATION)
 #error "httpserver/detail/http1_body_source.hpp is internal; only include it when compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
@@ -90,6 +93,20 @@ class http1_body_source final : public body_source {
         }
         if (waiter != nullptr) waiter->complete(wake);
         return consumed;
+    }
+
+    // Engine-side disconnect arm: wakes the parked waiter (if any) as
+    // cancelled. Call AFTER the exchange's disconnect made the stop
+    // sticky — park() checks-and-registers in one critical section, so
+    // the pairing cannot miss a read (one parked earlier is taken here;
+    // one parking later completes inline at park's own table).
+    void cancel_parked() {
+        body_wait* waiter = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            waiter = take_waiter_locked();
+        }
+        if (waiter != nullptr) waiter->complete(body_wake::cancelled);
     }
 
     bool failed() const noexcept {

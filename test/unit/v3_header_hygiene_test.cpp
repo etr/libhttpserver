@@ -86,6 +86,10 @@ const std::vector<const char*>& header_files() {
         // the same rules (no config gates, no backend/OS tokens;
         // engine and body delivery vocabulary only).
         "/response_writer.hpp",
+        // TASK-108: the native server lifecycle joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; the pimpl keeps the engine vocabulary in detail/).
+        "/server/server.hpp",
     };
     return files;
 }

@@ -749,9 +749,11 @@ LT_BEGIN_AUTO_TEST(body_framing_suite, trailers_get_the_head_field_validation)
     LT_CHECK(ctl_wire.find("0\r\n") == std::string::npos);
 LT_END_AUTO_TEST(trailers_get_the_head_field_validation)
 
-LT_BEGIN_AUTO_TEST(body_framing_suite, body_push_on_no_body_kinds_fails)
-    // close_delimited: strictly no push (the v3 engine frames close-
-    // delimited bodies only through the connection loop's EOF path).
+LT_BEGIN_AUTO_TEST(body_framing_suite, close_delimited_body_is_raw_until_close)
+    // close_delimited (no CL, HTTP/1.0): the body runs to EOF. The
+    // engine streams it through the one outbox path like every other
+    // kind, so the framer emits the bytes raw -- the close itself (the
+    // response's only terminator) is the connection loop's business.
     http::fields handler;
     handler.append("Content-Type", "text/plain");
     http1_response_framer framer;
@@ -759,11 +761,22 @@ LT_BEGIN_AUTO_TEST(body_framing_suite, body_push_on_no_body_kinds_fails)
     LT_CHECK(framer.start_head(wire, get_10(),
                                http::status::from_code(200),
                                handler).ok());
-    const http::outcome pushed = framer.push_body(wire, as_bytes("x"),
-                                                  unlimited);
-    LT_CHECK(pushed.code() == http::outcome_code::protocol_error);
+    LT_CHECK(framer.push_body(wire, as_bytes("hel"), unlimited).ok());
+    LT_CHECK(framer.push_body(wire, as_bytes("lo"), unlimited).ok());
+    http::fields no_trailers;
+    LT_CHECK(framer.finish_body(wire, no_trailers).ok());
+    const observed_response r = parse_back(wire, "");
+    LT_CHECK(r.status == 200);
+    LT_CHECK(r.body == "hello");
+    LT_CHECK(r.framing == "none");
+LT_END_AUTO_TEST(close_delimited_body_is_raw_until_close)
 
-    // none (204) and head_no_body reject body bytes the same way.
+LT_BEGIN_AUTO_TEST(body_framing_suite, body_push_on_no_body_kinds_fails)
+    // none (204) and head_no_body reject body bytes: those kinds carry
+    // no body by definition (close-delimited streaming moved to its
+    // own case above).
+    http::fields handler;
+    handler.append("Content-Type", "text/plain");
     http1_response_framer none_framer;
     std::string none_wire;
     LT_CHECK(none_framer.start_head(none_wire, get_11(),
