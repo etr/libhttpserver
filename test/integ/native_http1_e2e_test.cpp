@@ -1001,6 +1001,33 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_sync_route_over_cap_413)
     LT_CHECK_EQ(sync_echo_invocations.load(), 0);
 LT_END_AUTO_TEST(http11_post_sync_route_over_cap_413)
 
+// (26) TASK-111: a BODYLESS POST (no Content-Length: a legal request
+// with no body framing -- the engine hands the exchange no body source)
+// is served by the sync route, not 500'd: the handler sees an empty
+// span and the connection stays keep-alive.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_sync_route_bodyless)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /sync-echo HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        // The handler saw the head and an empty body.
+        LT_CHECK_EQ(seen[0].body, std::string("/sync-echo:"));
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(sync_echo_invocations.load(), 1);
+    // Keep-alive: the same connection answers the next request.
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
+    LT_CHECK_EQ(sync_echo_invocations.load(), 1);
+LT_END_AUTO_TEST(http11_post_sync_route_bodyless)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

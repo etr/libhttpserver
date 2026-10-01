@@ -591,6 +591,60 @@ LT_BEGIN_AUTO_TEST(route_sync_suite, sync_route_serves_http_1_0_and_1_1)
     LT_CHECK_EQ(invocations, 2);
 LT_END_AUTO_TEST(sync_route_serves_http_1_0_and_1_1)
 
+// (10) A BODYLESS request -- the engine's construction for a head with
+// no body framing passes NO body source to the exchange -- is served,
+// not 500'd: admission accepts, collect() reads an empty complete body,
+// and the handler sees an empty span (the documented vocabulary).
+LT_BEGIN_AUTO_TEST(route_sync_suite, sync_route_serves_bodyless_request)
+    srv::route_registry registry;
+    LT_CHECK(srv::route_registry::create(budget_with_routes(4), registry).ok());
+    capturing_sink sink;
+    fake::scripted_body_sink responses;
+    observed seen;
+
+    LT_CHECK(registry.route(
+        http::method::known(http::method_id::post), "/none",
+        srv::make_sync_route(
+            [&seen](const http::request_head&,
+                    std::span<const std::byte> body) -> srv::sync_response {
+                ++seen.invoked;
+                seen.body = of(body);
+                srv::sync_response out;
+                out.status = http::status::from_code(200);
+                return out;
+            },
+            64)).ok());
+
+    // Exactly the engine's bodyless shape: null body source (serve_one
+    // passes body_present ? source : nullptr).
+    fake::scripted_body_source* source = nullptr;
+    exchange x(make_head(http::method::known(http::method_id::post), "/none"),
+               &sink, 0, source, &responses);
+    manual_executor ex;
+    int deliveries = 0;
+    spawn(ex, detail::run_route(registry, x),
+          [&](task_result<void> r) {
+              ++deliveries;
+              LT_CHECK(!r.is_exception());
+          });
+    drain(ex);
+
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK_EQ(seen.invoked, 1);
+    LT_CHECK(seen.body.empty());
+    // The admission still carries the declared cap; collect succeeds
+    // with the empty body; the value commits one-shot with CL 0.
+    LT_CHECK_EQ(sink.admit_calls, 1);
+    LT_CHECK_EQ(sink.admitted_bytes, static_cast<std::uint64_t>(64));
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(sink.code, static_cast<std::uint16_t>(200));
+    LT_CHECK(sink.responded.first("content-length").value_or("") == "0");
+    LT_CHECK_EQ(responses.push_calls(), 0);
+    LT_CHECK_EQ(responses.end_calls(), 0);
+    LT_CHECK_EQ(sink.abort_calls, 0);
+    LT_CHECK(x.state() == exchange_state::responded);
+LT_END_AUTO_TEST(sync_route_serves_bodyless_request)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

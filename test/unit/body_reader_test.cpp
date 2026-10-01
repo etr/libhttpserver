@@ -483,6 +483,44 @@ LT_BEGIN_AUTO_TEST(body_reader_suite, body_collect_zero_cap)
     LT_CHECK(refused.status.code() == http::outcome_code::limit_exceeded);
 LT_END_AUTO_TEST(body_collect_zero_cap)
 
+// The engine's bodyless-request construction: the head carries no body
+// framing, so serve_one hands the exchange NO delivery source. The
+// admission still accepts, and the admitted body is empty and complete
+// -- a read ends the body, a collect returns zero bytes, and a second
+// read fails at-end like any finished body (TASK-111's sync adapter
+// serves bodyless requests through exactly this shape).
+LT_BEGIN_AUTO_TEST(body_reader_suite, body_admitted_without_source_is_empty)
+    detail::recording_sink sink;
+    manual_executor ex;
+    std::vector<std::byte> destination(8);
+
+    // Before admission the gate still refuses (body not admitted).
+    exchange fresh(make_head(), &sink, 0, nullptr);
+    const body_read before = run_read(fresh, ex, destination);
+    LT_CHECK(before.status.code() == http::outcome_code::invalid_state);
+
+    // Incremental shape: the first read ends the (empty) body; a second
+    // read fails at-end like any finished body.
+    exchange reading(make_head(), &sink, 0, nullptr);
+    LT_CHECK(reading.admit_body(body_policy()).ok());
+    const body_read ended = run_read(reading, ex, destination);
+    LT_CHECK(ended.status.ok());
+    LT_CHECK(ended.end_of_body);
+    LT_CHECK(ended.data.empty());
+    const body_read again = run_read(reading, ex, destination);
+    LT_CHECK(again.status.code() == http::outcome_code::invalid_state);
+
+    // Buffered shape: a collect returns the zero-byte body successfully
+    // and the trailers are final (empty).
+    exchange collecting(make_head(), &sink, 0, nullptr);
+    LT_CHECK(collecting.admit_body(body_policy()).ok());
+    const body_collect whole = run_collect(collecting, ex, 16);
+    LT_CHECK(whole.status.ok());
+    LT_CHECK(whole.data.empty());
+    LT_CHECK(collecting.body().trailers().size()
+             == static_cast<std::size_t>(0));
+LT_END_AUTO_TEST(body_admitted_without_source_is_empty)
+
 LT_BEGIN_AUTO_TEST(body_reader_suite, body_collect_over_limit_is_sticky)
     detail::recording_sink sink;
     fake::scripted_body_source source;
