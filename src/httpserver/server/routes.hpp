@@ -23,6 +23,7 @@
 #define SRC_HTTPSERVER_SERVER_ROUTES_HPP_
 
 #include <cstddef>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -30,8 +31,11 @@
 
 #include <httpserver/concurrency/executor.hpp>
 #include <httpserver/concurrency/task.hpp>
+#include <httpserver/http/fields.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/outcome.hpp>
+#include <httpserver/http/request_head.hpp>
+#include <httpserver/http/status.hpp>
 #include <httpserver/server/budgets.hpp>
 
 namespace httpserver {
@@ -220,6 +224,20 @@ class route_pattern {
 // The canonical coroutine handler of the v3 API: a lazily started task
 // over the per-connection exchange (architecture §3.1, DR-V3-003).
 using route_handler = concurrency::unique_function<task<void>(exchange&)>;
+
+// The value one synchronous route returns: terminal status, response
+// fields, and the complete body bytes. A plain aggregate; an invalid
+// status makes the route's runner synthesize the 500.
+struct sync_response {
+    http::status status;  // invalid -> the runner's synthesized 500
+    http::fields fields;  // handler-pinned framing passes through
+    std::vector<std::byte> body;
+};
+
+// The value-returning handler (DR-V3-003): receives the complete
+// request head and the bounded buffered body (empty for a bodyless
+// request) and returns the response value. No coroutine code.
+using sync_route_handler = concurrency::unique_function<sync_response(const http::request_head&, std::span<const std::byte>)>;
 
 // Budget-bounded registration table: the seed of the immutable
 // published route generation. A registration is visible to every

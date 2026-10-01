@@ -39,6 +39,7 @@
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/listener_engine.hpp>
 #include <httpserver/detail/worker_pool.hpp>
+#include <httpserver/server/route_sync.hpp>
 
 namespace httpserver {
 
@@ -67,6 +68,30 @@ class native_server::impl {
                 "native_server: route() after listen() is not allowed");
         }
         return registry_.route(method, pattern, std::move(handler));
+    }
+
+    http::outcome route_sync(const http::method& method,
+                             std::string_view pattern,
+                             sync_route_handler handler,
+                             std::uint64_t body_cap) {
+        if (running_.load(std::memory_order_acquire)) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "native_server: route_sync() after listen() is not allowed");
+        }
+        if (body_cap == 0) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "native_server: route_sync needs a body cap of at least"
+                " one byte");
+        }
+        if (!handler) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "native_server: route_sync handler is empty");
+        }
+        return registry_.route(
+            method, pattern, make_sync_route(std::move(handler), body_cap));
     }
 
     http::outcome listen() {
@@ -253,6 +278,13 @@ http::outcome native_server::route(const http::method& method,
                                    std::string_view pattern,
                                    route_handler handler) {
     return impl_->route(method, pattern, std::move(handler));
+}
+
+http::outcome native_server::route_sync(const http::method& method,
+                                        std::string_view pattern,
+                                        sync_route_handler handler,
+                                        std::uint64_t body_cap) {
+    return impl_->route_sync(method, pattern, std::move(handler), body_cap);
 }
 
 http::outcome native_server::listen() { return impl_->listen(); }

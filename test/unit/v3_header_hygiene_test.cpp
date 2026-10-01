@@ -90,6 +90,9 @@ const std::vector<const char*>& header_files() {
         // scan with the same rules (no config gates, no backend/OS
         // tokens; the pimpl keeps the engine vocabulary in detail/).
         "/server/server.hpp",
+        // TASK-111: the sync route adapter joins the sentinel scan
+        // with the same rules (no config gates, no backend/OS tokens).
+        "/server/route_sync.hpp",
     };
     return files;
 }

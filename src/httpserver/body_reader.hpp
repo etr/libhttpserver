@@ -33,6 +33,13 @@
 //   - a read parked with nothing staged wakes on the first of bytes
 //     staged, end of body, engine failure, or exchange disconnect.
 //
+// A bodyless request is admitted like any other: the engine accepts the
+// admission but has no body to deliver, so it provides no source. An
+// admitted body with no source is therefore complete and empty -- the
+// first read ends the body and a collect returns zero bytes -- never an
+// error (the sync route adapter depends on this to serve bodyless
+// requests with an empty span).
+//
 // The engine side of the seam is detail::body_source, declared in this
 // public header for the same reason detail::exchange_sink is: the
 // reader's inline methods invoke it and a public header may not
@@ -254,12 +261,13 @@ class body_wait final {
 // movable with the exchange, never copied.
 //
 // Reader state (no locks — reads run on the handler's executor
-// thread): admitted (engine seam attached), pending (the
-// one-outstanding-read rule), at_end (trailers final), failed (sticky:
-// over-limit or engine failure ends the body), closed (exchange
-// terminal). A read issued after a disconnect fails connection_closed
-// carrying the stored disconnect detail; a read interrupted by one
-// returns cancelled.
+// thread): admitted (engine seam attached; a bodyless request is
+// admitted with no seam and reads as an empty complete body), pending
+// (the one-outstanding-read rule), at_end (trailers final), failed
+// (sticky: over-limit or engine failure ends the body), closed
+// (exchange terminal). A read issued after a disconnect fails
+// connection_closed carrying the stored disconnect detail; a read
+// interrupted by one returns cancelled.
 class body_reader {
  public:
     // Bounded incremental read: resolves with at least one byte (and
@@ -269,6 +277,12 @@ class body_reader {
         const http::outcome gate = enter(destination.empty());
         if (!gate.ok()) {
             co_return body_read{gate, {}, false};
+        }
+        if (bodyless()) {
+            // Admitted with no engine source: the request is bodyless,
+            // so the body is empty and already complete.
+            at_end_ = true;
+            co_return body_read{http::outcome::okay(), {}, true};
         }
         pending_ = true;
         for (;;) {
@@ -317,11 +331,16 @@ class body_reader {
     // Fully buffers the remaining body, at most `maximum` bytes. Fails
     // limit_exceeded (diagnostic naming the cap) exactly when the body
     // exceeds it; exactly-at-cap succeeds. On success the reader is at
-    // end of body and trailers() is final.
+    // end of body and trailers() is final. A bodyless request (admitted
+    // with no engine source) collects to zero bytes successfully.
     task<body_collect> collect(std::uint64_t maximum) {
         const http::outcome gate = enter(false);
         if (!gate.ok()) {
             co_return body_collect{gate, {}};
+        }
+        if (bodyless()) {
+            at_end_ = true;
+            co_return body_collect{http::outcome::okay(), {}};
         }
         pending_ = true;
         std::vector<std::byte> out;
@@ -381,7 +400,8 @@ class body_reader {
         : cancel_token_(std::move(cancel)) { }
 
     // exchange::admit_body, after the engine accepted the admission. A
-    // null source keeps every read at invalid_state.
+    // null source is the bodyless-request shape: the engine accepted the
+    // admission but has no body to deliver (see bodyless()).
     void activate(detail::body_source* source) noexcept {
         source_ = source;
         admitted_ = true;
@@ -413,7 +433,7 @@ class body_reader {
             return http::outcome(http::outcome_code::invalid_state,
                                  "body_reader: exchange is terminal");
         }
-        if (!admitted_ || source_ == nullptr) {
+        if (!admitted_) {
             return http::outcome(http::outcome_code::invalid_state,
                                  "body_reader: body not admitted");
         }
@@ -437,6 +457,11 @@ class body_reader {
         failed_ = true;
         failure_ = reason;
     }
+
+    // An admission the engine accepted without a delivery source: the
+    // request carries no body (the engine's bodyless construction), so
+    // the body is empty and already complete.
+    bool bodyless() const noexcept { return admitted_ && source_ == nullptr; }
 
     // Pull size for collect: never more than the remaining cap room,
     // plus one probe byte that proves an over-limit body exactly. The
