@@ -78,6 +78,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <string>
 
 #if defined(_WIN32)
 #include <mutex>
@@ -147,6 +148,10 @@ inline native_socket_t open_stream() {
     return ::socket(AF_INET, SOCK_STREAM, 0);
 #endif
 }
+
+// listen() backlog of every adopted server listener (the make_listener
+// convention).
+constexpr int k_listen_backlog = 16;
 
 // Closes a socket and clears the handle; k_invalid_socket is a no-op
 // (idempotent teardown).
@@ -394,6 +399,116 @@ inline native_socket_t listener_failure(native_socket_t socket) {
     release_winsock();
 #endif
     return k_invalid_socket;
+}
+
+// Fills @p storage for @p address:@p per the listener address spellings:
+// "" and "*" mean any local address (AF_INET INADDR_ANY); otherwise the
+// address must be a numeric IPv4 or IPv6 literal (name resolution is the
+// caller's job, mirroring server_options validation). False when the
+// spelling is neither. One half of the open_listener decomposition (the
+// complexity gate split the family dispatch out of the driver entry).
+inline bool fill_listener_address(std::string_view address,
+                                  std::uint16_t port,
+                                  sockaddr_storage& storage) {
+    auto* const in4 = reinterpret_cast<sockaddr_in*>(&storage);
+    if (address.empty() || address == "*") {
+        in4->sin_family = AF_INET;
+        in4->sin_port = htons(port);
+        in4->sin_addr.s_addr = INADDR_ANY;
+        return true;
+    }
+    if (address.size() < 16
+            && ::inet_pton(AF_INET, std::string(address).c_str(),
+                           &in4->sin_addr) == 1) {
+        in4->sin_family = AF_INET;
+        in4->sin_port = htons(port);
+        return true;
+    }
+    auto* const in6 = reinterpret_cast<sockaddr_in6*>(&storage);
+    if (address.size() >= 64
+            || ::inet_pton(AF_INET6, std::string(address).c_str(),
+                           &in6->sin6_addr) != 1) {
+        return false;
+    }
+    in6->sin6_family = AF_INET6;
+    in6->sin6_port = htons(port);
+    return true;
+}
+
+// bind() + listen() on an open listener handle; false on either
+// failure. The sockaddr size follows the stored family.
+inline bool bind_listener(native_socket_t socket,
+                          const sockaddr_storage& storage) {
+    const socklen_t size = static_cast<socklen_t>(
+        storage.ss_family == AF_INET6 ? sizeof(sockaddr_in6)
+                                      : sizeof(sockaddr_in));
+    return ::bind(socket, reinterpret_cast<const sockaddr*>(&storage), size)
+               == 0
+        && ::listen(socket, k_listen_backlog) == 0;
+}
+
+// The bound host-order port of a listening handle, read through
+// getsockname and the stored family.
+inline std::uint16_t bound_listener_port(native_socket_t socket) {
+    sockaddr_storage bound{};
+#if defined(_WIN32)
+    int length = sizeof(bound);
+#else
+    socklen_t length = sizeof(bound);
+#endif
+    if (::getsockname(socket, reinterpret_cast<sockaddr*>(&bound),
+                      &length) != 0) {
+        return 0;
+    }
+    if (bound.ss_family == AF_INET6) {
+        auto* const in6 = reinterpret_cast<sockaddr_in6*>(&bound);
+        return ntohs(in6->sin6_port);
+    }
+    auto* const in4 = reinterpret_cast<sockaddr_in*>(&bound);
+    return ntohs(in4->sin_port);
+}
+
+// A listening stream socket bound to @p address:@p port, left
+// nonblocking, with SO_REUSEADDR set (a restarted server rebinds its
+// configured port immediately). Address spellings per
+// fill_listener_address; port 0 requests an ephemeral port and the
+// resolved host-order port is always reported through @p bound_port.
+// Any failure closes the handle and returns k_invalid_socket.
+// TASK-108: the native_server listener engine opens every configured
+// endpoint through this one helper -- the only address-parsing
+// divergence the driver layer carries.
+inline native_socket_t open_listener(std::string_view address,
+                                     std::uint16_t port,
+                                     std::uint16_t& bound_port) {
+#if defined(_WIN32)
+    if (!ensure_winsock()) {
+        return k_invalid_socket;
+    }
+#endif
+    sockaddr_storage storage{};
+    if (!fill_listener_address(address, port, storage)) {
+        return listener_failure(k_invalid_socket);
+    }
+#if defined(_WIN32)
+    const int family = static_cast<int>(storage.ss_family);
+    const native_socket_t socket =
+        ::socket(family, SOCK_STREAM, IPPROTO_TCP);
+#else
+    const native_socket_t socket =
+        ::socket(storage.ss_family, SOCK_STREAM, 0);
+#endif
+    if (socket == k_invalid_socket) {
+        return listener_failure(socket);
+    }
+    int reuse = 1;
+    ::setsockopt(socket, SOL_SOCKET, SO_REUSEADDR,
+                 reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+    if (!bind_listener(socket, storage)) {
+        return listener_failure(socket);
+    }
+    bound_port = bound_listener_port(socket);
+    set_nonblocking(socket, true);
+    return socket;
 }
 
 // A listening stream socket bound to the loopback address with an
