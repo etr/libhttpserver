@@ -109,6 +109,11 @@ void connection_engine::wake_loops() noexcept {
     static_cast<void>(backend_.wake());
 }
 
+void connection_engine::wake_loops_ordered() {
+    std::lock_guard<std::mutex> lock(mu_);
+    wake_loops();
+}
+
 void connection_engine::disconnect_current(http::outcome_code reason,
                                            std::string detail) noexcept {
     http1_body_source* body = nullptr;
@@ -192,7 +197,7 @@ void connection_engine::emit_error(std::uint16_t code) {
     static_cast<void>(slot.start(request, http::status::from_code(code),
                                  fields, config_.clock));
     static_cast<void>(slot.push_end(http::fields()));
-    wake_loops();
+    wake_loops_ordered();
     request_close();
 }
 
@@ -330,23 +335,26 @@ task<void> connection_engine::reader_loop(
     std::shared_ptr<connection_engine> self) {
     std::array<std::byte, k_read_buffer_bytes> buffer;
     for (;;) {
+        wake_operation gate_op(self->owner_, self->id_);
         bool gated = false;
         {
             std::lock_guard<std::mutex> lock(self->mu_);
             if (self->shutdown_ || self->close_after_drain_) co_return;
-            gated = !self->reader_may_read_locked();
-        }
-        if (gated) {
             // The pre-admission memory bound: early bytes (or a parked
             // pipelined tail) sit at the staging cap, so park instead
             // of reading; every transition that moves the gate wakes
             // the loops and spurious wakes re-check. A parked reader
             // does not observe a silent peer FIN immediately, but each
             // gated scenario ends in a transition (admission,
-            // rejection) or a watchdog deadline, so nothing hangs.
-            wake_operation op(self->owner_, self->id_);
-            op.submit(self->backend_);
-            const io_result r = co_await std::move(op);
+            // rejection) or a watchdog deadline, so nothing hangs. The
+            // wake op registers under mu_ (the lost-wake closure,
+            // TASK-109): a gate transition either sees this op in the
+            // registry or its state change is visible at the re-check.
+            gated = !self->reader_may_read_locked();
+            if (gated) gate_op.submit(self->backend_);
+        }
+        if (gated) {
+            const io_result r = co_await std::move(gate_op);
             if (r.code != http::outcome_code::ok) co_return;
             continue;
         }
@@ -397,30 +405,33 @@ task<void> connection_engine::writer_loop(
     for (;;) {
         const std::size_t buffered = self->outbox_.copy_front(buffer);
         if (buffered == 0) {
-            bool drained = false;
-            bool done = false;
+            wake_operation op(self->owner_, self->id_);
             {
                 std::lock_guard<std::mutex> lock(self->mu_);
-                drained = self->outbox_.empty();
-                done = self->route_done_ || self->shutdown_;
-            }
-            // Exits only once the route loop is finished AND the outbox is
-            // drained, so a close-after-response never truncates a body.
-            // The writer owns the release on the close paths: every other
-            // loop is parked in a transport operation only a release can
-            // complete (a parked read on an idle keep-alive peer, for one).
-            if (drained && done) {
-                std::lock_guard<std::mutex> lock(self->mu_);
-                if (self->close_after_drain_ || self->shutdown_) {
-                    self->backend_.release_connection(self->id_);
+                const bool drained = self->outbox_.empty();
+                const bool done = self->route_done_ || self->shutdown_;
+                // Exits only once the route loop is finished AND the
+                // outbox is drained, so a close-after-response never
+                // truncates a body. The writer owns the release on the
+                // close paths: every other loop is parked in a
+                // transport operation only a release can complete (a
+                // parked read on an idle keep-alive peer, for one).
+                if (drained && done) {
+                    if (self->close_after_drain_ || self->shutdown_) {
+                        self->backend_.release_connection(self->id_);
+                    }
+                    co_return;
                 }
-                co_return;
+                // Nothing to flush yet, or the front waits on the
+                // handler: park. The op registers under mu_ and the
+                // outbox-appending sinks wake under the same mutex
+                // (wake_loops_ordered), so a push racing this park
+                // either fires the op or is visible at the re-check
+                // (the lost-wake closure, TASK-109). Wake ops coalesce
+                // globally -- a spurious completion re-checks; a
+                // terminal one means the transport is gone.
+                op.submit(self->backend_);
             }
-            // Nothing to flush yet, or the front waits on the handler:
-            // park. Wake ops coalesce globally -- a spurious completion
-            // re-checks; a terminal one means the transport is gone.
-            wake_operation op(self->owner_, self->id_);
-            op.submit(self->backend_);
             const io_result r = co_await std::move(op);
             if (r.code != http::outcome_code::ok) co_return;
             continue;
@@ -464,6 +475,15 @@ connection_engine::suspension_deadline_locked() {
     return *suspension_anchor_ + config_.timeouts.suspension;
 }
 
+std::optional<std::chrono::steady_clock::time_point>
+connection_engine::drain_deadline_locked() const {
+    if (gate_ != body_gate::draining || drain_remaining_ == 0
+            || !drain_anchor_.has_value()) {
+        return std::nullopt;
+    }
+    return *drain_anchor_ + config_.timeouts.drain;
+}
+
 connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     watchdog_plan plan;
     if (shutdown_ || close_after_drain_) {
@@ -492,10 +512,9 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
             suspended_until = suspension_deadline_locked()) {
         candidates[candidate_count++] = *suspended_until;
     }
-    if (gate_ == body_gate::draining && drain_remaining_ > 0
-            && drain_anchor_.has_value()) {
-        candidates[candidate_count++] =
-            *drain_anchor_ + config_.timeouts.drain;
+    if (const std::optional<std::chrono::steady_clock::time_point>
+            drain_until = drain_deadline_locked()) {
+        candidates[candidate_count++] = *drain_until;
     }
     if (candidate_count == 0) {
         if (current_ != nullptr) {

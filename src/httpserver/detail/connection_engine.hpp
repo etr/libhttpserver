@@ -176,6 +176,14 @@ class connection_engine final
     // wakes re-check).
     void wake_loops() noexcept;
 
+    // wake_loops() ordered against every mu_-held park check (the
+    // lost-wake closure, TASK-109). Call AFTER mutating outbox state:
+    // a concurrently parking loop either already sees the mutation at
+    // its own under-mu_ check, or its wake op -- submitted under the
+    // same mutex -- is completed by this wake. The caller must NOT
+    // hold mu_.
+    void wake_loops_ordered();
+
     static constexpr std::size_t k_read_buffer_bytes = 16384;
     static constexpr std::size_t k_write_buffer_bytes = 4096;
     // Deferred-state re-check cadence (an exchange is routed, no
@@ -226,6 +234,11 @@ class connection_engine final
     // must be held.
     std::optional<std::chrono::steady_clock::time_point>
     suspension_deadline_locked();
+    // The drain candidate, anchored at drain start so a trickling
+    // remainder cannot slide the deadline (TASK-109); nullopt while no
+    // drain is outstanding. mu_ must be held.
+    std::optional<std::chrono::steady_clock::time_point>
+    drain_deadline_locked() const;
     // True when the deadline that just fired still governs the current
     // state (activity re-arms instead of enforcing).
     bool watchdog_due(std::chrono::steady_clock::time_point deadline);
@@ -241,6 +254,12 @@ class connection_engine final
     void enforce_timeout() noexcept;
     static task<void> route_loop(std::shared_ptr<connection_engine> self);
     static task<bool> serve_one(std::shared_ptr<connection_engine> self);
+    // Parks the route side while a rejection drain runs down its
+    // counted remainder (TASK-109). True when the drain completed (or
+    // none was armed): the connection may serve its next exchange.
+    // False when EOF, a close verdict, or a stop ended the wait
+    // mid-drain.
+    static task<bool> await_drain(std::shared_ptr<connection_engine> self);
 
     // Stages one exchange's body decoder WITHOUT feeding it: the
     // drained seed parks as the early-byte buffer and the decoder is

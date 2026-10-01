@@ -46,6 +46,7 @@ namespace detail {
 task<bool> connection_engine::wait_for_head(
     std::shared_ptr<connection_engine> self) {
     for (;;) {
+        wake_operation op(self->owner_, self->id_);
         {
             std::lock_guard<std::mutex> lock(self->mu_);
             if (self->shutdown_) co_return false;
@@ -56,12 +57,14 @@ task<bool> connection_engine::wait_for_head(
                 co_return false;
             }
             if (self->eof_) co_return false;
+            // Park until a reader absorb nudges the loops (or the
+            // transport is released, which terminal-fails the wake).
+            // The op registers under mu_ -- the lost-wake closure
+            // (TASK-109): every mu_-held state change either fires
+            // this op with its wake or is visible at the re-check.
+            // Spurious wakes re-check by design.
+            op.submit(self->backend_);
         }
-        // Park until a reader absorb nudges the loops (or the transport
-        // is released, which terminal-fails the wake). Spurious wakes
-        // re-check by design: wake ops coalesce globally.
-        wake_operation op(self->owner_, self->id_);
-        op.submit(self->backend_);
         const io_result r = co_await std::move(op);
         if (r.code != http::outcome_code::ok) co_return false;
     }
@@ -123,26 +126,29 @@ task<bool> connection_engine::serve_one(
         std::lock_guard<std::mutex> lock(self->mu_);
         self->current_ = nullptr;
     }
-    const bool keep = self->finish_exchange(forwarding, routed, engine_sink,
-                                            mode);
-    if (!keep) co_return false;
+    if (!self->finish_exchange(forwarding, routed, engine_sink, mode)) {
+        co_return false;
+    }
     // A rejected length-framed body drains to its counted remainder
-    // before the next head may parse the stream (TASK-109): park until
-    // the drain completes. EOF, a close verdict, or a stop ends the
-    // connection instead of waiting out the remainder.
+    // before the next head may parse the stream (TASK-109).
+    co_return co_await await_drain(self);
+}
+
+task<bool> connection_engine::await_drain(
+    std::shared_ptr<connection_engine> self) {
     for (;;) {
-        bool drained = false;
+        wake_operation op(self->owner_, self->id_);
         {
             std::lock_guard<std::mutex> lock(self->mu_);
-            drained = self->gate_ != body_gate::draining;
-            if (!drained && (self->eof_ || self->shutdown_
-                             || self->close_after_drain_)) {
+            if (self->gate_ != body_gate::draining) co_return true;
+            if (self->eof_ || self->shutdown_ || self->close_after_drain_) {
                 co_return false;
             }
+            // Registers under mu_ (the lost-wake closure, TASK-109):
+            // the drain's completion and every bail-out condition
+            // change under the same mutex.
+            op.submit(self->backend_);
         }
-        if (drained) co_return true;
-        wake_operation op(self->owner_, self->id_);
-        op.submit(self->backend_);
         const io_result r = co_await std::move(op);
         if (r.code != http::outcome_code::ok) co_return false;
     }
@@ -298,7 +304,7 @@ void http1_exchange_sink::on_admit(const body_policy& policy) {
         return;
     }
     static_cast<void>(slot_->interim(100));
-    engine_->wake_loops();
+    engine_->wake_loops_ordered();
 }
 
 void http1_exchange_sink::on_respond(const http::status& s,
@@ -318,7 +324,9 @@ void http1_exchange_sink::on_respond(const http::status& s,
     const http1_response_mode mode = http1_response_mode::compute(head_, s, f);
     keepalive_ = http1_response_keepalive(head_, mode.kind,
                                           mode.close_policy);
-    engine_->wake_loops();
+    // Ordered against the writer's park check: the committed head is
+    // outbox state a parked writer must not miss (TASK-109).
+    engine_->wake_loops_ordered();
     // Queued bytes switch the plan to write_idle, which can be nearer
     // than the deadline currently armed.
     engine_->rearm_watchdog();
@@ -343,7 +351,10 @@ void http1_exchange_sink::on_abort() {
 body_push_result wake_body_sink::push(std::span<const std::byte> from) {
     const body_push_result pushed = inner_->push(from);
     if (pushed.kind == body_push::accepted) {
-        engine_.wake_loops();
+        // Ordered against the writer's park check (TASK-109): the
+        // parked writer either fires its registered op here or sees
+        // the accepted bytes at its own re-check.
+        engine_.wake_loops_ordered();
         engine_.rearm_watchdog();
     }
     return pushed;
@@ -353,7 +364,7 @@ body_push_result wake_body_sink::push_end(const http::fields& trailers) {
     const body_push_result pushed = inner_->push_end(trailers);
     if (pushed.kind == body_push::accepted) {
         ended_ = true;
-        engine_.wake_loops();
+        engine_.wake_loops_ordered();
         engine_.rearm_watchdog();
     }
     return pushed;
