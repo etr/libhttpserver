@@ -26,6 +26,7 @@
 
 #include <httpserver/detail/connection_engine.hpp>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <string>
@@ -108,6 +109,11 @@ void connection_engine::wake_loops() noexcept {
     static_cast<void>(backend_.wake());
 }
 
+void connection_engine::wake_loops_ordered() {
+    std::lock_guard<std::mutex> lock(mu_);
+    wake_loops();
+}
+
 void connection_engine::disconnect_current(http::outcome_code reason,
                                            std::string detail) noexcept {
     http1_body_source* body = nullptr;
@@ -115,7 +121,9 @@ void connection_engine::disconnect_current(http::outcome_code reason,
         std::lock_guard<std::mutex> lock(mu_);
         if (current_ == nullptr) return;
         static_cast<void>(current_->disconnect(reason, std::move(detail)));
-        if (body_active_) body = body_.get();
+        // Only the admitted state can hold parked body reads (the
+        // decoder is unfed until admission).
+        if (gate_ == body_gate::admitted) body = body_.get();
     }
     // Second half of the body wake pairing (http1_body_source): the
     // exchange's stop is sticky now, so a read parked before this
@@ -135,26 +143,31 @@ void connection_engine::request_close() noexcept {
 
 void connection_engine::absorb(std::string_view data) {
     bool body_failed = false;
+    bool drain_done = false;
     note_transport_activity();
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (shutdown_) return;
-        if (body_active_ && body_ != nullptr
-                && !body_->message_complete()) {
-            // Body phase: the decoder keeps the unconsumed tail (its
-            // backpressure semantic); the reader re-feeds it ahead of
-            // every later chunk.
-            std::string combined;
-            combined.reserve(pending_tail_.size() + data.size());
-            combined.append(pending_tail_).append(data);
-            pending_tail_.clear();
-            const std::size_t consumed = body_->feed(combined);
-            pending_tail_.assign(combined, consumed,
-                                 combined.size() - consumed);
-            body_failed = body_->failed();
-        } else {
-            absorb_head_locked(data);
+        switch (gate_) {
+            case body_gate::none:
+                absorb_head_locked(data);
+                break;
+            case body_gate::pending:
+                absorb_pending_locked(data);
+                break;
+            case body_gate::admitted:
+                body_failed = absorb_admitted_locked(data);
+                break;
+            case body_gate::draining:
+                drain_done = absorb_drain_locked(data);
+                break;
         }
+    }
+    if (drain_done) {
+        // The route loop's drain await re-checks, and the drain
+        // candidate leaves the watchdog's inventory.
+        wake_loops();
+        rearm_watchdog();
     }
     if (body_failed) {
         // A framing failure poisons the byte stream: unwind the live
@@ -184,7 +197,7 @@ void connection_engine::emit_error(std::uint16_t code) {
     static_cast<void>(slot.start(request, http::status::from_code(code),
                                  fields, config_.clock));
     static_cast<void>(slot.push_end(http::fields()));
-    wake_loops();
+    wake_loops_ordered();
     request_close();
 }
 
@@ -195,22 +208,50 @@ std::uint16_t connection_engine::error_code_for(
     return 400;
 }
 
-bool connection_engine::stage_body(const http1_body_mode& mode,
+void connection_engine::stage_body(const http1_body_mode& mode,
                                    std::string seed) {
-    bool seed_failed = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
         body_ = std::make_unique<http1_body_source>(mode, config_.body);
-        body_active_ = true;
-        if (!seed.empty()) {
+        gate_ = body_gate::pending;
+        early_bytes_ = std::move(seed);
+    }
+    // The reader may already be gated on the early cap (or becomes so
+    // now), and the watchdog's candidate set changed.
+    wake_loops();
+    rearm_watchdog();
+}
+
+bool connection_engine::admit_early_body() {
+    bool seed_failed = false;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        // gate_ == none covers a bodyless request (no decoder exists);
+        // the transition runs exactly once per exchange.
+        if (gate_ != body_gate::pending) return true;
+        std::string seed = std::move(early_bytes_);
+        std::string().swap(early_bytes_);
+        if (body_ != nullptr && !seed.empty()) {
+            // Fed under mu_: the admitted absorb path holds the same
+            // lock, so socket bytes can never overtake the seed.
             const std::size_t consumed = body_->feed(seed);
             pending_tail_.assign(seed, consumed, seed.size() - consumed);
             seed_failed = body_->failed();
         }
+        gate_ = body_gate::admitted;
     }
-    // The body_idle deadline can be nearer than whatever is armed.
+    // The gated reader resumes, and body_idle may be nearer than
+    // whatever is armed.
+    wake_loops();
     rearm_watchdog();
-    return seed_failed;
+    if (seed_failed) {
+        disconnect_current(http::outcome_code::protocol_error,
+                           "http1 connection engine: request body framing"
+                           " failed");
+        request_close();
+        return false;
+    }
+    return true;
 }
 
 void connection_engine::absorb_head_locked(std::string_view data) {
@@ -232,16 +273,91 @@ void connection_engine::absorb_head_locked(std::string_view data) {
     parser_.feed(data);
 }
 
+void connection_engine::absorb_pending_locked(std::string_view data) {
+    // Never discard pre-admission bytes: they are this exchange's body
+    // prefix. The reader gate bounds the buffer at the staging cap
+    // (plus at most one read buffer of overshoot).
+    early_bytes_.append(data);
+}
+
+bool connection_engine::absorb_admitted_locked(std::string_view data) {
+    if (body_ == nullptr || body_->message_complete()) {
+        absorb_head_locked(data);
+        return false;
+    }
+    // The decoder keeps the unconsumed tail (its backpressure
+    // semantic); the reader re-feeds it ahead of every later chunk.
+    std::string combined;
+    combined.reserve(pending_tail_.size() + data.size());
+    combined.append(pending_tail_).append(data);
+    pending_tail_.clear();
+    const std::size_t consumed = body_->feed(combined);
+    pending_tail_.assign(combined, consumed, combined.size() - consumed);
+    return body_->failed();
+}
+
+bool connection_engine::absorb_drain_locked(std::string_view data) {
+    const std::size_t discard = static_cast<std::size_t>(
+        std::min<std::uint64_t>(drain_remaining_, data.size()));
+    drain_remaining_ -= discard;
+    data.remove_prefix(discard);
+    if (drain_remaining_ > 0) return false;   // more counted bytes due
+    // The counted remainder is gone: anything past it is a pipelined
+    // next head, and the route loop's drain await observes the gate
+    // flip.
+    gate_ = body_gate::none;
+    drain_anchor_.reset();
+    if (!data.empty()) absorb_head_locked(data);
+    return true;
+}
+
+bool connection_engine::reader_may_read_locked() const {
+    switch (gate_) {
+        case body_gate::none:
+            // A complete, untaken head plus no live exchange: parked
+            // pipelined bytes wait for the route loop, bounded at the
+            // same cap.
+            if (parser_.state() == http1_head_state::complete
+                    && current_ == nullptr) {
+                return pending_tail_.size() < config_.body.max_staged_bytes;
+            }
+            return true;
+        case body_gate::pending:
+            return early_bytes_.size() < config_.body.max_staged_bytes;
+        case body_gate::admitted:
+        case body_gate::draining:
+            return true;
+    }
+    return true;
+}
+
 task<void> connection_engine::reader_loop(
     std::shared_ptr<connection_engine> self) {
     std::array<std::byte, k_read_buffer_bytes> buffer;
     for (;;) {
-        bool stopping = false;
+        wake_operation gate_op(self->owner_, self->id_);
+        bool gated = false;
         {
             std::lock_guard<std::mutex> lock(self->mu_);
-            stopping = self->shutdown_ || self->close_after_drain_;
+            if (self->shutdown_ || self->close_after_drain_) co_return;
+            // The pre-admission memory bound: early bytes (or a parked
+            // pipelined tail) sit at the staging cap, so park instead
+            // of reading; every transition that moves the gate wakes
+            // the loops and spurious wakes re-check. A parked reader
+            // does not observe a silent peer FIN immediately, but each
+            // gated scenario ends in a transition (admission,
+            // rejection) or a watchdog deadline, so nothing hangs. The
+            // wake op registers under mu_ (the lost-wake closure,
+            // TASK-109): a gate transition either sees this op in the
+            // registry or its state change is visible at the re-check.
+            gated = !self->reader_may_read_locked();
+            if (gated) gate_op.submit(self->backend_);
         }
-        if (stopping) co_return;
+        if (gated) {
+            const io_result r = co_await std::move(gate_op);
+            if (r.code != http::outcome_code::ok) co_return;
+            continue;
+        }
         read_operation op(self->owner_, self->id_,
                           std::span<std::byte>(buffer.data(), buffer.size()));
         op.submit(self->backend_);
@@ -289,30 +405,33 @@ task<void> connection_engine::writer_loop(
     for (;;) {
         const std::size_t buffered = self->outbox_.copy_front(buffer);
         if (buffered == 0) {
-            bool drained = false;
-            bool done = false;
+            wake_operation op(self->owner_, self->id_);
             {
                 std::lock_guard<std::mutex> lock(self->mu_);
-                drained = self->outbox_.empty();
-                done = self->route_done_ || self->shutdown_;
-            }
-            // Exits only once the route loop is finished AND the outbox is
-            // drained, so a close-after-response never truncates a body.
-            // The writer owns the release on the close paths: every other
-            // loop is parked in a transport operation only a release can
-            // complete (a parked read on an idle keep-alive peer, for one).
-            if (drained && done) {
-                std::lock_guard<std::mutex> lock(self->mu_);
-                if (self->close_after_drain_ || self->shutdown_) {
-                    self->backend_.release_connection(self->id_);
+                const bool drained = self->outbox_.empty();
+                const bool done = self->route_done_ || self->shutdown_;
+                // Exits only once the route loop is finished AND the
+                // outbox is drained, so a close-after-response never
+                // truncates a body. The writer owns the release on the
+                // close paths: every other loop is parked in a
+                // transport operation only a release can complete (a
+                // parked read on an idle keep-alive peer, for one).
+                if (drained && done) {
+                    if (self->close_after_drain_ || self->shutdown_) {
+                        self->backend_.release_connection(self->id_);
+                    }
+                    co_return;
                 }
-                co_return;
+                // Nothing to flush yet, or the front waits on the
+                // handler: park. The op registers under mu_ and the
+                // outbox-appending sinks wake under the same mutex
+                // (wake_loops_ordered), so a push racing this park
+                // either fires the op or is visible at the re-check
+                // (the lost-wake closure, TASK-109). Wake ops coalesce
+                // globally -- a spurious completion re-checks; a
+                // terminal one means the transport is gone.
+                op.submit(self->backend_);
             }
-            // Nothing to flush yet, or the front waits on the handler:
-            // park. Wake ops coalesce globally -- a spurious completion
-            // re-checks; a terminal one means the transport is gone.
-            wake_operation op(self->owner_, self->id_);
-            op.submit(self->backend_);
             const io_result r = co_await std::move(op);
             if (r.code != http::outcome_code::ok) co_return;
             continue;
@@ -332,41 +451,81 @@ task<void> connection_engine::writer_loop(
 
 // -- watchdog ---------------------------------------------------------------
 
+// True while the engine is decoding this exchange's body and the
+// message boundary has not been reached (the body_idle candidate).
+bool connection_engine::body_decode_pending_locked() const {
+    return gate_ == body_gate::admitted && body_ != nullptr
+        && !body_->message_complete();
+}
+
+// The suspension candidate, anchored at first sight of the suspended
+// exchange so the deadline cannot slide on later activity (TASK-109).
+// A disconnected exchange arms nothing -- its handler is already
+// unwinding, so no second enforcement window opens.
+std::optional<std::chrono::steady_clock::time_point>
+connection_engine::suspension_deadline_locked() {
+    if (current_ == nullptr || !current_->suspended()
+            || current_->disconnected()) {
+        suspension_anchor_.reset();
+        return std::nullopt;
+    }
+    if (!suspension_anchor_.has_value()) {
+        suspension_anchor_ = std::chrono::steady_clock::now();
+    }
+    return *suspension_anchor_ + config_.timeouts.suspension;
+}
+
+std::optional<std::chrono::steady_clock::time_point>
+connection_engine::drain_deadline_locked() const {
+    if (gate_ != body_gate::draining || drain_remaining_ == 0
+            || !drain_anchor_.has_value()) {
+        return std::nullopt;
+    }
+    return *drain_anchor_ + config_.timeouts.drain;
+}
+
 connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     watchdog_plan plan;
     if (shutdown_ || close_after_drain_) {
         plan.exit = true;
         return plan;
     }
-    // Nearest-deadline order: a decoding body, then queued bytes with a
-    // stalled peer, then a suspended exchange. While an exchange is
-    // routed and none of those holds, no inventory deadline applies --
-    // the plan defers (TASK-110's drain semantics bound it instead).
-    if (body_active_ && body_ != nullptr
-            && !body_->message_complete()) {
-        plan.deadline = last_activity_ + config_.timeouts.body_idle;
-        return plan;
+    // Nearest-deadline order, as the contract promises: collect every
+    // candidate the current state offers and arm the minimum. A
+    // trickling body slides body_idle but never the suspension or
+    // drain anchors, so a suspended exchange and a stalled rejection
+    // drain both reach their deadlines; the sliding candidates still
+    // win whenever they are genuinely nearer. While an exchange is
+    // routed and no candidate applies, the plan defers (TASK-110's
+    // drain semantics bound it instead).
+    std::chrono::steady_clock::time_point candidates[4];
+    std::size_t candidate_count = 0;
+    if (body_decode_pending_locked()) {
+        candidates[candidate_count++] =
+            last_activity_ + config_.timeouts.body_idle;
     }
     if (outbox_.queued_bytes() > 0) {
-        plan.deadline = last_activity_ + config_.timeouts.write_idle;
-        return plan;
+        candidates[candidate_count++] =
+            last_activity_ + config_.timeouts.write_idle;
     }
-    if (current_ != nullptr) {
-        if (!current_->suspended()) {
-            suspension_anchor_.reset();
+    if (const std::optional<std::chrono::steady_clock::time_point>
+            suspended_until = suspension_deadline_locked()) {
+        candidates[candidate_count++] = *suspended_until;
+    }
+    if (const std::optional<std::chrono::steady_clock::time_point>
+            drain_until = drain_deadline_locked()) {
+        candidates[candidate_count++] = *drain_until;
+    }
+    if (candidate_count == 0) {
+        if (current_ != nullptr) {
             plan.defer = true;
             return plan;
         }
-        // Anchored at first sight: recomputing now + suspension on
-        // every check would slide the deadline forever.
-        if (!suspension_anchor_.has_value()) {
-            suspension_anchor_ = std::chrono::steady_clock::now();
-        }
-        plan.deadline = *suspension_anchor_ + config_.timeouts.suspension;
+        plan.deadline = last_activity_ + config_.timeouts.header;
         return plan;
     }
-    suspension_anchor_.reset();
-    plan.deadline = last_activity_ + config_.timeouts.header;
+    plan.deadline = *std::min_element(candidates,
+                                      candidates + candidate_count);
     return plan;
 }
 
