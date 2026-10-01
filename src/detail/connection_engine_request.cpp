@@ -90,20 +90,17 @@ task<bool> connection_engine::serve_one(
     }
     const bool body_present = mode.kind != http1_body_kind::none;
     if (body_present) {
-        const bool seed_failed = self->stage_body(mode, std::move(seed));
-        if (seed_failed) {
-            self->disconnect_current(
-                http::outcome_code::protocol_error,
-                "http1 connection engine: request body framing failed");
-            self->request_close();
-            co_return false;
-        }
+        // The decoder exists now (the exchange ctor needs its pointer)
+        // but stays unfed: the seed parks as this exchange's early
+        // bytes until the handler admits the body.
+        self->stage_body(mode, std::move(seed));
     } else {
         // No framing: every seed byte belongs to the next pipelined
         // head. Park it where the settle recycle and the head-phase
-        // absorb both look.
+        // absorb both look, and nudge a reader gated on the tail cap.
         std::lock_guard<std::mutex> lock(self->mu_);
         self->pending_tail_.append(seed);
+        self->wake_loops();
     }
     const std::uint64_t sequence = [&self] {
         std::lock_guard<std::mutex> lock(self->mu_);
@@ -154,19 +151,29 @@ bool connection_engine::finish_exchange(wake_body_sink& forwarding,
 void connection_engine::settle_exchange_state(bool& keep,
                                               bool body_present) {
     std::lock_guard<std::mutex> lock(mu_);
+    if (gate_ == body_gate::pending && body_present) {
+        // Never admitted: the decoder never consumed the early bytes.
+        // Fold them back to the parked tail -- they are a pipelined
+        // next head when the framing was complete at birth (a zero
+        // length), and dead weight on the close path otherwise.
+        pending_tail_.append(early_bytes_);
+        std::string().swap(early_bytes_);
+    }
     // An undrained body would misparse as the next head.
     if (body_present && (body_ == nullptr || !body_->message_complete())) {
         keep = false;
     }
     // A kept verdict implies the body (if any) completed, so parked
     // pipelined bytes are exactly the next head: recycle them into the
-    // parser. (body_active_ stays set for the connection's life; it is
-    // the per-exchange completion keep carries, not that flag.)
+    // parser. The per-exchange gate closes either way; the next
+    // serve_one reopens it when its framing says so.
     if (keep && !pending_tail_.empty()) {
         std::string back = std::move(pending_tail_);
         pending_tail_.clear();
         parser_.feed(back);
     }
+    gate_ = body_gate::none;
+    std::string().swap(early_bytes_);
     if (!keep) close_after_drain_ = true;
 }
 
@@ -228,9 +235,16 @@ bool http1_exchange_sink::upgraded() const noexcept {
 
 void http1_exchange_sink::on_admit(const body_policy& policy) {
     static_cast<void>(policy);  // delivery knobs arrive with TASK-110
+    // The admission transition first (TASK-109): the parked early
+    // bytes seed the decoder and the gated reader resumes; a seed that
+    // already fails framing disconnects the exchange and never earns
+    // the interim.
+    if (!engine_->admit_early_body()) return;
     // Expect: 100-continue (RFC 9110 section 10.1.1): the interim rides
-    // ahead of the final head in the same slot. TASK-109 refines the
-    // timing around the admission.
+    // ahead of the final head in the same slot. Admission-conditional
+    // only: it fires even when the whole body already arrived (the RFC
+    // allows omission; the simple rule). Unknown Expect values stay
+    // ignored -- no 417 posture.
     const std::optional<std::string_view> expect =
         head_.head_fields.first("expect");
     if (slot_ == nullptr || expect == std::nullopt
@@ -239,6 +253,7 @@ void http1_exchange_sink::on_admit(const body_policy& policy) {
         return;
     }
     static_cast<void>(slot_->interim(100));
+    engine_->wake_loops();
 }
 
 void http1_exchange_sink::on_respond(const http::status& s,

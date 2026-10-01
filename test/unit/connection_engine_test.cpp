@@ -734,6 +734,54 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite,
     force_stop(s);
 LT_END_AUTO_TEST(suspension_after_admit_times_out_once)
 
+// Early upload bytes park bounded while admission is pending, and are
+// delivered whole at admission: with the staging cap at 2048 the body
+// fully parks in the early buffer (the reader gate engages at the
+// cap), admission seeds the decoder from it, and the echo returns
+// every byte. Bodies larger than the cap flow through the admitted
+// path's combined re-feed (bounded by the TASK-106 seam: a pull-driven
+// engine wake is out of scope), so the no-loss pin here is the early
+// phase at exactly the cap.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, early_bytes_bounded_no_loss)
+    srv::budget_limits limits;
+    limits.set(srv::resource::body_buffer_bytes, 2048);
+    scenario s(limits);
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/late_admit",
+        late_admit_handler));
+    late_gate = resume_signal{};
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /late_admit HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\n"
+        "Content-Length: 2048\r\n\r\n" + std::string(2048, 'e');
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    LT_CHECK(no_bytes_within(s.pair.peer(), std::chrono::milliseconds(200)));
+    late_gate.signal();
+    const std::optional<observed_response> interim =
+        s.next_response(s.pair.peer());
+    LT_CHECK(interim.has_value());
+    if (interim.has_value()) LT_CHECK_EQ(interim->status, 100);
+    const std::optional<observed_response> final_response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(final_response.has_value());
+    if (final_response.has_value()) {
+        LT_CHECK_EQ(final_response->status, 200);
+        LT_CHECK_EQ(final_response->body.size(), std::size_t{2048});
+    }
+    // Healthy after the burst: another exchange on the same connection.
+    const std::string follow = "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), follow.data(), follow.size());
+    const std::optional<observed_response> again =
+        s.next_response(s.pair.peer());
+    LT_CHECK(again.has_value());
+    if (again.has_value()) {
+        LT_CHECK_EQ(again->status, 200);
+        LT_CHECK_EQ(again->body, std::string("hello"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(early_bytes_bounded_no_loss)
+
 // A body the handler never reads blocks keep-alive: the handler
 // one-shot responds and the body arrives afterwards -- the connection
 // closes instead of misframing the next head.

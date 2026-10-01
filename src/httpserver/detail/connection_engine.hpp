@@ -28,11 +28,17 @@
 //                detection; feeds never lose bytes -- a complete
 //                untaken head parks its bytes in the pending tail for
 //                the route loop to hand to the body path or back to the
-//                parser).
-//   route_loop   sequential exchanges: wait head -> seed body -> route
-//                through run_route -> end synthesis -> keep-alive
-//                verdict. Pipelined heads buffer in the parser/outbox
-//                ordering, never re-ordered.
+//                parser). TASK-109: pre-admission upload bytes park in
+//                a bounded early buffer and the reader itself parks at
+//                the staging cap, so an unadmitted body cannot grow
+//                engine memory without bound.
+//   route_loop   sequential exchanges: wait head -> park the early
+//                bytes -> route through run_route -> end synthesis ->
+//                keep-alive verdict (admission hands the early bytes to
+//                the decoder; a rejected length-framed body drains to
+//                its counted remainder instead of closing). Pipelined
+//                heads buffer in the parser/outbox ordering, never
+//                re-ordered.
 //   writer_loop  outbox -> transport (copy_front / write_operation /
 //                consume_front), parking on a wake operation whenever
 //                nothing is buffered. Every completed write counts as
@@ -179,6 +185,17 @@ class connection_engine final
     friend class http1_exchange_sink;
     friend class wake_body_sink;
 
+    // Per-exchange body posture (TASK-109). none: the parser owns the
+    // byte stream. pending: the head is complete and the framing known,
+    // but the handler has not admitted the body -- upload bytes park,
+    // bounded, in early_bytes_ and the decoder stays unfed. admitted:
+    // the decoder consumes the stream (the TASK-106/108 posture).
+    // draining: a rejected length-framed body is discarded down to its
+    // counted remainder so the connection can be reused.
+    enum class body_gate : std::uint8_t {
+        none, pending, admitted, draining,
+    };
+
     // Blocks until a complete head is parseable, the parser failed, the
     // peer hung up, or the server stopped; true only for the complete
     // head.
@@ -223,16 +240,41 @@ class connection_engine final
     static task<void> route_loop(std::shared_ptr<connection_engine> self);
     static task<bool> serve_one(std::shared_ptr<connection_engine> self);
 
-    // Stages one exchange's body decoder: seeds it with the drained
-    // residue (backpressure leftovers return to the pending tail) and
-    // reports a framing failure already visible in the seed.
-    bool stage_body(const http1_body_mode& mode, std::string seed);
+    // Stages one exchange's body decoder WITHOUT feeding it: the
+    // drained seed parks as the early-byte buffer and the decoder is
+    // fed only at the admission transition (TASK-109's bounded
+    // pre-admission posture). A seed framing failure surfaces at that
+    // transition, not here.
+    void stage_body(const http1_body_mode& mode, std::string seed);
+
+    // The admission transition (called from the exchange sink): feeds
+    // the parked early bytes to the decoder, flips the gate, and wakes
+    // the gated reader. False when the seed already fails framing (the
+    // caller must not emit the interim then; the exchange is
+    // disconnected and the connection marked to close).
+    bool admit_early_body();
 
     // Reader-side byte admission: feeds the active body decoder or the
     // head parser, parking unhandable bytes in the pending tail.
     void absorb(std::string_view data);
     // The head-phase half of absorb; the mutex must be held.
     void absorb_head_locked(std::string_view data);
+    // Pre-admission parking: appends to the bounded early buffer; the
+    // mutex must be held.
+    void absorb_pending_locked(std::string_view data);
+    // The admitted-state decoder feed (pending-tail re-feed posture of
+    // TASK-106/108); the mutex must be held. True on a framing failure.
+    bool absorb_admitted_locked(std::string_view data);
+    // Discards the counted rejection remainder; whatever follows it is
+    // the next pipelined head and feeds the parser. True when the drain
+    // completed (the caller wakes the loops and re-arms); the mutex
+    // must be held.
+    bool absorb_drain_locked(std::string_view data);
+
+    // True when the reader may submit another socket read. Parking
+    // (not reading) is the pre-admission memory bound; the mutex must
+    // be held.
+    bool reader_may_read_locked() const;
 
     // Disconnects the live exchange, if one is being routed.
     void disconnect_current(http::outcome_code reason,
@@ -278,6 +320,10 @@ class connection_engine final
     http1_response_outbox outbox_;
     std::unique_ptr<http1_body_source> body_;
     std::string pending_tail_;   // bytes no consumer could take yet
+    std::string early_bytes_;    // pre-admission parking (bounded)
+    body_gate gate_ = body_gate::none;
+    std::uint64_t drain_remaining_ = 0;
+    std::optional<std::chrono::steady_clock::time_point> drain_anchor_;
     std::uint64_t next_sequence_ = 0;
     exchange* current_ = nullptr;   // live exchange being routed
     std::chrono::steady_clock::time_point last_activity_
@@ -290,7 +336,6 @@ class connection_engine final
     // exchange, held until the exchange leaves the suspended state.
     std::optional<std::chrono::steady_clock::time_point>
         suspension_anchor_;
-    bool body_active_ = false;
     bool eof_ = false;
     bool shutdown_ = false;
     bool route_done_ = false;
