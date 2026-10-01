@@ -149,7 +149,7 @@ task<void> one_shot_handler(exchange& x) {
 // thread-backed backend.
 struct scenario {
     explicit scenario(srv::budget_limits limits = srv::budget_limits())
-        : root(srv::resource_budget::root(limits)) {
+        : config_limits(limits), root(srv::resource_budget::root(limits)) {
         static_cast<void>(srv::route_registry::create(root, registry));
         static_cast<void>(registry.route(
             http::method::known(http::method_id::get), "/hello",
@@ -456,6 +456,71 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, post_miss_404_with_staged_body)
     s.pair.close_peer();
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
 LT_END_AUTO_TEST(post_miss_404_with_staged_body)
+
+// A malformed request line synthesizes 400 and closes; nothing parses
+// after a close_now posture.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, malformed_line_400_then_close)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request = "GET /no-version\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 400);
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(malformed_line_400_then_close)
+
+// A head over the configured budget synthesizes 431 and closes.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, head_over_budget_431)
+    srv::budget_limits limits;
+    limits.set(srv::resource::header_bytes, 128);
+    scenario s(limits);
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "GET /" + std::string(256, 'a') + " HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 431);
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(head_over_budget_431)
+
+// Transfer-Encoding together with Content-Length: 400 (smuggling
+// posture), connection closed.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, te_with_cl_400)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /echo HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n"
+        "Content-Length: 4\r\n\r\n0\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 400);
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(te_with_cl_400)
+
+// A transfer coding before chunked is well-formed but unsupported: 501.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, te_coding_before_chunked_501)
+    scenario s;
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /echo HTTP/1.1\r\nHost: h\r\n"
+        "Transfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 501);
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(te_coding_before_chunked_501)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

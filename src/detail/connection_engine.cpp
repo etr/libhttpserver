@@ -158,6 +158,35 @@ void connection_engine::absorb(std::string_view data) {
     }
 }
 
+void connection_engine::emit_error(std::uint16_t code) {
+    stop_source cancel;
+    const std::uint64_t sequence = [this] {
+        std::lock_guard<std::mutex> lock(mu_);
+        return next_sequence_++;
+    }();
+    http1_response_sink& slot = outbox_.open(sequence, cancel.get_token());
+    http::request_head request;
+    request.request_protocol = http::protocol::http_1_1;
+    request.request_method = http::method::known(http::method_id::get);
+    request.raw_target = "/";
+    request.route_path = "/";
+    request.head_fields.append("Connection", "close");
+    http::fields fields;
+    fields.append("Content-Length", "0");
+    static_cast<void>(slot.start(request, http::status::from_code(code),
+                                 fields, config_.clock));
+    static_cast<void>(slot.push_end(http::fields()));
+    wake_loops();
+    request_close();
+}
+
+std::uint16_t connection_engine::error_code_for(
+    http::outcome_code code) noexcept {
+    if (code == http::outcome_code::limit_exceeded) return 431;
+    if (code == http::outcome_code::not_supported) return 501;
+    return 400;
+}
+
 bool connection_engine::stage_body(const http1_body_mode& mode,
                                    std::string seed) {
     std::lock_guard<std::mutex> lock(mu_);

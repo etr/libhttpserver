@@ -66,6 +66,7 @@
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/detail/http1_body_decoder.hpp>
 #include <httpserver/detail/http1_body_source.hpp>
+#include <httpserver/detail/http1_error_synth.hpp>
 #include <httpserver/detail/http1_head_parser.hpp>
 #include <httpserver/detail/http1_response_framer.hpp>
 #include <httpserver/detail/http1_response_outbox.hpp>
@@ -74,6 +75,7 @@
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/exchange.hpp>
+#include <httpserver/http/outcome.hpp>
 #include <httpserver/server/budgets.hpp>
 #include <httpserver/server/routes.hpp>
 
@@ -176,6 +178,15 @@ class connection_engine final
 
     // Marks the connection close-once-drained (error and abort paths).
     void request_close() noexcept;
+
+    // Emits a bare synthesized error (http1_error_synth wire form)
+    // through the outbox and marks the close. For the no-routing paths:
+    // a failed head, a rejected framing, an exhausted budget.
+    void emit_error(std::uint16_t code);
+
+    // Maps a typed failure to its synthesized status: 431 for a budget
+    // violation, 501 for an unsupported feature, 400 otherwise.
+    static std::uint16_t error_code_for(http::outcome_code code) noexcept;
 
     // Exchange-tail: end synthesis, keep-alive verdict, pipelined-byte
     // recycle. Returns the keep-alive decision for the route loop.

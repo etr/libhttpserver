@@ -83,6 +83,11 @@ task<bool> connection_engine::serve_one(
         self->pending_tail_.clear();
     }
     const http1_body_mode mode = http1_body_mode::compute(head);
+    if (mode.kind == http1_body_kind::rejected) {
+        self->emit_error(
+            self->error_code_for(mode.failure.code()));
+        co_return false;
+    }
     const bool body_present = mode.kind != http1_body_kind::none;
     if (body_present) {
         const bool seed_failed = self->stage_body(mode, std::move(seed));
@@ -162,9 +167,20 @@ task<void> connection_engine::route_loop(
     // order is preserved without re-entry.
     for (;;) {
         if (!(co_await wait_for_head(self))) {
-            // EOF, shutdown, or a failed head: close (the error-status
-            // synthesis for a failed head arrives in step 6).
-            self->request_close();
+            // A failed head answers bare (400/431/501) and closes; EOF
+            // and shutdown just close.
+            http::outcome failure;
+            {
+                std::lock_guard<std::mutex> lock(self->mu_);
+                if (self->parser_.state() == http1_head_state::failed) {
+                    failure = self->parser_.failure();
+                }
+            }
+            if (failure.ok()) {
+                self->request_close();
+            } else {
+                self->emit_error(self->error_code_for(failure.code()));
+            }
             break;
         }
         if (!(co_await serve_one(self))) break;
