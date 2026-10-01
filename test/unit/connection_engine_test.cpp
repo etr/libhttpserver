@@ -785,7 +785,11 @@ LT_END_AUTO_TEST(early_bytes_bounded_no_loss)
 // A body the handler never reads blocks keep-alive: the handler
 // one-shot responds and the body arrives afterwards -- the connection
 // closes instead of misframing the next head.
-LT_BEGIN_AUTO_TEST(connection_engine_suite, undrained_body_closes)
+// TASK-109: a rejected length-framed body drains to its counted
+// remainder and the connection is reused (the RFC 9110 section 10.1.1
+// "continue reading" posture) instead of closing.
+LT_BEGIN_AUTO_TEST(connection_engine_suite,
+                   undrained_length_body_drains_and_reuses)
     scenario s;
     static_cast<void>(s.registry.route(
         http::method::known(http::method_id::post), "/ignore",
@@ -799,12 +803,77 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, undrained_body_closes)
         s.next_response(s.pair.peer());
     LT_CHECK(response.has_value());
     if (response.has_value()) LT_CHECK_EQ(response->status, 200);
-    // The late body never gets a reader: the server closes anyway.
+    // The late body feeds the drain, not the parser: no FIN arrives.
     const std::string body = "12345678";
     io_loopback::write_all(s.pair.peer(), body.data(), body.size());
+    LT_CHECK(no_bytes_within(s.pair.peer(), std::chrono::milliseconds(300)));
+    // The drained connection serves the next exchange untouched.
+    const std::string follow = "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), follow.data(), follow.size());
+    const std::optional<observed_response> again =
+        s.next_response(s.pair.peer());
+    LT_CHECK(again.has_value());
+    if (again.has_value()) {
+        LT_CHECK_EQ(again->status, 200);
+        LT_CHECK_EQ(again->body, std::string("hello"));
+    }
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(undrained_length_body_drains_and_reuses)
+
+// A rejected chunked body has no counted remainder to drain: the
+// connection closes rather than guess the framing (the pinned
+// not-drainable posture).
+LT_BEGIN_AUTO_TEST(connection_engine_suite, undrained_chunked_rejection_closes)
+    scenario s;
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/ignore",
+        ignore_body_handler));
+    LT_CHECK(s.start_engine());
+    // An unterminated chunked body: the handler answers one-shot, the
+    // framing never completes.
+    const std::string request =
+        "POST /ignore HTTP/1.1\r\nHost: h\r\n"
+        "Transfer-Encoding: chunked\r\n\r\n"
+        "4\r\nabcd";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 200);
     LT_CHECK(reaches_eof(s.pair.peer()));
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
-LT_END_AUTO_TEST(undrained_body_closes)
+LT_END_AUTO_TEST(undrained_chunked_rejection_closes)
+
+// A stalled drain hits its non-sliding deadline: the client sends only
+// a prefix of a rejected 1 MiB body, so the drain anchor is set and the
+// deadline closes the connection instead of hanging on the remainder.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, rejection_drain_deadline_closes)
+    srv::timeout_options timeouts;
+    timeouts.drain = std::chrono::milliseconds(200);
+    scenario s(timeouts);
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/ignore",
+        ignore_body_handler));
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /ignore HTTP/1.1\r\nHost: h\r\nContent-Length: 1048576"
+        "\r\n\r\n" + std::string(256, 'x');
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 200);
+    // In-drain quiet window: the 200 ms deadline has not arrived, so
+    // nothing -- not even the FIN -- may appear yet. The always-close
+    // posture fails here (its FIN is immediate).
+    LT_CHECK(no_bytes_within(s.pair.peer(), std::chrono::milliseconds(50)));
+    const auto began = std::chrono::steady_clock::now();
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    const auto elapsed = std::chrono::steady_clock::now() - began;
+    LT_CHECK(elapsed < std::chrono::milliseconds(2000));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(rejection_drain_deadline_closes)
 
 // The one-shot shape: head and body in one segment, the handler
 // responds without ever touching the writer or the body.

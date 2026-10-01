@@ -124,14 +124,34 @@ task<bool> connection_engine::serve_one(
         self->current_ = nullptr;
     }
     const bool keep = self->finish_exchange(forwarding, routed, engine_sink,
-                                            body_present);
-    co_return keep;
+                                            mode);
+    if (!keep) co_return false;
+    // A rejected length-framed body drains to its counted remainder
+    // before the next head may parse the stream (TASK-109): park until
+    // the drain completes. EOF, a close verdict, or a stop ends the
+    // connection instead of waiting out the remainder.
+    for (;;) {
+        bool drained = false;
+        {
+            std::lock_guard<std::mutex> lock(self->mu_);
+            drained = self->gate_ != body_gate::draining;
+            if (!drained && (self->eof_ || self->shutdown_
+                             || self->close_after_drain_)) {
+                co_return false;
+            }
+        }
+        if (drained) co_return true;
+        wake_operation op(self->owner_, self->id_);
+        op.submit(self->backend_);
+        const io_result r = co_await std::move(op);
+        if (r.code != http::outcome_code::ok) co_return false;
+    }
 }
 
 bool connection_engine::finish_exchange(wake_body_sink& forwarding,
                                         const exchange& routed,
                                         http1_exchange_sink& engine_sink,
-                                        bool body_present) {
+                                        const http1_body_mode& mode) {
     // Head-only responses (respond() without a streaming body) still
     // need their end marker so the framing closes validly.
     if (!forwarding.ended() && !routed.disconnected()) {
@@ -140,41 +160,66 @@ bool connection_engine::finish_exchange(wake_body_sink& forwarding,
     bool keep = !routed.disconnected() && !engine_sink.upgraded()
         && engine_sink.responded_ok()
         && engine_sink.keepalive() == http1_keepalive::keep_alive;
-    settle_exchange_state(keep, body_present);
+    settle_exchange_state(keep, mode);
     wake_loops();
-    // Back to awaiting a head (or closing): the header deadline can be
-    // nearer than the deadline armed for the exchange.
+    // Back to awaiting a head (or closing, or a fresh drain): the next
+    // deadline can be nearer than the one armed for the exchange.
     rearm_watchdog();
     return keep;
 }
 
 void connection_engine::settle_exchange_state(bool& keep,
-                                              bool body_present) {
+                                              const http1_body_mode& mode) {
     std::lock_guard<std::mutex> lock(mu_);
-    if (gate_ == body_gate::pending && body_present) {
-        // Never admitted: the decoder never consumed the early bytes.
-        // Fold them back to the parked tail -- they are a pipelined
-        // next head when the framing was complete at birth (a zero
-        // length), and dead weight on the close path otherwise.
-        pending_tail_.append(early_bytes_);
-        std::string().swap(early_bytes_);
-    }
-    // An undrained body would misparse as the next head.
-    if (body_present && (body_ == nullptr || !body_->message_complete())) {
-        keep = false;
-    }
-    // A kept verdict implies the body (if any) completed, so parked
-    // pipelined bytes are exactly the next head: recycle them into the
-    // parser. The per-exchange gate closes either way; the next
-    // serve_one reopens it when its framing says so.
+    // Undrained: the exchange ends with body octets nobody consumed --
+    // the decoder unfed (never admitted) or fed but incomplete.
+    const bool undrained = mode.kind != http1_body_kind::none
+        && (gate_ == body_gate::pending
+            || (gate_ == body_gate::admitted
+                && (body_ == nullptr || !body_->message_complete())));
+    if (undrained) decide_drain_locked(keep, mode);
+    // A kept verdict implies the body (if any) is accounted for, so
+    // parked pipelined bytes are exactly the next head: recycle them
+    // into the parser. The per-exchange gate closes unless a drain
+    // holds it; the next serve_one reopens it when its framing says so.
     if (keep && !pending_tail_.empty()) {
         std::string back = std::move(pending_tail_);
         pending_tail_.clear();
         parser_.feed(back);
     }
-    gate_ = body_gate::none;
+    if (gate_ != body_gate::draining) gate_ = body_gate::none;
     std::string().swap(early_bytes_);
     if (!keep) close_after_drain_ = true;
+}
+
+void connection_engine::decide_drain_locked(bool& keep,
+                                            const http1_body_mode& mode) {
+    if (!keep || eof_ || mode.kind != http1_body_kind::length) {
+        keep = false;
+        return;
+    }
+    std::uint64_t remaining = mode.content_length;
+    if (gate_ == body_gate::pending) {
+        const std::uint64_t early = early_bytes_.size();
+        if (early > remaining) {
+            // Early bytes past the counted body are the next pipelined
+            // head: park them where the settle recycle looks.
+            pending_tail_.append(
+                early_bytes_, static_cast<std::size_t>(remaining),
+                static_cast<std::size_t>(early - remaining));
+        }
+        std::string().swap(early_bytes_);
+        remaining = early < remaining ? remaining - early : 0;
+    } else {
+        // Admitted: never-fed octets plus the decoder's refused tail
+        // (staged-but-unread octets die with the decoder).
+        remaining = body_->length_remaining() + pending_tail_.size();
+        pending_tail_.clear();
+    }
+    if (remaining == 0) return;   // the whole body already arrived
+    gate_ = body_gate::draining;
+    drain_remaining_ = remaining;
+    drain_anchor_ = std::chrono::steady_clock::now();
 }
 
 task<void> connection_engine::route_loop(

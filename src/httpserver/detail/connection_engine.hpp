@@ -51,7 +51,9 @@
 //                keep-alive gap), body_idle (a decoding body with no
 //                new octets), write_idle (queued bytes with a stalled
 //                peer), suspension (a suspended exchange, anchored at
-//                first sight so the deadline cannot slide). Transport
+//                first sight so the deadline cannot slide), drain (a
+//                rejection drain, anchored at drain start so a
+//                trickling remainder cannot slide it either). Transport
 //                activity cancels and re-arms; a routed exchange with
 //                no inventory state defers on a short re-check tick.
 //                Enforcement disconnects the live exchange and
@@ -297,10 +299,20 @@ class connection_engine final
     bool finish_exchange(wake_body_sink& forwarding,
                          const exchange& routed,
                          http1_exchange_sink& engine_sink,
-                         bool body_present);
+                         const http1_body_mode& mode);
     // The mutex-guarded half: budget the keep verdict against undrained
-    // bodies, recycle parked pipelined bytes, record the close verdict.
-    void settle_exchange_state(bool& keep, bool body_present);
+    // bodies (drain-or-close, TASK-109), recycle parked pipelined
+    // bytes, record the close verdict.
+    void settle_exchange_state(bool& keep, const http1_body_mode& mode);
+    // The drain-or-close verdict for an undrained body at settle time.
+    // Length framing with a healthy peer and a keep verdict reuses the
+    // connection: the gate flips to draining over the counted
+    // socket-side remainder (a remainder of zero completes at once),
+    // and early bytes past the counted body park as the recyclable next
+    // pipelined head. Every other posture -- chunked framing, a hung-up
+    // peer, or the response's own close -- keeps the close. mu_ must be
+    // held.
+    void decide_drain_locked(bool& keep, const http1_body_mode& mode);
 
     void loop_finished();
     void finalize();

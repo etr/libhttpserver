@@ -472,12 +472,13 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     }
     // Nearest-deadline order, as the contract promises: collect every
     // candidate the current state offers and arm the minimum. A
-    // trickling body slides body_idle but never the suspension anchor,
-    // so a suspended exchange reaches its deadline; body_idle and
-    // write_idle still win whenever they are genuinely nearer. While
-    // an exchange is routed and no candidate applies, the plan defers
-    // (TASK-110's drain semantics bound it instead).
-    std::chrono::steady_clock::time_point candidates[3];
+    // trickling body slides body_idle but never the suspension or
+    // drain anchors, so a suspended exchange and a stalled rejection
+    // drain both reach their deadlines; the sliding candidates still
+    // win whenever they are genuinely nearer. While an exchange is
+    // routed and no candidate applies, the plan defers (TASK-110's
+    // drain semantics bound it instead).
+    std::chrono::steady_clock::time_point candidates[4];
     std::size_t candidate_count = 0;
     if (body_decode_pending_locked()) {
         candidates[candidate_count++] =
@@ -490,6 +491,11 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     if (const std::optional<std::chrono::steady_clock::time_point>
             suspended_until = suspension_deadline_locked()) {
         candidates[candidate_count++] = *suspended_until;
+    }
+    if (gate_ == body_gate::draining && drain_remaining_ > 0
+            && drain_anchor_.has_value()) {
+        candidates[candidate_count++] =
+            *drain_anchor_ + config_.timeouts.drain;
     }
     if (candidate_count == 0) {
         if (current_ != nullptr) {

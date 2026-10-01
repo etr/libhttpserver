@@ -44,6 +44,7 @@
 #define SRC_HTTPSERVER_DETAIL_HTTP1_BODY_SOURCE_HPP_
 
 #include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <string_view>
 
@@ -122,6 +123,14 @@ class http1_body_source final : public body_source {
     std::size_t staged_bytes() const noexcept {
         std::lock_guard<std::mutex> lock(mu_);
         return decoder_.staged_bytes();
+    }
+
+    // Body octets still expected under the current framing expectation
+    // (the exact socket-side remainder for length framing); 0 once the
+    // boundary was framed. TASK-109's rejection drain counts from here.
+    std::uint64_t length_remaining() const noexcept {
+        std::lock_guard<std::mutex> lock(mu_);
+        return decoder_.length_remaining();
     }
 
     // Close posture of the recorded failure (rejected body mode or a
