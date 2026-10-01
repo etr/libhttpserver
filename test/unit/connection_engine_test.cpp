@@ -76,6 +76,7 @@ using httpserver::detail::io_poll_backend;
 using httpserver::detail::worker_pool;
 using httpserver::body_collect;
 using httpserver::body_policy;
+using httpserver::body_read;
 using httpserver::exchange;
 using httpserver::resume_outcome;
 using httpserver::resume_signal;
@@ -207,6 +208,23 @@ task<void> suspend_head_handler(exchange& x) {
     co_return;   // a cancelled exchange must not respond
 }
 
+// POST /suspend_admit: admits, pulls one bounded piece (the first body
+// bytes), then suspends -- the post-admission suspension scenario.
+task<void> suspend_admit_handler(exchange& x) {
+    const http::outcome admitted = x.admit_body(body_policy{});
+    if (!admitted.ok()) co_return;
+    std::byte piece[8];
+    const body_read first = co_await x.body().read_some(piece);
+    if (!first.status.ok() || first.end_of_body) co_return;
+    resume_signal wait;
+    if (!x.suspend(wait).ok()) co_return;
+    suspend_entered.store(true);
+    const resume_outcome outcome = co_await wait.wait_for(kBudget);
+    suspend_outcome.store(static_cast<int>(outcome));
+    suspend_wait_done.fetch_add(1);
+    co_return;
+}
+
 // One scenario rig: pool + poll backend + registry + one loopback
 // connection. Declaration order is the teardown order's reverse: the
 // engine dies first, then the pair, then the pool, then the
@@ -334,6 +352,14 @@ bool no_bytes_within(pollsys::native_socket_t peer,
         }
         return false;   // data arrived, or the peer closed
     }
+}
+
+// Deterministic unwind for a failing deadline scenario: never leave a
+// live engine writing its stop callback into a destroyed scenario.
+void force_stop(scenario& s) {
+    if (s.stopped.load()) return;
+    s.engine->shutdown();
+    static_cast<void>(wait_until([&s] { return s.stopped.load(); }));
 }
 
 }  // namespace
@@ -627,6 +653,86 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, suspension_head_disconnect_cancels)
     LT_CHECK_EQ(suspend_outcome.load(),
                 static_cast<int>(resume_outcome::cancelled));
 LT_END_AUTO_TEST(suspension_head_disconnect_cancels)
+
+// The suspension deadline is not masked by a trickling body: the
+// first-sight anchor does not slide on transport activity (body_idle
+// does), so a suspended head exchange ends exactly once at its
+// deadline even while body bytes keep arriving.
+LT_BEGIN_AUTO_TEST(connection_engine_suite,
+                   suspension_head_not_masked_by_trickle_times_out_once)
+    srv::timeout_options timeouts;
+    timeouts.suspension = std::chrono::milliseconds(400);
+    timeouts.body_idle = std::chrono::milliseconds(2000);
+    scenario s(timeouts);
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/suspend_head",
+        suspend_head_handler));
+    suspend_entered.store(false);
+    suspend_wait_done.store(0);
+    suspend_outcome.store(-1);
+    LT_CHECK(s.start_engine());
+    const std::string head =
+        "POST /suspend_head HTTP/1.1\r\nHost: h\r\nContent-Length: 1000\r\n"
+        "\r\n";
+    io_loopback::write_all(s.pair.peer(), head.data(), head.size());
+    LT_CHECK(wait_until([] { return suspend_entered.load(); }));
+    const auto began = std::chrono::steady_clock::now();
+    const char dot = 'x';
+    while (!s.stopped.load()
+           && std::chrono::steady_clock::now() - began
+                  < std::chrono::milliseconds(1200)) {
+        io_loopback::write_all(s.pair.peer(), &dot, 1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    const auto elapsed = std::chrono::steady_clock::now() - began;
+    LT_CHECK(s.stopped.load());
+    LT_CHECK(elapsed < std::chrono::milliseconds(1500));
+    LT_CHECK_EQ(suspend_wait_done.load(), 1);
+    LT_CHECK_EQ(suspend_outcome.load(),
+                static_cast<int>(resume_outcome::cancelled));
+    // A timed-out peer reads no response: close observed, zero bytes.
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    force_stop(s);
+LT_END_AUTO_TEST(suspension_head_not_masked_by_trickle_times_out_once)
+
+// The same suspension deadline governs AFTER admission: a handler that
+// read a partial body and suspended still ends exactly once, at the
+// anchored deadline, despite the continuing trickle.
+LT_BEGIN_AUTO_TEST(connection_engine_suite,
+                   suspension_after_admit_times_out_once)
+    srv::timeout_options timeouts;
+    timeouts.suspension = std::chrono::milliseconds(400);
+    timeouts.body_idle = std::chrono::milliseconds(2000);
+    scenario s(timeouts);
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/suspend_admit",
+        suspend_admit_handler));
+    suspend_entered.store(false);
+    suspend_wait_done.store(0);
+    suspend_outcome.store(-1);
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /suspend_admit HTTP/1.1\r\nHost: h\r\n"
+        "Content-Length: 1000\r\n\r\n" + std::string(16, 'p');
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    LT_CHECK(wait_until([] { return suspend_entered.load(); }));
+    const auto began = std::chrono::steady_clock::now();
+    const char dot = 'x';
+    while (!s.stopped.load()
+           && std::chrono::steady_clock::now() - began
+                  < std::chrono::milliseconds(1200)) {
+        io_loopback::write_all(s.pair.peer(), &dot, 1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    const auto elapsed = std::chrono::steady_clock::now() - began;
+    LT_CHECK(s.stopped.load());
+    LT_CHECK(elapsed < std::chrono::milliseconds(1500));
+    LT_CHECK_EQ(suspend_wait_done.load(), 1);
+    LT_CHECK_EQ(suspend_outcome.load(),
+                static_cast<int>(resume_outcome::cancelled));
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    force_stop(s);
+LT_END_AUTO_TEST(suspension_after_admit_times_out_once)
 
 // A body the handler never reads blocks keep-alive: the handler
 // one-shot responds and the body arrives afterwards -- the connection

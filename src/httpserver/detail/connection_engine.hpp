@@ -197,6 +197,16 @@ class connection_engine final
     };
     // mu_ must be held.
     watchdog_plan plan_watchdog_locked();
+    // True while this exchange's body is decoding and the message
+    // boundary has not been reached (the body_idle candidate). mu_ must
+    // be held.
+    bool body_decode_pending_locked() const;
+    // The suspension candidate, anchored at first sight of the
+    // suspended exchange so the deadline cannot slide; a disconnected
+    // exchange arms nothing (its handler is already unwinding). mu_
+    // must be held.
+    std::optional<std::chrono::steady_clock::time_point>
+    suspension_deadline_locked();
     // True when the deadline that just fired still governs the current
     // state (activity re-arms instead of enforcing).
     bool watchdog_due(std::chrono::steady_clock::time_point deadline);

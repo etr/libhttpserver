@@ -26,6 +26,7 @@
 
 #include <httpserver/detail/connection_engine.hpp>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <string>
@@ -332,41 +333,67 @@ task<void> connection_engine::writer_loop(
 
 // -- watchdog ---------------------------------------------------------------
 
+// True while the engine is decoding this exchange's body and the
+// message boundary has not been reached (the body_idle candidate).
+bool connection_engine::body_decode_pending_locked() const {
+    return body_active_ && body_ != nullptr
+        && !body_->message_complete();
+}
+
+// The suspension candidate, anchored at first sight of the suspended
+// exchange so the deadline cannot slide on later activity (TASK-109).
+// A disconnected exchange arms nothing -- its handler is already
+// unwinding, so no second enforcement window opens.
+std::optional<std::chrono::steady_clock::time_point>
+connection_engine::suspension_deadline_locked() {
+    if (current_ == nullptr || !current_->suspended()
+            || current_->disconnected()) {
+        suspension_anchor_.reset();
+        return std::nullopt;
+    }
+    if (!suspension_anchor_.has_value()) {
+        suspension_anchor_ = std::chrono::steady_clock::now();
+    }
+    return *suspension_anchor_ + config_.timeouts.suspension;
+}
+
 connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     watchdog_plan plan;
     if (shutdown_ || close_after_drain_) {
         plan.exit = true;
         return plan;
     }
-    // Nearest-deadline order: a decoding body, then queued bytes with a
-    // stalled peer, then a suspended exchange. While an exchange is
-    // routed and none of those holds, no inventory deadline applies --
-    // the plan defers (TASK-110's drain semantics bound it instead).
-    if (body_active_ && body_ != nullptr
-            && !body_->message_complete()) {
-        plan.deadline = last_activity_ + config_.timeouts.body_idle;
-        return plan;
+    // Nearest-deadline order, as the contract promises: collect every
+    // candidate the current state offers and arm the minimum. A
+    // trickling body slides body_idle but never the suspension anchor,
+    // so a suspended exchange reaches its deadline; body_idle and
+    // write_idle still win whenever they are genuinely nearer. While
+    // an exchange is routed and no candidate applies, the plan defers
+    // (TASK-110's drain semantics bound it instead).
+    std::chrono::steady_clock::time_point candidates[3];
+    std::size_t candidate_count = 0;
+    if (body_decode_pending_locked()) {
+        candidates[candidate_count++] =
+            last_activity_ + config_.timeouts.body_idle;
     }
     if (outbox_.queued_bytes() > 0) {
-        plan.deadline = last_activity_ + config_.timeouts.write_idle;
-        return plan;
+        candidates[candidate_count++] =
+            last_activity_ + config_.timeouts.write_idle;
     }
-    if (current_ != nullptr) {
-        if (!current_->suspended()) {
-            suspension_anchor_.reset();
+    if (const std::optional<std::chrono::steady_clock::time_point>
+            suspended_until = suspension_deadline_locked()) {
+        candidates[candidate_count++] = *suspended_until;
+    }
+    if (candidate_count == 0) {
+        if (current_ != nullptr) {
             plan.defer = true;
             return plan;
         }
-        // Anchored at first sight: recomputing now + suspension on
-        // every check would slide the deadline forever.
-        if (!suspension_anchor_.has_value()) {
-            suspension_anchor_ = std::chrono::steady_clock::now();
-        }
-        plan.deadline = *suspension_anchor_ + config_.timeouts.suspension;
+        plan.deadline = last_activity_ + config_.timeouts.header;
         return plan;
     }
-    suspension_anchor_.reset();
-    plan.deadline = last_activity_ + config_.timeouts.header;
+    plan.deadline = *std::min_element(candidates,
+                                      candidates + candidate_count);
     return plan;
 }
 
