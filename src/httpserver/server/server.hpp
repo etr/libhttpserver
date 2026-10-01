@@ -54,6 +54,19 @@ namespace httpserver {
 
 namespace server {
 
+// The two-state outcome of a drain ticket wait (PRD-V3N-REQ-032):
+// every counted unit completed, or the drain's deadline expired with
+// work still counted. A stop-driven completion reports completed --
+// the two-state result is the documented posture.
+enum class drain_status : std::uint8_t { completed, deadline_expired };
+
+// What one ticket wait observed. remaining is the unit count still
+// live at expiry (a pre-cancellation snapshot; 0 when completed).
+struct drain_result {
+    drain_status status = drain_status::completed;
+    std::size_t remaining = 0;
+};
+
 // The owned-engine HTTP/1 server. All methods are thread-safe unless
 // noted; lifecycle calls (listen/stop) are expected from one
 // controlling thread.
