@@ -378,7 +378,7 @@ check-hygiene:
 # on the presence of specs/ so that `make check` from an unpacked release tarball
 # still runs the full test suite plus the header / example / lint gates, but
 # skips the source-only doc gates whose inputs it cannot satisfy.
-check-local: check-headers check-examples lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-fence-balance
+check-local: check-headers check-examples lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage
 	@if test -d "$(top_srcdir)/specs"; then \
 		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck; \
 	else \
@@ -397,6 +397,15 @@ check-local: check-headers check-examples lint-warning-suppressions lint-server-
 	    CHECK_HYGIENE_STAGE="$(abs_top_builddir)/.shared-check-stage" \
 	    CHECK_HYGIENE_SHARED=yes
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
+
+# TASK-108 (PRD-V3N-REQ-001/002): the native TLS-off linkage audit.
+# Builds the v3_native_linkage program (v3core archive only) and runs
+# scripts/audit-v3-native-linkage.sh over it: a banned include in the
+# v3 surface or a third-party runtime library in the binary fails check.
+check-v3-native-linkage:
+	@echo "=== check-v3-native-linkage: native TLS-off surface audit ==="
+	@$(MAKE) $(AM_MAKEFLAGS) -C "$(top_builddir)/test" v3_native_linkage >/dev/null
+	@BUILD_DIR="$(abs_top_builddir)" SRC_DIR="$(top_srcdir)" $(top_srcdir)/scripts/audit-v3-native-linkage.sh
 
 # TASK-040: enforce static invariants on the two flagship examples
 # (hello_world.cpp <= 10 LOC, lambda-only; shared_state.cpp class+mutex).

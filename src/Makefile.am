@@ -25,7 +25,16 @@ lib_LTLIBRARIES = libhttpserver.la
 # builds. The WS-off branch in websocket_handler.cpp provides stub
 # definitions (every member throws feature_unavailable except is_valid()
 # which returns false).
-libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_request_auth.cpp http_response.cpp http_response_factories.cpp http_resource.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp hook_handle.cpp peer_address.cpp resource_hook_table.cpp cookie.cpp detail/http_endpoint.cpp detail/response_body.cpp detail/ip_representation.cpp detail/ip_access_control.cpp detail/ws_registry.cpp detail/hook_bus.cpp detail/route_table.cpp detail/daemon_lifecycle.cpp detail/dispatch_util.cpp detail/error_pages.cpp detail/hook_dispatcher.cpp detail/http_request_impl.cpp detail/http_request_impl_args.cpp detail/http_request_impl_tls.cpp detail/request_dispatcher.cpp detail/request_pipeline.cpp detail/response_materializer.cpp detail/upload_pipeline.cpp detail/websocket_upgrader.cpp detail/webserver_impl.cpp detail/webserver_callbacks.cpp detail/webserver_body_pipeline.cpp detail/io_operation.cpp detail/io_connection_owner.cpp detail/fake_io_backend.cpp detail/io_poll_backend.cpp detail/worker_pool.cpp detail/connection_engine.cpp detail/connection_engine_request.cpp detail/listener_engine.cpp detail/server.cpp
+# TASK-108 step 10 (PRD-V3N-REQ-001/002): the v3 native engine as a
+# convenience library. Its objects fold into libhttpserver.la below (the
+# shipped .la is unchanged) while staying linkable alone: the
+# v3_native_linkage check program links ONLY this archive and the audit
+# script proves the native TLS-off surface needs no microhttpd, gnutls,
+# openssl, or wslay.
+noinst_LTLIBRARIES = libhttpserver_v3core.la
+libhttpserver_v3core_la_SOURCES = detail/io_operation.cpp detail/io_connection_owner.cpp detail/fake_io_backend.cpp detail/io_poll_backend.cpp detail/worker_pool.cpp detail/connection_engine.cpp detail/connection_engine_request.cpp detail/listener_engine.cpp detail/server.cpp
+
+libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_request_auth.cpp http_response.cpp http_response_factories.cpp http_resource.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp hook_handle.cpp peer_address.cpp resource_hook_table.cpp cookie.cpp detail/http_endpoint.cpp detail/response_body.cpp detail/ip_representation.cpp detail/ip_access_control.cpp detail/ws_registry.cpp detail/hook_bus.cpp detail/route_table.cpp detail/daemon_lifecycle.cpp detail/dispatch_util.cpp detail/error_pages.cpp detail/hook_dispatcher.cpp detail/http_request_impl.cpp detail/http_request_impl_args.cpp detail/http_request_impl_tls.cpp detail/request_dispatcher.cpp detail/request_pipeline.cpp detail/response_materializer.cpp detail/upload_pipeline.cpp detail/websocket_upgrader.cpp detail/webserver_impl.cpp detail/webserver_callbacks.cpp detail/webserver_body_pipeline.cpp
 # noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
 # Detail headers (httpserver/detail/*.hpp) live here so they cannot leak to
 # downstream consumers — the public surface comes in through <httpserver.hpp>.
@@ -41,7 +50,7 @@ AM_LDFLAGS += -O0 --coverage -lgcov --no-inline
 endif
 
 if !COND_CROSS_COMPILE
-libhttpserver_la_LIBADD = -lmicrohttpd
+libhttpserver_la_LIBADD = libhttpserver_v3core.la -lmicrohttpd
 if HAVE_WEBSOCKET
 libhttpserver_la_LIBADD += -lmicrohttpd_ws
 endif
