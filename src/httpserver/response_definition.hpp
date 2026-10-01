@@ -84,6 +84,8 @@
 #include <vector>
 
 #include <httpserver/concurrency/executor.hpp>
+#include <httpserver/concurrency/task.hpp>
+#include <httpserver/exchange.hpp>
 #include <httpserver/http/fields.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/outcome.hpp>
@@ -92,6 +94,10 @@
 namespace httpserver {
 
 namespace detail {
+
+// One send's private body state; defined after response_overlay below
+// (it reaches the definition's frozen block through friendship).
+class send_cursor;
 
 // True iff any byte of v is a control character forbidden in a field
 // value: every CTL (0x00-0x1F, 0x7F) except HTAB, which is legal
@@ -263,6 +269,10 @@ class response_definition {
     }
 
  private:
+    // Reaches the frozen block (bytes, path, factory) to snapshot one
+    // send's body source; consumers never see the impl.
+    friend class detail::send_cursor;
+
     // The frozen state. Built locally by a factory, validated in
     // full, and only then shared immutably (`shared_ptr<const impl>`
     // makes the immutability structural: no API can reach a mutable
@@ -313,6 +323,225 @@ class response_definition {
 
     std::shared_ptr<const impl> impl_;
 };
+
+// Request-specific additions for ONE send (DR-V3-005, REQ-030). Owns
+// its ordered header and trailer occurrences as a plain deep value;
+// the definition it decorates is never mutated. Headers append AFTER
+// the definition's base fields, in entries() order (repeated names
+// included); trailers ride the final framing of that send only. The
+// engine's finish-time rules still apply: a trailer on a body the
+// protocol frames without a trailer section fails there, typed.
+struct response_overlay {
+    http::fields headers;
+    http::fields trailers;
+};
+
+// Typed result of one send_definition() completion. ok: the whole body
+// was streamed and the final framing (with the overlay's trailers)
+// was accepted; body_bytes counts the payload bytes handed to the
+// writer. Every failure carries its typed outcome.
+struct send_report {
+    http::outcome status;
+    std::size_t body_bytes = 0;
+};
+
+namespace detail {
+
+// Merged wire fields of one send: the definition's base fields with
+// every overlay header occurrence appended in entries() order, so the
+// committed sequence is base-then-overlay with the overlay order
+// preserved (REQ-030). A local copy per send — the definition is
+// never touched.
+inline http::fields merge_send_fields(const response_definition& def,
+                                      const response_overlay& overlay) {
+    http::fields merged = def.fields();
+    for (const http::fields::entry e : overlay.headers.entries()) {
+        merged.append(e.name, e.value);
+    }
+    return merged;
+}
+
+// Trailer names that may never ride a trailer section: the framing
+// fields and the connection's routing name belong to the head only.
+inline http::outcome check_trailer_names(const http::fields& trailers) {
+    for (const std::string_view name :
+         {"Transfer-Encoding", "Content-Length", "Host"}) {
+        if (trailers.count(name) > 0) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "response fields: '" + std::string(name)
+                    + "' cannot be a trailer");
+        }
+    }
+    return http::outcome::okay();
+}
+
+// Pre-commit validation of one overlay: wire-safe headers, wire-safe
+// trailers, and no framing or routing names among the trailers.
+inline http::outcome check_overlay(const response_overlay& overlay) {
+    const http::outcome headers =
+        check_fields_wire_safe(overlay.headers);
+    if (!headers.ok()) return headers;
+    const http::outcome trailers =
+        check_fields_wire_safe(overlay.trailers);
+    if (!trailers.ok()) return trailers;
+    return check_trailer_names(overlay.trailers);
+}
+
+// One send's private body state, allocated in send_definition's
+// coroutine frame: independence across concurrent sends of one shared
+// definition is structural — nothing here is reachable from the
+// definition. Declared in this public header for the same reason as
+// detail::body_sink: send_definition's inline body drives it, and a
+// public header may not include a private one.
+class send_cursor {
+ public:
+    // Binds to `def` (which must be valid) and takes this send's
+    // snapshot of the body source: the bytes aliased (the definition
+    // pins them alive), the file freshly opened with its size
+    // observed, or one fresh producer invoked.
+    http::outcome prepare(const response_definition& def) {
+        owner_ = def.impl_;
+        if (def.impl_->kind
+                == response_definition::source_kind::owned_bytes) {
+            offset_ = 0;
+            total_ = def.impl_->bytes.size();
+            return http::outcome::okay();
+        }
+        // The file and factory snapshots arrive with their sends;
+        // until then those kinds fail typed, exchange untouched.
+        return http::outcome(
+            http::outcome_code::invalid_argument,
+            "send_definition: body source not supported by this send");
+    }
+
+    // The next chunk of this send's body: exactly one meaning per
+    // body_chunk, spans valid until the next pull on this cursor.
+    body_chunk pull() {
+        // owned_bytes: the whole remainder in one chunk carrying end
+        // (the writer's internal loop paces it against queue
+        // capacity, so backpressure stays the writer's).
+        if (offset_ >= total_) {
+            return body_chunk{http::outcome::okay(), {}, true};
+        }
+        const std::byte* const base = owner_->bytes.data() + offset_;
+        const std::size_t rest =
+            static_cast<std::size_t>(total_ - offset_);
+        offset_ = total_;
+        return body_chunk{http::outcome::okay(),
+                          std::span<const std::byte>(base, rest), true};
+    }
+
+    // reopen_file only: the size observed at this send's prepare (the
+    // pinned Content-Length); 0 for every other kind.
+    std::uint64_t file_size() const noexcept { return file_size_; }
+
+ private:
+    std::shared_ptr<const response_definition::impl> owner_;
+    std::uint64_t offset_ = 0;     // owned_bytes cursor into shared bytes
+    std::uint64_t total_ = 0;      // owned_bytes total
+    std::uint64_t file_size_ = 0;  // reopen_file pinned size
+};
+
+// Everything a send does BEFORE committing the head: gates on the
+// definition, validates the overlay and the merged framing, merges
+// the wire fields, and takes the send's cursor snapshot. A failure
+// here leaves the exchange untouched (DR-V3-005: conflicting
+// singleton/framing fields fail validation before headers commit).
+inline http::outcome prepare_send(const response_definition& def,
+                                  const response_overlay& overlay,
+                                  http::fields& merged,
+                                  send_cursor& cursor) {
+    if (!def.valid()) {
+        return http::outcome(
+            http::outcome_code::invalid_argument,
+            "send_definition: definition is empty");
+    }
+    const http::outcome overlay_ok = check_overlay(overlay);
+    if (!overlay_ok.ok()) return overlay_ok;
+    merged = merge_send_fields(def, overlay);
+    const http::outcome framing = check_fields_framing(merged);
+    if (!framing.ok()) return framing;
+    const http::outcome prepared = cursor.prepare(def);
+    if (!prepared.ok()) return prepared;
+    if (def.kind() == response_definition::source_kind::reopen_file) {
+        // The pinned size is per send: the file is re-observed every
+        // time, never baked into the definition.
+        pin_content_length(merged, cursor.file_size());
+    }
+    return http::outcome::okay();
+}
+
+// Streams the cursor's body into the exchange's writer, one pull at a
+// time; backpressure is the writer's (a parked write IS it).
+inline task<http::outcome> stream_body(exchange& x, send_cursor& cursor,
+                                       std::size_t& body_bytes) {
+    for (;;) {
+        const body_chunk chunk = cursor.pull();
+        if (!chunk.status.ok()) co_return chunk.status;
+        if (!chunk.data.empty()) {
+            const body_write written =
+                co_await x.writer().write(chunk.data);
+            if (!written.status.ok()) co_return written.status;
+            body_bytes += chunk.data.size();
+        }
+        if (chunk.end) co_return http::outcome::okay();
+    }
+}
+
+}  // namespace detail
+
+// Sends one definition through an open exchange with one overlay
+// (architecture §3.1's exchange::respond(const response_definition&,
+// response_overlay), as a free function wrapping the exchange the
+// same way make_sync_route does — the exchange itself stays
+// engine-facing and unmodified).
+//
+// The send validates the overlay and the merged framing, commits the
+// head with start_response (base fields then overlay headers, in
+// order), streams the body through writer() with backpressure, and
+// finishes with the overlay's trailers. A validation, prepare, or
+// head-commit failure returns typed with the exchange untouched; a
+// failure after the committed head returns typed with the exchange
+// terminal (the engine owns the connection's fate; the send never
+// calls abort() itself).
+//
+// The definition is borrowed — it must outlive the task; it is never
+// mutated. The overlay is taken BY VALUE: the send frame owns its
+// copy, so a temporary overlay is exactly as safe as a named one (a
+// reference parameter bound to a default temporary would dangle
+// across the send's suspensions).
+//
+// Failure vocabulary: invalid_argument — malformed fields, framing
+// conflicts, an unopenable file, an empty producer or chunk;
+// invalid_state — the exchange or writer gates (e.g. a second
+// terminal decision); connection_closed / cancelled — a disconnect
+// before or during the send; protocol_error — a file body short of
+// its pinned Content-Length.
+inline task<send_report> send_definition(exchange& x,
+                                         const response_definition& def,
+                                         response_overlay overlay = {}) {
+    send_report report;
+    if (x.disconnected()) {
+        report.status = http::outcome(
+            http::outcome_code::connection_closed,
+            "send_definition: exchange is disconnected");
+        co_return report;
+    }
+    http::fields merged;
+    detail::send_cursor cursor;
+    report.status = detail::prepare_send(def, overlay, merged, cursor);
+    if (!report.status.ok()) co_return report;
+    report.status = x.start_response(def.status(), merged);
+    if (!report.status.ok()) co_return report;
+    report.status =
+        co_await detail::stream_body(x, cursor, report.body_bytes);
+    if (!report.status.ok()) co_return report;
+    const body_finish finished =
+        co_await x.writer().finish(overlay.trailers);
+    report.status = finished.status;
+    co_return report;
+}
 
 }  // namespace httpserver
 

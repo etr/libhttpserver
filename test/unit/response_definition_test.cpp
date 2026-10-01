@@ -39,17 +39,31 @@
 #include <utility>
 #include <vector>
 
+#include <httpserver/concurrency/executor.hpp>
+#include <httpserver/concurrency/task.hpp>
+#include <httpserver/exchange.hpp>
 #include <httpserver/http/fields.hpp>
+#include <httpserver/http/request_head.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/response_definition.hpp>
 
+#include "./body_sink_fake.hpp"
 #include "./littletest.hpp"
 
 using httpserver::body_chunk;
 using httpserver::body_factory;
 using httpserver::body_producer;
+using httpserver::exchange;
+using httpserver::exchange_state;
+using httpserver::manual_executor;
 using httpserver::response_definition;
+using httpserver::response_overlay;
+using httpserver::send_definition;
+using httpserver::send_report;
+using httpserver::spawn;
+using httpserver::task_result;
 namespace http = httpserver::http;
+namespace fake = httpserver_test;
 
 namespace {
 
@@ -58,6 +72,15 @@ std::vector<std::byte> bytes(const std::string& s) {
     out.reserve(s.size());
     for (const char c : s) {
         out.push_back(std::byte(static_cast<unsigned char>(c)));
+    }
+    return out;
+}
+
+std::string of(std::span<const std::byte> data) {
+    std::string out;
+    out.reserve(data.size());
+    for (const std::byte b : data) {
+        out.push_back(static_cast<char>(b));
     }
     return out;
 }
@@ -83,6 +106,59 @@ http::fields base_fields() {
     http::fields f;
     f.append("Content-Type", "text/plain");
     return f;
+}
+
+http::request_head make_head() {
+    http::request_head head;
+    head.raw_target = "/things";
+    head.route_path = "/things";
+    head.request_method = http::method::known(http::method_id::get);
+    head.request_protocol = http::protocol::http_1_1;
+    return head;
+}
+
+// Decision oracle keeping the committed fields whole (the merge-order
+// assertions need the entries, not just counts).
+class capturing_sink final : public httpserver::detail::exchange_sink {
+ public:
+    void on_admit(const httpserver::body_policy&) override {
+        ++admit_calls;
+    }
+
+    void on_respond(const http::status& s, const http::fields& f) override {
+        ++respond_calls;
+        code = s.code();
+        responded = f;
+    }
+
+    void on_upgrade(const httpserver::ws_upgrade_options&) override {
+        ++upgrade_calls;
+    }
+
+    void on_abort() override {
+        ++abort_calls;
+    }
+
+    int admit_calls = 0;
+    int respond_calls = 0;
+    int upgrade_calls = 0;
+    int abort_calls = 0;
+    std::uint16_t code = 0;
+    http::fields responded;
+};
+
+// Runs one send to completion on `ex` (no parking: the rig's sink
+// capacity always exceeds the payloads) and returns the report.
+send_report run_send(exchange& x, manual_executor& ex,
+                     const response_definition& def,
+                     const response_overlay& overlay) {
+    send_report seen;
+    spawn(ex, send_definition(x, def, overlay),
+          [&](task_result<send_report> r) {
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    return seen;
 }
 
 }  // namespace
@@ -324,6 +400,259 @@ LT_BEGIN_AUTO_TEST(response_definition_suite, copies_share_frozen_state)
     LT_CHECK(moved.fields().first("content-length").value_or("") == "4");
     LT_CHECK(!def.valid());
 LT_END_AUTO_TEST(copies_share_frozen_state)
+
+// (S2.1) The overlay's headers append AFTER the definition's base
+// fields, in entries() order, repeated names included: the committed
+// wire order is base-then-overlay (REQ-030).
+LT_BEGIN_AUTO_TEST(response_definition_suite, send_appends_overlay_headers_after_base)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    http::fields base;
+    base.append("A", "1");
+    base.append("B", "2");
+    base.append("Content-Length", "7");
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), base, bytes("payload"), def).ok());
+
+    response_overlay overlay;
+    overlay.headers.append("C", "3");
+    overlay.headers.append("A", "4");
+
+    const send_report report = run_send(x, ex, def, overlay);
+    LT_CHECK(report.status.ok());
+    LT_CHECK_EQ(sink.respond_calls, 1);
+
+    http::fields expected;
+    expected.append("A", "1");
+    expected.append("B", "2");
+    expected.append("Content-Length", "7");
+    expected.append("C", "3");
+    expected.append("A", "4");
+    LT_CHECK(sink.responded == expected);
+LT_END_AUTO_TEST(send_appends_overlay_headers_after_base)
+
+// (S2.2) A malformed or framing-conflicting overlay fails typed
+// BEFORE the head commits: no engine decision, no writer traffic, the
+// exchange stays at head (DR-V3-005).
+LT_BEGIN_AUTO_TEST(response_definition_suite, send_rejects_bad_overlay_before_commit)
+    struct case_spec {
+        const char* name;
+        response_overlay overlay;
+    };
+    std::vector<case_spec> cases;
+
+    response_overlay bad_name;
+    bad_name.headers.append("Bad Name", "v");
+    cases.push_back({"non-token header name", bad_name});
+
+    response_overlay ctl_value;
+    ctl_value.headers.append("X-Note", "a\rb");
+    cases.push_back({"ctl in header value", ctl_value});
+
+    response_overlay second_cl;
+    second_cl.headers.append("Content-Length", "9");
+    cases.push_back({"second content-length", second_cl});
+
+    response_overlay te_over_cl;
+    te_over_cl.headers.append("Transfer-Encoding", "chunked");
+    cases.push_back({"transfer-encoding over content-length", te_over_cl});
+
+    response_overlay trailer_te;
+    trailer_te.trailers.append("Transfer-Encoding", "chunked");
+    cases.push_back({"transfer-encoding trailer", trailer_te});
+
+    response_overlay trailer_cl;
+    trailer_cl.trailers.append("Content-Length", "9");
+    cases.push_back({"content-length trailer", trailer_cl});
+
+    response_overlay trailer_host;
+    trailer_host.trailers.append("Host", "h");
+    cases.push_back({"host trailer", trailer_host});
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), http::fields(), bytes("payload"),
+        def).ok());
+
+    for (const case_spec& c : cases) {
+        capturing_sink sink;
+        fake::scripted_body_sink out;
+        exchange x(make_head(), &sink, 0, nullptr, &out);
+        manual_executor ex;
+        const send_report report = run_send(x, ex, def, c.overlay);
+        LT_CHECK(report.status.code() == http::outcome_code::invalid_argument);
+        LT_CHECK(!report.status.message().empty());
+        LT_CHECK_EQ(sink.respond_calls, 0);
+        LT_CHECK_EQ(out.push_calls(), 0);
+        LT_CHECK_EQ(out.end_calls(), 0);
+        LT_CHECK(x.state() == exchange_state::head);
+    }
+LT_END_AUTO_TEST(send_rejects_bad_overlay_before_commit)
+
+// (S2.3) The happy path: head committed once with the merged fields,
+// the whole body streamed, one body end, and the report counting the
+// bytes.
+LT_BEGIN_AUTO_TEST(response_definition_suite, send_streams_body_and_finishes)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), base_fields(), bytes("payload"),
+        def).ok());
+
+    response_overlay overlay;
+    overlay.headers.append("X-Request", "17");
+
+    const send_report report = run_send(x, ex, def, overlay);
+    LT_CHECK(report.status.ok());
+    LT_CHECK_EQ(report.body_bytes, static_cast<std::size_t>(7));
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(sink.code, 200);
+    LT_CHECK_EQ(sink.responded.count("content-length"),
+                static_cast<std::size_t>(1));
+    LT_CHECK(sink.responded.first("content-length").value_or("") == "7");
+    LT_CHECK(sink.responded.first("x-request").value_or("") == "17");
+    LT_CHECK_EQ(out.produced(), static_cast<std::size_t>(7));
+    LT_CHECK_EQ(out.drain(64), static_cast<std::size_t>(7));
+    LT_CHECK(of(out.drained_bytes()) == "payload");
+    LT_CHECK_EQ(out.end_calls(), 1);
+    LT_CHECK(out.ended());
+LT_END_AUTO_TEST(send_streams_body_and_finishes)
+
+// (S2.4) An empty owned body sends no body chunks at all: the cursor
+// ends at once, the framed "0" rides the head, exactly one body end.
+LT_BEGIN_AUTO_TEST(response_definition_suite, send_empty_body_ends_immediately)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), http::fields(), {}, def).ok());
+
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.ok());
+    LT_CHECK_EQ(report.body_bytes, static_cast<std::size_t>(0));
+    LT_CHECK_EQ(out.push_calls(), 0);
+    LT_CHECK_EQ(out.end_calls(), 1);
+    LT_CHECK(sink.responded.first("content-length").value_or("") == "0");
+LT_END_AUTO_TEST(send_empty_body_ends_immediately)
+
+// (S2.5) The overlay's trailers ride the send's final framing.
+LT_BEGIN_AUTO_TEST(response_definition_suite, send_delivers_overlay_trailers)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), http::fields(), bytes("ab"), def).ok());
+
+    response_overlay overlay;
+    overlay.trailers.append("X-Checksum", "abc");
+
+    const send_report report = run_send(x, ex, def, overlay);
+    LT_CHECK(report.status.ok());
+    http::fields expected_trailers;
+    expected_trailers.append("X-Checksum", "abc");
+    LT_CHECK(out.trailers() == expected_trailers);
+LT_END_AUTO_TEST(send_delivers_overlay_trailers)
+
+// (S2.6) A mid-body engine failure propagates typed; the head stays
+// committed (the engine owns the connection's fate) and no body end is
+// pushed.
+LT_BEGIN_AUTO_TEST(response_definition_suite, send_failure_mid_body_propagates)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    out.stage_failure(http::outcome_code::protocol_error, "transport gone");
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), http::fields(), bytes("payload"),
+        def).ok());
+
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(out.end_calls(), 0);
+LT_END_AUTO_TEST(send_failure_mid_body_propagates)
+
+// (S2.7) Neither the definition nor the overlay is mutated by a send:
+// deep-equal snapshots before and after, and the frozen state stays
+// the same shared block.
+LT_BEGIN_AUTO_TEST(response_definition_suite, send_mutates_neither_side)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), base_fields(), bytes("payload"),
+        def).ok());
+    const http::fields fields_before = def.fields();
+    const http::status* const state_before = &def.status();
+
+    response_overlay overlay;
+    overlay.headers.append("X-Request", "17");
+    overlay.trailers.append("X-Checksum", "abc");
+    const http::fields overlay_headers_before = overlay.headers;
+    const http::fields overlay_trailers_before = overlay.trailers;
+
+    const send_report report = run_send(x, ex, def, overlay);
+    LT_CHECK(report.status.ok());
+
+    LT_CHECK(def.fields() == fields_before);
+    LT_CHECK(&def.status() == state_before);
+    LT_CHECK(overlay.headers == overlay_headers_before);
+    LT_CHECK(overlay.trailers == overlay_trailers_before);
+    // The committed head carries the merged copy, not the definition.
+    LT_CHECK(sink.responded != fields_before);
+LT_END_AUTO_TEST(send_mutates_neither_side)
+
+// (S2.8) Gate failures: an empty definition and a disconnected
+// exchange each fail typed with the exchange untouched.
+LT_BEGIN_AUTO_TEST(response_definition_suite, send_gates_fail_typed)
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), http::fields(), bytes("x"), def).ok());
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    const send_report empty = run_send(x, ex, response_definition{}, {});
+    LT_CHECK(empty.status.code() == http::outcome_code::invalid_argument);
+    LT_CHECK_EQ(sink.respond_calls, 0);
+    LT_CHECK(x.state() == exchange_state::head);
+
+    const send_report ok_once = run_send(x, ex, def, {});
+    LT_CHECK(ok_once.status.ok());
+    LT_CHECK_EQ(sink.respond_calls, 1);
+
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer closed").ok());
+    capturing_sink sink2;
+    fake::scripted_body_sink out2;
+    exchange y(make_head(), &sink2, 0, nullptr, &out2);
+    LT_CHECK(y.disconnect(http::outcome_code::connection_closed,
+                          "peer closed").ok());
+    const send_report closed = run_send(y, ex, def, {});
+    LT_CHECK(closed.status.code() == http::outcome_code::connection_closed);
+    LT_CHECK_EQ(sink2.respond_calls, 0);
+LT_END_AUTO_TEST(send_gates_fail_typed)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
