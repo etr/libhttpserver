@@ -23,12 +23,13 @@
 // native_server on an ephemeral loopback listener, one raw client
 // connection per scenario (raw_http_client.hpp over the pollsys
 // shims), responses asserted through the parity frame parser -- the
-// wire is the interface. Cases 1-11 exercise the protocol posture
+// wire is the interface. Cases 1-14 exercise the protocol posture
 // (keep-alive, version-conditional framing and close, pipelining,
-// error synthesis, watchdog timeouts, client aborts), 12-15 the
-// server posture (concurrency, handler-safe stop, the validate gate,
-// the connections budget). Every wait is deadline-bound; a pass is
-// always observed bytes or an observed close, never a sleep.
+// error synthesis, watchdog timeouts, client aborts, Expect
+// admission, rejection drain, suspension deadlines), 15-18 the server
+// posture (concurrency, handler-safe stop, the validate gate, the
+// connections budget). Every wait is deadline-bound; a pass is always
+// observed bytes or an observed close, never a sleep.
 
 #include <atomic>
 #include <chrono>
@@ -40,6 +41,7 @@
 #include <utility>
 
 #include <httpserver/body_reader.hpp>
+#include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/status.hpp>
@@ -58,6 +60,8 @@ namespace raw = raw_http;
 using httpserver::body_collect;
 using httpserver::body_policy;
 using httpserver::exchange;
+using httpserver::resume_outcome;
+using httpserver::resume_signal;
 using httpserver::task;
 using raw::observed_response;
 
@@ -150,6 +154,54 @@ task<void> stopper_handler(exchange& x) {
     stopper_returned.store(true);
 }
 
+// TASK-109 scenario state. The suite runs sequentially
+// (AUTORUN_TESTS); each scenario resets what it reads before
+// connecting (the previous fixture's stop joined its handlers).
+resume_signal e2e_late_gate;   // /late_admit parks here, pre-admission
+std::atomic<int> e2e_suspend_outcome{-1};   // resume_outcome as int
+
+// POST /late_admit: parks on the shared gate BEFORE admitting (the
+// wire must stay silent until admission), then collects + echoes. The
+// test thread releases the gate, so the interim-vs-admission ordering
+// is observable on the wire.
+task<void> late_admit_handler(exchange& x) {
+    const resume_outcome gate =
+        co_await e2e_late_gate.wait_for(raw::kExchangeBudget);
+    if (gate != resume_outcome::resumed) co_return;
+    const http::outcome admitted = x.admit_body(body_policy{});
+    if (!admitted.ok()) co_return;
+    const body_collect collected = co_await x.body().collect(1 << 20);
+    if (!collected.status.ok()) co_return;
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", std::to_string(collected.data.size()));
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::byte* raw =
+        reinterpret_cast<const std::byte*>(collected.data.data());
+    co_await x.writer().write(
+        std::span<const std::byte>(raw, collected.data.size()));
+    co_await x.writer().finish();
+}
+
+// POST /reject: answers 403 straight from the head -- the body is
+// never admitted, so the rejection drain (not a handler) consumes it.
+task<void> reject_handler(exchange& x) {
+    http::fields f;
+    f.append("Content-Length", "0");
+    static_cast<void>(x.respond(http::status::from_code(403), f));
+    co_return;
+}
+
+// POST /suspend_head: suspends the exchange at head state and parks;
+// the engine resolves the wait (the suspension deadline cancels it).
+task<void> suspend_head_handler(exchange& x) {
+    resume_signal wait;
+    if (!x.suspend(wait).ok()) co_return;
+    const resume_outcome outcome =
+        co_await wait.wait_for(raw::kExchangeBudget);
+    e2e_suspend_outcome.store(static_cast<int>(outcome));
+}
+
 // -- fixtures ----------------------------------------------------------------
 
 srv::server_options base_options() {
@@ -185,6 +237,15 @@ class server_fixture {
         static_cast<void>(server_.route(
             http::method::known(http::method_id::get), "/stopper",
             stopper_handler));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::post), "/late_admit",
+            late_admit_handler));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::post), "/reject",
+            reject_handler));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::post), "/suspend_head",
+            suspend_head_handler));
         static_cast<void>(server_.listen());
     }
 
@@ -215,6 +276,8 @@ LT_BEGIN_SUITE(native_http1_e2e_suite)
     void set_up() {
         rendezvous_arrived.store(0);
         stopper_returned.store(false);
+        e2e_late_gate = resume_signal{};
+        e2e_suspend_outcome.store(-1);
     }
 
     void tear_down() {
@@ -449,7 +512,94 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, partial_head_header_timeout_close)
     LT_CHECK(elapsed < std::chrono::milliseconds(4000));
 LT_END_AUTO_TEST(partial_head_header_timeout_close)
 
-// (12) Two concurrent connections interleave: each /rendezvous response
+// (12) TASK-109: Expect: 100-continue is gated on admission. The wire
+// stays silent while the handler has not admitted (no interim, no
+// close); releasing the handler yields the 100 first, then the final
+// response once the body follows it.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, expect_continue_gated_on_admission)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /late_admit HTTP/1.1\r\nHost: h\r\n"
+                         "Expect: 100-continue\r\n"
+                         "Content-Length: 4\r\n\r\n"));
+    // Pre-admission silence: neither the interim nor a close.
+    LT_CHECK(client.quiet_for(std::chrono::milliseconds(300)));
+    e2e_late_gate.signal();
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) LT_CHECK_EQ(seen[0].status, 100);
+    // The body follows the interim; the final echo closes the exchange.
+    LT_CHECK(client.send("ping"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) {
+        LT_CHECK_EQ(seen[1].status, 200);
+        LT_CHECK_EQ(seen[1].body, std::string("ping"));
+    }
+LT_END_AUTO_TEST(expect_continue_gated_on_admission)
+
+// (13) TASK-109: a rejected length-framed body drains to its counted
+// remainder and the connection is reused -- the 403 commits, the
+// remainder discards, the same connection answers the next request.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, reject_drains_and_reuses_connection)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    // Head plus a partial body: the 403 commits while the drain still
+    // counts the missing suffix.
+    LT_CHECK(client.send("POST /reject HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Length: 16\r\n\r\n"
+                         "0123456789"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) LT_CHECK_EQ(seen[0].status, 403);
+    // The drain holds the connection open: no close while the counted
+    // remainder is outstanding.
+    LT_CHECK(client.quiet_for(std::chrono::milliseconds(200)));
+    // The remainder, then the next request pipelined behind it.
+    LT_CHECK(client.send("abcdef"
+                         "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
+LT_END_AUTO_TEST(reject_drains_and_reuses_connection)
+
+// (14) TASK-109: a handler suspended at head state hits its suspension
+// deadline exactly once: the close lands inside the deadline window,
+// not one response byte precedes it, and the parked wait resolves as
+// cancelled.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, suspended_head_timeout_closes_once)
+    srv::server_options options = base_options();
+    options.timeouts().suspension = std::chrono::milliseconds(300);
+    server_fixture s(options);
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /suspend_head HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Length: 8\r\n\r\n"));
+    std::deque<observed_response> seen;
+    const auto began = std::chrono::steady_clock::now();
+    LT_CHECK(client.receive_close(
+        seen, std::chrono::milliseconds(5000)));
+    const auto elapsed = std::chrono::steady_clock::now() - began;
+    LT_CHECK(client.peer_closed());
+    LT_CHECK(seen.empty());
+    LT_CHECK(elapsed < std::chrono::milliseconds(2500));
+    // The single enforcement cancelled the parked handler wait.
+    const auto cancelled = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(5000);
+    while (e2e_suspend_outcome.load()
+               != static_cast<int>(resume_outcome::cancelled)) {
+        if (std::chrono::steady_clock::now() >= cancelled) break;
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+    LT_CHECK_EQ(e2e_suspend_outcome.load(),
+                static_cast<int>(resume_outcome::cancelled));
+LT_END_AUTO_TEST(suspended_head_timeout_closes_once)
+
+// (15) Two concurrent connections interleave: each /rendezvous response
 // arrives only after both handlers were running.
 LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, two_clients_interleave)
     server_fixture s(base_options());
@@ -471,7 +621,7 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, two_clients_interleave)
                                              std::string("met"));
 LT_END_AUTO_TEST(two_clients_interleave)
 
-// (13) DR-V3-008: request_stop() from inside a handler returns (the
+// (16) DR-V3-008: request_stop() from inside a handler returns (the
 // handler finishes), and stop() joins everything promptly.
 LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, request_stop_inside_handler)
     server_fixture s(base_options());
@@ -489,7 +639,7 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, request_stop_inside_handler)
     LT_CHECK(!s.server().is_running());
 LT_END_AUTO_TEST(request_stop_inside_handler)
 
-// (14) REQ-016: invalid options fail typed from listen(); nothing ran.
+// (17) REQ-016: invalid options fail typed from listen(); nothing ran.
 LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, invalid_options_fail_typed)
     srv::server_options empty;
     srv::native_server server(empty);
@@ -500,7 +650,7 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, invalid_options_fail_typed)
     server.stop();
 LT_END_AUTO_TEST(invalid_options_fail_typed)
 
-// (15) Connections budget = 1: while one connection holds its seat, a
+// (18) Connections budget = 1: while one connection holds its seat, a
 // second is closed without a response.
 LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, connections_budget_refuses_second)
     srv::server_options options = base_options();

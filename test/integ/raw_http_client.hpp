@@ -176,6 +176,27 @@ class connection {
         return peer_closed_;
     }
 
+    // Deadline-bounded absence probe (TASK-109): true when NOT one byte
+    // -- nor a close -- arrives within @p window. A byte or FIN fails
+    // it immediately.
+    bool quiet_for(std::chrono::milliseconds window) {
+        std::byte buffer[64];
+        const auto deadline = std::chrono::steady_clock::now() + window;
+        for (;;) {
+            const pollsys::sys_result r =
+                pollsys::read_some(socket_, buffer, sizeof buffer);
+            if (r.status == pollsys::sys_status::would_block) {
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    return true;
+                }
+                std::this_thread::sleep_for(
+                    std::chrono::microseconds(200));
+                continue;
+            }
+            return false;   // data arrived, or the peer closed
+        }
+    }
+
     void close() {
         if (socket_ != pollsys::k_invalid_socket) {
             pollsys::close_socket(socket_);
