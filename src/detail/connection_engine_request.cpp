@@ -139,6 +139,9 @@ bool connection_engine::finish_exchange(wake_body_sink& forwarding,
         && engine_sink.keepalive() == http1_keepalive::keep_alive;
     settle_exchange_state(keep, body_present);
     wake_loops();
+    // Back to awaiting a head (or closing): the header deadline can be
+    // nearer than the deadline armed for the exchange.
+    rearm_watchdog();
     return keep;
 }
 
@@ -248,6 +251,9 @@ void http1_exchange_sink::on_respond(const http::status& s,
     keepalive_ = http1_response_keepalive(head_, mode.kind,
                                           mode.close_policy);
     engine_->wake_loops();
+    // Queued bytes switch the plan to write_idle, which can be nearer
+    // than the deadline currently armed.
+    engine_->rearm_watchdog();
 }
 
 void http1_exchange_sink::on_upgrade(const ws_upgrade_options& options) {
@@ -268,7 +274,10 @@ void http1_exchange_sink::on_abort() {
 
 body_push_result wake_body_sink::push(std::span<const std::byte> from) {
     const body_push_result pushed = inner_->push(from);
-    if (pushed.kind == body_push::accepted) engine_.wake_loops();
+    if (pushed.kind == body_push::accepted) {
+        engine_.wake_loops();
+        engine_.rearm_watchdog();
+    }
     return pushed;
 }
 
@@ -277,6 +286,7 @@ body_push_result wake_body_sink::push_end(const http::fields& trailers) {
     if (pushed.kind == body_push::accepted) {
         ended_ = true;
         engine_.wake_loops();
+        engine_.rearm_watchdog();
     }
     return pushed;
 }

@@ -54,6 +54,7 @@
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/server/options.hpp>
 #include <httpserver/server/routes.hpp>
 #include <parity/response_frame.hpp>
 
@@ -134,6 +135,13 @@ task<void> ignore_body_handler(exchange& x) {
     co_return;
 }
 
+// POST /hang admits the body and parks on a collect that never
+// completes (the body-idle watchdog scenario).
+task<void> hang_body_handler(exchange& x) {
+    static_cast<void>(x.admit_body(body_policy{}));
+    static_cast<void>(co_await x.body().collect(1 << 20));
+}
+
 // POST /oneshot: the same one-shot shape with the body fully staged
 // before the handler even runs.
 task<void> one_shot_handler(exchange& x) {
@@ -148,8 +156,10 @@ task<void> one_shot_handler(exchange& x) {
 // engine dies first, then the pair, then the pool, then the
 // thread-backed backend.
 struct scenario {
-    explicit scenario(srv::budget_limits limits = srv::budget_limits())
-        : config_limits(limits), root(srv::resource_budget::root(limits)) {
+    scenario(srv::budget_limits limits, srv::timeout_options timeouts_in)
+        : config_limits(limits), timeouts(timeouts_in),
+          root(srv::resource_budget::root(limits)) {
+        config.timeouts = timeouts;
         static_cast<void>(srv::route_registry::create(root, registry));
         static_cast<void>(registry.route(
             http::method::known(http::method_id::get), "/hello",
@@ -163,18 +173,28 @@ struct scenario {
         }
     }
 
+    explicit scenario(srv::budget_limits limits = srv::budget_limits())
+        : scenario(limits, srv::timeout_options()) { }
+
+    explicit scenario(srv::timeout_options timeouts_in)
+        : scenario(srv::budget_limits(), timeouts_in) { }
+
     bool start_engine() {
         if (!pair.ok()) return false;
         backend.adopt_connection(kConnId, pair.detach_local());
-        engine = std::make_shared<connection_engine>(
-            backend, pool, registry, root,
-            connection_engine_config::from_budget_limits(config_limits),
-            kConnId, [this] { stopped.store(true); });
+        engine = std::make_shared<connection_engine>(backend, pool, registry,
+                                                    root, config, kConnId,
+                                                    [this] {
+                                                        stopped.store(true);
+                                                    });
         engine->start();
         return true;
     }
 
     srv::budget_limits config_limits;
+    srv::timeout_options timeouts;
+    connection_engine_config config
+        = connection_engine_config::from_budget_limits(config_limits);
     srv::resource_budget root;
     srv::route_registry registry;
     io_loopback::pair pair;
@@ -521,6 +541,59 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, te_coding_before_chunked_501)
     LT_CHECK(reaches_eof(s.pair.peer()));
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
 LT_END_AUTO_TEST(te_coding_before_chunked_501)
+
+// An idle connection closes at the header timeout (watchdog-enforced,
+// observed as the stop within a tight deadline -- never a sleep pass).
+LT_BEGIN_AUTO_TEST(connection_engine_suite, idle_header_timeout_closes)
+    srv::timeout_options timeouts;
+    timeouts.header = std::chrono::milliseconds(200);
+    scenario s(timeouts);
+    LT_CHECK(s.start_engine());
+    const auto began = std::chrono::steady_clock::now();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+    const auto elapsed = std::chrono::steady_clock::now() - began;
+    LT_CHECK(elapsed < std::chrono::milliseconds(5000));
+LT_END_AUTO_TEST(idle_header_timeout_closes)
+
+// Activity re-arms the watchdog: a request completed well inside the
+// timeout still gets its response.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, activity_rearms_watchdog)
+    srv::timeout_options timeouts;
+    timeouts.header = std::chrono::milliseconds(400);
+    scenario s(timeouts);
+    LT_CHECK(s.start_engine());
+    io_loopback::write_all(s.pair.peer(), "GET /he", 7);
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const std::string rest = "llo HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), rest.data(), rest.size());
+    const std::optional<observed_response> response =
+        s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    if (response.has_value()) LT_CHECK_EQ(response->status, 200);
+    s.pair.close_peer();
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(activity_rearms_watchdog)
+
+// A body that never arrives trips the body-idle watchdog: the parked
+// handler unwinds through the disconnect and the connection closes.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, body_idle_disconnects)
+    srv::timeout_options timeouts;
+    timeouts.body_idle = std::chrono::milliseconds(200);
+    scenario s(timeouts);
+    static_cast<void>(s.registry.route(
+        http::method::known(http::method_id::post), "/hang",
+        hang_body_handler));
+    LT_CHECK(s.start_engine());
+    const std::string request =
+        "POST /hang HTTP/1.1\r\nHost: h\r\nContent-Length: 8\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    // No body ever arrives; the response never comes either.
+    const std::optional<observed_response> none =
+        s.next_response(s.pair.peer());
+    LT_CHECK(!none.has_value());
+    LT_CHECK(reaches_eof(s.pair.peer()));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+LT_END_AUTO_TEST(body_idle_disconnects)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

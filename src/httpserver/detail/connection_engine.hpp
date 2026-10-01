@@ -33,10 +33,24 @@
 //                through run_route -> end synthesis -> keep-alive
 //                verdict. Pipelined heads buffer in the parser/outbox
 //                ordering, never re-ordered.
-//   writer_loop  outbox -> transport (write_front), parking on a wake
-//                operation whenever nothing is buffered. wake ops
-//                coalesce globally: every parked loop tolerates a
-//                spurious wake by re-checking its condition.
+//   writer_loop  outbox -> transport (copy_front / write_operation /
+//                consume_front), parking on a wake operation whenever
+//                nothing is buffered. Every completed write counts as
+//                transport activity, so a flowing stream never trips
+//                the write-idle deadline. wake ops coalesce globally:
+//                every parked loop tolerates a spurious wake by
+//                re-checking its condition.
+//   watchdog     nearest-deadline timer loop over the timeout
+//                inventory: header (awaiting a head or the idle
+//                keep-alive gap), body_idle (a decoding body with no
+//                new octets), write_idle (queued bytes with a stalled
+//                peer), suspension (a suspended exchange, anchored at
+//                first sight so the deadline cannot slide). Transport
+//                activity cancels and re-arms; a routed exchange with
+//                no inventory state defers on a short re-check tick.
+//                Enforcement disconnects the live exchange and
+//                releases the transport -- no response is written to a
+//                peer that just timed out.
 //
 // Coordination state is mutex-guarded (short critical sections only);
 // every loop exits when the connection is released, and the LAST loop
@@ -56,9 +70,11 @@
 #ifndef SRC_HTTPSERVER_DETAIL_CONNECTION_ENGINE_HPP_
 #define SRC_HTTPSERVER_DETAIL_CONNECTION_ENGINE_HPP_
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -77,6 +93,7 @@
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/server/options.hpp>
 #include <httpserver/server/routes.hpp>
 
 namespace httpserver {
@@ -94,6 +111,11 @@ struct connection_engine_config {
     http1_head_budget head;
     http1_body_budget body;
     http1_outbox_budget outbox;
+    // The watchdog's deadline inventory (§3.4): header covers awaiting
+    // a head and the idle keep-alive gap, body_idle a decoding body
+    // with no new octets, write_idle a non-empty outbox with a stalled
+    // peer, suspension a suspended exchange.
+    server::timeout_options timeouts;
     http1_response_framer::clock_source clock;
 
     static connection_engine_config from_budget_limits(
@@ -147,6 +169,11 @@ class connection_engine final
     void wake_loops() noexcept;
 
     static constexpr std::size_t k_read_buffer_bytes = 16384;
+    static constexpr std::size_t k_write_buffer_bytes = 4096;
+    // Deferred-state re-check cadence (an exchange is routed, no
+    // inventory deadline applies): the poll driver's one-wake-per-
+    // second posture, so a bare suspension decision is noticed.
+    static constexpr std::chrono::milliseconds k_watchdog_tick{1000};
 
  private:
     friend class http1_exchange_sink;
@@ -158,6 +185,31 @@ class connection_engine final
     static task<bool> wait_for_head(std::shared_ptr<connection_engine> self);
     static task<void> reader_loop(std::shared_ptr<connection_engine> self);
     static task<void> writer_loop(std::shared_ptr<connection_engine> self);
+    static task<void> watchdog_loop(std::shared_ptr<connection_engine> self);
+
+    // The watchdog's next move: exit (the connection is closing), defer
+    // (an exchange is routed and no inventory deadline applies), or arm
+    // a timer at the deadline.
+    struct watchdog_plan {
+        bool exit = false;
+        bool defer = false;
+        std::chrono::steady_clock::time_point deadline{};
+    };
+    // mu_ must be held.
+    watchdog_plan plan_watchdog_locked();
+    // True when the deadline that just fired still governs the current
+    // state (activity re-arms instead of enforcing).
+    bool watchdog_due(std::chrono::steady_clock::time_point deadline);
+    // Drops the pending watchdog timer so the next state change re-arms
+    // (exactly-once claim resolves the race with a firing deadline).
+    void rearm_watchdog() noexcept;
+    // Records transport progress (a read or a completed write) and
+    // re-arms: every inventory deadline except suspension anchors at
+    // the last activity instant.
+    void note_transport_activity();
+    // A fired deadline: disconnect the live exchange, mark the close,
+    // release the transport, wake the loops.
+    void enforce_timeout() noexcept;
     static task<void> route_loop(std::shared_ptr<connection_engine> self);
     static task<bool> serve_one(std::shared_ptr<connection_engine> self);
 
@@ -218,6 +270,16 @@ class connection_engine final
     std::string pending_tail_;   // bytes no consumer could take yet
     std::uint64_t next_sequence_ = 0;
     exchange* current_ = nullptr;   // live exchange being routed
+    std::chrono::steady_clock::time_point last_activity_
+        = std::chrono::steady_clock::now();
+    // The armed timer's state, shared-owned so a re-arm racing the
+    // timer's own completion never dereferences a dead handle (the
+    // op handle itself lives in the watchdog's frame).
+    std::shared_ptr<op_state> pending_timer_;
+    // Suspension deadline anchor: set at first sight of the suspended
+    // exchange, held until the exchange leaves the suspended state.
+    std::optional<std::chrono::steady_clock::time_point>
+        suspension_anchor_;
     bool body_active_ = false;
     bool eof_ = false;
     bool shutdown_ = false;

@@ -31,8 +31,6 @@
 #include <string>
 #include <utility>
 
-#include <cstdio>
-
 #include <httpserver/http/outcome.hpp>
 
 namespace httpserver {
@@ -62,7 +60,7 @@ void connection_engine::start() {
         std::lock_guard<std::mutex> lock(mu_);
         if (started_) return;
         started_ = true;
-        live_loops_ = 3;
+        live_loops_ = 4;
     }
     if (!budget_.reserve(server::resource::connections, 1, seat_).ok()) {
         // Budget exhaustion: no response (the accept path closes the
@@ -83,6 +81,8 @@ void connection_engine::start() {
     spawn(pool_, writer_loop(self),
           [self](task_result<void>) { self->loop_finished(); });
     spawn(pool_, route_loop(self),
+          [self](task_result<void>) { self->loop_finished(); });
+    spawn(pool_, watchdog_loop(self),
           [self](task_result<void>) { self->loop_finished(); });
 }
 
@@ -110,10 +110,17 @@ void connection_engine::wake_loops() noexcept {
 
 void connection_engine::disconnect_current(http::outcome_code reason,
                                            std::string detail) noexcept {
-    std::lock_guard<std::mutex> lock(mu_);
-    if (current_ != nullptr) {
+    http1_body_source* body = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (current_ == nullptr) return;
         static_cast<void>(current_->disconnect(reason, std::move(detail)));
+        if (body_active_) body = body_.get();
     }
+    // Second half of the body wake pairing (http1_body_source): the
+    // exchange's stop is sticky now, so a read parked before this
+    // moment wakes here and one parking later fails at its own gate.
+    if (body != nullptr) body->cancel_parked();
 }
 
 void connection_engine::request_close() noexcept {
@@ -128,6 +135,7 @@ void connection_engine::request_close() noexcept {
 
 void connection_engine::absorb(std::string_view data) {
     bool body_failed = false;
+    note_transport_activity();
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (shutdown_) return;
@@ -189,13 +197,20 @@ std::uint16_t connection_engine::error_code_for(
 
 bool connection_engine::stage_body(const http1_body_mode& mode,
                                    std::string seed) {
-    std::lock_guard<std::mutex> lock(mu_);
-    body_ = std::make_unique<http1_body_source>(mode, config_.body);
-    body_active_ = true;
-    if (seed.empty()) return false;
-    const std::size_t consumed = body_->feed(seed);
-    pending_tail_.assign(seed, consumed, seed.size() - consumed);
-    return body_->failed();
+    bool seed_failed = false;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        body_ = std::make_unique<http1_body_source>(mode, config_.body);
+        body_active_ = true;
+        if (!seed.empty()) {
+            const std::size_t consumed = body_->feed(seed);
+            pending_tail_.assign(seed, consumed, seed.size() - consumed);
+            seed_failed = body_->failed();
+        }
+    }
+    // The body_idle deadline can be nearer than whatever is armed.
+    rearm_watchdog();
+    return seed_failed;
 }
 
 void connection_engine::absorb_head_locked(std::string_view data) {
@@ -267,40 +282,172 @@ task<void> connection_engine::reader_loop(
 
 task<void> connection_engine::writer_loop(
     std::shared_ptr<connection_engine> self) {
+    // The engine drives the socket writes itself (copy_front /
+    // write_operation / consume_front) so every completed write is
+    // visible as transport activity for the write-idle deadline.
+    std::array<std::byte, k_write_buffer_bytes> buffer;
     for (;;) {
-        const io_result r = co_await self->outbox_.write_front(
-            self->backend_, self->owner_, self->id_);
-        if (r.code != http::outcome_code::ok) co_return;
-        bool drained = false;
-        bool done = false;
-        {
-            std::lock_guard<std::mutex> lock(self->mu_);
-            drained = self->outbox_.empty();
-            done = self->route_done_ || self->shutdown_;
-        }
-        // Exits only once the route loop is finished AND the outbox is
-        // drained, so a close-after-response never truncates a body.
-        // The writer owns the release on the close paths: every other
-        // loop is parked in a transport operation only a release can
-        // complete (a parked read on an idle keep-alive peer, for one).
-        if (drained && done) {
-            std::lock_guard<std::mutex> lock(self->mu_);
-            if (self->close_after_drain_ || self->shutdown_) {
-                self->backend_.release_connection(self->id_);
+        const std::size_t buffered = self->outbox_.copy_front(buffer);
+        if (buffered == 0) {
+            bool drained = false;
+            bool done = false;
+            {
+                std::lock_guard<std::mutex> lock(self->mu_);
+                drained = self->outbox_.empty();
+                done = self->route_done_ || self->shutdown_;
             }
-            co_return;
-        }
-        if (drained) {
-            // Nothing buffered and more may come: park. Wake ops
-            // coalesce globally -- a spurious completion re-checks.
+            // Exits only once the route loop is finished AND the outbox is
+            // drained, so a close-after-response never truncates a body.
+            // The writer owns the release on the close paths: every other
+            // loop is parked in a transport operation only a release can
+            // complete (a parked read on an idle keep-alive peer, for one).
+            if (drained && done) {
+                std::lock_guard<std::mutex> lock(self->mu_);
+                if (self->close_after_drain_ || self->shutdown_) {
+                    self->backend_.release_connection(self->id_);
+                }
+                co_return;
+            }
+            // Nothing to flush yet, or the front waits on the handler:
+            // park. Wake ops coalesce globally -- a spurious completion
+            // re-checks; a terminal one means the transport is gone.
             wake_operation op(self->owner_, self->id_);
             op.submit(self->backend_);
-            static_cast<void>(co_await std::move(op));
+            const io_result r = co_await std::move(op);
+            if (r.code != http::outcome_code::ok) co_return;
+            continue;
         }
+        write_operation op(self->owner_, self->id_,
+                           std::span<const std::byte>(buffer.data(),
+                                                      buffered));
+        op.submit(self->backend_);
+        const io_result r = co_await std::move(op);
+        if (r.code != http::outcome_code::ok) co_return;
+        self->outbox_.consume_front(r.transferred);
+        self->note_transport_activity();
     }
 }
 
 // -- coordination -----------------------------------------------------------
+
+// -- watchdog ---------------------------------------------------------------
+
+connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
+    watchdog_plan plan;
+    if (shutdown_ || close_after_drain_) {
+        plan.exit = true;
+        return plan;
+    }
+    // Nearest-deadline order: a decoding body, then queued bytes with a
+    // stalled peer, then a suspended exchange. While an exchange is
+    // routed and none of those holds, no inventory deadline applies --
+    // the plan defers (TASK-110's drain semantics bound it instead).
+    if (body_active_ && body_ != nullptr
+            && !body_->message_complete()) {
+        plan.deadline = last_activity_ + config_.timeouts.body_idle;
+        return plan;
+    }
+    if (outbox_.queued_bytes() > 0) {
+        plan.deadline = last_activity_ + config_.timeouts.write_idle;
+        return plan;
+    }
+    if (current_ != nullptr) {
+        if (!current_->suspended()) {
+            suspension_anchor_.reset();
+            plan.defer = true;
+            return plan;
+        }
+        // Anchored at first sight: recomputing now + suspension on
+        // every check would slide the deadline forever.
+        if (!suspension_anchor_.has_value()) {
+            suspension_anchor_ = std::chrono::steady_clock::now();
+        }
+        plan.deadline = *suspension_anchor_ + config_.timeouts.suspension;
+        return plan;
+    }
+    suspension_anchor_.reset();
+    plan.deadline = last_activity_ + config_.timeouts.header;
+    return plan;
+}
+
+bool connection_engine::watchdog_due(
+    std::chrono::steady_clock::time_point deadline) {
+    std::lock_guard<std::mutex> lock(mu_);
+    const watchdog_plan plan = plan_watchdog_locked();
+    return !plan.exit && !plan.defer && plan.deadline == deadline
+        && std::chrono::steady_clock::now() >= deadline;
+}
+
+void connection_engine::rearm_watchdog() noexcept {
+    std::shared_ptr<op_state> pending;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        pending = pending_timer_;
+    }
+    if (pending != nullptr) {
+        static_cast<void>(backend_.request_cancel(*pending));
+    }
+}
+
+void connection_engine::note_transport_activity() {
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        last_activity_ = std::chrono::steady_clock::now();
+    }
+    rearm_watchdog();
+}
+
+void connection_engine::enforce_timeout() noexcept {
+    // A fired deadline means the peer or the exchange will not
+    // progress. Disconnect the live exchange (its parked handler
+    // unwinds through run_route), mark the close, and release the
+    // transport so every parked loop terminal-completes. No response
+    // is synthesized: a timed-out peer is not reading one.
+    disconnect_current(http::outcome_code::timeout,
+                       "http1 connection engine: watchdog timeout");
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        close_after_drain_ = true;
+    }
+    backend_.release_connection(id_);
+    wake_loops();
+}
+
+task<void> connection_engine::watchdog_loop(
+    std::shared_ptr<connection_engine> self) {
+    for (;;) {
+        watchdog_plan plan;
+        {
+            std::lock_guard<std::mutex> lock(self->mu_);
+            plan = self->plan_watchdog_locked();
+        }
+        if (plan.exit) co_return;
+        const auto deadline = plan.defer
+            ? std::chrono::steady_clock::now() + k_watchdog_tick
+            : plan.deadline;
+        timer_operation op(self->owner_, self->id_, deadline);
+        {
+            std::lock_guard<std::mutex> lock(self->mu_);
+            self->pending_timer_ = op.state();
+        }
+        op.submit(self->backend_);
+        const io_result r = co_await std::move(op);
+        {
+            std::lock_guard<std::mutex> lock(self->mu_);
+            self->pending_timer_.reset();
+        }
+        // A released transport ends the watchdog with the connection.
+        if (r.code == http::outcome_code::connection_closed) co_return;
+        // A cancellation (state moved) and a deferred re-check tick
+        // both re-plan with fresh eyes.
+        if (r.code != http::outcome_code::ok || plan.defer) continue;
+        // Fired: enforce only when the deadline still governs the
+        // current state (activity moved it -- re-arm).
+        if (!self->watchdog_due(deadline)) continue;
+        self->enforce_timeout();
+        co_return;
+    }
+}
 
 void connection_engine::loop_finished() {
     {
