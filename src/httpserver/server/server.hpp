@@ -122,6 +122,23 @@ class native_server {
     http::outcome route(const http::method& method, std::string_view pattern,
                         route_handler handler);
 
+    // Registers one bounded synchronous value-returning route: the
+    // handler receives the complete request head and the body buffered
+    // within body_cap, returns the response value, and writes no
+    // coroutine code (make_sync_route wraps it; DR-V3-003). body_cap
+    // must be at least 1 (a zero cap means "engine default" in the
+    // admission policy, so it is rejected here); an empty handler is
+    // invalid_argument; a duplicate (method, pattern) is invalid_state
+    // from the registry. Fails invalid_state once listen() ran. The
+    // bounded sync form is the restricted half of the route surface
+    // (PRD-V3N-REQ-021): no suspension, upgrade decision, admission
+    // control, or streaming -- unbounded uploads and duplex work need
+    // the coroutine route() form.
+    http::outcome route_sync(const http::method& method,
+                             std::string_view pattern,
+                             sync_route_handler handler,
+                             std::uint64_t body_cap);
+
     // Validates the whole configuration (REQ-016: the pre-listen gate;
     // no I/O before it passes), binds every configured listener, and
     // starts the accept loops. A typed failure binds nothing that was

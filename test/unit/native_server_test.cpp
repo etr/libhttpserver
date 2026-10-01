@@ -29,12 +29,15 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <utility>
 
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/method.hpp>
+#include <httpserver/http/request_head.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/server/options.hpp>
+#include <httpserver/server/route_sync.hpp>
 #include <httpserver/server/server.hpp>
 
 #include "./littletest.hpp"
@@ -111,6 +114,61 @@ LT_BEGIN_AUTO_TEST(native_server_suite, route_after_listen_rejected)
     LT_CHECK(routed.code() == http::outcome_code::invalid_state);
     server.stop();
 LT_END_AUTO_TEST(route_after_listen_rejected)
+
+// TASK-111: the sync registration surface. A zero body cap is
+// invalid_argument (zero means "engine default" in the admission
+// policy -- a silent foot-gun), an empty handler is invalid_argument,
+// and a duplicate (method, pattern) is invalid_state from the registry.
+LT_BEGIN_AUTO_TEST(native_server_suite, route_sync_registration_validated)
+    srv::native_server server(loopback_options());
+    const http::method post = http::method::known(http::method_id::post);
+    const auto echo = [](const http::request_head&,
+                         std::span<const std::byte> body)
+        -> srv::sync_response {
+        srv::sync_response out;
+        out.status = http::status::from_code(200);
+        out.body.assign(body.begin(), body.end());
+        return out;
+    };
+
+    const http::outcome zero_cap = server.route_sync(
+        post, "/sync", echo, 0);
+    LT_CHECK(zero_cap.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(!zero_cap.message().empty());
+
+    srv::sync_route_handler empty;
+    const http::outcome empty_handler =
+        server.route_sync(post, "/sync", std::move(empty), 64);
+    LT_CHECK(empty_handler.code() == http::outcome_code::invalid_argument);
+
+    LT_CHECK(server.route_sync(post, "/sync", echo, 16).ok());
+    const http::outcome duplicate = server.route_sync(post, "/sync", echo, 16);
+    LT_CHECK(duplicate.code() == http::outcome_code::invalid_state);
+LT_END_AUTO_TEST(route_sync_registration_validated)
+
+// TASK-111: route_sync() after listen() is invalid_state like route()
+// -- the accepted route generation is frozen.
+LT_BEGIN_AUTO_TEST(native_server_suite, route_sync_after_listen_rejected)
+    srv::native_server server(loopback_options());
+    LT_CHECK(server.route_sync(
+                 http::method::known(http::method_id::post), "/early",
+                 [](const http::request_head&,
+                    std::span<const std::byte>) -> srv::sync_response {
+                     return srv::sync_response{};
+                 },
+                 64)
+                 .ok());
+    LT_CHECK(server.listen().ok());
+    const http::outcome late = server.route_sync(
+        http::method::known(http::method_id::post), "/late",
+        [](const http::request_head&,
+           std::span<const std::byte>) -> srv::sync_response {
+            return srv::sync_response{};
+        },
+        64);
+    LT_CHECK(late.code() == http::outcome_code::invalid_state);
+    server.stop();
+LT_END_AUTO_TEST(route_sync_after_listen_rejected)
 
 // listen() runs once; a second call is invalid_state (not a re-bind).
 LT_BEGIN_AUTO_TEST(native_server_suite, double_listen_rejected)
