@@ -13,39 +13,35 @@
      Lesser General Public License for more details.
 
      You should have received a copy of the GNU Lesser General Public
-     License along with this library; if not, write to the file
+     License along with the library; if not, write to the file
      LICENSE in the distribution; if not, write to the Free Software
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
      02110-1301 USA
 */
 
-// TASK-116 step 5: parity replay of the forms.tseq corpus case through
-// the REAL urlencoded decode and the REAL response framer -- no
-// hand-synthesized fields (the TASK-114 basic corpus convention).
-// Every case loads the live transcript at runtime, rebuilds the
-// request head and raw body from its send segments, decodes the body
-// with the library decoder under the adapter's default budgets, echoes
-// the fields exactly the way the v2 fixture's /echo_form resource did
-// (a=<a>;b=<b>), frames the response, parses the wire with the parity
-// response-frame parser, and asserts every expectation through the
-// corpus's own assertion engine plus the keep-alive verdict, exactly
-// as transcript_runner does.
-//
-// multipart_field is deliberately NOT replayed here: it is TASK-117's
-// scope (the multipart decoder), and its case stays pinned by the v2
-// transcript_runner lane alone until that task lands.
+// TASK-117 step 5: parity replay of the forms.tseq multipart corpus
+// case through the REAL multipart decode and the REAL response
+// framer -- no hand-synthesized fields (the TASK-114 basic corpus
+// convention). The case loads the live transcript at runtime, rebuilds
+// the request head and raw body from its send segments (the promoted
+// parity/case_wire.hpp helper), decodes the body with the library
+// decoder under the adapter's default budgets, echoes the field
+// exactly the way the v2 fixture's /upload resource did (note=<v>),
+// frames the response, parses the wire with the parity response-frame
+// parser, and asserts every expectation through the corpus's own
+// assertion engine plus the keep-alive verdict, exactly as
+// transcript_runner does.
 
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 #include <httpserver/detail/http1_response_framer.hpp>
-#include <httpserver/forms/urlencoded.hpp>
+#include <httpserver/forms/multipart.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/protocol.hpp>
 #include <httpserver/http/request_head.hpp>
@@ -74,16 +70,50 @@ std::span<const std::byte> as_bytes(const std::string& s) {
     return std::span<const std::byte>(raw, s.size());
 }
 
-// TASK-117 promoted the request-side wire rebuild into
-// parity/case_wire.hpp (shared with the multipart corpus replay).
-
-// The handler side of the corpus fixture: /echo_form echoes
-// get_arg("a")/get_arg("b") as "a=<a>;b=<b>" with the pinned framing
-// (the v2 fixture's posture, driven here by the real decode).
+// The handler side of the corpus fixture: /upload echoes
+// get_arg("note") as "note=<v>" with the pinned framing (the v2
+// fixture's posture, driven here by the real decode).
 std::string echo_body(const forms::form_fields& fields) {
-    return "a=" + std::string(fields.value("a").value_or(""))
-        + ";b=" + std::string(fields.value("b").value_or(""));
+    return "note=" + std::string(fields.value("note").value_or(""));
 }
+
+// A part_sink mirroring the adapter's internal one: field parts
+// collect, file parts drain (the fixture case carries none).
+class field_sink final : public forms::part_sink {
+ public:
+    http::outcome on_part_begin(
+        const forms::part_descriptor& part) override {
+        draining_file_ = !part.filename.empty();
+        if (!draining_file_) name_ = std::string(part.name);
+        return http::outcome::okay();
+    }
+
+    http::outcome on_part_data(std::span<const std::byte> data) override {
+        if (!draining_file_) {
+            const char* raw = reinterpret_cast<const char*>(data.data());
+            value_.append(raw, data.size());
+        }
+        return http::outcome::okay();
+    }
+
+    http::outcome on_part_end() override {
+        entries_.emplace_back(std::move(name_), std::move(value_));
+        value_.clear();
+        return http::outcome::okay();
+    }
+
+    void on_part_abort(http::outcome) override { }
+
+    forms::form_fields take_fields() {
+        return forms::form_fields(std::move(entries_));
+    }
+
+ private:
+    std::vector<std::pair<std::string, std::string>> entries_;
+    std::string name_;
+    std::string value_;
+    bool draining_file_ = false;
+};
 
 // Decodes with the real library, echoes through the real framer,
 // parses, and checks every expectation of the case; returns the
@@ -99,13 +129,20 @@ std::string replay_case(const char* case_name) {
         return "case not found: " + std::string(case_name);
     }
 
-    const parity::corpus_request request = parity::parse_case(*found);
-    forms::form_fields fields;
-    const http::outcome decoded = forms::decode_urlencoded(
-        as_bytes(request.body), forms::urlencoded_limits{}, fields);
+    const parity::corpus_request request =
+        parity::parse_case(*found);
+    field_sink sink;
+    forms::multipart_read read;
+    const http::outcome decoded = forms::decode_multipart(
+        as_bytes(request.body),
+        request.head.head_fields.first("Content-Type"),
+        forms::multipart_limits{}, sink, read);
     if (!decoded.ok()) return "decode: " + decoded.message();
+    if (read.parts_completed != 1) {
+        return "parts_completed " + std::to_string(read.parts_completed);
+    }
 
-    const std::string body = echo_body(fields);
+    const std::string body = echo_body(sink.take_fields());
     http::fields out;
     out.append("Content-Type", "text/plain");
     out.append("Content-Length", std::to_string(body.size()));
@@ -170,18 +207,18 @@ std::string replay_case(const char* case_name) {
 
 }  // namespace
 
-LT_BEGIN_SUITE(forms_urlencoded_corpus_suite)
+LT_BEGIN_SUITE(forms_multipart_corpus_suite)
     void set_up() { }
     void tear_down() { }
-LT_END_SUITE(forms_urlencoded_corpus_suite)
+LT_END_SUITE(forms_multipart_corpus_suite)
 
-LT_BEGIN_AUTO_TEST(forms_urlencoded_corpus_suite, urlencoded_echo_replay)
-    const std::string diff = replay_case("urlencoded_echo");
+LT_BEGIN_AUTO_TEST(forms_multipart_corpus_suite, multipart_field_replay)
+    const std::string diff = replay_case("multipart_field");
     if (!diff.empty()) {
-        std::cerr << "[replay urlencoded_echo] " << diff << "\n";
+        std::cerr << "[replay multipart_field] " << diff << "\n";
     }
     LT_CHECK(diff.empty());
-LT_END_AUTO_TEST(urlencoded_echo_replay)
+LT_END_AUTO_TEST(multipart_field_replay)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

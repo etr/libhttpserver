@@ -114,6 +114,11 @@ const std::vector<const char*>& header_files() {
         // scan with the same rules (no config gates, no backend/OS
         // tokens; the decoder and adapters stay in detail/).
         "/forms/urlencoded.hpp",
+        // TASK-117: the multipart form vocabulary joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; the wire decoder, the drivers, and the temp-file
+        // sink stay in detail/).
+        "/forms/multipart.hpp",
     };
     return files;
 }

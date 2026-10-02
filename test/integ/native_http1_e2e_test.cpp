@@ -31,11 +31,15 @@
 // connections budget). Every wait is deadline-bound; a pass is always
 // observed bytes or an observed close, never a sleep.
 
+#include <dirent.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <deque>
 #include <iostream>
 #include <span>
@@ -50,6 +54,7 @@
 #include <httpserver/body_reader.hpp>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/exchange.hpp>
+#include <httpserver/forms/multipart.hpp>
 #include <httpserver/forms/urlencoded.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/status.hpp>
@@ -282,6 +287,148 @@ srv::sync_response form_echo_value(
     out.fields.append("Content-Type", "text/plain");
     const std::byte* raw = reinterpret_cast<const std::byte*>(echo.data());
     out.body.assign(raw, raw + echo.size());
+    return out;
+}
+
+// TASK-117 multipart state. The disk scenarios point e2e_disk_dir() at
+// a scratch directory before connecting (the suite runs sequentially).
+std::atomic<int> upload_note_invocations{0};
+std::atomic<int> upload_capped_invocations{0};
+std::string& e2e_disk_dir() {
+    static std::string dir;
+    return dir;
+}
+
+// TASK-117: the /upload handler value -- the v2 fixture's posture
+// (note=<v>, text/plain, length-framed).
+srv::sync_response upload_note_value(
+    const httpserver::forms::form_fields& fields) {
+    ++upload_note_invocations;
+    const std::string echo =
+        "note=" + std::string(fields.value("note").value_or(""));
+    srv::sync_response out;
+    out.status = http::status::from_code(200);
+    out.fields.append("Content-Type", "text/plain");
+    const std::byte* raw = reinterpret_cast<const std::byte*>(echo.data());
+    out.body.assign(raw, raw + echo.size());
+    return out;
+}
+
+// TASK-117: /upload_capped -- the bounded-upload scenario's route,
+// counting invocations so the 413 case can prove the handler never
+// ran.
+srv::sync_response upload_capped_value(
+    const httpserver::forms::form_fields&) {
+    ++upload_capped_invocations;
+    srv::sync_response out;
+    out.status = http::status::from_code(200);
+    return out;
+}
+
+// TASK-117: /upload_disk -- a coroutine route driving read_multipart
+// with temp_file_part_sink (the disk-upload round trip). The sink
+// lives on the handler's frame: completed files are kept (the caller
+// verifies the bytes) and removed at handler exit otherwise. The
+// response body is the created file's path.
+task<void> upload_disk_handler(exchange& x) {
+    httpserver::forms::temp_file_options options;
+    options.directory = e2e_disk_dir();
+    options.should_keep =
+        [](const std::string&, const std::string&,
+           const httpserver::forms::part_file_info&) { return true; };
+    httpserver::forms::temp_file_part_sink sink(std::move(options));
+    const httpserver::forms::multipart_read read =
+        co_await httpserver::forms::read_multipart(
+            x, httpserver::forms::multipart_limits{16 << 20, 64,
+                                                    16 << 20, 8192},
+            sink);
+    if (!read.ok()) co_return;
+    const std::string path = sink.completed().empty()
+        ? std::string()
+        : sink.completed().front().file_system_file_name;
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", std::to_string(path.size()));
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::byte* raw = reinterpret_cast<const std::byte*>(path.data());
+    co_await x.writer().write(
+        std::span<const std::byte>(raw, path.size()));
+    co_await x.writer().finish();
+}
+
+// TASK-117: /upload_slow -- the same streaming read without a keep
+// callback, parked mid-body by the scenario's partial write; the
+// client abort mid-file-part must unwind it and leave the scratch
+// directory empty.
+task<void> upload_slow_handler(exchange& x) {
+    httpserver::forms::temp_file_part_sink sink(
+        httpserver::forms::temp_file_options{e2e_disk_dir()});
+    static_cast<void>(co_await httpserver::forms::read_multipart(
+        x, httpserver::forms::multipart_limits{}, sink));
+}
+
+// TASK-117: one scratch directory per disk scenario (mkdtemp),
+// removed recursively on destruction.
+class e2e_scratch_dir {
+ public:
+    e2e_scratch_dir() {
+        char tmpl[] = "/tmp/lht-e2e-upload-XXXXXX";
+        char* made = mkdtemp(tmpl);
+        if (made != nullptr) path_ = made;
+    }
+
+    ~e2e_scratch_dir() {
+        if (path_.empty()) return;
+        for (const std::string& name : entries()) {
+            std::remove((path_ + "/" + name).c_str());
+        }
+        std::remove(path_.c_str());
+    }
+
+    const std::string& path() const noexcept { return path_; }
+
+    bool empty() const { return entries().empty(); }
+
+    std::vector<std::string> entries() const {
+        std::vector<std::string> out;
+        DIR* dir = opendir(path_.c_str());
+        if (dir == nullptr) return out;
+        while (dirent* entry = readdir(dir)) {
+            const std::string name = entry->d_name;
+            if (name != "." && name != "..") out.push_back(name);
+        }
+        closedir(dir);
+        return out;
+    }
+
+ private:
+    std::string path_;
+};
+
+// TASK-117: deadline-bound poll for the scratch directory to become
+// non-empty (the partial file appears) or empty again (the abort
+// removed it).
+bool wait_dir_state(const e2e_scratch_dir& dir, bool want_empty,
+                    std::chrono::milliseconds budget =
+                        std::chrono::milliseconds(5000)) {
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    for (;;) {
+        if (dir.empty() == want_empty) return true;
+        if (std::chrono::steady_clock::now() >= deadline) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+}
+
+std::string read_all(const std::string& path) {
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (f == nullptr) return "<missing>";
+    std::string out;
+    char buf[4096];
+    std::size_t n = 0;
+    while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) {
+        out.append(buf, n);
+    }
+    std::fclose(f);
     return out;
 }
 
@@ -520,6 +667,34 @@ class server_fixture {
                     -> srv::sync_response {
                     return form_echo_value(fields);
                 })));
+        // TASK-117: the multipart routes -- the parity-posture field
+        // echo (default budgets), the small-capped bounded-upload
+        // probe, and the two streaming disk-upload coroutines.
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::post), "/upload",
+            httpserver::forms::make_multipart_route(
+                httpserver::forms::multipart_limits{},
+                [](const http::request_head&,
+                   const httpserver::forms::form_fields& fields)
+                    -> srv::sync_response {
+                    return upload_note_value(fields);
+                })));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::post), "/upload_capped",
+            httpserver::forms::make_multipart_route(
+                httpserver::forms::multipart_limits{65536, 64, 65536,
+                                                    8192},
+                [](const http::request_head&,
+                   const httpserver::forms::form_fields& fields)
+                    -> srv::sync_response {
+                    return upload_capped_value(fields);
+                })));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::post), "/upload_disk",
+            upload_disk_handler));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::post), "/upload_slow",
+            upload_slow_handler));
         static_cast<void>(server_.listen());
     }
 
@@ -563,6 +738,9 @@ LT_BEGIN_SUITE(native_http1_e2e_suite)
         e2e_suspend_outcome.store(-1);
         sync_echo_invocations.store(0);
         form_echo_invocations.store(0);
+        upload_note_invocations.store(0);
+        upload_capped_invocations.store(0);
+        e2e_disk_dir().clear();
         e2e_drain_gate = resume_signal{};
         e2e_drain_entered.store(false);
         e2e_hang_entered.store(false);
@@ -1823,6 +2001,219 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_form_chunked_body)
     }
     LT_CHECK_EQ(form_echo_invocations.load(), 1);
 LT_END_AUTO_TEST(http11_post_form_chunked_body)
+
+// (42) TASK-117: the multipart parity posture over the wire -- the
+// corpus body (one field part note=hello) answers exactly the way the
+// v2 fixture did (200, text/plain, Content-Length: 10, note=hello,
+// length framing) and the connection stays keep-alive.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_multipart_field_round_trip)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /upload HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: multipart/form-data; "
+                         "boundary=PARITY096B\r\n"
+                         "Content-Length: 84\r\n\r\n"
+                         "--PARITY096B\r\n"
+                         "Content-Disposition: form-data; name=\"note\"\r\n"
+                         "\r\n"
+                         "hello\r\n"
+                         "--PARITY096B--\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        bool text_plain = false;
+        for (const parity::observed_header& h : seen[0].headers) {
+            if (h.name == "Content-Type" && h.value == "text/plain") {
+                text_plain = true;
+            }
+        }
+        LT_CHECK(text_plain);
+        LT_CHECK_EQ(seen[0].body, std::string("note=hello"));
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(upload_note_invocations.load(), 1);
+    // Keep-alive: the same connection serves the next request.
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
+LT_END_AUTO_TEST(http11_post_multipart_field_round_trip)
+
+// (43) TASK-117: a bounded upload -- a multipart body four times the
+// route's 64KiB byte cap answers 413 without invoking the handler,
+// long before the client finishes writing; the drain then consumes
+// the remainder and the connection serves the next request (the
+// bounded claim: the server read only cap-plus-epsilon before
+// rejecting).
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_multipart_over_cap_413)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    const std::size_t declared = 256 << 10;
+    LT_CHECK(client.send("POST /upload_capped HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: multipart/form-data; "
+                         "boundary=BIGB\r\n"
+                         "Content-Length: " + std::to_string(declared)
+                         + "\r\n\r\n"));
+    // Write slices past the cap until the 413 lands (the send may
+    // stall once the server stops reading -- the deadline bounds it).
+    std::deque<observed_response> seen;
+    const auto deadline = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(5000);
+    const std::string slice(16 << 10, 'x');
+    std::size_t sent = 0;
+    while (seen.empty()
+            && std::chrono::steady_clock::now() < deadline) {
+        static_cast<void>(client.send(slice,
+                                      std::chrono::milliseconds(300)));
+        sent += slice.size();
+        static_cast<void>(client.receive(
+            1, seen, std::chrono::milliseconds(100)));
+    }
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 413);
+        LT_CHECK_EQ(seen[0].body, std::string());
+    }
+    LT_CHECK_EQ(upload_capped_invocations.load(), 0);
+    // The declared remainder, then the next request pipelined behind
+    // it: the drain consumes the bytes and the connection is reused.
+    while (sent < declared) {
+        const std::size_t n = std::min<std::size_t>(
+            64 << 10, declared - sent);
+        const std::string rest(n, 'y');
+        LT_CHECK(client.send(rest));
+        sent += n;
+    }
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
+    LT_CHECK_EQ(upload_capped_invocations.load(), 0);
+LT_END_AUTO_TEST(http11_multipart_over_cap_413)
+
+// (44) TASK-117: a client abort mid-file-part -- the streaming read
+// unwinds, the temp-file sink's partial file is removed, and the next
+// connection is served normally.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, multipart_client_abort_removes_partial)
+    server_fixture s(base_options());
+    e2e_scratch_dir dir;
+    LT_CHECK(!dir.path().empty());
+    e2e_disk_dir() = dir.path();
+
+    raw::connection aborter;
+    LT_CHECK(aborter.connect(s.port()));
+    LT_CHECK(aborter.send("POST /upload_slow HTTP/1.1\r\nHost: h\r\n"
+                          "Content-Type: multipart/form-data; "
+                          "boundary=AB\r\n"
+                          "Content-Length: 65536\r\n\r\n"
+                          "--AB\r\n"
+                          "Content-Disposition: form-data; "
+                          "name=\"f\"; filename=\"p.bin\"\r\n"
+                          "\r\npartial file bytes"));
+    // The partial file appears once the part began.
+    LT_CHECK(wait_dir_state(dir, false));
+    // The abort: close without finishing the body.
+    aborter.close();
+    // The abort removed the partial; the directory is empty again.
+    LT_CHECK(wait_dir_state(dir, true));
+
+    // The next connection is served normally.
+    raw::connection next;
+    LT_CHECK(next.connect(s.port()));
+    LT_CHECK(next.send("POST /upload HTTP/1.1\r\nHost: h\r\n"
+                       "Content-Type: multipart/form-data; "
+                       "boundary=PARITY096B\r\n"
+                       "Content-Length: 84\r\n\r\n"
+                       "--PARITY096B\r\n"
+                       "Content-Disposition: form-data; name=\"note\"\r\n"
+                       "\r\n"
+                       "hello\r\n"
+                       "--PARITY096B--\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(next.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) LT_CHECK_EQ(seen[0].body, std::string("note=hello"));
+LT_END_AUTO_TEST(multipart_client_abort_removes_partial)
+
+// (45) TASK-117: the disk-upload round trip -- a coroutine route
+// drives read_multipart with temp_file_part_sink, the uploaded bytes
+// land on disk byte-identical (kept through the should_keep hook for
+// verification), and an upload whose sink keeps nothing leaves the
+// directory empty again.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, multipart_disk_upload_round_trip)
+    server_fixture s(base_options());
+    e2e_scratch_dir dir;
+    LT_CHECK(!dir.path().empty());
+    e2e_disk_dir() = dir.path();
+
+    // A 2 MiB deterministic payload through a 512 KiB part body.
+    std::string payload;
+    payload.reserve(2 << 20);
+    for (std::size_t i = 0; i < (2 << 20); ++i) {
+        payload.push_back(static_cast<char>('a' + (i % 26)));
+    }
+    const std::string head =
+        "--D\r\nContent-Disposition: form-data; name=\"f\"; "
+        "filename=\"big.bin\"\r\nContent-Type: "
+        "application/octet-stream\r\n\r\n";
+    const std::string tail = "\r\n--D--\r\n";
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /upload_disk HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: multipart/form-data; "
+                         "boundary=D\r\n"
+                         "Content-Length: "
+                         + std::to_string(head.size() + payload.size()
+                                          + tail.size())
+                         + "\r\n\r\n"
+                         + head));
+    // The payload in slices (keep the socket fed).
+    for (std::size_t at = 0; at < payload.size(); at += (64 << 10)) {
+        const std::size_t n = std::min<std::size_t>(
+            64 << 10, payload.size() - at);
+        LT_CHECK(client.send(std::string_view(payload).substr(at, n)));
+    }
+    LT_CHECK(client.send(tail));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        const std::string path = seen[0].body;
+        LT_CHECK(path.size() > dir.path().size());
+        LT_CHECK(read_all(path) == payload);
+        std::remove(path.c_str());
+    }
+
+    // The slow route keeps nothing: the same upload through
+    // /upload_slow (a sink with no keep callback) ends with the
+    // handler removing the completed file; the quiet handler's exit
+    // synthesizes a response, then the directory must be empty.
+    raw::connection quiet_client;
+    LT_CHECK(quiet_client.connect(s.port()));
+    LT_CHECK(quiet_client.send("POST /upload_slow HTTP/1.1\r\nHost: h\r\n"
+                               "Content-Type: multipart/form-data; "
+                               "boundary=D\r\n"
+                               "Content-Length: "
+                               + std::to_string(head.size()
+                                                + payload.size()
+                                                + tail.size())
+                               + "\r\n\r\n"
+                               + head));
+    for (std::size_t at = 0; at < payload.size(); at += (64 << 10)) {
+        const std::size_t n = std::min<std::size_t>(
+            64 << 10, payload.size() - at);
+        LT_CHECK(quiet_client.send(std::string_view(payload).substr(at, n)));
+    }
+    LT_CHECK(quiet_client.send(tail));
+    std::deque<observed_response> quiet_seen;
+    static_cast<void>(quiet_client.receive(1, quiet_seen));
+    LT_CHECK(wait_dir_state(dir, true));
+LT_END_AUTO_TEST(multipart_disk_upload_round_trip)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
