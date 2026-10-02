@@ -31,14 +31,20 @@
 // "each send owns serialization state, body cursor, cancellation,
 // overlay").
 //
-// Body sources (REQ-026) and their vocabulary — pull chunks,
+// Body sources (REQ-026/028) and their vocabulary — pull chunks,
 // producers, factories, the source-kind taxonomy, and the per-send
 // cursor — live in response_sources.hpp (TASK-113 split):
 //   owned_bytes  — the library holds a deep copy of the body;
 //   reopen_file  — the library stores a path and opens one fresh
 //                  handle per send;
 //   factory      — the application supplies a callable returning one
-//                  fresh producer per send.
+//                  fresh producer per send;
+//   borrowed     — the application keeps the memory and hands over a
+//                  span plus the body_lease pinning it alive;
+//   owned_file   — an open std::FILE* transferred to the library and
+//                  streamed once from its position at transfer;
+//   owned_pipe   — a pipe endpoint transferred to the library and
+//                  streamed once to its own EOF (unknown length).
 //
 // One send = send_definition(exchange, definition, overlay): it
 // validates the overlay and the merged framing BEFORE committing the
@@ -49,34 +55,58 @@
 // never mutates the definition (borrowed) or the caller's overlay
 // (taken by value into the send's own frame).
 //
-// Ownership / lifetime matrix (REQ-028):
+// Ownership / lifetime matrix (REQ-028). The Replay column is
+// REQ-029's concurrent-reuse contract, deliberately narrowed by the
+// one-shot kinds (architecture §3.2, DR-V3-005):
 //
-//   Source          | Library owns              | Application guarantees
-//   ----------------+---------------------------+--------------------------------
-//   owned_bytes     | deep copy of the bytes    | nothing after the factory
-//                   | (moved in at factory time)| returns
-//   reopen_file     | the path string; one      | the path resolves at each
-//                   | fresh handle per send     | send's prepare; a file that
-//                   |                           | shrinks below the declared
-//                   |                           | or pinned size fails that
-//                   |                           | send typed
-//   factory         | the callable (move-only)  | the callable is safe to
-//                   |                           | invoke concurrently (once
-//                   |                           | per in-flight send); each
-//                   |                           | producer serves one send;
-//                   |                           | producer data spans stay
-//                   |                           | valid until the next pull
+//   Source     | Library owns          | Replay     | Application guarantees
+//   -----------+-----------------------+------------+-----------------------
+//   owned_bytes| deep copy of the      | any number | nothing after the
+//              | body, moved in at     | of sends   | factory returns
+//              | factory time          |            |
+//   reopen_file| the path; one fresh   | any number | the path resolves at
+//              | handle per send       | of sends   | each send's prepare; a
+//              |                       |            | file that shrinks below
+//              |                       |            | the declared or pinned
+//              |                       |            | size fails that send
+//              |                       |            | typed
+//   factory    | the callable          | any number | the callable is safe to
+//              | (move-only)           | of sends   | invoke concurrently
+//              |                       |            | (once per in-flight
+//              |                       |            | send); each producer
+//              |                       |            | serves one send; a
+//              |                       |            | producer's data spans
+//              |                       |            | stay valid until its
+//              |                       |            | next pull
+//   borrowed   | the span and the      | any number | the keeper keeps
+//              | lease (nothing is     | of sends   | [data, data + size)
+//              | copied)               |            | unchanged and alive
+//              |                       |            | while the definition
+//              |                       |            | lives; the lease spans
+//              |                       |            | every send
+//   owned_file | the handle until the  | ONE send   | the handle is seekable
+//              | exactly-once close    |            | with a remaining size a
+//              | (the claiming send's  |            | long can express; an
+//              | cursor, or the unsent |            | application keeping the
+//              | holder, releases it)  |            | handle open wraps the
+//              |                       |            | readable side in a
+//              |                       |            | factory source instead
+//   owned_pipe | the endpoint until    | ONE send   | the stream reaches EOF
+//              | the exactly-once      |            | by itself, or supplies
+//              | close                 |            | a Content-Length that
+//              |                       |            | bounds the read
 //   response_overlay| its own field sets (deep  | a plain value; the send
-//                   | value type)               | frame holds its own copy
+//                    | value type)               | frame holds its own copy
 //   send_definition | nothing of either input   | the definition outlives
-//                   |                           | the task (borrowed by
-//                   |                           | reference)
+//                    |                           | the task (borrowed by
+//                    |                           | reference)
 //
-// TASK-113 extends the source taxonomy with owned_file / owned_pipe
-// transfers and borrowed leases: one-shot sources will fail a second
-// send before writing anything, and borrowed memory will require a
-// lease spanning send completion. The cursor's kind dispatch (in
-// response_sources.hpp) is the extension point.
+// The one-shot narrowing: a one-shot definition admits exactly ONE
+// send attempt past validation. The claim is taken before the probe
+// and is not refundable, so a second send — or a racing loser —
+// fails invalid_state before writing anything, and a failed probe
+// spends the definition. A leased borrowed body keeps REQ-029's full
+// contract: reading a span is non-destructive.
 
 #ifndef SRC_HTTPSERVER_RESPONSE_DEFINITION_HPP_
 #define SRC_HTTPSERVER_RESPONSE_DEFINITION_HPP_
@@ -592,11 +622,13 @@ inline task<http::outcome> stream_body(exchange& x, send_cursor& cursor,
 // across the send's suspensions).
 //
 // Failure vocabulary: invalid_argument — malformed fields, framing
-// conflicts, an unopenable file, an empty producer or chunk;
-// invalid_state — the exchange or writer gates (e.g. a second
-// terminal decision); connection_closed / cancelled — a disconnect
-// before or during the send; protocol_error — a file body short of
-// its pinned Content-Length.
+// conflicts, an unopenable file, an unseekable owned_file handle, an
+// empty producer or chunk; invalid_state — the exchange or writer
+// gates (e.g. a second terminal decision), a spent one-shot source,
+// or a handle read failure mid-body; connection_closed / cancelled —
+// a disconnect before or during the send; protocol_error — a file,
+// transferred, or borrowed body short of its pinned or declared
+// Content-Length.
 inline task<send_report> send_definition(exchange& x,
                                          const response_definition& def,
                                          response_overlay overlay = {}) {
