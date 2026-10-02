@@ -32,9 +32,14 @@
 //   S3 - the reopenable file and source-factory body cursors;
 //   S4 - concurrent sends of one definition staying independent.
 
+#include <unistd.h>
+
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
+#include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -160,6 +165,49 @@ send_report run_send(exchange& x, manual_executor& ex,
     ex.run_pending();
     return seen;
 }
+
+// (S3 rig) RAII scratch file: created from `content`, rewritable,
+// removed on destruction.
+class temp_file {
+ public:
+    explicit temp_file(const std::string& content) {
+        char pattern[] = "/tmp/libhttpserver_task112_XXXXXX";
+        const int fd = ::mkstemp(pattern);
+        if (fd < 0) throw std::runtime_error("task112: mkstemp failed");
+        ::close(fd);
+        path_ = pattern;
+        rewrite(content);
+    }
+
+    ~temp_file() { ::unlink(path_.c_str()); }
+
+    temp_file(const temp_file&) = delete;
+    temp_file& operator=(const temp_file&) = delete;
+
+    const std::string& path() const noexcept { return path_; }
+
+    void rewrite(const std::string& content) {
+        std::ofstream out(path_, std::ios::binary | std::ios::trunc);
+        out.write(content.data(),
+                  static_cast<std::streamsize>(content.size()));
+    }
+
+ private:
+    std::string path_;
+};
+
+std::string repeating(std::size_t n) {
+    std::string out;
+    out.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        out.push_back(static_cast<char>('a' + (i % 26)));
+    }
+    return out;
+}
+
+// The cursor's per-pull read size (mirrors detail::k_file_chunk_bytes
+// for the parking choreography below).
+constexpr std::size_t k_file_chunk_capacity = 16u * 1024u;
 
 }  // namespace
 
@@ -300,7 +348,7 @@ LT_END_AUTO_TEST(factories_reject_non_token_name)
 // (S1.7) control bytes in base field values are rejected; HTAB, legal
 // interior OWS, passes.
 LT_BEGIN_AUTO_TEST(response_definition_suite, factories_reject_ctl_values)
-    for (const std::string value :
+    for (const std::string& value :
          {std::string("a\rb"), std::string("a\nb"),
           std::string("a\x01b"), std::string("a\x7f" "b")}) {
         http::fields f;
@@ -653,6 +701,284 @@ LT_BEGIN_AUTO_TEST(response_definition_suite, send_gates_fail_typed)
     LT_CHECK(closed.status.code() == http::outcome_code::connection_closed);
     LT_CHECK_EQ(sink2.respond_calls, 0);
 LT_END_AUTO_TEST(send_gates_fail_typed)
+
+// (S3.1) A 40 KiB reopen_file body streams whole and in order across
+// the cursor's 16 KiB reads, with Content-Length pinned per send.
+LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_streams_whole_body)
+    const std::string payload = repeating(40 * 1024);
+    temp_file asset(payload);
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::reopen_file(
+        http::status::from_code(200), http::fields(), asset.path(),
+        def).ok());
+
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.ok());
+    LT_CHECK_EQ(report.body_bytes, payload.size());
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK(sink.responded.first("content-length").value_or("")
+             == std::to_string(payload.size()));
+    LT_CHECK_EQ(out.drain(1u << 20), payload.size());
+    LT_CHECK(of(out.drained_bytes()) == payload);
+    LT_CHECK_EQ(out.end_calls(), 1);
+LT_END_AUTO_TEST(file_send_streams_whole_body)
+
+// (S3.2) Every send reopens the file: appending to the file between
+// sends changes the next send's pinned length and body, and the
+// definition's own fields never gain a Content-Length.
+LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_reopens_per_send)
+    temp_file asset("one");
+
+    response_definition def;
+    LT_CHECK(response_definition::reopen_file(
+        http::status::from_code(200), http::fields(), asset.path(),
+        def).ok());
+
+    capturing_sink sink1;
+    fake::scripted_body_sink out1;
+    exchange first(make_head(), &sink1, 0, nullptr, &out1);
+    manual_executor ex1;
+    const send_report one = run_send(first, ex1, def, {});
+    LT_CHECK(one.status.ok());
+    LT_CHECK(sink1.responded.first("content-length").value_or("") == "3");
+    LT_CHECK_EQ(out1.drain(64), static_cast<std::size_t>(3));
+    LT_CHECK(of(out1.drained_bytes()) == "one");
+
+    asset.rewrite("one-two");
+
+    capturing_sink sink2;
+    fake::scripted_body_sink out2;
+    exchange second(make_head(), &sink2, 0, nullptr, &out2);
+    manual_executor ex2;
+    const send_report two = run_send(second, ex2, def, {});
+    LT_CHECK(two.status.ok());
+    LT_CHECK_EQ(two.body_bytes, static_cast<std::size_t>(7));
+    LT_CHECK(sink2.responded.first("content-length").value_or("") == "7");
+    LT_CHECK_EQ(out2.drain(64), static_cast<std::size_t>(7));
+    LT_CHECK(of(out2.drained_bytes()) == "one-two");
+
+    LT_CHECK_EQ(def.fields().count("content-length"),
+                static_cast<std::size_t>(0));
+LT_END_AUTO_TEST(file_send_reopens_per_send)
+
+// (S3.3) A file that cannot be opened fails the send BEFORE the head
+// commits: typed, no engine decision, exchange at head.
+LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_missing_file_fails_pre_commit)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::reopen_file(
+        http::status::from_code(200), http::fields(),
+        "/definitely/not/here/task112.txt", def).ok());
+
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(!report.status.message().empty());
+    LT_CHECK_EQ(sink.respond_calls, 0);
+    LT_CHECK_EQ(out.push_calls(), 0);
+    LT_CHECK(x.state() == exchange_state::head);
+LT_END_AUTO_TEST(file_send_missing_file_fails_pre_commit)
+
+// (S3.4) A file short of the length the send declares (explicit
+// Content-Length in the base fields) fails that send with the
+// engine's short-body diagnosis, after the committed head (the
+// engine owns the connection's fate).
+LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_short_of_declared_length_fails)
+    const std::string payload = repeating(40 * 1024);
+    temp_file asset(payload);
+
+    http::fields framed;
+    framed.append("Content-Length", std::to_string(payload.size()));
+    response_definition def;
+    LT_CHECK(response_definition::reopen_file(
+        http::status::from_code(200), framed, asset.path(), def).ok());
+
+    asset.rewrite(repeating(100));
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report short_body = run_send(x, ex, def, {});
+    LT_CHECK(short_body.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK(short_body.status.message().find(
+                 "shorter than the declared Content-Length")
+             != std::string::npos);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK(sink.responded.first("content-length").value_or("")
+             == std::to_string(40 * 1024));
+    LT_CHECK_EQ(out.end_calls(), 0);
+LT_END_AUTO_TEST(file_send_short_of_declared_length_fails)
+
+// (S3.4b) The same diagnosis covers a file that shrinks MID-send:
+// after the send's own prepare, the read bound stays pinned, so the
+// next pull meets a clean EOF with bytes still owed.
+LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_truncated_mid_send_fails)
+    const std::string payload = repeating(40 * 1024);
+    temp_file asset(payload);
+
+    response_definition def;
+    LT_CHECK(response_definition::reopen_file(
+        http::status::from_code(200), http::fields(), asset.path(),
+        def).ok());
+
+    capturing_sink sink;
+    // Capacity fits the first 16 KiB chunk exactly: the second chunk
+    // parks, and the truncation lands between the send's pulls.
+    fake::scripted_body_sink out(k_file_chunk_capacity);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    send_report seen;
+    int done = 0;
+    spawn(ex, send_definition(x, def, {}),
+          [&](task_result<send_report> r) {
+              ++done;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK_EQ(out.queued(), k_file_chunk_capacity);
+    LT_CHECK(out.parked());
+
+    asset.rewrite(repeating(100));
+    LT_CHECK_EQ(out.drain(1u << 20),
+                static_cast<std::size_t>(k_file_chunk_capacity));
+    ex.run_pending();
+    LT_CHECK_EQ(done, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(out.end_calls(), 0);
+LT_END_AUTO_TEST(file_send_truncated_mid_send_fails)
+
+// (S3.5) A factory source invokes once per send, and each producer
+// serves exactly its own send (fresh state, own pull sequence); a
+// factory body is never Content-Length pinned by the send.
+LT_BEGIN_AUTO_TEST(response_definition_suite, factory_send_serves_each_send_fresh)
+    std::vector<std::shared_ptr<int>> pull_counts;
+    int invocations = 0;
+
+    response_definition def;
+    LT_CHECK(response_definition::factory(
+        http::status::from_code(200), http::fields(),
+        [&pull_counts, &invocations]() -> body_producer {
+            ++invocations;
+            auto count = std::make_shared<int>(0);
+            pull_counts.push_back(count);
+            const auto tag = std::make_shared<std::string>(
+                "body-" + std::to_string(invocations));
+            return [count, tag, sent = false]() mutable -> body_chunk {
+                ++*count;
+                if (sent) {
+                    return body_chunk{http::outcome::okay(), {}, true};
+                }
+                sent = true;
+                return body_chunk{
+                    http::outcome::okay(),
+                    std::span<const std::byte>(
+                        reinterpret_cast<const std::byte*>(tag->data()),
+                        tag->size()),
+                    false};
+            };
+        }, def).ok());
+
+    for (const std::string& expected : {std::string("body-1"),
+                                        std::string("body-2")}) {
+        capturing_sink sink;
+        fake::scripted_body_sink out;
+        exchange x(make_head(), &sink, 0, nullptr, &out);
+        manual_executor ex;
+        const send_report report = run_send(x, ex, def, {});
+        LT_CHECK(report.status.ok());
+        LT_CHECK_EQ(out.drain(64), expected.size());
+        LT_CHECK(of(out.drained_bytes()) == expected);
+        LT_CHECK_EQ(sink.responded.count("content-length"),
+                    static_cast<std::size_t>(0));
+    }
+
+    LT_CHECK_EQ(invocations, 2);
+    LT_CHECK_EQ(pull_counts.size(), static_cast<std::size_t>(2));
+    if (pull_counts.size() == 2) {
+        LT_CHECK_EQ(*pull_counts[0], 2);   // data pull + end pull
+        LT_CHECK_EQ(*pull_counts[1], 2);
+    }
+LT_END_AUTO_TEST(factory_send_serves_each_send_fresh)
+
+// (S3.6) A producer failure surfaces typed from the send, after the
+// committed head, with no body end pushed.
+LT_BEGIN_AUTO_TEST(response_definition_suite, factory_send_producer_failure_surfaces)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::factory(
+        http::status::from_code(200), http::fields(),
+        []() -> body_producer {
+            return []() -> body_chunk {
+                return body_chunk{
+                    http::outcome(http::outcome_code::protocol_error,
+                                  "producer broke"),
+                    {}, false};
+            };
+        }, def).ok());
+
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(out.end_calls(), 0);
+LT_END_AUTO_TEST(factory_send_producer_failure_surfaces)
+
+// (S3.7) An empty non-end chunk is a producer contract violation:
+// typed invalid_argument, never silently skipped.
+LT_BEGIN_AUTO_TEST(response_definition_suite, factory_send_empty_chunk_fails)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::factory(
+        http::status::from_code(200), http::fields(),
+        []() -> body_producer {
+            return []() -> body_chunk {
+                return body_chunk{http::outcome::okay(), {}, false};
+            };
+        }, def).ok());
+
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.code() == http::outcome_code::invalid_argument);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(out.end_calls(), 0);
+LT_END_AUTO_TEST(factory_send_empty_chunk_fails)
+
+// (S3.8) A factory returning an empty producer fails the send BEFORE
+// the head commits: the exchange stays at head.
+LT_BEGIN_AUTO_TEST(response_definition_suite, factory_send_empty_producer_pre_commit)
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+
+    response_definition def;
+    LT_CHECK(response_definition::factory(
+        http::status::from_code(200), http::fields(),
+        []() -> body_producer { return body_producer{}; }, def).ok());
+
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.code() == http::outcome_code::invalid_argument);
+    LT_CHECK_EQ(sink.respond_calls, 0);
+    LT_CHECK(x.state() == exchange_state::head);
+LT_END_AUTO_TEST(factory_send_empty_producer_pre_commit)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -74,9 +74,13 @@
 #ifndef SRC_HTTPSERVER_RESPONSE_DEFINITION_HPP_
 #define SRC_HTTPSERVER_RESPONSE_DEFINITION_HPP_
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -98,6 +102,10 @@ namespace detail {
 // One send's private body state; defined after response_overlay below
 // (it reaches the definition's frozen block through friendship).
 class send_cursor;
+
+// The per-pull read size for reopen_file sources: bounds the send's
+// own memory while keeping transport-sized reads.
+inline constexpr std::size_t k_file_chunk_bytes = 16u * 1024u;
 
 // True iff any byte of v is a control character forbidden in a field
 // value: every CTL (0x00-0x1F, 0x7F) except HTAB, which is legal
@@ -134,10 +142,42 @@ inline http::outcome check_fields_wire_safe(const http::fields& f) {
     return http::outcome::okay();
 }
 
+// Parses the field set's Content-Length into `out`; absent is ok with
+// out = 0. A present but non-numeric or overflowing value fails typed
+// (the framing must be a length, not a claim).
+inline http::outcome parse_content_length(const http::fields& f,
+                                          std::uint64_t& out) {
+    out = 0;
+    const std::optional<std::string_view> value =
+        f.first("content-length");
+    if (!value.has_value()) return http::outcome::okay();
+    if (value->empty()) {
+        return http::outcome(
+            http::outcome_code::invalid_argument,
+            "response fields: Content-Length is not a number");
+    }
+    for (const char c : *value) {
+        if (c < '0' || c > '9') {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "response fields: Content-Length is not a number");
+        }
+        if (out > (std::numeric_limits<std::uint64_t>::max()
+                   - static_cast<std::uint64_t>(c - '0')) / 10) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "response fields: Content-Length is out of range");
+        }
+        out = out * 10 + static_cast<std::uint64_t>(c - '0');
+    }
+    return http::outcome::okay();
+}
+
 // Framing self-consistency of one field set: at most one
-// Content-Length occurrence, and never a Transfer-Encoding beside a
+// Content-Length occurrence, never a Transfer-Encoding beside a
 // Content-Length (the same conflicts the engine's response mode
-// rejects).
+// rejects), and a numeric Content-Length when one is present (a
+// framing lie fails validation, not the wire).
 inline http::outcome check_fields_framing(const http::fields& f) {
     if (f.count("content-length") > 1) {
         return http::outcome(
@@ -150,7 +190,8 @@ inline http::outcome check_fields_framing(const http::fields& f) {
             http::outcome_code::invalid_argument,
             "response fields: Transfer-Encoding with Content-Length");
     }
-    return http::outcome::okay();
+    std::uint64_t declared = 0;
+    return parse_content_length(f, declared);
 }
 
 // Pins Content-Length to `size` when the field set carries neither
@@ -397,30 +438,92 @@ inline http::outcome check_overlay(const response_overlay& overlay) {
 class send_cursor {
  public:
     // Binds to `def` (which must be valid) and takes this send's
-    // snapshot of the body source: the bytes aliased (the definition
-    // pins them alive), the file freshly opened with its size
-    // observed, or one fresh producer invoked.
-    http::outcome prepare(const response_definition& def) {
+    // snapshot of the body source against the merged framing
+    // `framing`: the bytes aliased (the definition pins them alive),
+    // the file freshly opened with its read bound taken from an
+    // explicit Content-Length when the merged fields carry one (the
+    // observed size otherwise), or one fresh producer invoked.
+    http::outcome prepare(const response_definition& def,
+                          const http::fields& framing) {
         owner_ = def.impl_;
-        if (def.impl_->kind
-                == response_definition::source_kind::owned_bytes) {
-            offset_ = 0;
-            total_ = def.impl_->bytes.size();
-            return http::outcome::okay();
+        switch (owner_->kind) {
+            case response_definition::source_kind::owned_bytes:
+                offset_ = 0;
+                total_ = owner_->bytes.size();
+                return http::outcome::okay();
+            case response_definition::source_kind::reopen_file:
+                return prepare_file(framing);
+            case response_definition::source_kind::factory:
+                return prepare_factory();
         }
-        // The file and factory snapshots arrive with their sends;
-        // until then those kinds fail typed, exchange untouched.
-        return http::outcome(
-            http::outcome_code::invalid_argument,
-            "send_definition: body source not supported by this send");
+        return http::outcome::okay();
     }
 
     // The next chunk of this send's body: exactly one meaning per
     // body_chunk, spans valid until the next pull on this cursor.
     body_chunk pull() {
-        // owned_bytes: the whole remainder in one chunk carrying end
-        // (the writer's internal loop paces it against queue
-        // capacity, so backpressure stays the writer's).
+        switch (owner_->kind) {
+            case response_definition::source_kind::owned_bytes:
+                return pull_bytes();
+            case response_definition::source_kind::reopen_file:
+                return pull_file();
+            case response_definition::source_kind::factory:
+                return pull_factory();
+        }
+        return body_chunk{http::outcome::okay(), {}, true};
+    }
+
+    // reopen_file only: the size observed at this send's prepare (the
+    // pinned Content-Length); 0 for every other kind.
+    std::uint64_t file_size() const noexcept { return file_size_; }
+
+ private:
+    // One fresh private handle per send: concurrent sends of one
+    // reopen_file definition never share seek state. The size observed
+    // here is this send's pinned Content-Length; an explicit
+    // Content-Length in the merged framing becomes the read bound
+    // instead, so a file short of its declared length fails that send
+    // typed (the ownership matrix's shrink guarantee).
+    http::outcome prepare_file(const http::fields& framing) {
+        file_.open(owner_->path, std::ios::binary);
+        if (!file_.is_open()) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "send_definition: cannot reopen file '" + owner_->path
+                    + "'");
+        }
+        file_.seekg(0, std::ios::end);
+        const std::streamoff end = file_.tellg();
+        file_.seekg(0, std::ios::beg);
+        file_size_ = end < 0 ? 0 : static_cast<std::uint64_t>(end);
+        remaining_ = file_size_;
+        if (framing.count("content-length") > 0) {
+            std::uint64_t declared = 0;
+            const http::outcome length =
+                parse_content_length(framing, declared);
+            if (!length.ok()) return length;
+            remaining_ = declared;
+        }
+        buffer_.assign(k_file_chunk_bytes, std::byte{0});
+        return http::outcome::okay();
+    }
+
+    // One fresh producer per send; an empty one is a contract
+    // violation failed before the head commits.
+    http::outcome prepare_factory() {
+        producer_ = owner_->make();
+        if (!producer_) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "send_definition: factory returned an empty producer");
+        }
+        return http::outcome::okay();
+    }
+
+    // owned_bytes: the whole remainder in one chunk carrying end (the
+    // writer's internal loop paces it against queue capacity, so
+    // backpressure stays the writer's).
+    body_chunk pull_bytes() {
         if (offset_ >= total_) {
             return body_chunk{http::outcome::okay(), {}, true};
         }
@@ -432,15 +535,62 @@ class send_cursor {
                           std::span<const std::byte>(base, rest), true};
     }
 
-    // reopen_file only: the size observed at this send's prepare (the
-    // pinned Content-Length); 0 for every other kind.
-    std::uint64_t file_size() const noexcept { return file_size_; }
+    // reopen_file: at most one buffer's worth of the pinned size. A
+    // clean EOF with bytes still owed to the pinned Content-Length is
+    // a short body (the file shrank between sends): typed
+    // protocol_error, mirroring the engine's short-body diagnosis.
+    body_chunk pull_file() {
+        if (remaining_ == 0) {
+            return body_chunk{http::outcome::okay(), {}, true};
+        }
+        file_.read(reinterpret_cast<char*>(buffer_.data()),
+                   static_cast<std::streamsize>(std::min<std::uint64_t>(
+                       remaining_, buffer_.size())));
+        const std::streamsize got = file_.gcount();
+        // eofbit is set only when fewer characters than requested were
+        // available, and the request never exceeds the bound -- so eof
+        // (or a zero count) means the file ran out before the pinned
+        // length: a short body, typed like the engine's.
+        if (got <= 0 || file_.eof()) {
+            return body_chunk{
+                http::outcome(
+                    http::outcome_code::protocol_error,
+                    "send_definition: body shorter than the declared "
+                    "Content-Length"),
+                {}, false};
+        }
+        remaining_ -= static_cast<std::uint64_t>(got);
+        return body_chunk{
+            http::outcome::okay(),
+            std::span<const std::byte>(buffer_.data(),
+                                       static_cast<std::size_t>(got)),
+            remaining_ == 0};
+    }
 
- private:
+    // factory: forwards to this send's producer; an empty non-end
+    // chunk is a producer contract violation failed typed (never
+    // silently skipped); end and failure pass through verbatim.
+    body_chunk pull_factory() {
+        const body_chunk chunk = producer_();
+        if (chunk.status.ok() && !chunk.end && chunk.data.empty()) {
+            return body_chunk{
+                http::outcome(
+                    http::outcome_code::invalid_argument,
+                    "send_definition: producer returned an empty "
+                    "non-end chunk"),
+                {}, false};
+        }
+        return chunk;
+    }
+
     std::shared_ptr<const response_definition::impl> owner_;
     std::uint64_t offset_ = 0;     // owned_bytes cursor into shared bytes
     std::uint64_t total_ = 0;      // owned_bytes total
     std::uint64_t file_size_ = 0;  // reopen_file pinned size
+    std::uint64_t remaining_ = 0;  // reopen_file bytes left to pinned size
+    std::ifstream file_;           // reopen_file: this send's private handle
+    std::vector<std::byte> buffer_;  // reopen_file read buffer
+    body_producer producer_;       // factory: this send's producer
 };
 
 // Everything a send does BEFORE committing the head: gates on the
@@ -462,7 +612,7 @@ inline http::outcome prepare_send(const response_definition& def,
     merged = merge_send_fields(def, overlay);
     const http::outcome framing = check_fields_framing(merged);
     if (!framing.ok()) return framing;
-    const http::outcome prepared = cursor.prepare(def);
+    const http::outcome prepared = cursor.prepare(def, merged);
     if (!prepared.ok()) return prepared;
     if (def.kind() == response_definition::source_kind::reopen_file) {
         // The pinned size is per send: the file is re-observed every
