@@ -212,6 +212,32 @@ LT_BEGIN_AUTO_TEST(basic_auth_suite, valid_credentials_authenticate)
     LT_CHECK(verdict.password == "wonderland");
 LT_END_AUTO_TEST(valid_credentials_authenticate)
 
+// The default-constructed policy is the unconfigured one: absent stays
+// no_credentials and everything presented is rejected -- including the
+// empty pair of `Basic Og==`, which would otherwise equal its empty
+// fixed credentials -- while a factory-created empty pair is a
+// configured policy that honors the fixed-form equality contract.
+LT_BEGIN_AUTO_TEST(basic_auth_suite, unconfigured_policy_rejects_everything)
+    const basic_auth_policy unconfigured;
+    LT_CHECK(unconfigured.check(request_with("")).result
+             == basic_auth_result::no_credentials);
+    const basic_auth_verdict empty_pair_presented =
+        unconfigured.check(request_with("Basic Og=="));
+    LT_CHECK(!empty_pair_presented.allowed());
+    LT_CHECK(empty_pair_presented.result
+             == basic_auth_result::credentials_rejected);
+    LT_CHECK(challenge_of(empty_pair_presented) == "Basic realm=\"\"");
+    LT_CHECK(unconfigured.check(request_with("Basic YWxpY2U6d29uZGVybGFuZA=="))
+                 .result
+             == basic_auth_result::credentials_rejected);
+
+    basic_auth_policy empty_pair;
+    LT_CHECK(basic_auth_policy::create("", "", "", empty_pair).ok());
+    LT_CHECK(empty_pair.check(request_with("Basic Og==")).allowed());
+    LT_CHECK(empty_pair.check(request_with("Basic dXNlcg==")).result
+             == basic_auth_result::credentials_rejected);
+LT_END_AUTO_TEST(unconfigured_policy_rejects_everything)
+
 LT_BEGIN_AUTO_TEST(basic_auth_suite, separators_and_scheme_case)
     const basic_auth_policy policy = transcript_policy();
     const char* spellings[] = {

@@ -218,6 +218,7 @@ http::outcome basic_auth_policy::create(std::string realm,
     built.challenge_ = build_challenge(built.realm_);
     built.user_ = std::move(user);
     built.password_ = std::move(password);
+    built.configured_ = true;
     out = std::move(built);
     return http::outcome::okay();
 }
@@ -234,6 +235,7 @@ http::outcome basic_auth_policy::create(std::string realm,
     built.realm_ = std::move(realm);
     built.challenge_ = build_challenge(built.realm_);
     built.validate_ = std::move(validate);
+    built.configured_ = true;
     out = std::move(built);
     return http::outcome::okay();
 }
@@ -275,7 +277,10 @@ basic_auth_verdict basic_auth_policy::check(
     bool accepted = false;
     if (validate_) {
         accepted = validate_(verdict.user, verdict.password);
-    } else {
+    } else if (configured_) {
+        // The default-constructed policy is not configured: nothing
+        // presented can authenticate (empty fixed credentials would
+        // otherwise match the empty pair of `Basic Og==`).
         accepted = detail::constant_time_equal(verdict.user, user_)
                    && detail::constant_time_equal(verdict.password,
                                                   password_);

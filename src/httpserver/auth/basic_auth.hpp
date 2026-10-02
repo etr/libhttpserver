@@ -138,10 +138,18 @@ class basic_auth_policy {
 
  private:
     std::string realm_;
-    std::string challenge_;  // pre-escaped: Basic realm="<realm>"
+    // Pre-escaped: Basic realm="<realm>". The default constructor
+    // names the empty realm rather than leaving an empty challenge
+    // value.
+    std::string challenge_ = "Basic realm=\"\"";
     std::string user_;       // fixed form (validator form: empty)
     std::string password_;   // fixed form (validator form: empty)
     basic_auth_validator validate_;  // empty iff fixed form
+    // True only for the two factory forms. The default-constructed
+    // policy has no credentials to match, so its fixed-form branch
+    // must reject everything presented (an empty user and password
+    // pair would otherwise authenticate `Basic Og==`).
+    bool configured_ = false;
 };
 
 // Wraps one route handler with the policy: unauthenticated requests
