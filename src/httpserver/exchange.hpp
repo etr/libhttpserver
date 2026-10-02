@@ -23,6 +23,7 @@
 #define SRC_HTTPSERVER_EXCHANGE_HPP_
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -35,6 +36,7 @@
 #include <httpserver/http/request_head.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/response_writer.hpp>
+#include <httpserver/server/routes.hpp>
 
 namespace httpserver {
 
@@ -179,6 +181,20 @@ class exchange {
 
     // Fan-out handle observing this exchange's disconnect.
     stop_token cancellation() const noexcept { return stop_.get_token(); }
+
+    // TASK-118 (plan D2): the named path captures of the resolved
+    // route, stamped by the engine's dispatcher before the handler
+    // runs; empty when no parameterized route matched. Names view the
+    // registry's stored pattern text (valid while the registry is not
+    // mutated -- registration is closed once listen() runs); values
+    // are owned by the exchange for its whole lifetime.
+    void set_path_args(std::vector<server::route_captures> args) {
+        path_args_ = std::move(args);
+    }
+
+    std::span<const server::route_captures> path_args() const noexcept {
+        return path_args_;
+    }
 
     // Terminal response decision; doubles as the reject decision when
     // called with an error status straight from the head. Commits via
@@ -338,6 +354,7 @@ class exchange {
     // Declared after stop_: the writer's constructor copies the stop
     // token, so disconnects fan out to parked response writes.
     response_writer writer_;
+    std::vector<server::route_captures> path_args_;
     std::vector<resume_signal> resume_signals_;
 };
 

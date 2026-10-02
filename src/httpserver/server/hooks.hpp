@@ -65,10 +65,11 @@
 // mid-fire without disturbing the running pass); the first
 // respond_with short-circuits the remaining hooks of the phase; a
 // zero-cost-when-unused gate per phase; add/remove are runtime-safe
-// before and after listen(). A hook that throws propagates out of
-// fire() to the engine's dispatcher, which contains the throw,
-// treats it as pass(), and routes it through the handler_exception
-// chain.
+// before and after listen(). A hook that throws is contained inside
+// fire(), treated as pass(), and the chain continues (the v2 rule;
+// the logging surface for the swallowed diagnostic is a deferred
+// milestone item). handler_exception fires for HANDLER throws, at
+// the dispatcher.
 
 #ifndef SRC_HTTPSERVER_SERVER_HOOKS_HPP_
 #define SRC_HTTPSERVER_SERVER_HOOKS_HPP_
@@ -352,8 +353,8 @@ class hook_bus {
 
     // The engine-facing firing seam: invokes the phase's hooks in
     // registration order over a snapshot; the first respond_with wins
-    // and later hooks of the phase do not run. A hook that throws
-    // propagates (the dispatcher contains it).
+    // and later hooks of the phase do not run. A throwing hook is
+    // contained and treated as pass() (the v2 rule).
     template <hook_phase P>
     hook_action fire(typename detail::phase_ctx_t<P>& ctx) const {
         return detail::hook_bus_fire(impl_, static_cast<std::uint8_t>(P),

@@ -95,7 +95,15 @@ class hook_bus_impl {
             }
         }
         for (const std::shared_ptr<erased>& call : snapshot) {
-            hook_action outcome = (*call)(ctx);
+            hook_action outcome;
+            try {
+                outcome = (*call)(ctx);
+            } catch (...) {
+                // A throwing hook is treated as pass() and the chain
+                // continues (the v2 rule; the logging surface for the
+                // swallowed diagnostic is a deferred milestone item).
+                continue;
+            }
             if (!outcome.is_pass()) return outcome;
         }
         return hook_action::pass();

@@ -87,6 +87,7 @@ src/detail/forms_urlencoded.cpp
 src/detail/forms_multipart.cpp
 src/detail/forms_multipart_files.cpp
 src/detail/server_hooks.cpp
+src/detail/request_lifecycle.cpp
 "
 
 # TASK-114: the in-tree codec/hash/entropy primitives the auth TU and
@@ -109,6 +110,8 @@ src/httpserver/detail/auth_text.hpp
 src/httpserver/detail/forms_urlencoded.hpp
 src/httpserver/detail/forms_multipart.hpp
 src/httpserver/detail/forms_verdict.hpp
+src/httpserver/detail/lifecycle_sink.hpp
+src/httpserver/detail/request_lifecycle.hpp
 "
 
 violations=0

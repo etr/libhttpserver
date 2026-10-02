@@ -25,14 +25,17 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <httpserver/concurrency/executor.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/protocol.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/server/hooks.hpp>
 
 namespace httpserver {
 
@@ -495,6 +498,37 @@ class server_options {
     budget_limits& budgets() noexcept { return budgets_; }
     const budget_limits& budgets() const noexcept { return budgets_; }
 
+    // TASK-118 (plan D3): construction-time custom error-page
+    // factories, the v3 equivalents of the v2 not_found_handler and
+    // method_not_allowed_handler aliases. Set before the server is
+    // constructed (factories, not runtime bus seats: the aliases are
+    // gone in v3). An unset factory means the v2 default page. The 405
+    // Allow header is appended by the engine on every method-mismatch
+    // response, custom or default. Copies of server_options share the
+    // installed factories.
+    using response_factory =
+        concurrency::unique_function<hook_response(const http::request_head&)>;
+
+    void not_found_response(response_factory factory) {
+        not_found_response_ =
+            std::make_shared<const response_factory>(std::move(factory));
+    }
+
+    // Null when unset (the v2 default page serves).
+    const response_factory* not_found_response() const noexcept {
+        return not_found_response_.get();
+    }
+
+    void method_not_allowed_response(response_factory factory) {
+        method_not_allowed_response_ =
+            std::make_shared<const response_factory>(std::move(factory));
+    }
+
+    // Null when unset (the v2 default page serves).
+    const response_factory* method_not_allowed_response() const noexcept {
+        return method_not_allowed_response_.get();
+    }
+
     // Judges the whole configuration. Returns an ok outcome, or exactly
     // one typed failure whose diagnostic names the violated rule or
     // bound. Pure, idempotent, and callable on a const object.
@@ -545,6 +579,8 @@ class server_options {
     tls_options tls_;
     protocol_set protocols_;
     budget_limits budgets_;
+    std::shared_ptr<const response_factory> not_found_response_;
+    std::shared_ptr<const response_factory> method_not_allowed_response_;
 };
 
 }  // namespace server
