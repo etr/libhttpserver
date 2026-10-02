@@ -152,6 +152,17 @@ std::string repeating(std::size_t n) {
     return out;
 }
 
+// Drains the executor until `flag` turns non-zero (one millisecond per
+// spin), for the disconnect round whose wake-ups post from the
+// cancellation fan-out.
+bool drain_until(manual_executor& ex, int& flag, int spins) {
+    for (int i = 0; i < spins && flag == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        ex.run_pending();
+    }
+    return flag != 0;
+}
+
 }  // namespace
 
 LT_BEGIN_SUITE(response_sources_suite)
@@ -897,6 +908,268 @@ LT_BEGIN_AUTO_TEST(response_sources_suite, owned_pipe_declared_length_bounds_rea
     LT_CHECK_EQ(closes->load(), 2);
 LT_END_AUTO_TEST(owned_pipe_declared_length_bounds_read)
 
+#endif  // !_WIN32
+
+// -----------------------------------------------------------------------
+// C - cancellation and concurrent-send cleanup: a one-shot transfer
+// releases its handle exactly once whatever the send's fate, the
+// cursor pins the body block past the definition's own death, and the
+// gate order keeps earlier checks ahead of the one-shot claim.
+// -----------------------------------------------------------------------
+
+// (C1) A cancelled owned_file send (parked mid-body on a tiny sink,
+// then disconnected) closes its handle exactly once.
+LT_BEGIN_AUTO_TEST(response_sources_suite, cancelled_owned_file_send_closes_once)
+    fake::temp_file asset(repeating(2048));
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    response_definition def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), http::fields(),
+        fake::open_for_read(asset), fake::counting_close(closes),
+        def).ok());
+
+    capturing_sink sink;
+    fake::scripted_body_sink out(4);   // parks mid-body
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    spawn(ex, fake::watch_stop_and_resume(x, out),
+          [&](task_result<void>) { });
+    send_report seen;
+    int done = 0;
+    spawn(ex, send_definition(x, def, {}),
+          [&](task_result<send_report> r) {
+              ++done;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK(out.parked());
+    LT_CHECK_EQ(closes->load(), 0);
+
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+    LT_CHECK(drain_until(ex, done, 400));
+    LT_CHECK_EQ(done, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::cancelled);
+    LT_CHECK_EQ(out.end_calls(), 0);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(cancelled_owned_file_send_closes_once)
+
+// (C2) A cancelled owned_pipe send closes its endpoint exactly once.
+#ifndef _WIN32
+LT_BEGIN_AUTO_TEST(response_sources_suite, cancelled_owned_pipe_send_closes_once)
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    response_definition def;
+    LT_CHECK(response_definition::owned_pipe(
+        http::status::from_code(200), http::fields(),
+        fake::filled_pipe(repeating(2048)).release(),
+        fake::counting_close(closes), def).ok());
+
+    capturing_sink sink;
+    fake::scripted_body_sink out(4);   // parks mid-body
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    spawn(ex, fake::watch_stop_and_resume(x, out),
+          [&](task_result<void>) { });
+    send_report seen;
+    int done = 0;
+    spawn(ex, send_definition(x, def, {}),
+          [&](task_result<send_report> r) {
+              ++done;
+              if (r.has_value()) seen = r.value();
+          });
+    ex.run_pending();
+    LT_CHECK(out.parked());
+    LT_CHECK_EQ(closes->load(), 0);
+
+    LT_CHECK(x.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+    LT_CHECK(drain_until(ex, done, 400));
+    LT_CHECK_EQ(done, 1);
+    LT_CHECK(seen.status.code() == http::outcome_code::cancelled);
+    LT_CHECK_EQ(out.end_calls(), 0);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(cancelled_owned_pipe_send_closes_once)
+#endif  // !_WIN32
+
+// (C3) The cursor PINS the frozen body block: a definition destroyed
+// while its send is parked (head already committed, body streaming
+// from the cursor alone) still streams to completion and closes its
+// handle exactly once at the send's own end.
+LT_BEGIN_AUTO_TEST(response_sources_suite, definition_destroyed_mid_parked_send_completes)
+    fake::temp_file asset(repeating(4096));
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    capturing_sink sink;
+    fake::scripted_body_sink out(8);   // parks mid-body
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    send_report seen;
+    int done = 0;
+    {
+        response_definition def;
+        LT_CHECK(response_definition::owned_file(
+            http::status::from_code(200), http::fields(),
+            fake::open_for_read(asset), fake::counting_close(closes),
+            def).ok());
+        spawn(ex, send_definition(x, def, {}),
+              [&](task_result<send_report> r) {
+                  ++done;
+                  if (r.has_value()) seen = r.value();
+              });
+        ex.run_pending();
+        LT_CHECK(out.parked());
+        // The head is committed; past it the send never touches the
+        // definition object -- everything it needs is the cursor's
+        // pinned body block. Destroying the object here must be safe.
+        LT_CHECK_EQ(sink.respond_calls, 1);
+    }
+    LT_CHECK_EQ(closes->load(), 0);   // the cursor still pins the handle
+
+    int rounds = 0;
+    while (done == 0 && rounds < 512) {
+        out.drain(1u << 20);
+        ex.run_pending();
+        ++rounds;
+    }
+    LT_CHECK_EQ(done, 1);
+    LT_CHECK(seen.status.ok());
+    LT_CHECK_EQ(seen.body_bytes, static_cast<std::size_t>(4096));
+    LT_CHECK_EQ(out.drained(), static_cast<std::size_t>(4096));
+    LT_CHECK(of(out.drained_bytes()) == repeating(4096));
+    LT_CHECK_EQ(out.end_calls(), 1);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(definition_destroyed_mid_parked_send_completes)
+
+// (C4) Gate order (TASK-112's, kept): a second send of a SPENT
+// one-shot definition with a bad overlay reports the overlay error
+// first — the one-shot claim is checked after the earlier gates, so
+// its diagnosis never masks a malformed input.
+LT_BEGIN_AUTO_TEST(response_sources_suite, one_shot_gate_order)
+    fake::temp_file asset(repeating(64));
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    response_definition def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), http::fields(),
+        fake::open_for_read(asset), fake::counting_close(closes),
+        def).ok());
+
+    capturing_sink sink1;
+    fake::scripted_body_sink out1;
+    exchange first(make_head(), &sink1, 0, nullptr, &out1);
+    manual_executor ex1;
+    LT_CHECK(run_send(first, ex1, def, {}).status.ok());
+    LT_CHECK_EQ(closes->load(), 1);
+
+    response_overlay bad;
+    bad.trailers.append("Host", "late");
+    capturing_sink sink2;
+    fake::scripted_body_sink out2;
+    exchange second(make_head(), &sink2, 0, nullptr, &out2);
+    manual_executor ex2;
+    const send_report two = run_send(second, ex2, def, bad);
+    LT_CHECK(two.status.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(two.status.message().find("cannot be a trailer")
+             != std::string::npos);
+    LT_CHECK_EQ(sink2.respond_calls, 0);
+    LT_CHECK_EQ(out2.push_calls(), 0);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(one_shot_gate_order)
+
+// (C5) The replayable/one-shot contrast under the same race: four
+// threads all stream ONE leased borrowed definition whole (REQ-029
+// holds for replayable sources), while four threads racing ONE pipe
+// definition yield exactly one winner and three typed rejections —
+// the deliberate narrowing is per KIND, not per send count.
+#ifndef _WIN32
+LT_BEGIN_AUTO_TEST(response_sources_suite, replayable_concurrent_contrast)
+    constexpr int k_threads = 4;
+    const std::string payload = repeating(4096);
+
+    auto keeper = std::make_shared<std::string>(payload);
+    response_definition memory;
+    LT_CHECK(response_definition::borrowed(
+        http::status::from_code(200), http::fields(),
+        fake::byte_span(*keeper), body_lease(keeper), memory).ok());
+    auto pipe_closes = std::make_shared<std::atomic<int>>(0);
+    response_definition stream;
+    LT_CHECK(response_definition::owned_pipe(
+        http::status::from_code(200), http::fields(),
+        fake::filled_pipe(payload).release(),
+        fake::counting_close(pipe_closes), stream).ok());
+
+    std::vector<int> memory_ok(k_threads, 0);
+    std::vector<std::string> memory_bodies(k_threads);
+    std::vector<int> stream_ok(k_threads, 0);
+    std::vector<int> stream_rejected(k_threads, 0);
+    std::vector<std::thread> workers;
+    for (int k = 0; k < k_threads; ++k) {
+        workers.emplace_back([&, k] {
+            const auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::seconds(5);
+            {
+                capturing_sink sink;
+                fake::scripted_body_sink out;
+                exchange x(make_head(), &sink, 0, nullptr, &out);
+                manual_executor ex;
+                int done = 0;
+                spawn(ex, send_definition(x, memory, {}),
+                      [&](task_result<send_report> r) {
+                          ++done;
+                          if (r.has_value() && r.value().status.ok()) {
+                              memory_ok[k] = 1;
+                          }
+                      });
+                while (done == 0
+                        && std::chrono::steady_clock::now() < deadline) {
+                    ex.run_pending();
+                    out.drain(1u << 20);
+                    std::this_thread::sleep_for(
+                        std::chrono::milliseconds(1));
+                }
+                out.drain(1u << 20);
+                memory_bodies[k] = of(out.drained_bytes());
+            }
+            {
+                capturing_sink sink;
+                fake::scripted_body_sink out;
+                exchange x(make_head(), &sink, 0, nullptr, &out);
+                manual_executor ex;
+                int done = 0;
+                spawn(ex, send_definition(x, stream, {}),
+                      [&](task_result<send_report> r) {
+                          ++done;
+                          if (!r.has_value()) return;
+                          if (r.value().status.ok()) {
+                              stream_ok[k] = 1;
+                          } else if (r.value().status.code()
+                                     == http::outcome_code::invalid_state) {
+                              stream_rejected[k] = 1;
+                          }
+                      });
+                while (done == 0
+                        && std::chrono::steady_clock::now() < deadline) {
+                    ex.run_pending();
+                    out.drain(1u << 20);
+                    std::this_thread::sleep_for(
+                        std::chrono::milliseconds(1));
+                }
+                out.drain(1u << 20);
+            }
+        });
+    }
+    for (std::thread& t : workers) t.join();
+
+    int winners = 0;
+    int losers = 0;
+    for (int k = 0; k < k_threads; ++k) {
+        LT_CHECK_EQ(memory_ok[k], 1);
+        LT_CHECK(memory_bodies[k] == payload);
+        winners += stream_ok[k];
+        losers += stream_rejected[k];
+    }
+    LT_CHECK_EQ(winners, 1);
+    LT_CHECK_EQ(losers, k_threads - 1);
+    LT_CHECK_EQ(pipe_closes->load(), 1);
+LT_END_AUTO_TEST(replayable_concurrent_contrast)
 #endif  // !_WIN32
 
 LT_BEGIN_AUTO_TEST_ENV()

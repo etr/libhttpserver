@@ -262,12 +262,15 @@ struct response_body_source {
 // body drives it, and a public header may not include a private one.
 class send_cursor {
  public:
-    // A claimed transfer's handle is released here on every send
-    // fate: completed, failed, cancelled (the coroutine frame's
-    // destruction runs this). close() is idempotent, so the holder's
-    // backstop destructor never double-closes.
+    // A cursor releases ONLY the handle it claimed: a losing one-shot
+    // send closes nothing (its claim never happened), so a racing
+    // loser's destruction can never close the handle under the
+    // winner's read. A claimed transfer's handle is released here on
+    // every send fate: completed, failed, cancelled (the coroutine
+    // frame's destruction runs this). close() is idempotent, so the
+    // holder's backstop destructor never double-closes.
     ~send_cursor() {
-        if (owner_ && owner_->handle) owner_->handle->close();
+        if (owner_ && owns_handle_) owner_->handle->close();
     }
 
     // Binds to `source` (one definition's frozen body block) and takes
@@ -387,6 +390,7 @@ class send_cursor {
                 http::outcome_code::invalid_state,
                 "send_definition: one-shot source already used");
         }
+        owns_handle_ = true;
         std::FILE* const stream = owner_->handle->get();
         // std::ftell is the ISO C probe and returns long by contract —
         // the documented LONG_MAX bound of the probed size.
@@ -424,6 +428,7 @@ class send_cursor {
                 http::outcome_code::invalid_state,
                 "send_definition: one-shot source already used");
         }
+        owns_handle_ = true;
         remaining_ = k_read_to_eof;
         eof_ends_ = true;
         if (framing.count("content-length") > 0) {
@@ -554,6 +559,7 @@ class send_cursor {
     }
 
     std::shared_ptr<const response_body_source> owner_;
+    bool owns_handle_ = false;     // this send claimed owner_'s handle
     std::span<const std::byte> view_;  // owned_bytes/borrowed: the span
     std::uint64_t offset_ = 0;     // owned_bytes/borrowed span cursor
     std::uint64_t total_ = 0;      // owned_bytes/borrowed span total
