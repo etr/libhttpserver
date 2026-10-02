@@ -97,6 +97,10 @@ struct urlencoded_limits {
 // The decoded fields of one urlencoded body, in arrival order
 // (repeated names appended -- the v2 documented contract). Names and
 // values are length-carrying strings: a decoded NUL is storable.
+// TASK-117: the multipart surface reuses this type -- a multipart
+// route's non-file parts land in a form_fields with the same contract
+// (the two form verdict types also share detail/forms_verdict.hpp's
+// rejection shaping).
 class form_fields {
  public:
     form_fields() = default;
