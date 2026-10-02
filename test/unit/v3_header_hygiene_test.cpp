@@ -93,6 +93,10 @@ const std::vector<const char*>& header_files() {
         // TASK-111: the sync route adapter joins the sentinel scan
         // with the same rules (no config gates, no backend/OS tokens).
         "/server/route_sync.hpp",
+        // TASK-112: the immutable response definitions join the
+        // sentinel scan with the same rules (no config gates, no
+        // backend/OS tokens; response value and send vocabulary only).
+        "/response_definition.hpp",
     };
     return files;
 }
