@@ -229,21 +229,28 @@ inline http::outcome parse_type_params(
 
 }  // namespace multipart_params
 
+// One RFC 2046 bchar: a bcharsnospace, or a space (which may not be
+// the last character -- the caller checks that).
+inline bool is_bchar(char c) noexcept {
+    constexpr std::string_view k_special = "'()+_,-./:=? ";
+    if (k_special.find(c) != std::string_view::npos) return true;
+    const bool digit = c >= '0' && c <= '9';
+    const bool upper = c >= 'A' && c <= 'Z';
+    const bool lower = c >= 'a' && c <= 'z';
+    return digit || upper || lower;
+}
+
 // Validates one boundary per RFC 2046: 1..256 bchars, a space allowed
 // anywhere but last. This is the driver-setup gate (a Content-Type
 // with an invalid boundary never reaches the wire machine).
 inline http::outcome validate_boundary(std::string_view boundary) {
-    constexpr std::string_view k_special = "'()+_,-./:=? ";
     if (boundary.empty() || boundary.size() > 256) {
         return http::outcome(
             http::outcome_code::invalid_argument,
             "multipart boundary length must be 1..256");
     }
     for (const char c : boundary) {
-        const bool bchar = k_special.find(c) != std::string_view::npos
-            || (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')
-            || (c >= 'a' && c <= 'z');
-        if (!bchar) {
+        if (!is_bchar(c)) {
             return http::outcome(
                 http::outcome_code::invalid_argument,
                 "multipart boundary has a character outside RFC 2046 "

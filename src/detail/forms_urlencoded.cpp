@@ -43,6 +43,7 @@
 #include <httpserver/body_reader.hpp>
 #include <httpserver/detail/auth_text.hpp>
 #include <httpserver/detail/forms_urlencoded.hpp>
+#include <httpserver/detail/forms_verdict.hpp>
 #include <httpserver/forms/urlencoded.hpp>
 #include <httpserver/server/route_sync.hpp>
 
@@ -96,21 +97,16 @@ bool form_read::ok() const noexcept {
     return status.ok();
 }
 
+// The shared forms rejection shaping (detail/forms_verdict.hpp): the
+// multipart verdict type delegates to the same helper, so the two
+// form surfaces cannot drift apart (the duplication gate requires
+// one copy, not one per form).
 http::status form_read::reject_status() const noexcept {
-    if (status.code() == http::outcome_code::limit_exceeded) {
-        return http::status::from_code(413);
-    }
-    if (status.code() == http::outcome_code::invalid_argument) {
-        return http::status::from_code(400);
-    }
-    // Transport, cancellation, and state failures commit nothing.
-    return http::status::from_code(0);
+    return detail::forms_verdict::reject_status(status);
 }
 
 http::fields form_read::reject_fields() const {
-    http::fields fields;
-    fields.append("Content-Length", "0");
-    return fields;
+    return detail::forms_verdict::reject_fields();
 }
 
 http::outcome decode_urlencoded(std::span<const std::byte> body,
