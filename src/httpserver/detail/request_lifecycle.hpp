@@ -33,6 +33,8 @@
 #ifndef SRC_HTTPSERVER_DETAIL_REQUEST_LIFECYCLE_HPP_
 #define SRC_HTTPSERVER_DETAIL_REQUEST_LIFECYCLE_HPP_
 
+#include <memory>
+
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/server/hooks.hpp>
@@ -46,11 +48,12 @@ namespace detail {
 class lifecycle_sink;
 
 // The two construction-time custom error-page factories (plan D3),
-// copied out of server_options at listen(). Empty members mean the v2
-// default pages.
+// carried out of server_options at listen() by shared ownership. Null
+// members mean the v2 default pages.
 struct error_page_factories {
-    server::server_options::response_factory not_found;
-    server::server_options::response_factory method_not_allowed;
+    using factory = server::server_options::response_factory;
+    std::shared_ptr<const factory> not_found;
+    std::shared_ptr<const factory> method_not_allowed;
 };
 
 // Dispatches one complete request head through the pipeline over @p x:

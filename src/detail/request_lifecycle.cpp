@@ -174,8 +174,8 @@ task<void> run_handler(const server::hook_bus& bus, lifecycle_sink& sink,
 // The miss branch: the 404 page.
 task<void> dispatch_miss(const error_page_factories& pages,
                          lifecycle_sink& sink, exchange& x) {
-    co_await commit_page(x, sink, pages.not_found ? &pages.not_found : nullptr,
-                         404, k_not_found_body, nullptr);
+    co_await commit_page(x, sink, pages.not_found.get(), 404,
+                         k_not_found_body, nullptr);
 }
 
 // The method-miss branch: before_handler is the consultation point (a
@@ -200,11 +200,8 @@ task<void> dispatch_method_miss(const server::hook_bus& bus,
             }
         }
     }
-    co_await commit_page(x, sink,
-                         pages.method_not_allowed
-                             ? &pages.method_not_allowed
-                             : nullptr,
-                         405, k_method_not_allowed_body, &allow);
+    co_await commit_page(x, sink, pages.method_not_allowed.get(), 405,
+                         k_method_not_allowed_body, &allow);
 }
 
 // The hit branch: before_handler may short-circuit, else the handler

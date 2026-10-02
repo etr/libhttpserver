@@ -318,9 +318,11 @@ LT_END_AUTO_TEST(default_404_page)
 // (4) Custom 404: the construction-time factory supplies the body.
 LT_BEGIN_AUTO_TEST(request_lifecycle_suite, custom_404_page)
     dispatch_round r;
-    r.pages.not_found = [](const http::request_head&) -> srv::hook_response {
-        return hook_page(404, "custom-not-found");
-    };
+    r.pages.not_found =
+        std::make_shared<const srv::server_options::response_factory>(
+            [](const http::request_head&) -> srv::hook_response {
+                return hook_page(404, "custom-not-found");
+            });
     LT_CHECK(r.registry.route(kGet, "/hello", text_handler("OK")).ok());
     record_all_phases(r.bus, r.seen);
 
@@ -357,9 +359,10 @@ LT_END_AUTO_TEST(default_405_with_allow)
 LT_BEGIN_AUTO_TEST(request_lifecycle_suite, custom_405_keeps_allow)
     dispatch_round r;
     r.pages.method_not_allowed =
-        [](const http::request_head&) -> srv::hook_response {
-            return hook_page(405, "custom-not-allowed");
-        };
+        std::make_shared<const srv::server_options::response_factory>(
+            [](const http::request_head&) -> srv::hook_response {
+                return hook_page(405, "custom-not-allowed");
+            });
     http::method_set both;
     both.set(http::method_id::get);
     both.set(http::method_id::head);

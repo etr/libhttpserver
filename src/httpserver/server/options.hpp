@@ -515,8 +515,9 @@ class server_options {
     }
 
     // Null when unset (the v2 default page serves).
-    const response_factory* not_found_response() const noexcept {
-        return not_found_response_.get();
+    const std::shared_ptr<const response_factory>& not_found_response()
+            const noexcept {
+        return not_found_response_;
     }
 
     void method_not_allowed_response(response_factory factory) {
@@ -525,8 +526,9 @@ class server_options {
     }
 
     // Null when unset (the v2 default page serves).
-    const response_factory* method_not_allowed_response() const noexcept {
-        return method_not_allowed_response_.get();
+    const std::shared_ptr<const response_factory>&
+    method_not_allowed_response() const noexcept {
+        return method_not_allowed_response_;
     }
 
     // Judges the whole configuration. Returns an ok outcome, or exactly
