@@ -44,8 +44,8 @@
 // untouched), merges the overlay's headers after the definition's base
 // fields in order, streams the body through exchange::writer() with
 // backpressure, and finishes with the overlay's trailers. The send
-// never mutates the definition or the overlay; both are borrowed for
-// the duration of the task only.
+// never mutates the definition (borrowed) or the caller's overlay
+// (taken by value into the send's own frame).
 //
 // Ownership / lifetime matrix (REQ-028):
 //
@@ -55,16 +55,20 @@
 //                   | (moved in at factory time)| returns
 //   reopen_file     | the path string; one      | the path resolves at each
 //                   | fresh handle per send     | send's prepare; a file that
-//                   |                           | shrinks below the pinned
-//                   |                           | size fails that send typed
+//                   |                           | shrinks below the declared
+//                   |                           | or pinned size fails that
+//                   |                           | send typed
 //   factory         | the callable (move-only)  | the callable is safe to
 //                   |                           | invoke concurrently (once
 //                   |                           | per in-flight send); each
 //                   |                           | producer serves one send;
 //                   |                           | producer data spans stay
 //                   |                           | valid until the next pull
-//   response_overlay| its own field sets (deep  | borrowed for the duration
-//                   | value type)               | of one send task only
+//   response_overlay| its own field sets (deep  | a plain value; the send
+//                   | value type)               | frame holds its own copy
+//   send_definition | nothing of either input   | the definition outlives
+//                   |                           | the task (borrowed by
+//                   |                           | reference)
 //
 // TASK-113 extends source_kind with owned_file / owned_pipe transfers
 // and borrowed leases: one-shot sources will fail a second send before
@@ -209,10 +213,12 @@ inline void pin_content_length(http::fields& f, std::uint64_t size) {
 // One pull from a response body producer (REQ-026). Exactly one of the
 // three members carries meaning:
 //   - !status.ok(): the body failed; the producer is finished;
-//   - data (status ok, !end): valid until the NEXT pull on that
-//     producer; MUST be non-empty (an empty non-end chunk is a
+//   - data (status ok): valid until the NEXT pull on that producer;
+//     MUST be non-empty while !end (an empty non-end chunk is a
 //     producer contract violation; the send fails it typed);
-//   - end (status ok): the body is complete; data is empty.
+//   - end (status ok): the body is complete once this chunk's data
+//     (if any) has been consumed — a cursor may carry the final data
+//     and end together in one chunk.
 struct body_chunk {
     http::outcome status;
     std::span<const std::byte> data;
@@ -459,8 +465,9 @@ class send_cursor {
         return http::outcome::okay();
     }
 
-    // The next chunk of this send's body: exactly one meaning per
-    // body_chunk, spans valid until the next pull on this cursor.
+    // The next chunk of this send's body (prepare() must have
+    // succeeded): exactly one meaning per body_chunk, spans valid
+    // until the next pull on this cursor.
     body_chunk pull() {
         switch (owner_->kind) {
             case response_definition::source_kind::owned_bytes:
