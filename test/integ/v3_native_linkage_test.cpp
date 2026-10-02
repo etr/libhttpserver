@@ -32,9 +32,12 @@
 
 #include <chrono>
 #include <cstdint>
+#include <string>
 #include <utility>
 
+#include "./digest_client.hpp"
 #include <httpserver/auth/basic_auth.hpp>
+#include <httpserver/auth/digest_auth.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/fields.hpp>
 #include <httpserver/http/method.hpp>
@@ -94,7 +97,48 @@ int audit_basic_auth_link() {
     return verdict.allowed() ? 0 : 1;
 }
 
+// TASK-115: the Digest auth policy is part of the v3core surface
+// (detail/auth_digest.cpp). Constructing it and driving one full
+// challenge/response round here forces the audit binary to link the
+// digest object AND its in-tree hash/entropy dependencies -- the
+// no-MHD/no-TLS-library claim, executable for this area too. The
+// client side is the self-contained test helper (inline reference
+// MD5/SHA-256, no library dependency), so the audit binary still
+// links libhttpserver_v3core.la and nothing else.
+int audit_digest_auth_link() {
+    using httpserver::auth::digest_auth_policy;
+    using httpserver::auth::digest_auth_verdict;
+    digest_auth_policy policy;
+    const http::outcome created = digest_auth_policy::create(
+        "transcript", "bob", "builder", {}, policy);
+    if (!created.ok()) return 1;
+
+    http::request_head head;
+    head.raw_target = "/audit";
+    head.request_method = http::method::known(http::method_id::get);
+    const digest_auth_verdict offered = policy.check(head);
+    if (offered.allowed()) return 1;
+    const auto challenge =
+        httpserver_test::parse_www_authenticate(offered.challenge);
+    if (!challenge.has_value()) return 1;
+
+    const std::string response =
+        httpserver_test::compute_response_cleartext(
+            *challenge, httpserver_test::digest_hash::md5, "GET",
+            "/audit", "bob", "builder", "audit-cnonce", "00000001");
+    head.head_fields.append(
+        "Authorization",
+        httpserver_test::build_authorization_header(
+            *challenge, "bob", "/audit", "audit-cnonce", "00000001",
+            response));
+    const digest_auth_verdict verdict = policy.check(head);
+    return verdict.allowed() ? 0 : 1;
+}
+
 }  // namespace
 
-// Both audits always run: plain | does not short-circuit.
-int main() { return audit_link_surface() | audit_basic_auth_link(); }
+// All audits always run: plain | does not short-circuit.
+int main() {
+    return audit_link_surface() | audit_basic_auth_link()
+           | audit_digest_auth_link();
+}

@@ -65,6 +65,7 @@ src/httpserver/exchange.hpp
 src/httpserver/body_reader.hpp
 src/httpserver/response_writer.hpp
 src/httpserver/auth/basic_auth.hpp
+src/httpserver/auth/digest_auth.hpp
 "
 
 V3CORE_SOURCES="
@@ -78,11 +79,13 @@ src/detail/connection_engine_request.cpp
 src/detail/listener_engine.cpp
 src/detail/server.cpp
 src/detail/auth_basic.cpp
+src/detail/auth_digest.cpp
 "
 
 # TASK-114: the in-tree codec/hash/entropy primitives the auth TU and
 # the ws/digest milestones consume. Private (never installed), but they
 # are part of the native TLS-off surface and stay under the same ban.
+# TASK-115 adds the Digest nonce/ledger/parser/response chain.
 V3_DETAIL_HEADERS="
 src/httpserver/detail/base64.hpp
 src/httpserver/detail/sha1.hpp
@@ -90,6 +93,11 @@ src/httpserver/detail/md5.hpp
 src/httpserver/detail/sha256.hpp
 src/httpserver/detail/secure_compare.hpp
 src/httpserver/detail/entropy_sys.hpp
+src/httpserver/detail/digest_hex.hpp
+src/httpserver/detail/digest_nonce.hpp
+src/httpserver/detail/digest_ledger.hpp
+src/httpserver/detail/digest_params.hpp
+src/httpserver/detail/digest_response.hpp
 "
 
 violations=0
