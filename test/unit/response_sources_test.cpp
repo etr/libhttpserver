@@ -684,6 +684,221 @@ LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_unseekable_fails_precommit
 LT_END_AUTO_TEST(owned_file_unseekable_fails_precommit_and_spends)
 #endif  // !_WIN32
 
+// -----------------------------------------------------------------------
+// P - owned_pipe: a transferred pipe endpoint is a strictly one-shot
+// streaming source with unknown length (the pipe fixtures are
+// POSIX-only).
+// -----------------------------------------------------------------------
+#ifndef _WIN32
+
+// (P1) owned_pipe requires a non-null handle and a non-empty close
+// operation; each failed call leaves `out` untouched.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_pipe_requires_handle)
+    response_definition seeded;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), http::fields(), bytes("x"),
+        seeded).ok());
+
+    fake::filled_pipe pipe("p");
+    response_definition def = seeded;
+    http::outcome made = response_definition::owned_pipe(
+        http::status::from_code(200), http::fields(), nullptr, def);
+    LT_CHECK(!made.ok());
+    LT_CHECK(made.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(!made.message().empty());
+    LT_CHECK(def.fields().first("content-length").value_or("") == "1");
+
+    made = response_definition::owned_pipe(
+        http::status::from_code(200), http::fields(), pipe.get(),
+        httpserver::owned_close_fn{}, def);
+    LT_CHECK(!made.ok());
+    LT_CHECK(made.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(def.fields().first("content-length").value_or("") == "1");
+LT_END_AUTO_TEST(owned_pipe_requires_handle)
+
+// (P2) The pipe body streams whole to EOF with NO Content-Length
+// invented: the length is unknown, so the framing stays the
+// transport's (chunked on HTTP/1.1, close-delimited on HTTP/1.0) —
+// the non-replayable narrowing of REQ-029's contract.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_pipe_streams_to_eof_unpinned)
+    const std::string payload = repeating(3000);
+    auto closes = std::make_shared<std::atomic<int>>(0);
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_pipe(
+        http::status::from_code(200), http::fields(),
+        fake::filled_pipe(payload).release(),
+        fake::counting_close(closes), def).ok());
+    LT_CHECK(def.valid());
+    LT_CHECK(def.kind() == response_definition::source_kind::owned_pipe);
+    LT_CHECK_EQ(def.fields().count("content-length"),
+                static_cast<std::size_t>(0));
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.ok());
+    LT_CHECK_EQ(report.body_bytes, payload.size());
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(sink.responded.count("content-length"),
+                static_cast<std::size_t>(0));
+    LT_CHECK_EQ(out.drain(1u << 20), payload.size());
+    LT_CHECK(of(out.drained_bytes()) == payload);
+    LT_CHECK_EQ(out.end_calls(), 1);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(owned_pipe_streams_to_eof_unpinned)
+
+// (P3) One endpoint, one read: a second send fails invalid_state
+// BEFORE anything is written — no head, no body traffic — and closes
+// nothing.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_pipe_second_send_rejected_before_writing)
+    fake::filled_pipe pipe(repeating(128));
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    response_definition def;
+    LT_CHECK(response_definition::owned_pipe(
+        http::status::from_code(200), http::fields(), pipe.release(),
+        fake::counting_close(closes), def).ok());
+
+    capturing_sink sink1;
+    fake::scripted_body_sink out1;
+    exchange first(make_head(), &sink1, 0, nullptr, &out1);
+    manual_executor ex1;
+    const send_report one = run_send(first, ex1, def, {});
+    LT_CHECK(one.status.ok());
+    LT_CHECK_EQ(closes->load(), 1);
+
+    capturing_sink sink2;
+    fake::scripted_body_sink out2;
+    exchange second(make_head(), &sink2, 0, nullptr, &out2);
+    manual_executor ex2;
+    const send_report two = run_send(second, ex2, def, {});
+    LT_CHECK(two.status.code() == http::outcome_code::invalid_state);
+    LT_CHECK(!two.status.message().empty());
+    LT_CHECK_EQ(sink2.respond_calls, 0);
+    LT_CHECK_EQ(out2.push_calls(), 0);
+    LT_CHECK_EQ(out2.end_calls(), 0);
+    LT_CHECK(second.state() == exchange_state::head);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(owned_pipe_second_send_rejected_before_writing)
+
+// (P4) Four threads race one pipe definition: the one-shot claim
+// admits exactly ONE full body; every loser fails invalid_state typed;
+// the endpoint closes exactly once across all of them.
+LT_BEGIN_AUTO_TEST(response_sources_suite, threaded_pipe_sends_single_winner)
+    constexpr int k_threads = 4;
+    const std::string payload = repeating(8192);
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    response_definition def;
+    LT_CHECK(response_definition::owned_pipe(
+        http::status::from_code(200), http::fields(),
+        fake::filled_pipe(payload).release(),
+        fake::counting_close(closes), def).ok());
+
+    std::vector<int> ok(k_threads, 0);
+    std::vector<int> rejected(k_threads, 0);
+    std::vector<std::string> bodies(k_threads);
+    std::vector<std::thread> workers;
+    for (int k = 0; k < k_threads; ++k) {
+        workers.emplace_back([&, k] {
+            capturing_sink sink;
+            fake::scripted_body_sink out;
+            exchange x(make_head(), &sink, 0, nullptr, &out);
+            manual_executor ex;
+            int done = 0;
+            spawn(ex, send_definition(x, def, {}),
+                  [&](task_result<send_report> r) {
+                      ++done;
+                      if (!r.has_value()) return;
+                      if (r.value().status.ok()) {
+                          ok[k] = 1;
+                      } else if (r.value().status.code()
+                                 == http::outcome_code::invalid_state) {
+                          rejected[k] = 1;
+                      }
+                  });
+            const auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::seconds(5);
+            while (done == 0
+                    && std::chrono::steady_clock::now() < deadline) {
+                ex.run_pending();
+                out.drain(1u << 20);
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(1));
+            }
+            out.drain(1u << 20);
+            bodies[k] = of(out.drained_bytes());
+        });
+    }
+    for (std::thread& t : workers) t.join();
+
+    int winners = 0;
+    int full = 0;
+    for (int k = 0; k < k_threads; ++k) {
+        winners += ok[k];
+        if (bodies[k] == payload) ++full;
+        LT_CHECK_EQ(rejected[k] + ok[k], 1);
+    }
+    LT_CHECK_EQ(winners, 1);
+    LT_CHECK_EQ(full, 1);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(threaded_pipe_sends_single_winner)
+
+// (P5) A declared Content-Length bounds the pipe read in BOTH
+// directions: short of it is the engine's short-body diagnosis (after
+// the committed head carries the declared length); over it truncates
+// cleanly to the declared size.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_pipe_declared_length_bounds_read)
+    const std::string payload = repeating(32);
+    auto closes = std::make_shared<std::atomic<int>>(0);
+
+    http::fields over;
+    over.append("Content-Length", std::to_string(payload.size() + 10));
+    response_definition long_def;
+    LT_CHECK(response_definition::owned_pipe(
+        http::status::from_code(200), over,
+        fake::filled_pipe(payload).release(),
+        fake::counting_close(closes), long_def).ok());
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report short_body = run_send(x, ex, long_def, {});
+    LT_CHECK(short_body.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK(short_body.status.message().find(
+                 "shorter than the declared Content-Length")
+             != std::string::npos);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK(sink.responded.first("content-length").value_or("")
+             == std::to_string(payload.size() + 10));
+    LT_CHECK_EQ(out.end_calls(), 0);
+    LT_CHECK_EQ(closes->load(), 1);
+
+    http::fields under;
+    under.append("Content-Length", "3");
+    response_definition trim_def;
+    LT_CHECK(response_definition::owned_pipe(
+        http::status::from_code(200), under,
+        fake::filled_pipe(payload).release(),
+        fake::counting_close(closes), trim_def).ok());
+
+    capturing_sink sink2;
+    fake::scripted_body_sink out2;
+    exchange y(make_head(), &sink2, 0, nullptr, &out2);
+    manual_executor ex2;
+    const send_report trimmed = run_send(y, ex2, trim_def, {});
+    LT_CHECK(trimmed.status.ok());
+    LT_CHECK_EQ(trimmed.body_bytes, static_cast<std::size_t>(3));
+    LT_CHECK_EQ(out2.drain(64), static_cast<std::size_t>(3));
+    LT_CHECK(of(out2.drained_bytes()) == payload.substr(0, 3));
+    LT_CHECK_EQ(out2.end_calls(), 1);
+    LT_CHECK_EQ(closes->load(), 2);
+LT_END_AUTO_TEST(owned_pipe_declared_length_bounds_read)
+
+#endif  // !_WIN32
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

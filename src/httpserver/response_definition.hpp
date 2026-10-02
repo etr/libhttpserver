@@ -300,6 +300,50 @@ class response_definition {
         return commit(std::move(state), out);
     }
 
+    // Body streamed from an open pipe endpoint TRANSFERRED to the
+    // library and closed with std::fclose (see the owned_close_fn
+    // overload for a custom release).
+    static http::outcome owned_pipe(const http::status& s, http::fields f,
+                                    std::FILE* handle,
+                                    response_definition& out) {
+        return owned_pipe(s, std::move(f), handle,
+                          owned_close_fn(&detail::fclose_owned), out);
+    }
+
+    // Body streamed from an open pipe endpoint (any std::FILE* with no
+    // usable seek position) transferred to the library (REQ-028):
+    // ONE-SHOT and NON-REPLAYABLE (architecture §3.2) — the bytes can
+    // be read exactly once, so exactly one send may consume the
+    // definition; a second send, however it races the winner, fails
+    // invalid_state before writing anything. Nothing is probed at the
+    // send's prepare (a pipe is never seeked). The length is unknown
+    // unless the fields declare a Content-Length: without one no
+    // length is pinned and the framing stays the transport's (chunked
+    // on HTTP/1.1, close-delimited on HTTP/1.0); with one the declared
+    // length bounds the read, and a body short of it fails that send
+    // typed. The library owns the endpoint from here on and closes it
+    // exactly once: after the send completes, fails, or is cancelled,
+    // or when an unsent definition is destroyed.
+    static http::outcome owned_pipe(const http::status& s, http::fields f,
+                                    std::FILE* handle,
+                                    owned_close_fn close,
+                                    response_definition& out) {
+        if (handle == nullptr || !close) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "response_definition: owned_pipe requires a handle and "
+                "a close operation");
+        }
+        build state;
+        state.status = s;
+        state.fields = std::move(f);
+        state.body.kind = source_kind::owned_pipe;
+        state.body.handle =
+            std::make_shared<detail::transferred_handle>(
+                handle, std::move(close));
+        return commit(std::move(state), out);
+    }
+
     // The empty, not-yet-valid definition; valid() reports false.
     response_definition() noexcept = default;
     response_definition(const response_definition&) noexcept = default;

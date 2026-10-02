@@ -125,6 +125,7 @@ enum class response_source_kind : std::uint8_t {
     factory,
     borrowed,
     owned_file,
+    owned_pipe,
 };
 
 // The close operation riding an owned handle transfer (REQ-028): the
@@ -140,6 +141,11 @@ namespace detail {
 // The per-pull read size for file-backed sources: bounds the send's
 // own memory while keeping transport-sized reads.
 inline constexpr std::size_t k_file_chunk_bytes = 16u * 1024u;
+
+// The read bound of an UNBOUNDED pipe source (no declared
+// Content-Length): a count fread can never satisfy, so the read runs
+// to the stream's own EOF.
+inline constexpr std::uint64_t k_read_to_eof = std::numeric_limits<std::uint64_t>::max();
 
 // Parses the field set's Content-Length into `out`; absent is ok with
 // out = 0. A present but non-numeric or overflowing value fails typed
@@ -287,6 +293,8 @@ class send_cursor {
                 return http::outcome::okay();
             case response_source_kind::owned_file:
                 return prepare_owned_file(framing);
+            case response_source_kind::owned_pipe:
+                return prepare_owned_pipe(framing);
         }
         return http::outcome::okay();
     }
@@ -304,6 +312,8 @@ class send_cursor {
             case response_source_kind::factory:
                 return pull_factory();
             case response_source_kind::owned_file:
+                return pull_handle();
+            case response_source_kind::owned_pipe:
                 return pull_handle();
         }
         return body_chunk{http::outcome::okay(), {}, true};
@@ -401,6 +411,33 @@ class send_cursor {
         return http::outcome::okay();
     }
 
+    // owned_pipe: the one-shot claim, NO probe — a pipe endpoint has
+    // no seek position, and transferring it means the bytes feed
+    // exactly one send. Without a declared Content-Length the length is
+    // unknown: the read runs to the stream's own EOF and nothing is
+    // pinned (the framing stays the transport's). A declared length
+    // becomes the read bound instead. Like owned_file, the claim is
+    // not refundable.
+    http::outcome prepare_owned_pipe(const http::fields& framing) {
+        if (!owner_->handle->claim()) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "send_definition: one-shot source already used");
+        }
+        remaining_ = k_read_to_eof;
+        eof_ends_ = true;
+        if (framing.count("content-length") > 0) {
+            std::uint64_t declared = 0;
+            const http::outcome length =
+                parse_content_length(framing, declared);
+            if (!length.ok()) return length;
+            remaining_ = declared;
+            eof_ends_ = false;
+        }
+        buffer_.assign(k_file_chunk_bytes, std::byte{0});
+        return http::outcome::okay();
+    }
+
     // owned_bytes / borrowed: the whole remaining span in one chunk
     // carrying end (the writer's internal loop paces it against queue
     // capacity, so backpressure stays the writer's).
@@ -464,10 +501,12 @@ class send_cursor {
         return chunk;
     }
 
-    // owned_file: at most one buffer's worth of the bounded read. A
-    // clean EOF with bytes still owed to the pinned or declared
-    // length is a short body (protocol_error, like reopen_file); an
-    // I/O failure is invalid_state.
+    // owned_file / owned_pipe: at most one buffer's worth of the
+    // bounded read. A short read is the stream's own verdict: an I/O
+    // failure is invalid_state; EOF on an unbounded pipe (no declared
+    // Content-Length) ends the body there; EOF with bytes still owed
+    // to the pinned or declared length is a short body
+    // (protocol_error, like reopen_file).
     body_chunk pull_handle() {
         if (remaining_ == 0) {
             return body_chunk{http::outcome::okay(), {}, true};
@@ -477,28 +516,33 @@ class send_cursor {
             std::min<std::uint64_t>(remaining_, buffer_.size()));
         const std::size_t got =
             std::fread(buffer_.data(), 1, want, stream);
-        if (got == 0 || got < want) {
-            if (std::ferror(stream) != 0) {
-                return body_chunk{
-                    http::outcome(
-                        http::outcome_code::invalid_state,
-                        "send_definition: handle read failed"),
-                    {}, false};
-            }
-            if (remaining_ > got) {
-                return body_chunk{
-                    http::outcome(
-                        http::outcome_code::protocol_error,
-                        "send_definition: body shorter than the "
-                        "declared Content-Length"),
-                    {}, false};
-            }
+        if (got == want) {
+            remaining_ -= got;
+            return body_chunk{
+                http::outcome::okay(),
+                std::span<const std::byte>(buffer_.data(), got),
+                remaining_ == 0};
         }
-        remaining_ -= got;
+        if (std::ferror(stream) != 0) {
+            return body_chunk{
+                http::outcome(
+                    http::outcome_code::invalid_state,
+                    "send_definition: handle read failed"),
+                {}, false};
+        }
+        if (eof_ends_ && std::feof(stream) != 0) {
+            remaining_ = 0;
+            return body_chunk{
+                http::outcome::okay(),
+                std::span<const std::byte>(buffer_.data(), got),
+                true};
+        }
         return body_chunk{
-            http::outcome::okay(),
-            std::span<const std::byte>(buffer_.data(), got),
-            remaining_ == 0};
+            http::outcome(
+                http::outcome_code::protocol_error,
+                "send_definition: body shorter than the declared "
+                "Content-Length"),
+            {}, false};
     }
 
  private:
@@ -515,6 +559,7 @@ class send_cursor {
     std::uint64_t total_ = 0;      // owned_bytes/borrowed span total
     std::uint64_t file_size_ = 0;  // file-backed pinned size at prepare
     std::uint64_t remaining_ = 0;  // file-backed bytes left to the bound
+    bool eof_ends_ = false;        // owned_pipe: EOF terminates the body
     std::ifstream file_;           // reopen_file: this send's private handle
     std::vector<std::byte> buffer_;  // file-backed read buffer
     body_producer producer_;       // factory: this send's producer
