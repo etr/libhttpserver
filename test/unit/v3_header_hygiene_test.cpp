@@ -99,8 +99,12 @@ const std::vector<const char*>& header_files() {
         "/response_definition.hpp",
         // TASK-113: the response body-source vocabulary (split from
         // response_definition.hpp) joins the sentinel scan with the
-        // same rules (no config gates, no backend/OS tokens).
+        // same rules (no config gates, no backend/OS-socket tokens).
         "/response_sources.hpp",
+        // TASK-114: the Basic authentication policy joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; parsing and codecs stay in the library's detail/).
+        "/auth/basic_auth.hpp",
     };
     return files;
 }
