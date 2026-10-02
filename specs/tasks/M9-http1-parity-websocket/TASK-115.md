@@ -9,9 +9,9 @@
 Provide RFC 7616 Digest authentication and replay checks for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Port Digest challenge, nonce and replay ledger without MHD.
-- [ ] Support documented algorithms with bounded parsing.
-- [ ] Test stale, replayed, malformed and valid independent-client flows.
+- [x] Port Digest challenge, nonce and replay ledger without MHD.
+- [x] Support documented algorithms with bounded parsing.
+- [x] Test stale, replayed, malformed and valid independent-client flows.
 
 **Dependencies:**
 - Blocked by: TASK-114
@@ -24,4 +24,4 @@ Provide RFC 7616 Digest authentication and replay checks for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-002, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
