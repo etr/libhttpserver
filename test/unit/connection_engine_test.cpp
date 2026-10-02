@@ -300,7 +300,7 @@ struct scenario {
         if (!pair.ok()) return false;
         backend.adopt_connection(kConnId, pair.detach_local());
         engine = std::make_shared<connection_engine>(backend, pool, registry,
-                                                    root, scenario_scope,
+                                                    hooks, root, scenario_scope,
                                                     config, kConnId,
                                                     [this] {
                                                         stopped.store(true);
@@ -315,6 +315,7 @@ struct scenario {
         = connection_engine_config::from_budget_limits(config_limits);
     srv::resource_budget root;
     srv::route_registry registry;
+    srv::hook_bus hooks;  // TASK-118: no hooks by default (the zero-hook lane)
     io_loopback::pair pair;
     // Teardown is the reverse declaration order: the engine dies first,
     // then the thread-backed backend (close + driver join), then the
@@ -463,7 +464,8 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, get_round_trip_streams_body)
     LT_CHECK(!s.engine->running());
 LT_END_AUTO_TEST(get_round_trip_streams_body)
 
-// A route miss synthesizes 404 with a valid (empty) body and closes.
+// A route miss serves the v2 default 404 page (TASK-118: body
+// "Not Found", text/plain, Content-Length framing).
 LT_BEGIN_AUTO_TEST(connection_engine_suite, miss_404_then_close)
     scenario s;
     LT_CHECK(s.start_engine());
@@ -474,7 +476,8 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, miss_404_then_close)
     LT_CHECK(response.has_value());
     if (response.has_value()) {
         LT_CHECK_EQ(response->status, 404);
-        LT_CHECK(response->body.empty());
+        LT_CHECK_EQ(response->body, std::string("Not Found"));
+        LT_CHECK_EQ(response->framing, std::string("content-length"));
     }
     s.pair.close_peer();
     LT_CHECK(wait_until([&s] { return s.stopped.load(); }));

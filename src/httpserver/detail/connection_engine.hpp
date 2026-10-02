@@ -102,12 +102,15 @@
 #include <httpserver/detail/http1_response_framer.hpp>
 #include <httpserver/detail/http1_response_outbox.hpp>
 #include <httpserver/detail/io_connection_owner.hpp>
+#include <httpserver/detail/lifecycle_sink.hpp>
+#include <httpserver/detail/request_lifecycle.hpp>
 #include <httpserver/detail/io_operation.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/routes.hpp>
 
@@ -133,6 +136,10 @@ struct connection_engine_config {
     // peer, suspension a suspended exchange.
     server::timeout_options timeouts;
     http1_response_framer::clock_source clock;
+    // TASK-118: the construction-time error-page factories (plan D3).
+    // Null means the v2 default pages; the engine normalizes a null to
+    // an empty set at construction.
+    std::shared_ptr<const error_page_factories> pages;
 
     static connection_engine_config from_budget_limits(
         const server::budget_limits& limits) noexcept {
@@ -159,6 +166,7 @@ class connection_engine final
     // counter, entered for the engine's whole live window (TASK-110).
     connection_engine(io_poll_backend& backend, worker_pool& pool,
                       const server::route_registry& routes,
+                      const server::hook_bus& hooks,
                       const server::resource_budget& budget,
                       drain_scope& scope, connection_engine_config config,
                       std::uint64_t id, stopped_callback on_stopped);
@@ -363,6 +371,7 @@ class connection_engine final
     io_poll_backend& backend_;
     worker_pool& pool_;
     const server::route_registry& routes_;
+    const server::hook_bus& hooks_;
     io_connection_owner owner_;
     const server::resource_budget& budget_;
     drain_scope& scope_;

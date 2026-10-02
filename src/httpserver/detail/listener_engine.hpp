@@ -70,6 +70,7 @@ class listener_engine final
  public:
     listener_engine(io_poll_backend& backend, worker_pool& pool,
                     const server::route_registry& routes,
+                    const server::hook_bus& hooks,
                     const server::resource_budget& budget,
                     drain_scope& scope, connection_engine_config config);
 
@@ -120,6 +121,7 @@ class listener_engine final
     io_poll_backend& backend_;
     worker_pool& pool_;
     const server::route_registry& routes_;
+    const server::hook_bus& hooks_;
     io_connection_owner owner_;
     const server::resource_budget& budget_;
     drain_scope& scope_;

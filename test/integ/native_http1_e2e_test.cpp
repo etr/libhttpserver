@@ -42,6 +42,7 @@
 #include <cstdio>
 #include <deque>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -59,6 +60,7 @@
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/response_definition.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/server.hpp>
 
@@ -2214,6 +2216,338 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, multipart_disk_upload_round_trip)
     static_cast<void>(quiet_client.receive(1, quiet_seen));
     LT_CHECK(wait_dir_state(dir, true));
 LT_END_AUTO_TEST(multipart_disk_upload_round_trip)
+
+// TASK-118 step 4: the route-family and lifecycle-hook wire scenarios.
+// Each case builds a scenario-local server (the shared fixture pins
+// fixed routes; hooks and page factories are per-scenario state) and
+// asserts on the wire through the parity frame parser.
+
+// A scenario-local native server over the full route/hook/page
+// surface. Destruction stops it.
+class hooks_server {
+ public:
+    explicit hooks_server(srv::server_options options)
+        : server_(std::move(options)) { }
+
+    ~hooks_server() { server_.stop(); }
+
+    // Registration closes at listen(): routes and hooks install first,
+    // start() binds.
+    srv::native_server& get() noexcept { return server_; }
+
+    bool start() { return server_.listen().ok(); }
+
+    std::uint16_t port() const noexcept { return server_.get_bound_port(0); }
+
+ private:
+    srv::native_server server_;
+};
+
+// GET handler streaming @p body with the length pinned (the corpus
+// fixture's value-response shape: HEAD declares the GET body length
+// on the wire).
+srv::route_handler stream_body(const std::string& body) {
+    return srv::route_handler([out = body](exchange& x) -> task<void> {
+        http::fields f;
+        f.append("Content-Type", "text/plain");
+        f.append("Content-Length", std::to_string(out.size()));
+        static_cast<void>(x.start_response(http::status::from_code(200), f));
+        const std::byte* raw = reinterpret_cast<const std::byte*>(out.data());
+        co_await x.writer().write(std::span<const std::byte>(raw, out.size()));
+        co_await x.writer().finish();
+    });
+}
+
+// The observed value of one response header, "" when absent.
+std::string header_of(const raw::observed_response& r, const char* name) {
+    for (const parity::observed_header& h : r.headers) {
+        if (h.name == name) return h.value;
+    }
+    return "";
+}
+
+bool has_header(const raw::observed_response& r, const char* name) {
+    return !header_of(r, name).empty();
+}
+
+// (a) The method mismatch answers 405 with Allow and the v2 default
+// body on the wire.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, route_families_405_allow_on_wire)
+    hooks_server s(base_options());
+    LT_CHECK(s.get().route(http::method::known(http::method_id::get),
+                           "/get_only", stream_body("get-only"))
+                 .ok());
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /get_only HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Length: 0\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 405);
+        LT_CHECK_EQ(header_of(seen[0], "Allow"), std::string("GET"));
+        LT_CHECK_EQ(seen[0].body, std::string("Method not Allowed"));
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+LT_END_AUTO_TEST(route_families_405_allow_on_wire)
+
+// (b) HEAD on a GET+HEAD registration answers headers-only: no body
+// bytes, the declared Content-Length rides the head.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, route_families_head_headers_only)
+    hooks_server s(base_options());
+    http::method_set get_head;
+    get_head.set(http::method_id::get);
+    get_head.set(http::method_id::head);
+    LT_CHECK(s.get().route(get_head, "/both", stream_body("both-ok")).ok());
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    // The client parser must know the request was HEAD: a HEAD response
+    // never carries body bytes however the head frames them.
+    client.set_head_only(true);
+    LT_CHECK(client.send("HEAD /both HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string(""));
+        LT_CHECK_EQ(header_of(seen[0], "Content-Length"), std::string("7"));
+        LT_CHECK_EQ(seen[0].framing, std::string("none"));
+    }
+LT_END_AUTO_TEST(route_families_head_headers_only)
+
+// (c) A before_handler short-circuit answers its 403 and the
+// after_handler hook does NOT stamp its header (the pinned v2
+// suppression).
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, hooks_before_403_suppresses_after)
+    hooks_server s(base_options());
+    LT_CHECK(s.get().route(http::method::known(http::method_id::del),
+                           "/admin", stream_body("admin-ok"))
+                 .ok());
+    (void)s.get().hooks().add<srv::hook_phase::before_handler>(
+        [](srv::before_handler_ctx&) -> srv::hook_action {
+            srv::hook_response page;
+            page.status = http::status::from_code(403);
+            page.fields.append("Content-Type", "text/plain");
+            const char* body = "hooked403";
+            const std::byte* raw =
+                reinterpret_cast<const std::byte*>(body);
+            page.body.assign(raw, raw + 9);
+            return srv::hook_action::respond_with(std::move(page));
+        }).detach();
+    (void)s.get().hooks().add<srv::hook_phase::after_handler>(
+        [](srv::after_handler_ctx& ctx) -> srv::hook_action {
+            ctx.fields.append("X-Hook", "after");
+            return srv::hook_action::pass();
+        }).detach();
+
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("DELETE /admin HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Length: 0\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 403);
+        LT_CHECK_EQ(seen[0].body, std::string("hooked403"));
+        LT_CHECK(!has_header(seen[0], "X-Hook"));
+    }
+LT_END_AUTO_TEST(hooks_before_403_suppresses_after)
+
+// (d) after_handler mutates a streamed response's head on the wire.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, hooks_after_header_on_stream)
+    hooks_server s(base_options());
+    LT_CHECK(s.get().route(http::method::known(http::method_id::get),
+                           "/hello", stream_body("hello"))
+                 .ok());
+    (void)s.get().hooks().add<srv::hook_phase::after_handler>(
+        [](srv::after_handler_ctx& ctx) -> srv::hook_action {
+            ctx.fields.append("X-Hook", "after");
+            return srv::hook_action::pass();
+        }).detach();
+
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string("hello"));
+        LT_CHECK_EQ(header_of(seen[0], "X-Hook"), std::string("after"));
+    }
+LT_END_AUTO_TEST(hooks_after_header_on_stream)
+
+// (e) The construction-time custom 404 factory supplies the body.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, hooks_custom_404_page)
+    srv::server_options options = base_options();
+    options.not_found_response([](const http::request_head&) {
+        srv::hook_response page;
+        page.status = http::status::from_code(404);
+        page.fields.append("Content-Type", "text/plain");
+        const char* body = "custom-not-found";
+        const std::byte* raw = reinterpret_cast<const std::byte*>(body);
+        page.body.assign(raw, raw + 16);
+        return page;
+    });
+    hooks_server s(std::move(options));
+    LT_CHECK(s.get().route(http::method::known(http::method_id::get),
+                           "/hello", stream_body("hello"))
+                 .ok());
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /nope HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 404);
+        LT_CHECK_EQ(seen[0].body, std::string("custom-not-found"));
+    }
+LT_END_AUTO_TEST(hooks_custom_404_page)
+
+// (f) Family precedence on the wire: an exact route beats the prefix,
+// the prefix beats the catch-all.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, route_families_prefix_precedence)
+    hooks_server s(base_options());
+    const http::method get = http::method::known(http::method_id::get);
+    http::method_set gets;
+    gets.set(http::method_id::get);
+    LT_CHECK(s.get().route(get, "/api/exact", stream_body("exact")).ok());
+    LT_CHECK(s.get().route_prefix(gets, "/api", stream_body("api")).ok());
+    LT_CHECK(s.get().route_prefix(gets, "/", stream_body("root")).ok());
+
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /api/exact HTTP/1.1\r\nHost: h\r\n\r\n"
+                         "GET /api/other HTTP/1.1\r\nHost: h\r\n\r\n"
+                         "GET /zzz HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(3, seen));
+    LT_CHECK_EQ(seen.size(), 3u);
+    if (seen.size() == 3) {
+        LT_CHECK_EQ(seen[0].body, std::string("exact"));
+        LT_CHECK_EQ(seen[1].body, std::string("api"));
+        LT_CHECK_EQ(seen[2].body, std::string("root"));
+    }
+LT_END_AUTO_TEST(route_families_prefix_precedence)
+
+// (g) A request_received short-circuit answers 413 at head-complete
+// before the body; the declared remainder drains and the connection
+// serves the pipelined follow-up (PRD-V3N-REQ-023).
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, hooks_request_received_413_drains)
+    hooks_server s(base_options());
+    LT_CHECK(s.get().route(http::method::known(http::method_id::post),
+                           "/big", stream_body("big-ok"))
+                 .ok());
+    LT_CHECK(s.get().route(http::method::known(http::method_id::get),
+                           "/hello", stream_body("hello"))
+                 .ok());
+    (void)s.get().hooks().add<srv::hook_phase::request_received>(
+        [](srv::request_received_ctx& ctx) -> srv::hook_action {
+            if (ctx.request.route_path != "/big") {
+                return srv::hook_action::pass();
+            }
+            srv::hook_response page;
+            page.status = http::status::from_code(413);
+            page.fields.append("Content-Type", "text/plain");
+            const char* body = "too large";
+            const std::byte* raw =
+                reinterpret_cast<const std::byte*>(body);
+            page.body.assign(raw, raw + 9);
+            return srv::hook_action::respond_with(std::move(page));
+        }).detach();
+
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    const std::string declared(20, 'x');
+    LT_CHECK(client.send("POST /big HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Length: 20\r\n\r\n"
+                         + declared
+                         + "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) {
+        LT_CHECK_EQ(seen[0].status, 413);
+        LT_CHECK_EQ(seen[0].body, std::string("too large"));
+        LT_CHECK_EQ(seen[1].status, 200);
+        LT_CHECK_EQ(seen[1].body, std::string("hello"));
+    }
+LT_END_AUTO_TEST(hooks_request_received_413_drains)
+
+// (12) request_completed fires exactly once on a forced settle: the
+// suspension deadline disconnects a parked exchange, the tail reports
+// succeeded=false with the typed end reason.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, hooks_request_completed_on_abort)
+    srv::server_options options = base_options();
+    options.timeouts().suspension = std::chrono::milliseconds(300);
+    hooks_server s(std::move(options));
+    LT_CHECK(s.get().route(http::method::known(http::method_id::get),
+                           "/hang",
+                           [](exchange& x) -> task<void> {
+                               resume_signal wait;
+                               if (!x.suspend(wait).ok()) co_return;
+                               const resume_outcome outcome =
+                                   co_await wait.wait_for(
+                                       raw::kExchangeBudget);
+                               static_cast<void>(outcome);
+                           })
+                 .ok());
+    // The completion hook fires on an engine thread while this test
+    // thread reads: a mutex-guarded recorder.
+    struct recorder {
+        std::mutex mu;
+        std::vector<std::pair<bool, int>> entries;
+        void record(bool succeeded, int end) {
+            std::lock_guard<std::mutex> lock(mu);
+            entries.emplace_back(succeeded, end);
+        }
+        std::vector<std::pair<bool, int>> take() {
+            std::lock_guard<std::mutex> lock(mu);
+            return entries;
+        }
+    };
+    auto completions = std::make_shared<recorder>();
+    (void)s.get().hooks().add<srv::hook_phase::request_completed>(
+        [completions](srv::request_completed_ctx& ctx) -> srv::hook_action {
+            completions->record(ctx.succeeded,
+                                static_cast<int>(ctx.end.code()));
+            return srv::hook_action::pass();
+        }).detach();
+
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /hang HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive_close(seen));
+    LT_CHECK(client.peer_closed());
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(3000);
+    std::vector<std::pair<bool, int>> observed;
+    do {
+        observed = completions->take();
+        if (!observed.empty()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    } while (std::chrono::steady_clock::now() < deadline);
+    LT_CHECK_EQ(observed.size(), std::size_t{1});
+    if (!observed.empty()) {
+        LT_CHECK(!observed.front().first);
+        LT_CHECK(observed.front().second
+                 != static_cast<int>(http::outcome_code::ok));
+    }
+LT_END_AUTO_TEST(hooks_request_completed_on_abort)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

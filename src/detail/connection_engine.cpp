@@ -41,6 +41,7 @@ namespace detail {
 
 connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool,
                                      const server::route_registry& routes,
+                                     const server::hook_bus& hooks,
                                      const server::resource_budget& budget,
                                      drain_scope& scope,
                                      connection_engine_config config,
@@ -49,6 +50,7 @@ connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool
     : backend_(backend),
       pool_(pool),
       routes_(routes),
+      hooks_(hooks),
       owner_(pool),
       budget_(budget),
       scope_(scope),
@@ -57,6 +59,11 @@ connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool
       on_stopped_(std::move(on_stopped)),
       parser_(config_.head),
       outbox_(config_.outbox) {
+    if (config_.pages == nullptr) {
+        // The v2 default pages serve when the options carried no
+        // custom factories.
+        config_.pages = std::make_shared<const error_page_factories>();
+    }
 }
 
 void connection_engine::start() {

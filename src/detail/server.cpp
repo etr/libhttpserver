@@ -71,6 +71,28 @@ class native_server::impl {
         return registry_.route(method, pattern, std::move(handler));
     }
 
+    http::outcome route(const http::method_set& methods,
+                        std::string_view pattern, route_handler handler) {
+        if (running_.load(std::memory_order_acquire)) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "native_server: route() after listen() is not allowed");
+        }
+        return registry_.route(methods, pattern, std::move(handler));
+    }
+
+    http::outcome route_prefix(const http::method_set& methods,
+                               std::string_view pattern,
+                               route_handler handler) {
+        if (running_.load(std::memory_order_acquire)) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "native_server: route_prefix() after listen() is not"
+                " allowed");
+        }
+        return registry_.route_prefix(methods, pattern, std::move(handler));
+    }
+
     http::outcome route_sync(const http::method& method,
                              std::string_view pattern,
                              sync_route_handler handler,
@@ -114,10 +136,15 @@ class native_server::impl {
         engine::connection_engine_config config =
             engine::connection_engine_config::from_budget_limits(options_.budgets());
         config.timeouts = options_.timeouts();
+        auto pages = std::make_shared<engine::error_page_factories>();
+        pages->not_found = options_.not_found_response();
+        pages->method_not_allowed = options_.method_not_allowed_response();
+        config.pages = std::move(pages);
 
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             listeners_.push_back(std::make_shared<engine::listener_engine>(
-                backend_, pool_, registry_, budget_, *scope_, config));
+                backend_, pool_, registry_, hooks_, budget_, *scope_,
+                config));
             const http::outcome bound =
                 listeners_.back()->listen(options_.listener(i), i);
             if (!bound.ok()) {
@@ -285,6 +312,18 @@ http::outcome native_server::route(const http::method& method,
                                    std::string_view pattern,
                                    route_handler handler) {
     return impl_->route(method, pattern, std::move(handler));
+}
+
+http::outcome native_server::route(const http::method_set& methods,
+                                   std::string_view pattern,
+                                   route_handler handler) {
+    return impl_->route(methods, pattern, std::move(handler));
+}
+
+http::outcome native_server::route_prefix(const http::method_set& methods,
+                                          std::string_view pattern,
+                                          route_handler handler) {
+    return impl_->route_prefix(methods, pattern, std::move(handler));
 }
 
 http::outcome native_server::route_sync(const http::method& method,

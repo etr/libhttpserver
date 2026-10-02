@@ -37,12 +37,14 @@ namespace detail {
 
 listener_engine::listener_engine(io_poll_backend& backend, worker_pool& pool,
                                  const server::route_registry& routes,
+                                 const server::hook_bus& hooks,
                                  const server::resource_budget& budget,
                                  drain_scope& scope,
                                  connection_engine_config config)
     : backend_(backend),
       pool_(pool),
       routes_(routes),
+      hooks_(hooks),
       owner_(pool),
       budget_(budget),
       scope_(scope),
@@ -150,8 +152,8 @@ void listener_engine::adopt_accepted(std::uint64_t connection) {
             return;
         }
         engine = std::make_shared<connection_engine>(
-            backend_, pool_, routes_, budget_, scope_, config_, connection,
-            [this, connection] { erase(connection); });
+            backend_, pool_, routes_, hooks_, budget_, scope_, config_,
+            connection, [this, connection] { erase(connection); });
         connections_.emplace(connection, engine);
     }
     // Outside the lock: a budget-refusing engine reports its stop from

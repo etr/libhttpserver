@@ -123,6 +123,16 @@ class native_server {
     http::outcome route(const http::method& method, std::string_view pattern,
                         route_handler handler);
 
+    // TASK-118: the method-set and prefix-family registration forms
+    // (plan D1; admission and precedence per the route_registry
+    // contract). Both fail invalid_state once listen() ran.
+    http::outcome route(const http::method_set& methods,
+                        std::string_view pattern, route_handler handler);
+
+    http::outcome route_prefix(const http::method_set& methods,
+                               std::string_view pattern,
+                               route_handler handler);
+
     // Registers one bounded synchronous value-returning route: the
     // handler receives the complete request head and the body buffered
     // within body_cap, returns the response value, and writes no
