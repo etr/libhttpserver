@@ -83,7 +83,7 @@ never pinned.
 
 | Documented v2 behavior | Documentation source | Transcript case | Baseline status | Migration note |
 |---|---|---|---|---|
-| `application/x-www-form-urlencoded` POST fields are parsed and visible to the resource | doc/libhttpserver.3 (POST args); docs/architecture/features.md | forms.tseq:urlencoded_echo | pinned | |
+| `application/x-www-form-urlencoded` POST fields are parsed and visible to the resource | doc/libhttpserver.3 (POST args); docs/architecture/features.md | forms.tseq:urlencoded_echo | pinned | TASK-116: the v3 surface is the per-route `forms::make_urlencoded_route` adapter (the `httpserver::forms` area, decode within cap identical to v2: first-`=` split, `+` as 0x20, strict `%HH`, arrival-order repeats, first-value lookup). Migration deltas: (1) a malformed `%HH` answers 400 (v2 passed the bytes through literally); (2) a body or field count past `urlencoded_limits` (defaults mirroring v2's GET-arg budgets) answers 413 BEFORE any unbounded storage (v2 truncated silently); (3) the per-route opt-in adapter replaces the global `post_process_enabled`/`put_processed_data_to_content`/`unescaper` knobs (a custom decode hook is not ported -- strict decoding is the point). |
 | `multipart/form-data` fields are parsed (MHD post processor) and visible to the resource; raw multipart body sent as a single segment exercises the parser under segmentation | doc/libhttpserver.3 (file upload / post processor) | forms.tseq:multipart_field | pinned | |
 
 ## File responses
