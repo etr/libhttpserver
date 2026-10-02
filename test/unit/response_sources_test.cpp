@@ -34,6 +34,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <span>
 #include <string>
@@ -399,6 +400,289 @@ LT_BEGIN_AUTO_TEST(response_sources_suite, borrowed_destruction_releases_keeper_
     LT_CHECK(!def.valid());
     LT_CHECK_EQ(count->load(), 1);
 LT_END_AUTO_TEST(borrowed_destruction_releases_keeper_once)
+
+// -----------------------------------------------------------------------
+// F - owned_file: a transferred std::FILE* is one-shot and closed
+// exactly once on every path.
+// -----------------------------------------------------------------------
+
+// (F1) owned_file requires a non-null handle and a non-empty close
+// operation; each failed call leaves `out` untouched.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_requires_handle)
+    response_definition seeded;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), http::fields(), bytes("x"),
+        seeded).ok());
+
+    fake::temp_file asset("payload");
+    response_definition def = seeded;
+    http::outcome made = response_definition::owned_file(
+        http::status::from_code(200), http::fields(), nullptr, def);
+    LT_CHECK(!made.ok());
+    LT_CHECK(made.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(!made.message().empty());
+    LT_CHECK(def.fields().first("content-length").value_or("") == "1");
+
+    std::FILE* handle = fake::open_for_read(asset);
+    made = response_definition::owned_file(
+        http::status::from_code(200), http::fields(), handle,
+        httpserver::owned_close_fn{}, def);
+    LT_CHECK(!made.ok());
+    LT_CHECK(made.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(def.fields().first("content-length").value_or("") == "1");
+    std::fclose(handle);
+LT_END_AUTO_TEST(owned_file_requires_handle)
+
+// (F2) The whole file body streams in order; Content-Length is pinned
+// per send to the handle's remaining size at transfer (the frozen
+// fields carry none), and the definition is NOT reusable-by-factory:
+// kind() reports the transfer.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_streams_whole_body)
+    const std::string payload = repeating(40 * 1024);
+    fake::temp_file asset(payload);
+    auto closes = std::make_shared<std::atomic<int>>(0);
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), http::fields(),
+        fake::open_for_read(asset), fake::counting_close(closes),
+        def).ok());
+    LT_CHECK(def.valid());
+    LT_CHECK(def.kind() == response_definition::source_kind::owned_file);
+    LT_CHECK_EQ(def.fields().count("content-length"),
+                static_cast<std::size_t>(0));
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.ok());
+    LT_CHECK_EQ(report.body_bytes, payload.size());
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK(sink.responded.first("content-length").value_or("")
+             == std::to_string(payload.size()));
+    LT_CHECK_EQ(out.drain(1u << 20), payload.size());
+    LT_CHECK(of(out.drained_bytes()) == payload);
+    LT_CHECK_EQ(out.end_calls(), 1);
+LT_END_AUTO_TEST(owned_file_streams_whole_body)
+
+// (F3) The transfer honors the handle's position: the body is
+// position→EOF of whatever the application handed over.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_honors_transfer_position)
+    const std::string payload = "HEADER:body-bytes-here";
+    fake::temp_file asset(payload);
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    std::FILE* handle = fake::open_for_read(asset);
+    LT_CHECK_EQ(std::fseek(handle, 7, SEEK_SET), 0);
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), http::fields(), handle,
+        fake::counting_close(closes), def).ok());
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.ok());
+    const std::string expected = payload.substr(7);
+    LT_CHECK_EQ(report.body_bytes, expected.size());
+    LT_CHECK(sink.responded.first("content-length").value_or("")
+             == std::to_string(expected.size()));
+    LT_CHECK_EQ(out.drain(64), expected.size());
+    LT_CHECK(of(out.drained_bytes()) == expected);
+LT_END_AUTO_TEST(owned_file_honors_transfer_position)
+
+// (F4) The transferred handle closes exactly once after a completed
+// send — and stays closed exactly once after the definition itself is
+// destroyed (the backstop must not double-close).
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_closes_once_after_send)
+    fake::temp_file asset(repeating(64));
+    auto closes = std::make_shared<std::atomic<int>>(0);
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), http::fields(),
+        fake::open_for_read(asset), fake::counting_close(closes),
+        def).ok());
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report report = run_send(x, ex, def, {});
+    LT_CHECK(report.status.ok());
+    LT_CHECK_EQ(closes->load(), 1);
+
+    def = response_definition{};
+    LT_CHECK(!def.valid());
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(owned_file_closes_once_after_send)
+
+// (F5) One handle, one seek position, one send: a second send fails
+// invalid_state BEFORE anything is written — no head, no body traffic
+// — and closes nothing.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_second_send_rejected_before_writing)
+    fake::temp_file asset(repeating(128));
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    response_definition def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), http::fields(),
+        fake::open_for_read(asset), fake::counting_close(closes),
+        def).ok());
+
+    capturing_sink sink1;
+    fake::scripted_body_sink out1;
+    exchange first(make_head(), &sink1, 0, nullptr, &out1);
+    manual_executor ex1;
+    const send_report one = run_send(first, ex1, def, {});
+    LT_CHECK(one.status.ok());
+    LT_CHECK_EQ(closes->load(), 1);
+
+    capturing_sink sink2;
+    fake::scripted_body_sink out2;
+    exchange second(make_head(), &sink2, 0, nullptr, &out2);
+    manual_executor ex2;
+    const send_report two = run_send(second, ex2, def, {});
+    LT_CHECK(two.status.code() == http::outcome_code::invalid_state);
+    LT_CHECK(!two.status.message().empty());
+    LT_CHECK_EQ(sink2.respond_calls, 0);
+    LT_CHECK_EQ(out2.push_calls(), 0);
+    LT_CHECK_EQ(out2.end_calls(), 0);
+    LT_CHECK(second.state() == exchange_state::head);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(owned_file_second_send_rejected_before_writing)
+
+// (F6) A definition destroyed unsent still closes its handle exactly
+// once (the holder is the backstop closer).
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_unsent_destruction_closes_once)
+    fake::temp_file asset(repeating(32));
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    {
+        response_definition def;
+        LT_CHECK(response_definition::owned_file(
+            http::status::from_code(200), http::fields(),
+            fake::open_for_read(asset), fake::counting_close(closes),
+            def).ok());
+        LT_CHECK_EQ(closes->load(), 0);
+    }
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(owned_file_unsent_destruction_closes_once)
+
+// (F7) Copies of the definition share the ONE frozen handle block:
+// whichever copy sends consumes it, and one close serves all copies.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_copies_share_one_close)
+    fake::temp_file asset(repeating(32));
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    response_definition def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), http::fields(),
+        fake::open_for_read(asset), fake::counting_close(closes),
+        def).ok());
+
+    const response_definition copy = def;
+    LT_CHECK(copy.valid());
+    LT_CHECK(copy.kind() == response_definition::source_kind::owned_file);
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report report = run_send(x, ex, copy, {});
+    LT_CHECK(report.status.ok());
+    LT_CHECK_EQ(closes->load(), 1);
+
+    def = response_definition{};
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(owned_file_copies_share_one_close)
+
+// (F8) A declared Content-Length bounds the read in BOTH directions:
+// short of it is the engine's short-body diagnosis (after the
+// committed head); over it truncates cleanly to the declared size.
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_declared_length_bounds_read)
+    const std::string payload = repeating(32);
+    auto closes = std::make_shared<std::atomic<int>>(0);
+
+    http::fields over;
+    over.append("Content-Length", std::to_string(payload.size() + 10));
+    response_definition long_def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), over,
+        fake::open_for_read(fake::temp_file(payload)),
+        fake::counting_close(closes), long_def).ok());
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report short_body = run_send(x, ex, long_def, {});
+    LT_CHECK(short_body.status.code() == http::outcome_code::protocol_error);
+    LT_CHECK(short_body.status.message().find(
+                 "shorter than the declared Content-Length")
+             != std::string::npos);
+    LT_CHECK_EQ(sink.respond_calls, 1);
+    LT_CHECK_EQ(out.end_calls(), 0);
+    LT_CHECK_EQ(closes->load(), 1);
+
+    http::fields under;
+    under.append("Content-Length", "3");
+    response_definition trim_def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), under,
+        fake::open_for_read(fake::temp_file(payload)),
+        fake::counting_close(closes), trim_def).ok());
+
+    capturing_sink sink2;
+    fake::scripted_body_sink out2;
+    exchange y(make_head(), &sink2, 0, nullptr, &out2);
+    manual_executor ex2;
+    const send_report trimmed = run_send(y, ex2, trim_def, {});
+    LT_CHECK(trimmed.status.ok());
+    LT_CHECK_EQ(trimmed.body_bytes, static_cast<std::size_t>(3));
+    LT_CHECK_EQ(out2.drain(64), static_cast<std::size_t>(3));
+    LT_CHECK(of(out2.drained_bytes()) == payload.substr(0, 3));
+    LT_CHECK_EQ(out2.end_calls(), 1);
+    LT_CHECK_EQ(closes->load(), 2);
+LT_END_AUTO_TEST(owned_file_declared_length_bounds_read)
+
+// (F9) An unseekable handle (a pipe read end) fails owned_file's
+// probe pre-commit — the exchange untouched — and the failed attempt
+// SPENDS the one-shot claim: a second send reports the spent source,
+// not the probe failure. The spent handle is closed exactly once.
+#ifndef _WIN32
+LT_BEGIN_AUTO_TEST(response_sources_suite, owned_file_unseekable_fails_precommit_and_spends)
+    fake::filled_pipe pipe("pipe bytes");
+    auto closes = std::make_shared<std::atomic<int>>(0);
+    response_definition def;
+    LT_CHECK(response_definition::owned_file(
+        http::status::from_code(200), http::fields(), pipe.release(),
+        fake::counting_close(closes), def).ok());
+
+    capturing_sink sink;
+    fake::scripted_body_sink out;
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    const send_report probe = run_send(x, ex, def, {});
+    LT_CHECK(probe.status.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(!probe.status.message().empty());
+    LT_CHECK_EQ(sink.respond_calls, 0);
+    LT_CHECK_EQ(out.push_calls(), 0);
+    LT_CHECK(x.state() == exchange_state::head);
+    LT_CHECK_EQ(closes->load(), 1);
+
+    capturing_sink sink2;
+    fake::scripted_body_sink out2;
+    exchange y(make_head(), &sink2, 0, nullptr, &out2);
+    manual_executor ex2;
+    const send_report spent = run_send(y, ex2, def, {});
+    LT_CHECK(spent.status.code() == http::outcome_code::invalid_state);
+    LT_CHECK_EQ(sink2.respond_calls, 0);
+    LT_CHECK_EQ(out2.push_calls(), 0);
+    LT_CHECK_EQ(closes->load(), 1);
+LT_END_AUTO_TEST(owned_file_unseekable_fails_precommit_and_spends)
+#endif  // !_WIN32
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

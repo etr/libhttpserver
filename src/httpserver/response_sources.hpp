@@ -38,8 +38,10 @@
 #define SRC_HTTPSERVER_RESPONSE_SOURCES_HPP_
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <limits>
 #include <memory>
@@ -122,7 +124,16 @@ enum class response_source_kind : std::uint8_t {
     reopen_file,
     factory,
     borrowed,
+    owned_file,
 };
+
+// The close operation riding an owned handle transfer (REQ-028): the
+// library owns the handle from the factory on and releases it through
+// this callable, exactly once, whatever the send's fate. Move-only
+// and transferable, so a custom close can capture state (a descriptor
+// pool, a logging hook). The plain-pointer owned_file/owned_pipe
+// overloads default to std::fclose.
+using owned_close_fn = concurrency::unique_function<void(std::FILE*)>;
 
 namespace detail {
 
@@ -163,6 +174,58 @@ inline http::outcome parse_content_length(const http::fields& f,
     return http::outcome::okay();
 }
 
+// A transferred std::FILE* with its one-shot claim and its
+// exactly-once close. claim() is the one-shot gate: a compare-and-
+// swap that exactly one send ever wins (a second send fails
+// invalid_state before writing anything). close() routes every
+// release path — cursor destruction (send completed, failed, or
+// cancelled) and holder destruction (never sent: the backstop) —
+// through one atomic guard, so the close operation fires exactly once
+// however the definition dies. A holder cannot die while a cursor
+// lives: the cursor's owner block pins the holder.
+class transferred_handle {
+ public:
+    transferred_handle(std::FILE* handle, owned_close_fn close) noexcept
+        : handle_(handle),
+          close_(std::move(close)) {
+    }
+
+    transferred_handle(const transferred_handle&) = delete;
+    transferred_handle& operator=(const transferred_handle&) = delete;
+
+    // The backstop closer: an unsent definition's destruction ends
+    // here. Idempotent with close(), so a send that already released
+    // the handle never double-closes.
+    ~transferred_handle() { close(); }
+
+    // The one-shot gate: true for exactly one caller ever.
+    bool claim() noexcept {
+        bool idle = false;
+        return claimed_.compare_exchange_strong(
+            idle, true, std::memory_order_acq_rel,
+            std::memory_order_relaxed);
+    }
+
+    // Fires the close operation exactly once.
+    void close() noexcept {
+        if (closed_.exchange(true, std::memory_order_acq_rel)) return;
+        if (close_) close_(handle_);
+    }
+
+    std::FILE* get() const noexcept { return handle_; }
+
+ private:
+    std::atomic<bool> claimed_{false};
+    std::atomic<bool> closed_{false};
+    std::FILE* handle_;
+    owned_close_fn close_;
+};
+
+// The default close for a plain transferred std::FILE*.
+inline void fclose_owned(std::FILE* handle) noexcept {
+    if (handle != nullptr) std::fclose(handle);
+}
+
 // The frozen body half of one definition: the kind plus exactly the
 // state that kind needs (a response_definition's impl holds its
 // status, its base fields, and one shared immutable block of this
@@ -177,6 +240,12 @@ struct response_body_source {
     body_factory make;              // factory
     std::span<const std::byte> view;  // borrowed: the application body
     body_lease lease;               // borrowed: pins view alive
+    // owned_file/owned_pipe: the transferred handle. Deliberately a
+    // pointer to a mutable transferred_handle inside an otherwise
+    // const frozen block: the one-shot claim and the exactly-once
+    // close are per-handle state (the only mutability inside a frozen
+    // definition), and no releasable token exists to misuse.
+    std::shared_ptr<transferred_handle> handle;
 };
 
 // One send's private body state, allocated in send_definition's
@@ -187,12 +256,21 @@ struct response_body_source {
 // body drives it, and a public header may not include a private one.
 class send_cursor {
  public:
+    // A claimed transfer's handle is released here on every send
+    // fate: completed, failed, cancelled (the coroutine frame's
+    // destruction runs this). close() is idempotent, so the holder's
+    // backstop destructor never double-closes.
+    ~send_cursor() {
+        if (owner_ && owner_->handle) owner_->handle->close();
+    }
+
     // Binds to `source` (one definition's frozen body block) and takes
     // this send's snapshot of it against the merged framing
     // `framing`: the bytes or leased span aliased (the source pins
     // them alive), the file freshly opened with its read bound taken
     // from an explicit Content-Length when the merged fields carry one
-    // (the observed size otherwise), or one fresh producer invoked.
+    // (the observed size otherwise), one fresh producer invoked, or
+    // the transferred handle claimed (one-shot) and probed.
     http::outcome prepare(std::shared_ptr<const response_body_source> source,
                           const http::fields& framing) {
         owner_ = std::move(source);
@@ -207,6 +285,8 @@ class send_cursor {
             case response_source_kind::borrowed:
                 bind_span(owner_->view);
                 return http::outcome::okay();
+            case response_source_kind::owned_file:
+                return prepare_owned_file(framing);
         }
         return http::outcome::okay();
     }
@@ -223,12 +303,14 @@ class send_cursor {
                 return pull_file();
             case response_source_kind::factory:
                 return pull_factory();
+            case response_source_kind::owned_file:
+                return pull_handle();
         }
         return body_chunk{http::outcome::okay(), {}, true};
     }
 
-    // reopen_file only: the size observed at this send's prepare (the
-    // pinned Content-Length); 0 for every other kind.
+    // File-backed sources only: the size observed at this send's
+    // prepare (the pinned Content-Length); 0 for every other kind.
     std::uint64_t file_size() const noexcept { return file_size_; }
 
  private:
@@ -280,6 +362,42 @@ class send_cursor {
                 http::outcome_code::invalid_argument,
                 "send_definition: factory returned an empty producer");
         }
+        return http::outcome::okay();
+    }
+
+    // owned_file: the one-shot claim FIRST (two racing sends' probes
+    // must never interleave), then the size probe — the handle's
+    // position at transfer is honored: body = position→EOF. The claim
+    // is not refundable: a failed probe (an unseekable handle) leaves
+    // the definition spent — a one-shot definition admits exactly one
+    // send attempt past validation.
+    http::outcome prepare_owned_file(const http::fields& framing) {
+        if (!owner_->handle->claim()) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "send_definition: one-shot source already used");
+        }
+        std::FILE* const stream = owner_->handle->get();
+        // std::ftell is the ISO C probe and returns long by contract —
+        // the documented LONG_MAX bound of the probed size.
+        const long start = std::ftell(stream);  // NOLINT(runtime/int)
+        if (start < 0 || std::fseek(stream, 0, SEEK_END) != 0) {
+            return unseekable();
+        }
+        const long end = std::ftell(stream);  // NOLINT(runtime/int)
+        if (end < 0 || std::fseek(stream, start, SEEK_SET) != 0) {
+            return unseekable();
+        }
+        file_size_ = static_cast<std::uint64_t>(end - start);
+        remaining_ = file_size_;
+        if (framing.count("content-length") > 0) {
+            std::uint64_t declared = 0;
+            const http::outcome length =
+                parse_content_length(framing, declared);
+            if (!length.ok()) return length;
+            remaining_ = declared;
+        }
+        buffer_.assign(k_file_chunk_bytes, std::byte{0});
         return http::outcome::okay();
     }
 
@@ -346,14 +464,59 @@ class send_cursor {
         return chunk;
     }
 
+    // owned_file: at most one buffer's worth of the bounded read. A
+    // clean EOF with bytes still owed to the pinned or declared
+    // length is a short body (protocol_error, like reopen_file); an
+    // I/O failure is invalid_state.
+    body_chunk pull_handle() {
+        if (remaining_ == 0) {
+            return body_chunk{http::outcome::okay(), {}, true};
+        }
+        std::FILE* const stream = owner_->handle->get();
+        const std::size_t want = static_cast<std::size_t>(
+            std::min<std::uint64_t>(remaining_, buffer_.size()));
+        const std::size_t got =
+            std::fread(buffer_.data(), 1, want, stream);
+        if (got == 0 || got < want) {
+            if (std::ferror(stream) != 0) {
+                return body_chunk{
+                    http::outcome(
+                        http::outcome_code::invalid_state,
+                        "send_definition: handle read failed"),
+                    {}, false};
+            }
+            if (remaining_ > got) {
+                return body_chunk{
+                    http::outcome(
+                        http::outcome_code::protocol_error,
+                        "send_definition: body shorter than the "
+                        "declared Content-Length"),
+                    {}, false};
+            }
+        }
+        remaining_ -= got;
+        return body_chunk{
+            http::outcome::okay(),
+            std::span<const std::byte>(buffer_.data(), got),
+            remaining_ == 0};
+    }
+
+ private:
+    // The unseekable-handle diagnosis of owned_file's probe.
+    static http::outcome unseekable() {
+        return http::outcome(
+            http::outcome_code::invalid_argument,
+            "send_definition: owned_file handle is not seekable");
+    }
+
     std::shared_ptr<const response_body_source> owner_;
     std::span<const std::byte> view_;  // owned_bytes/borrowed: the span
     std::uint64_t offset_ = 0;     // owned_bytes/borrowed span cursor
     std::uint64_t total_ = 0;      // owned_bytes/borrowed span total
-    std::uint64_t file_size_ = 0;  // reopen_file pinned size
-    std::uint64_t remaining_ = 0;  // reopen_file bytes left to pinned size
+    std::uint64_t file_size_ = 0;  // file-backed pinned size at prepare
+    std::uint64_t remaining_ = 0;  // file-backed bytes left to the bound
     std::ifstream file_;           // reopen_file: this send's private handle
-    std::vector<std::byte> buffer_;  // reopen_file read buffer
+    std::vector<std::byte> buffer_;  // file-backed read buffer
     body_producer producer_;       // factory: this send's producer
 };
 

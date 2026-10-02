@@ -83,6 +83,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -250,6 +251,52 @@ class response_definition {
         state.body.kind = source_kind::borrowed;
         state.body.view = body;
         state.body.lease = std::move(lease);
+        return commit(std::move(state), out);
+    }
+
+    // Body streamed from an open std::FILE* TRANSFERRED to the
+    // library and closed with std::fclose (see the owned_close_fn
+    // overload for a custom release).
+    static http::outcome owned_file(const http::status& s, http::fields f,
+                                    std::FILE* handle,
+                                    response_definition& out) {
+        return owned_file(s, std::move(f), handle,
+                          owned_close_fn(&detail::fclose_owned), out);
+    }
+
+    // Body streamed from an open std::FILE* transferred to the
+    // library (REQ-028): ONE-SHOT — one handle holds one seek
+    // position, so exactly one send may consume it; a second send
+    // fails invalid_state before writing anything. The body is the
+    // handle's remaining bytes at transfer (position→EOF), probed at
+    // the send's prepare (an unseekable handle fails there, typed,
+    // and spends the definition). Content-Length pins per send to the
+    // probed size unless the fields declare one — a declared length
+    // becomes the read bound, and a body short of it fails that send
+    // typed. The library owns the handle from here on and closes it
+    // exactly once: after the send completes, fails, or is cancelled,
+    // or when an unsent definition is destroyed. An application that
+    // must keep its handle open wraps the readable side in a factory
+    // source instead. `long`-based offsets bound the probed size to
+    // LONG_MAX on LLP64 platforms; larger transfers belong to
+    // reopen_file (std::streamoff).
+    static http::outcome owned_file(const http::status& s, http::fields f,
+                                    std::FILE* handle,
+                                    owned_close_fn close,
+                                    response_definition& out) {
+        if (handle == nullptr || !close) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "response_definition: owned_file requires a handle and "
+                "a close operation");
+        }
+        build state;
+        state.status = s;
+        state.fields = std::move(f);
+        state.body.kind = source_kind::owned_file;
+        state.body.handle =
+            std::make_shared<detail::transferred_handle>(
+                handle, std::move(close));
         return commit(std::move(state), out);
     }
 
@@ -450,9 +497,11 @@ inline http::outcome prepare_send(const response_definition& def,
         def.impl_->body;
     const http::outcome prepared = cursor.prepare(body, merged);
     if (!prepared.ok()) return prepared;
-    if (body->kind == response_source_kind::reopen_file) {
-        // The pinned size is per send: the file is re-observed every
-        // time, never baked into the definition.
+    if (body->kind == response_source_kind::reopen_file
+            || body->kind == response_source_kind::owned_file) {
+        // The pinned size is per send: the file is re-observed (or the
+        // transferred handle probed) every time, never baked into the
+        // definition.
         pin_content_length(merged, cursor.file_size());
     }
     return http::outcome::okay();
