@@ -56,6 +56,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <utility>
 
@@ -195,20 +196,53 @@ class digest_auth_policy {
     static std::shared_ptr<const state> make_state(
         const digest_auth_options& options);
 
+    // The entropy draw the challenge mint uses, threaded as an
+    // internal-only parameter (the type detail::digest::entropy_fill
+    // spells): nullptr -- what every production call site passes --
+    // resolves to the OS entropy source, so default behavior is
+    // unchanged; tests inject a failing draw to drive the
+    // nonce_unavailable mapping through the real settle() path.
+    using entropy_fill = http::outcome (*)(std::span<std::byte>);
+
     // The freshly minted WWW-Authenticate value (empty string when
     // the configured policy's entropy draw failed; the unconfigured
     // policy's degenerate empty-nonce form otherwise).
-    std::string minted_challenge(bool stale) const;
+    std::string minted_challenge(bool stale,
+                                 entropy_fill fill = nullptr) const;
 
     // Records one classification and attaches the matching challenge;
     // a configured policy that cannot mint maps to nonce_unavailable.
     void settle(digest_auth_verdict& verdict,
-                digest_auth_result result) const;
+                digest_auth_result result,
+                entropy_fill fill = nullptr) const;
 
     digest_auth_verdict verify(std::string_view authorization,
                                const http::request_head& head,
                                digest_auth_verdict verdict) const;
+
+#if defined(HTTPSERVER_COMPILATION)
+    // Test-only bridge to the entropy seam above (the
+    // webserver_test_access pattern): gated on HTTPSERVER_COMPILATION
+    // so it never appears in installed-header compilations.
+    friend struct digest_auth_test_access;
+#endif
 };
+
+#if defined(HTTPSERVER_COMPILATION)
+// White-box bridge for the Digest entropy seam: unit tests compiled
+// with -DHTTPSERVER_COMPILATION (test/Makefile.am AM_CPPFLAGS) drive
+// the REAL settle() with an injected entropy draw -- a permanently
+// failing one pins the nonce_unavailable/503 mapping without
+// fabricating the verdict. Matches webserver_test_access.
+struct digest_auth_test_access {
+    static void settle(const digest_auth_policy& policy,
+                       digest_auth_verdict& verdict,
+                       digest_auth_result result,
+                       digest_auth_policy::entropy_fill fill) {
+        policy.settle(verdict, result, fill);
+    }
+};
+#endif
 
 // Wraps one route handler with the policy: unauthenticated requests
 // are answered with the verdict's challenge (401, or the 503 of

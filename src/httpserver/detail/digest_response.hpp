@@ -98,8 +98,7 @@ inline std::string sha256_hex(std::string_view text) {
 }
 
 inline constexpr hash_descriptor md5_descriptor{"MD5", 16, &md5_hex};
-inline constexpr hash_descriptor sha256_descriptor{"SHA-256", 32,
-                                                   &sha256_hex};
+inline constexpr hash_descriptor sha256_descriptor{"SHA-256", 32, &sha256_hex};
 
 // HA1 = H(username:realm:password); the fixed-credential factory
 // computes this once and scrubs the cleartext, the HA1-source form

@@ -31,18 +31,23 @@
 //     challenge shape with the pinned order and quoting;
 //   - the valid round, wrong password/uri/method/algorithm/realm,
 //     forged nonces;
+//   - a failed guess burns its nc: the same (nonce, nc) pair answers
+//     replayed_nonce afterwards, a strictly larger nc authenticates;
 //   - ttl=0 expiry -> stale_nonce with stale=TRUE and a fresh nonce;
 //   - identical Authorization twice -> authenticated then
 //     replayed_nonce WITHOUT stale;
+//   - the legacy qop-absent round authenticates with the implicit
+//     nc=1, and its identical replay is refused;
 //   - the malformed corpus -> malformed_credentials;
 //   - the HA1-source form (cleartext never seen) and unknown users;
 //   - the challenge's explicit Content-Length matching the body;
-//   - the nonce_unavailable 503 mapping;
+//   - the nonce_unavailable 503 mapping (helpers, and the real
+//     settle() path through a failing entropy seam);
 //   - a concurrency smoke: 8 threads, each its own challenge and nc.
 
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
+#include <span>
 #include <string>
 #include <thread>
 #include <utility>
@@ -120,10 +125,58 @@ std::string answered_authorization(const auth::digest_auth_policy& policy,
         *challenge, user, uri, cnonce, "00000001", response);
 }
 
+// answered_authorization's fixed-nonce generalization: one answer
+// against an ALREADY-ISSUED challenge at an explicit nc, so several
+// answers can race the same ledger slot (the failed-guess-burns-nc
+// pin). The cnonce is drawn once and used in BOTH the response
+// computation and the shipped header, as in answered_authorization.
+std::string answered_authorization_at(
+    const dclient::parsed_challenge& challenge, const char* password,
+    const char* nc, const char* user = k_user, const char* uri = "/digest",
+    const char* method = "GET") {
+    const std::string cnonce = dclient::make_cnonce();
+    const std::string response = dclient::compute_response_cleartext(
+        challenge, dclient::digest_hash::md5, method, uri, user, password,
+        cnonce, nc);
+    return dclient::build_authorization_header(
+        challenge, user, uri, cnonce, nc, response);
+}
+
+// The RFC 2617 legacy chain against an issued challenge: no qop, no
+// nc, no cnonce -- response = H(HA1:nonce:HA2) over the independent
+// test-side hash. build_authorization_header always emits qop, so the
+// legacy header is hand-built to the parser's required five fields.
+std::string legacy_authorization(const dclient::parsed_challenge& challenge,
+                                 const char* user = k_user,
+                                 const char* password = k_pass) {
+    namespace dci = dclient::digest_client_internal;
+    const std::string ha1 = dci::H_hex(
+        dclient::digest_hash::md5,
+        std::string(user) + ":" + challenge.realm + ":" + password);
+    const std::string ha2 = dci::H_hex(dclient::digest_hash::md5,
+                                       "GET:/digest");
+    const std::string response = dci::H_hex(
+        dclient::digest_hash::md5,
+        ha1 + ":" + challenge.nonce + ":" + ha2);
+    return std::string("Digest username=\"") + user + "\", realm=\""
+        + challenge.realm + "\", nonce=\"" + challenge.nonce
+        + "\", uri=\"/digest\", algorithm=MD5, response=\"" + response
+        + "\", opaque=\"" + challenge.opaque + "\"";
+}
+
 std::string challenge_of(const auth::digest_auth_verdict& verdict) {
     return std::string(verdict.challenge_fields()
                            .first("WWW-Authenticate")
                            .value_or(""));
+}
+
+// The entropy seam's failing draw: counts its calls so the real-path
+// test can also pin the one retry the mint performs before giving up.
+int seam_draw_calls = 0;
+http::outcome seam_failing_draw(std::span<std::byte>) {
+    ++seam_draw_calls;
+    return http::outcome(http::outcome_code::protocol_error,
+                         "injected entropy failure (test)");
 }
 
 }  // namespace
@@ -269,6 +322,37 @@ LT_BEGIN_AUTO_TEST(digest_auth_policy_suite, wrong_material_is_rejected)
     LT_CHECK(forged.challenge_status().code() == 401);
 LT_END_AUTO_TEST(wrong_material_is_rejected)
 
+// A failed guess burns its nc: ledger admission advances the slot
+// BEFORE password verification (plan section 6.1; digest_ledger.hpp's
+// anti-replay rationale), so the same (nonce, nc=00000001) pair can
+// never authenticate afterwards and only a strictly larger nc
+// succeeds.
+LT_BEGIN_AUTO_TEST(digest_auth_policy_suite, failed_guess_burns_nc)
+    const auth::digest_auth_policy policy = transcript_policy();
+    const auth::digest_auth_verdict offered =
+        policy.check(request_with(""));
+    const auto challenge = dclient::parse_www_authenticate(offered.challenge);
+    LT_CHECK(challenge.has_value());
+
+    const auth::digest_auth_verdict wrong = policy.check(request_with(
+        answered_authorization_at(*challenge, "wrong", "00000001")));
+    LT_CHECK(wrong.result
+             == auth::digest_auth_result::credentials_rejected);
+
+    // The SAME challenge at the SAME nc with the CORRECT password:
+    // the slot burned above answers replay, never authenticated.
+    const auth::digest_auth_verdict retry = policy.check(request_with(
+        answered_authorization_at(*challenge, k_pass, "00000001")));
+    LT_CHECK(retry.result == auth::digest_auth_result::replayed_nonce);
+    LT_CHECK(!retry.stale());
+
+    // Only a strictly larger nc can succeed against the burned slot.
+    const auth::digest_auth_verdict next = policy.check(request_with(
+        answered_authorization_at(*challenge, k_pass, "00000002")));
+    LT_CHECK(next.allowed());
+    LT_CHECK(next.username == k_user);
+LT_END_AUTO_TEST(failed_guess_burns_nc)
+
 // Identical Authorization presented twice: the first authenticates,
 // the second is a replay WITHOUT the stale hint.
 LT_BEGIN_AUTO_TEST(digest_auth_policy_suite, replayed_nonce_has_no_stale)
@@ -286,6 +370,33 @@ LT_BEGIN_AUTO_TEST(digest_auth_policy_suite, replayed_nonce_has_no_stale)
     LT_CHECK(second.challenge.rfind("Digest realm=\"transcript\"", 0) == 0);
     LT_CHECK(second.challenge.find("stale") == std::string::npos);
 LT_END_AUTO_TEST(replayed_nonce_has_no_stale)
+
+// The legacy qop-absent round: check() authenticates the RFC 2617
+// chain (response = H(HA1:nonce:HA2), no qop/nc/cnonce) with the
+// implicit nc=1, and the identical header replayed is refused as
+// replayed_nonce (plan section 6.1's 'qop-absent implicit nc 1 then
+// replay').
+LT_BEGIN_AUTO_TEST(digest_auth_policy_suite, legacy_qop_absent_round_and_replay)
+    const auth::digest_auth_policy policy = transcript_policy();
+    const auth::digest_auth_verdict offered =
+        policy.check(request_with(""));
+    const auto challenge = dclient::parse_www_authenticate(offered.challenge);
+    LT_CHECK(challenge.has_value());
+    const std::string authorization = legacy_authorization(*challenge);
+
+    const auth::digest_auth_verdict verdict =
+        policy.check(request_with(authorization));
+    LT_CHECK(verdict.allowed());
+    LT_CHECK(verdict.result == auth::digest_auth_result::authenticated);
+    LT_CHECK(verdict.username == k_user);
+
+    // The identical qop-less header again: the implicit nc=1 slot was
+    // burned by the round above.
+    const auth::digest_auth_verdict replay =
+        policy.check(request_with(authorization));
+    LT_CHECK(replay.result == auth::digest_auth_result::replayed_nonce);
+    LT_CHECK(!replay.stale());
+LT_END_AUTO_TEST(legacy_qop_absent_round_and_replay)
 
 // ttl=0: the nonce minted for the first check is expired by the time
 // the answered request arrives (wall clock advanced a second), and
@@ -420,6 +531,34 @@ LT_BEGIN_AUTO_TEST(digest_auth_policy_suite, nonce_unavailable_is_503)
     LT_CHECK(!fields.first("WWW-Authenticate").has_value());
     LT_CHECK(fields.first("Content-Length").value_or("") == "0");
 LT_END_AUTO_TEST(nonce_unavailable_is_503)
+
+// The real entropy-failure path: a configured policy whose challenge
+// mint draws through a permanently failing seam settles to
+// nonce_unavailable -- 503, no WWW-Authenticate field -- never a 401
+// with an empty challenge. Driven through the REAL settle() (the
+// digest_auth_test_access bridge, the webserver_test_access pattern),
+// not a fabricated verdict; the draw count also pins the mint's one
+// retry.
+LT_BEGIN_AUTO_TEST(digest_auth_policy_suite, entropy_failure_maps_to_503)
+    const auth::digest_auth_policy policy = transcript_policy();
+    auth::digest_auth_verdict verdict;
+    verdict.challenge_body = k_body;  // as check() would carry it
+    seam_draw_calls = 0;
+    auth::digest_auth_test_access::settle(
+        policy, verdict, auth::digest_auth_result::no_credentials,
+        &seam_failing_draw);
+
+    LT_CHECK(verdict.result
+             == auth::digest_auth_result::nonce_unavailable);
+    LT_CHECK(!verdict.allowed());
+    LT_CHECK(verdict.challenge.empty());
+    LT_CHECK(verdict.challenge_status().code() == 503);
+    const http::fields fields = verdict.challenge_fields();
+    LT_CHECK(!fields.first("WWW-Authenticate").has_value());
+    LT_CHECK(fields.first("Content-Length").value_or("")
+             == std::to_string(std::string(k_body).size()));
+    LT_CHECK_EQ(seam_draw_calls, 2);  // the one retry, then give up
+LT_END_AUTO_TEST(entropy_failure_maps_to_503)
 
 // The guard adapter: unauthenticated requests are answered with the
 // verdict's status/fields (the body written with the pinned

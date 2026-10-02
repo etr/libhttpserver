@@ -190,9 +190,14 @@ std::string check_expects(const parity::tcase& c,
     return "";
 }
 
-const parity::tcase* find_case(const std::string& name) {
-    const parity::transcript t = parity::parse_transcript_file(
-        std::string(PARITY_TRANSCRIPT_DIR "/auth_digest.tseq"));
+// Locates one named case of an ALREADY-PARSED transcript. The caller
+// owns @p t and must keep it alive past every use of the result: the
+// tcase's strings live in the transcript, so a pointer into a
+// transcript destroyed at the helper's return would dangle (the
+// TASK-114 lifetime shape -- parse in the replay function, look up
+// against the local).
+const parity::tcase* find_case(const parity::transcript& t,
+                               const char* name) {
     for (const parity::tcase& c : t.cases) {
         if (c.name == name) return &c;
     }
@@ -202,7 +207,9 @@ const parity::tcase* find_case(const std::string& name) {
 // challenge_structure: the 401 over the wire, byte-for-byte around
 // the nonce/opaque masks.
 std::string replay_challenge_structure() {
-    const parity::tcase* c = find_case("challenge_structure");
+    const parity::transcript t = parity::parse_transcript_file(
+        std::string(PARITY_TRANSCRIPT_DIR "/auth_digest.tseq"));
+    const parity::tcase* c = find_case(t, "challenge_structure");
     if (c == nullptr) return "case not found: challenge_structure";
 
     const auth::digest_auth_policy policy = transcript_policy();
@@ -224,7 +231,9 @@ std::string replay_challenge_structure() {
 // handshake -- challenge, independent-client response, re-check, the
 // authenticated side served the pinned secret.
 std::string replay_roundtrip_digest() {
-    const parity::tcase* c = find_case("roundtrip_digest");
+    const parity::transcript t = parity::parse_transcript_file(
+        std::string(PARITY_TRANSCRIPT_DIR "/auth_digest.tseq"));
+    const parity::tcase* c = find_case(t, "roundtrip_digest");
     if (c == nullptr) return "case not found: roundtrip_digest";
 
     const auth::digest_auth_policy policy = transcript_policy();

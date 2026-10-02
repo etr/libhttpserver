@@ -400,25 +400,32 @@ http::outcome digest_auth_policy::create(
     return http::outcome::okay();
 }
 
-std::string digest_auth_policy::minted_challenge(bool stale) const {
+std::string digest_auth_policy::minted_challenge(
+    bool stale, entropy_fill fill) const {
     if (state_ == nullptr) {
         // The unconfigured policy names the empty realm; it can mint
         // no nonce and nothing it is shown can authenticate.
         return build_challenge(realm_, descriptor_of(algorithm_), "",
                                "", stale);
     }
-    const std::optional<std::string> nonce = digest::mint_nonce(
-        state_->key, now_unix(), &detail::entropy::fill);
+    // The internal entropy seam: production callers pass nullptr (the
+    // OS source); an injected draw lets a test drive the mint-failure
+    // path through this real code.
+    const digest::entropy_fill draw =
+        fill != nullptr ? fill : &detail::entropy::fill;
+    const std::optional<std::string> nonce =
+        digest::mint_nonce(state_->key, now_unix(), draw);
     if (!nonce.has_value()) return std::string();
     return build_challenge(realm_, descriptor_of(algorithm_), *nonce,
                            state_->opaque_hex, stale);
 }
 
 void digest_auth_policy::settle(digest_auth_verdict& verdict,
-                                digest_auth_result result) const {
+                                digest_auth_result result,
+                                entropy_fill fill) const {
     verdict.result = result;
     verdict.challenge = minted_challenge(
-        result == digest_auth_result::stale_nonce);
+        result == digest_auth_result::stale_nonce, fill);
     // A configured policy that could not mint a challenge nonce maps
     // to the 503 taxonomy entry, never a 401 with an empty field.
     if (verdict.challenge.empty() && state_ != nullptr) {
