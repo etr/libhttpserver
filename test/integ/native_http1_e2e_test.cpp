@@ -31,8 +31,10 @@
 // connections budget). Every wait is deadline-bound; a pass is always
 // observed bytes or an observed close, never a sleep.
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cctype>
 #include <cstdint>
 #include <deque>
 #include <span>
@@ -40,12 +42,14 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <httpserver/body_reader.hpp>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/status.hpp>
+#include <httpserver/response_definition.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/server.hpp>
 
@@ -114,6 +118,33 @@ task<void> collect_slow_handler(exchange& x) {
 // GET /throwing: raises; run_route synthesizes the 500.
 task<void> throwing_handler(exchange&) {
     throw std::runtime_error("e2e: handler asked to throw");
+}
+
+// TASK-112: GET /asset serves ONE shared immutable definition to
+// every connection, each send decorated with its own overlay (the
+// connection's id rides X-Conn-Idx, appended after the shared base
+// fields). Built lazily: the definition is a plain value with a
+// non-trivial factory, and function-local static init is thread-safe
+// for the concurrent first sends.
+httpserver::response_definition& asset_definition() {
+    static httpserver::response_definition def = [] {
+        httpserver::response_definition built;
+        http::fields f;
+        f.append("Content-Type", "application/octet-stream");
+        static_cast<void>(httpserver::response_definition::owned_bytes(
+            http::status::from_code(200), f,
+            std::vector<std::byte>(1024, std::byte{0x61}), built));
+        return built;
+    }();
+    return def;
+}
+
+task<void> asset_handler(exchange& x) {
+    httpserver::response_overlay overlay;
+    overlay.headers.append("X-Conn-Idx",
+                           std::to_string(x.connection_id()));
+    static_cast<void>(co_await httpserver::send_definition(
+        x, asset_definition(), overlay));
 }
 
 // Rendezvous for the concurrency case: the response comes only once
@@ -304,6 +335,9 @@ class server_fixture {
             http::method::known(http::method_id::get), "/throwing",
             throwing_handler));
         static_cast<void>(server_.route(
+            http::method::known(http::method_id::get), "/asset",
+            asset_handler));
+        static_cast<void>(server_.route(
             http::method::known(http::method_id::get), "/rendezvous",
             rendezvous_handler));
         static_cast<void>(server_.route(
@@ -367,6 +401,15 @@ bool wait_until(const std::atomic<bool>& flag,
         std::this_thread::sleep_for(std::chrono::microseconds(200));
     }
     return true;
+}
+
+// ASCII-lowercased copy of a header name (TASK-112: case-insensitive
+// response header lookup).
+std::string lowered_header_name(const std::string& name) {
+    std::string out = name;
+    std::transform(out.begin(), out.end(), out.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return out;
 }
 
 }  // namespace
@@ -1027,6 +1070,70 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_sync_route_bodyless)
     if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
     LT_CHECK_EQ(sync_echo_invocations.load(), 1);
 LT_END_AUTO_TEST(http11_post_sync_route_bodyless)
+
+// (27) TASK-112: one shared immutable definition serves two CONCURRENT
+// connections (DR-V3-005): every body is the same shared bytes, every
+// head carries the shared base fields plus its own overlay
+// (X-Conn-Idx) appended after them, and each send's framing is the
+// definition's pinned Content-Length.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, shared_definition_serves_two_connections)
+    server_fixture s(base_options());
+    raw::connection first;
+    raw::connection second;
+    LT_CHECK(first.connect(s.port()));
+    LT_CHECK(second.connect(s.port()));
+    LT_CHECK(first.send("GET /asset HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(second.send("GET /asset HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen_first;
+    std::deque<observed_response> seen_second;
+    LT_CHECK(first.receive(1, seen_first));
+    LT_CHECK(second.receive(1, seen_second));
+
+    const std::string expected(1024, 'a');
+    const observed_response* replies[2] = {nullptr, nullptr};
+    if (seen_first.size() == 1) replies[0] = &seen_first[0];
+    if (seen_second.size() == 1) replies[1] = &seen_second[0];
+    std::string conn_tags[2];
+    for (int i = 0; i < 2; ++i) {
+        const observed_response* const r = replies[i];
+        if (r == nullptr) continue;
+        LT_CHECK_EQ(r->status, 200);
+        LT_CHECK_EQ(r->body, expected);
+        LT_CHECK_EQ(r->framing, std::string("content-length"));
+        // Shared base field present in both, exactly one overlay
+        // header, ordered after it.
+        const std::string* content_type = nullptr;
+        std::size_t content_type_at = r->headers.size();
+        const std::string* conn_idx = nullptr;
+        std::size_t conn_idx_at = r->headers.size();
+        for (std::size_t h = 0; h < r->headers.size(); ++h) {
+            const std::string name =
+                lowered_header_name(r->headers[h].name);
+            if (name == "content-type") {
+                content_type = &r->headers[h].value;
+                content_type_at = h;
+            } else if (name == "x-conn-idx") {
+                conn_idx = &r->headers[h].value;
+                conn_idx_at = h;
+            }
+        }
+        LT_CHECK(content_type != nullptr);
+        if (content_type != nullptr) {
+            LT_CHECK_EQ(*content_type,
+                        std::string("application/octet-stream"));
+        }
+        LT_CHECK(conn_idx != nullptr);
+        if (conn_idx != nullptr) {
+            LT_CHECK(!conn_idx->empty());
+            conn_tags[i] = *conn_idx;
+            LT_CHECK(conn_idx_at > content_type_at);
+        }
+    }
+    // The per-send overlays are per connection: two distinct tags.
+    LT_CHECK(!conn_tags[0].empty());
+    LT_CHECK(!conn_tags[1].empty());
+    LT_CHECK(conn_tags[0] != conn_tags[1]);
+LT_END_AUTO_TEST(shared_definition_serves_two_connections)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

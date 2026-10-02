@@ -43,6 +43,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/exchange.hpp>
@@ -65,7 +66,10 @@ class scripted_body_sink final : public httpserver::detail::body_sink {
     std::size_t drain(std::size_t n) {
         std::lock_guard<std::mutex> lock(mu_);
         const std::size_t popped = std::min(n, queue_.size());
-        for (std::size_t i = 0; i < popped; ++i) queue_.pop_front();
+        for (std::size_t i = 0; i < popped; ++i) {
+            drained_log_.push_back(queue_.front());
+            queue_.pop_front();
+        }
         queued_ -= popped;
         drained_ += popped;
         if (popped > 0 && waiter_ != nullptr) {
@@ -180,6 +184,14 @@ class scripted_body_sink final : public httpserver::detail::body_sink {
         return drained_;
     }
 
+    // The bytes drained so far, in drain order (TASK-112: the send
+    // suites compare whole streamed bodies, not just counts).
+    std::vector<std::byte> drained_bytes() const {
+        std::lock_guard<std::mutex> lock(mu_);
+        return std::vector<std::byte>(drained_log_.begin(),
+                                      drained_log_.end());
+    }
+
     std::size_t queued() const {
         std::lock_guard<std::mutex> lock(mu_);
         return queued_;
@@ -232,6 +244,7 @@ class scripted_body_sink final : public httpserver::detail::body_sink {
 
     mutable std::mutex mu_;
     std::deque<std::byte> queue_;
+    std::deque<std::byte> drained_log_;
     std::size_t capacity_ = 0;
     std::size_t queued_ = 0;
     std::size_t max_queued_ = 0;
