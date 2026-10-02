@@ -62,11 +62,15 @@
 #include <string_view>
 #include <utility>
 
+#include <httpserver/detail/auth_text.hpp>
+
 namespace httpserver {
 
 namespace detail {
 
 namespace digest {
+
+using detail::auth_text::ascii_iequal;
 
 struct digest_params {
     std::string username;
@@ -92,20 +96,6 @@ inline constexpr std::size_t k_max_whole = 8192;
 inline constexpr std::size_t k_max_params = 24;
 inline constexpr std::size_t k_max_name = 24;
 inline constexpr std::size_t k_max_value = 4096;
-
-inline char lowered(char c) noexcept {
-    return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a')
-                                  : c;
-}
-
-inline bool ascii_iequal(std::string_view left,
-                         std::string_view right) noexcept {
-    if (left.size() != right.size()) return false;
-    for (std::size_t i = 0; i < left.size(); ++i) {
-        if (lowered(left[i]) != lowered(right[i])) return false;
-    }
-    return true;
-}
 
 // RFC 7230 section 3.2.6 tchar; '=' and CTLs are excluded by design.
 inline constexpr std::string_view k_tchar_specials = "!#$%&'*+-.^_`|~";

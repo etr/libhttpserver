@@ -98,6 +98,7 @@ src/httpserver/detail/digest_nonce.hpp
 src/httpserver/detail/digest_ledger.hpp
 src/httpserver/detail/digest_params.hpp
 src/httpserver/detail/digest_response.hpp
+src/httpserver/detail/auth_text.hpp
 "
 
 violations=0
