@@ -48,6 +48,16 @@ class exchange;
 
 namespace server {
 
+// TASK-118: one captured path parameter delivered through the exchange
+// (plan D2). `name` views the registry's stored pattern text: the view
+// stays valid while the registry is not mutated (the native server
+// enforces this -- registration is closed once listen() runs); `value`
+// is owned.
+struct route_captures {
+    std::string_view name;
+    std::string value;
+};
+
 namespace detail {
 
 constexpr bool is_name_byte(char c) noexcept {
@@ -132,29 +142,53 @@ inline std::vector<std::string_view> split_path_segments(
     return segments;
 }
 
-// Segment-wise pattern match over an already-split path: a literal
+// Compares one pattern segment run against the path: a literal
 // pattern segment compares equal, a single {name} segment captures any
-// non-empty segment, and the segment counts must agree. Captures fill
-// in pattern order; a failed match leaves them unused.
-inline bool match_path_segments(
-    std::string_view pattern_text,
+// non-empty segment. Captures fill in pattern order, each name viewing
+// the pattern text; a failed match leaves them unused.
+inline bool match_segment_run(
+    const std::vector<std::string_view>& pattern_segments,
     const std::vector<std::string_view>& path_segments,
-    std::vector<std::string>& captures) {
-    const std::vector<std::string_view> pattern_segments =
-        split_path_segments(pattern_text);
-    if (pattern_segments.size() != path_segments.size()) return false;
+    std::vector<route_captures>& captures) {
     captures.clear();
     for (std::size_t i = 0; i < pattern_segments.size(); ++i) {
         const std::string_view& pattern = pattern_segments[i];
         const std::string_view& segment = path_segments[i];
         if (pattern.front() == '{') {
             if (segment.empty()) return false;
-            captures.emplace_back(segment);
+            captures.push_back(route_captures{
+                pattern.substr(1, pattern.size() - 2), std::string(segment)});
             continue;
         }
         if (pattern != segment) return false;
     }
     return true;
+}
+
+// Segment-wise full pattern match over an already-split path: the
+// segment counts must agree, then the whole run matches.
+inline bool match_path_segments(
+    std::string_view pattern_text,
+    const std::vector<std::string_view>& path_segments,
+    std::vector<route_captures>& captures) {
+    const std::vector<std::string_view> pattern_segments =
+        split_path_segments(pattern_text);
+    if (pattern_segments.size() != path_segments.size()) return false;
+    return match_segment_run(pattern_segments, path_segments, captures);
+}
+
+// Prefix-family match (TASK-118, plan D1): the pattern segments match
+// a leading run of the path segments, equal length included. The root
+// pattern "/" has no segments and therefore matches every path (the
+// documented catch-all).
+inline bool match_prefix_segments(
+    std::string_view pattern_text,
+    const std::vector<std::string_view>& path_segments,
+    std::vector<route_captures>& captures) {
+    const std::vector<std::string_view> pattern_segments =
+        split_path_segments(pattern_text);
+    if (pattern_segments.size() > path_segments.size()) return false;
+    return match_segment_run(pattern_segments, path_segments, captures);
 }
 
 }  // namespace detail
@@ -263,12 +297,14 @@ class route_registry {
         return http::outcome::okay();
     }
 
-    // Registers `handler` for (method, pattern). Typed failures:
-    // invalid_argument for the unknown_ method, a malformed pattern, or
-    // an empty handler; invalid_state for a duplicate (method, pattern)
-    // pair or a registry with no budget; limit_exceeded when the routes
-    // capacity is exhausted on this node or an ancestor. On failure the
-    // registry is unchanged.
+    // Registers `handler` for (method, pattern) -- the single-method
+    // form; an extension method registers exactly itself. Typed
+    // failures: invalid_argument for the unknown_ method, a malformed
+    // pattern, or an empty handler; invalid_state for a duplicate
+    // (overlapping methods, same pattern, same family) or a registry
+    // with no budget; limit_exceeded when the routes capacity is
+    // exhausted on this node or an ancestor. On failure the registry is
+    // unchanged.
     http::outcome route(const http::method& m, std::string_view pattern,
                         route_handler handler) {
         if (!m.valid()) {
@@ -280,35 +316,55 @@ class route_registry {
             return http::outcome(http::outcome_code::invalid_argument,
                                  "route_registry: handler is empty");
         }
-        route_pattern parsed;
-        if (const http::outcome result =
-                route_pattern::parse(pattern, parsed);
-            !result.ok()) {
-            return result;
+        http::method_set bits;
+        http::method single;
+        if (m.is_extension()) {
+            single = m;
+        } else {
+            bits.set(m.id());
         }
-        if (!budget_.valid()) {
+        return admit(pattern, std::move(handler), false, bits, single);
+    }
+
+    // Registers `handler` for a set of known methods on one pattern.
+    // An empty set is invalid_argument; the duplicate rule is
+    // overlapping-methods on the same pattern (disjoint sets coexist
+    // and the 405 Allow merges them).
+    http::outcome route(const http::method_set& set,
+                        std::string_view pattern, route_handler handler) {
+        if (!set.any()) {
             return http::outcome(
-                http::outcome_code::invalid_state,
-                "route_registry: registry has no budget");
+                http::outcome_code::invalid_argument,
+                "route_registry: a method-set route needs at least one"
+                " method");
         }
-        const std::string& canonical = parsed.text();
-        for (const entry& known : entries_) {
-            if (known.method_ == m && known.pattern_.text() == canonical) {
-                return http::outcome(
-                    http::outcome_code::invalid_state,
-                    "route_registry: duplicate route for "
-                        + std::string(m.name()) + " " + canonical);
-            }
+        if (!handler) {
+            return http::outcome(http::outcome_code::invalid_argument,
+                                 "route_registry: handler is empty");
         }
-        reservation seat;
-        if (const http::outcome result =
-                budget_.reserve(resource::routes, 1, seat);
-            !result.ok()) {
-            return result;
+        return admit(pattern, std::move(handler), false, set,
+                     http::method{});
+    }
+
+    // Registers `handler` as a prefix-family route: the pattern
+    // segments match a leading run of the request path segments (equal
+    // length included; "/" is the catch-all). Admission rules match
+    // route(); full-match routes outrank prefix routes at resolve time.
+    http::outcome route_prefix(const http::method_set& set,
+                               std::string_view pattern,
+                               route_handler handler) {
+        if (!set.any()) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "route_registry: a prefix route needs at least one"
+                " method");
         }
-        entries_.push_back(entry{m, std::move(parsed), std::move(handler),
-                                 std::move(seat)});
-        return http::outcome::okay();
+        if (!handler) {
+            return http::outcome(http::outcome_code::invalid_argument,
+                                 "route_registry: handler is empty");
+        }
+        return admit(pattern, std::move(handler), true, set,
+                     http::method{});
     }
 
     // Exact-segment visibility probe over the stored patterns (no
@@ -316,7 +372,7 @@ class route_registry {
     // request-handling tasks.
     bool registered(const http::method& m, const route_pattern& p) const {
         for (const entry& known : entries_) {
-            if (known.method_ == m && known.pattern_.text() == p.text()) {
+            if (known.pattern_.text() == p.text() && accepts(known, m)) {
                 return true;
             }
         }
@@ -341,16 +397,53 @@ class route_registry {
         const std::vector<std::string_view> path_segments =
             detail::split_path_segments(route_path);
         for (const entry& known : entries_) {
-            if (known.method_ != m) continue;
-            std::vector<std::string> captures;
-            if (detail::match_path_segments(known.pattern_.text(),
-                                            path_segments, captures)) {
-                found.handler = &known.handler_;
-                found.parameters = std::move(captures);
-                break;
+            if (known.prefix_ || !accepts(known, m)) continue;
+            std::vector<route_captures> captures;
+            if (!detail::match_path_segments(known.pattern_.text(),
+                                             path_segments, captures)) {
+                continue;
             }
+            found.handler = &known.handler_;
+            found.parameters.reserve(captures.size());
+            for (route_captures& capture : captures) {
+                found.parameters.push_back(std::move(capture.value));
+            }
+            break;
         }
         return found;
+    }
+
+    // TASK-118: the request-facing lookup with the v2 family
+    // precedence (plan D1). Full matches (exact and parameterized,
+    // first registration order) are decided before prefix matches
+    // (most segments wins, ties by registration order); the tier
+    // decision is method-blind, exactly like the v2 lookup tiers, so a
+    // full-match pattern that mismatches the method owns the 405. A
+    // hit reports the handler, the named captures in pattern order,
+    // and the matched pattern; a method miss reports the tier's merged
+    // methods (the Allow inputs: the known-slot set plus any extension
+    // singles' tokens); a plain miss reports neither. The v2 regex
+    // family and {name|regex} per-segment constraints are not ported
+    // (migration note in the v2-parity inventory).
+    struct resolve_result {
+        enum class resolve_kind : std::uint8_t { miss, method_miss, hit };
+
+        resolve_kind kind = resolve_kind::miss;
+        const route_handler* handler = nullptr;
+        std::vector<route_captures> captures;
+        std::string pattern_text;
+        http::method_set methods;
+        std::vector<std::string> extension_names;
+        bool is_prefix = false;
+    };
+
+    resolve_result resolve(const http::method& m,
+                           std::string_view route_path) const {
+        const std::vector<std::string_view> path_segments =
+            detail::split_path_segments(route_path);
+        resolve_result full = resolve_tier(m, path_segments, false);
+        if (full.kind != resolve_result::resolve_kind::miss) return full;
+        return resolve_tier(m, path_segments, true);
     }
 
     std::size_t size() const noexcept { return entries_.size(); }
@@ -362,11 +455,155 @@ class route_registry {
         : budget_(std::move(budget)) { }
 
     struct entry {
-        http::method method_;
+        http::method_set methods_;              // known-slot methods
+        http::method single_;                   // extension registration
         route_pattern pattern_;
         route_handler handler_;
         reservation seat_;
+        bool prefix_ = false;
     };
+
+    // True iff the entry would serve @p m: a known method tests the
+    // slot set; an extension single compares by identity.
+    static bool accepts(const entry& known, const http::method& m) noexcept {
+        if (known.single_.valid()) return known.single_ == m;
+        return known.methods_.contains(m);
+    }
+
+    // The shared admission tail of every registration form: parse,
+    // budget gate, same-family duplicate check (overlapping methods on
+    // one canonical pattern), then the reserved push.
+    http::outcome admit(std::string_view pattern, route_handler handler,
+                        bool prefix, const http::method_set& set,
+                        const http::method& single) {
+        route_pattern parsed;
+        if (const http::outcome result =
+                route_pattern::parse(pattern, parsed);
+            !result.ok()) {
+            return result;
+        }
+        if (!budget_.valid()) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "route_registry: registry has no budget");
+        }
+        const std::string& canonical = parsed.text();
+        for (const entry& known : entries_) {
+            if (known.prefix_ == prefix && known.pattern_.text() == canonical
+                    && overlaps(known, set, single)) {
+                const std::string label = single.valid()
+                    ? std::string(single.name()) : http::to_string(set);
+                return http::outcome(
+                    http::outcome_code::invalid_state,
+                    "route_registry: duplicate route for " + label + " "
+                        + canonical);
+            }
+        }
+        reservation seat;
+        if (const http::outcome result =
+                budget_.reserve(resource::routes, 1, seat);
+            !result.ok()) {
+            return result;
+        }
+        entries_.push_back(entry{set, single, std::move(parsed),
+                                 std::move(handler), std::move(seat),
+                                 prefix});
+        return http::outcome::okay();
+    }
+
+    // Overlap test for the duplicate rule: two known-slot sets
+    // intersect, or two extension singles name the same token. An
+    // extension single and a known-slot set are always disjoint.
+    static bool overlaps(const entry& known, const http::method_set& set,
+                         const http::method& single) noexcept {
+        if (single.valid()) {
+            return known.single_.valid() && known.single_ == single;
+        }
+        for (std::size_t id = 0;
+             id < static_cast<std::size_t>(http::method_id::extension);
+             ++id) {
+            const http::method slot =
+                http::method::known(static_cast<http::method_id>(id));
+            if (set.contains(slot) && known.methods_.contains(slot)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // One tier of the resolve decision. Merges every matching entry's
+    // methods (the Allow inputs); the first accepting full match wins,
+    // the deepest accepting prefix match wins.
+    resolve_result resolve_tier(
+            const http::method& m,
+            const std::vector<std::string_view>& path_segments,
+            bool prefix) const {
+        resolve_result out;
+        const entry* best = nullptr;
+        std::vector<route_captures> best_captures;
+        for (const entry& known : entries_) {
+            if (known.prefix_ != prefix) continue;
+            std::vector<route_captures> captures;
+            if (!match_tier_entry(known, path_segments, prefix, captures)) {
+                continue;
+            }
+            merge_entry_methods(out, known);
+            if (!accepts(known, m) || !outranks(best, known, prefix)) {
+                continue;
+            }
+            best = &known;
+            best_captures = std::move(captures);
+        }
+        if (best == nullptr) return miss_or_method_miss(out);
+        out.kind = resolve_result::resolve_kind::hit;
+        out.handler = &best->handler_;
+        out.captures = std::move(best_captures);
+        out.pattern_text = best->pattern_.text();
+        out.is_prefix = prefix;
+        return out;
+    }
+
+    // Path-shape match of one entry within its tier.
+    static bool match_tier_entry(
+            const entry& known,
+            const std::vector<std::string_view>& path_segments, bool prefix,
+            std::vector<route_captures>& captures) {
+        const std::string& text = known.pattern_.text();
+        return prefix ? detail::match_prefix_segments(text, path_segments,
+                                                      captures)
+                      : detail::match_path_segments(text, path_segments,
+                                                    captures);
+    }
+
+    // Folds one matching entry's methods into the tier's Allow inputs.
+    static void merge_entry_methods(resolve_result& out,
+                                    const entry& known) noexcept {
+        if (known.single_.valid()) {
+            out.extension_names.emplace_back(known.single_.name());
+        } else {
+            out.methods.merge(known.methods_);
+        }
+    }
+
+    // The candidate-selection rule: no winner yet always takes; the
+    // full tier keeps its first winner; the prefix tier takes only a
+    // strictly deeper pattern.
+    static bool outranks(const entry* best, const entry& candidate,
+                         bool prefix) noexcept {
+        if (best == nullptr) return true;
+        if (!prefix) return false;
+        return candidate.pattern_.segment_count()
+            > best->pattern_.segment_count();
+    }
+
+    // No accepting entry: a miss unless the tier matched some pattern
+    // shape (then the merged methods feed the 405 Allow).
+    static resolve_result miss_or_method_miss(resolve_result out) noexcept {
+        if (out.methods.any() || !out.extension_names.empty()) {
+            out.kind = resolve_result::resolve_kind::method_miss;
+        }
+        return out;
+    }
 
     std::vector<entry> entries_;
     resource_budget budget_;
