@@ -92,9 +92,8 @@ struct basic_auth_verdict {
 
 // Application-supplied credential decision (the form the parity
 // fixture's central auth_handler takes). Receives the decoded pair.
-using basic_auth_validator =
-    concurrency::unique_function<bool(const std::string& user,
-                                      const std::string& password)>;
+using basic_auth_validator = concurrency::unique_function<bool(
+    const std::string& user, const std::string& password)>;
 
 // An immutable, reusable Basic authentication policy. Two factory
 // forms: fixed credentials (matched through a constant-time

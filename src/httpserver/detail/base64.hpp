@@ -48,8 +48,7 @@ namespace httpserver {
 
 namespace detail {
 
-constexpr std::string_view k_base64_alphabet =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+constexpr std::string_view k_base64_alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 inline std::uint32_t octet(const std::byte b) noexcept {
     return static_cast<std::uint32_t>(b);

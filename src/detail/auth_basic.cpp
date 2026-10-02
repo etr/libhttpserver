@@ -80,9 +80,7 @@ bool is_separator(char c) noexcept {
 
 // The token68 alphabet of RFC 7235 (base64 URL-unfriendly specials
 // included); '=' is handled separately as trailing padding only.
-constexpr std::string_view k_token68_chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "-._~+/";
+constexpr std::string_view k_token68_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/";
 
 bool is_token68_char(char c) noexcept {
     return k_token68_chars.find(c) != std::string_view::npos;
@@ -197,8 +195,7 @@ http::fields basic_auth_verdict::challenge_fields() const {
     return fields;
 }
 
-basic_auth_policy::basic_auth_policy(basic_auth_policy&&) noexcept =
-    default;
+basic_auth_policy::basic_auth_policy(basic_auth_policy&&) noexcept = default;
 
 basic_auth_policy& basic_auth_policy::operator=(
     basic_auth_policy&&) noexcept = default;

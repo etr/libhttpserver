@@ -65,14 +65,15 @@ inline constexpr std::uint32_t sha1_majority(std::uint32_t b, std::uint32_t c,
     return (b & c) | (b & d) | (c & d);
 }
 
-using sha1_mix_fn =
-    std::uint32_t (*)(std::uint32_t, std::uint32_t, std::uint32_t);
+using sha1_mix_fn = std::uint32_t (*)(std::uint32_t, std::uint32_t, std::uint32_t);
 
 // Per step-group (20 rounds each): the mix and the additive constant.
 inline constexpr std::array<sha1_mix_fn, 4> k_sha1_mix{
-    sha1_choice, sha1_parity, sha1_majority, sha1_parity};
+    sha1_choice, sha1_parity, sha1_majority, sha1_parity,
+};
 inline constexpr std::array<std::uint32_t, 4> k_sha1_group_k{
-    0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xca62c1d6};
+    0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xca62c1d6,
+};
 
 // One 512-bit block into the five running state words.
 inline void sha1_compress(std::uint32_t (&h)[5],

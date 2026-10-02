@@ -48,9 +48,9 @@
 #ifndef SRC_HTTPSERVER_DETAIL_ENTROPY_SYS_HPP_
 #define SRC_HTTPSERVER_DETAIL_ENTROPY_SYS_HPP_
 
-#include <cstddef>
-#include <span>
-
+// The platform headers come first (the io_poll_sys.hpp convention): the
+// C system draws precede the C++ headers so the include-order gate
+// reads every lane the same way.
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -61,7 +61,6 @@
 #include <windows.h>
 #include <bcrypt.h>
 #elif defined(__linux__)
-#include <cerrno>
 #include <sys/random.h>
 #include <unistd.h>
 #elif defined(__APPLE__)
@@ -69,6 +68,10 @@
 #else
 #include <unistd.h>
 #endif
+
+#include <cerrno>
+#include <cstddef>
+#include <span>
 
 #include <httpserver/http/outcome.hpp>
 

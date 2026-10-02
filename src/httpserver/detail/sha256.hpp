@@ -56,7 +56,8 @@ inline constexpr std::array<std::uint32_t, 64> k_sha256_k{
     0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08,
     0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f,
     0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+};
 
 inline constexpr std::uint32_t sha256_rotate_right(
     std::uint32_t value, int bits) noexcept {
