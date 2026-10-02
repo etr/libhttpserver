@@ -9,9 +9,9 @@
 Provide streaming multipart uploads and cleanup for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Stream multipart parts and file uploads through bounded body reads.
-- [ ] Apply per-part and aggregate limits.
-- [ ] Clean partial resources and signal hooks once on cancellation.
+- [x] Stream multipart parts and file uploads through bounded body reads.
+- [x] Apply per-part and aggregate limits.
+- [x] Clean partial resources and signal hooks once on cancellation.
 
 **Dependencies:**
 - Blocked by: TASK-103, TASK-106, TASK-116
@@ -24,4 +24,4 @@ Provide streaming multipart uploads and cleanup for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-021, PRD-V3N-REQ-025, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
