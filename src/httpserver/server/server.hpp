@@ -51,6 +51,7 @@
 
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/outcome.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/routes.hpp>
 
@@ -169,6 +170,12 @@ class native_server {
     // True from a successful listen() until request_stop() (or the
     // destructor) runs.
     bool is_running() const noexcept;
+
+    // TASK-118: the server-wide lifecycle hook bus (server/hooks.hpp
+    // for the phase contract). Registration is runtime-safe before and
+    // after listen(); the returned reference is valid for the server's
+    // lifetime.
+    hook_bus& hooks() const noexcept;
 
     // The resolved port of listener @p listener_index (0 for an
     // ephemeral-port request reports the bound port; 0 before listen()

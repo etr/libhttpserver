@@ -39,6 +39,7 @@
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/listener_engine.hpp>
 #include <httpserver/detail/worker_pool.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/route_sync.hpp>
 
 namespace httpserver {
@@ -213,6 +214,8 @@ class native_server::impl {
         return listeners_[listener_index]->bound_port();
     }
 
+    hook_bus& hooks() const noexcept { return hooks_; }
+
  private:
     // Destruction order (reverse declaration): the flags, the transport
     // engine (close), the pool (drain), the listeners, the registry,
@@ -227,6 +230,10 @@ class native_server::impl {
     resource_budget budget_;
     route_registry registry_;
     http::outcome registry_state_;
+    // Declared before the listeners and the pool: connection engines
+    // reference the bus for their whole live window, so the bus
+    // outlives them (reverse destruction order).
+    mutable hook_bus hooks_;
     std::vector<std::shared_ptr<engine::listener_engine>> listeners_;
     engine::worker_pool pool_;
     engine::io_poll_backend backend_;
@@ -307,8 +314,12 @@ bool native_server::is_running() const noexcept {
 }
 
 std::uint16_t native_server::get_bound_port(
-    std::size_t listener_index) const noexcept {
+        std::size_t listener_index) const noexcept {
     return impl_->get_bound_port(listener_index);
+}
+
+hook_bus& native_server::hooks() const noexcept {
+    return impl_->hooks();
 }
 
 }  // namespace server
