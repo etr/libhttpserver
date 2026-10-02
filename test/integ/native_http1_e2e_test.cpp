@@ -44,6 +44,7 @@
 #include <utility>
 #include <vector>
 
+#include <httpserver/auth/basic_auth.hpp>
 #include <httpserver/body_reader.hpp>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/exchange.hpp>
@@ -81,6 +82,20 @@ task<void> hello_handler(exchange& x) {
     f.append("Content-Type", "text/plain");
     static_cast<void>(x.start_response(http::status::from_code(200), f));
     const std::string body = "hello";
+    const std::byte* raw = reinterpret_cast<const std::byte*>(body.data());
+    co_await x.writer().write(std::span<const std::byte>(raw, body.size()));
+    co_await x.writer().finish();
+}
+
+// TASK-114: GET /secret behind make_basic_guard -- the guarded body.
+// Authenticated requests are served the parity fixture's pinned
+// secret response (text/plain, Content-Length: 9, "secret-ok").
+task<void> secret_handler(exchange& x) {
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", "9");
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::string body = "secret-ok";
     const std::byte* raw = reinterpret_cast<const std::byte*>(body.data());
     co_await x.writer().write(std::span<const std::byte>(raw, body.size()));
     co_await x.writer().finish();
@@ -353,6 +368,15 @@ class server_fixture {
         static_cast<void>(server_.route(
             http::method::known(http::method_id::get), "/hello",
             hello_handler));
+        // TASK-114: /secret answers through the Basic auth guard (the
+        // v2 parity fixture's credentials and realm).
+        httpserver::auth::basic_auth_policy secret_policy;
+        static_cast<void>(httpserver::auth::basic_auth_policy::create(
+            "transcript", "alice", "wonderland", secret_policy));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::get), "/secret",
+            httpserver::auth::make_basic_guard(
+                std::move(secret_policy), secret_handler)));
         static_cast<void>(server_.route(
             http::method::known(http::method_id::post), "/echo",
             echo_handler));
@@ -1189,6 +1213,68 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, one_shot_definition_serves_once_then_
     LT_CHECK_EQ(seen.size(), 2u);
     if (seen.size() == 2) LT_CHECK_EQ(seen[1].status, 500);
 LT_END_AUTO_TEST(one_shot_definition_serves_once_then_500)
+
+// (29) TASK-114: GET /secret behind make_basic_guard over the wire,
+// all on ONE keep-alive connection: (a) no credentials answers the
+// exact challenge framing (401, WWW-Authenticate: Basic
+// realm="transcript", Content-Length: 0, empty body); (b) invalid
+// credentials answer the same challenge; (c) valid credentials are
+// served the secret; and the connection is still serving requests
+// after a challenge (the 401 never poisons the pipeline).
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, basic_auth_guard_secret_round_trip)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    std::deque<observed_response> seen;
+    // (a) absent Authorization.
+    LT_CHECK(client.send("GET /secret HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 401);
+        const std::string* challenge = nullptr;
+        for (const auto& h : seen[0].headers) {
+            if (lowered_header_name(h.name) == "www-authenticate") {
+                challenge = &h.value;
+            }
+        }
+        LT_CHECK(challenge != nullptr);
+        if (challenge != nullptr) {
+            LT_CHECK_EQ(*challenge, std::string("Basic realm=\"transcript\""));
+        }
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+        LT_CHECK_EQ(seen[0].body, std::string(""));
+    }
+    // (b) invalid credentials: the same challenge, still keep-alive.
+    LT_CHECK(client.send("GET /secret HTTP/1.1\r\nHost: h\r\n"
+                         "Authorization: Basic aW52YWxpZDppbnZhbGlk\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) {
+        LT_CHECK_EQ(seen[1].status, 401);
+        const std::string* challenge = nullptr;
+        for (const auto& h : seen[1].headers) {
+            if (lowered_header_name(h.name) == "www-authenticate") {
+                challenge = &h.value;
+            }
+        }
+        LT_CHECK(challenge != nullptr);
+        if (challenge != nullptr) {
+            LT_CHECK_EQ(*challenge, std::string("Basic realm=\"transcript\""));
+        }
+    }
+    // (c) valid credentials on the SAME connection: served the secret.
+    LT_CHECK(client.send("GET /secret HTTP/1.1\r\nHost: h\r\n"
+                         "Authorization: Basic YWxpY2U6d29uZGVybGFuZA==\r\n"
+                         "\r\n"));
+    LT_CHECK(client.receive(3, seen));
+    LT_CHECK_EQ(seen.size(), 3u);
+    if (seen.size() == 3) {
+        LT_CHECK_EQ(seen[2].status, 200);
+        LT_CHECK_EQ(seen[2].body, std::string("secret-ok"));
+        LT_CHECK_EQ(seen[2].framing, std::string("content-length"));
+    }
+LT_END_AUTO_TEST(basic_auth_guard_secret_round_trip)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
