@@ -40,16 +40,22 @@
 // The TASK-117 strictness deltas over v2 (migration-noted): a missing
 // first or final boundary, a delimiter truncated at EOF, a header line
 // without a colon or without CRLF, a part without a usable
-// Content-Disposition, and a malformed parameter list are typed
-// invalid_argument rejections, where MHD silently produced no parts;
-// the byte, part-count, per-part, and header-block budgets are typed
+// Content-Disposition, a malformed parameter list, and transport
+// padding after a delimiter longer than the boundary plus 8 bytes are
+// typed invalid_argument rejections, where MHD silently produced no
+// parts (and, for padding, tolerated it unboundedly); the byte,
+// part-count, per-part, and header-block budgets are typed
 // limit_exceeded rejections, where v2's effective default was
 // unbounded.
 //
 // Bounded by construction: pending_ never holds more than the incoming
 // feed plus the holdback window (boundary + 4 bytes) in part_body, so
 // the trailing delimiter candidate is never emitted as data, and a
-// part's bytes are emitted only under the per-part budget check.
+// part's bytes are emitted only under the per-part budget check. The
+// padding bound above keeps the same guarantee on the delimiter's
+// trailing side: an unterminated padding run is rejected once it
+// passes the bound, so it can never grow the window or the per-feed
+// rescan unboundedly.
 // Events see views of decoder-owned storage valid only inside the
 // callback. State survives arbitrary feed boundaries, so streaming
 // feeds and one-shot feeds decode identically. Rejections are sticky:
@@ -305,6 +311,7 @@ class multipart_decoder {
                       std::uint64_t max_part_header_bytes,
                       multipart_events& events) noexcept
         : needle_("\r\n--" + boundary),
+          max_follow_padding_(needle_.size() + 4),
           max_total_bytes_(max_total_bytes), max_parts_(max_parts),
           max_part_bytes_(max_part_bytes),
           max_part_header_bytes_(max_part_header_bytes),
@@ -365,6 +372,7 @@ class multipart_decoder {
     };
     enum class verdict : std::uint8_t {
         need_more, final_boundary, next_part, not_delimiter,
+        padding_reject,
     };
     enum class crlf_verdict : std::uint8_t {
         yes, no, need_more,
@@ -390,18 +398,32 @@ class multipart_decoder {
     // What follows the boundary at @p j: the closing "--", transport
     // padding then CRLF (next part), or CRLF (next part). Anything
     // else means this candidate is data. On a delimiter verdict,
-    // follow_end_ lands after the consumed delimiter bytes.
+    // follow_end_ lands after the consumed delimiter bytes. Transport
+    // padding (optional LWSP) is tolerated only up to the documented
+    // strictness bound -- the boundary length plus 8 bytes: a longer
+    // run, terminated or not, is the typed padding_reject (sticky
+    // malformed), so the pending window never grows with an
+    // unterminated padding run and each feed rescans at most
+    // bound-many held bytes (the streaming invariant; the migration
+    // note records the delta over MHD's unbounded tolerance).
     verdict decide_follow(std::size_t j) {
         if (j >= pending_.size()) return verdict::need_more;
         if (pending_[j] == '-') return decide_dash(j);
-        while (j < pending_.size()
-               && multipart_params::is_hspace(pending_[j])) {
-            ++j;
+        std::size_t k = j;
+        while (k < pending_.size()
+               && multipart_params::is_hspace(pending_[k])) {
+            ++k;
         }
-        const crlf_verdict end = crlf_at(j);
+        if (k - j > max_follow_padding_) {
+            fail(http::outcome_code::invalid_argument,
+                 "transport padding after boundary exceeds the "
+                 "accepted bound");
+            return verdict::padding_reject;
+        }
+        const crlf_verdict end = crlf_at(k);
         if (end == crlf_verdict::need_more) return verdict::need_more;
         if (end == crlf_verdict::yes) {
-            follow_end_ = j + 2;
+            follow_end_ = k + 2;
             return verdict::next_part;
         }
         return verdict::not_delimiter;
@@ -449,6 +471,7 @@ class multipart_decoder {
                 return http::outcome::okay();
             }
             const verdict v = decide_follow(p + needle_.size());
+            if (v == verdict::padding_reject) return failure_;
             if (v == verdict::need_more) {
                 pending_.erase(0, p);
                 need_more_ = true;
@@ -524,6 +547,7 @@ class multipart_decoder {
                 return http::outcome::okay();
             }
             const verdict v = decide_follow(p + needle_.size());
+            if (v == verdict::padding_reject) return failure_;
             if (v == verdict::need_more) {
                 const http::outcome emitted = emit_data(p);
                 if (!emitted.ok()) return emitted;
@@ -701,6 +725,9 @@ class multipart_decoder {
     }
 
     const std::string needle_;  // CRLF "--" boundary
+    // The transport-padding bound after one delimiter: the boundary
+    // length plus 8 bytes (needle_ is the boundary plus 4).
+    const std::size_t max_follow_padding_;
     const std::uint64_t max_total_bytes_;
     const std::uint64_t max_parts_;
     const std::uint64_t max_part_bytes_;

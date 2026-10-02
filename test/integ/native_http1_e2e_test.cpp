@@ -290,11 +290,14 @@ srv::sync_response form_echo_value(
     return out;
 }
 
-// TASK-117 multipart state. The disk scenarios point e2e_disk_dir at a
-// scratch directory before connecting (the suite runs sequentially).
+// TASK-117 multipart state. The disk scenarios point e2e_disk_dir() at
+// a scratch directory before connecting (the suite runs sequentially).
 std::atomic<int> upload_note_invocations{0};
 std::atomic<int> upload_capped_invocations{0};
-std::string e2e_disk_dir;
+std::string& e2e_disk_dir() {
+    static std::string dir;
+    return dir;
+}
 
 // TASK-117: the /upload handler value -- the v2 fixture's posture
 // (note=<v>, text/plain, length-framed).
@@ -329,7 +332,7 @@ srv::sync_response upload_capped_value(
 // response body is the created file's path.
 task<void> upload_disk_handler(exchange& x) {
     httpserver::forms::temp_file_options options;
-    options.directory = e2e_disk_dir;
+    options.directory = e2e_disk_dir();
     options.should_keep =
         [](const std::string&, const std::string&,
            const httpserver::forms::part_file_info&) { return true; };
@@ -359,7 +362,7 @@ task<void> upload_disk_handler(exchange& x) {
 // directory empty.
 task<void> upload_slow_handler(exchange& x) {
     httpserver::forms::temp_file_part_sink sink(
-        httpserver::forms::temp_file_options{e2e_disk_dir});
+        httpserver::forms::temp_file_options{e2e_disk_dir()});
     static_cast<void>(co_await httpserver::forms::read_multipart(
         x, httpserver::forms::multipart_limits{}, sink));
 }
@@ -737,7 +740,7 @@ LT_BEGIN_SUITE(native_http1_e2e_suite)
         form_echo_invocations.store(0);
         upload_note_invocations.store(0);
         upload_capped_invocations.store(0);
-        e2e_disk_dir.clear();
+        e2e_disk_dir().clear();
         e2e_drain_gate = resume_signal{};
         e2e_drain_entered.store(false);
         e2e_hang_entered.store(false);
@@ -2099,7 +2102,7 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, multipart_client_abort_removes_partia
     server_fixture s(base_options());
     e2e_scratch_dir dir;
     LT_CHECK(!dir.path().empty());
-    e2e_disk_dir = dir.path();
+    e2e_disk_dir() = dir.path();
 
     raw::connection aborter;
     LT_CHECK(aborter.connect(s.port()));
@@ -2145,7 +2148,7 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, multipart_disk_upload_round_trip)
     server_fixture s(base_options());
     e2e_scratch_dir dir;
     LT_CHECK(!dir.path().empty());
-    e2e_disk_dir = dir.path();
+    e2e_disk_dir() = dir.path();
 
     // A 2 MiB deterministic payload through a 512 KiB part body.
     std::string payload;

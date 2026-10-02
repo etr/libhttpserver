@@ -48,6 +48,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <iostream>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -150,8 +151,8 @@ std::vector<std::byte> bytes_of(const std::string& s) {
 
 struct part_spec {
     std::string name;
-    std::string filename;               // empty = field part
-    const char* content_type = nullptr; // null = no part Content-Type
+    std::string filename;                // empty = field part
+    const char* content_type = nullptr;  // null = no part Content-Type
     std::string data;
 };
 

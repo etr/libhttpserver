@@ -105,9 +105,7 @@ static_assert(!std::is_copy_constructible_v<temp_file_part_sink>);
 static_assert(!std::is_move_constructible_v<temp_file_part_sink>);
 static_assert(std::is_base_of_v<part_sink, temp_file_part_sink>);
 static_assert(std::is_same_v<
-    decltype(static_cast<http::outcome (temp_file_part_sink::*)(
-                  const part_descriptor&)>(
-        &temp_file_part_sink::on_part_begin)),
+    decltype(&temp_file_part_sink::on_part_begin),
     http::outcome (temp_file_part_sink::*)(const part_descriptor&)>);
 static_assert(std::is_same_v<
     decltype(&temp_file_part_sink::completed),

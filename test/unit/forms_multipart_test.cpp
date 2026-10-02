@@ -327,6 +327,18 @@ LT_END_AUTO_TEST(decode_drives_the_sink)
 // body both trip mid-part -- and NEVER on a clean decode or on a
 // before-any-part boundary failure.
 LT_BEGIN_AUTO_TEST(forms_multipart_suite, abort_fires_exactly_once)
+    // A boundary problem before any part began: nothing to abort.
+    LT_CHECK(fails_with(field_body(), "multipart/form-data",
+                        forms::multipart_limits{},
+                        http::outcome_code::invalid_argument, 0).empty());
+    LT_CHECK(fails_with(field_body(), nullptr,
+                        forms::multipart_limits{},
+                        http::outcome_code::invalid_argument, 0).empty());
+    LT_CHECK(fails_with(
+        field_body(), "multipart/form-data; boundary=bad!charset",
+        forms::multipart_limits{},
+        http::outcome_code::invalid_argument, 0).empty());
+
     // Mid-part malformed (missing final boundary): one abort carrying
     // the typed rejection.
     {
@@ -358,17 +370,6 @@ LT_BEGIN_AUTO_TEST(forms_multipart_suite, abort_fires_exactly_once)
         LT_CHECK(log.abort_reason.code()
                                  == http::outcome_code::limit_exceeded);
     }
-    // A boundary problem before any part began: nothing to abort.
-    LT_CHECK(fails_with(field_body(), "multipart/form-data",
-                        forms::multipart_limits{},
-                        http::outcome_code::invalid_argument, 0).empty());
-    LT_CHECK(fails_with(field_body(), nullptr,
-                        forms::multipart_limits{},
-                        http::outcome_code::invalid_argument, 0).empty());
-    LT_CHECK(fails_with(
-        field_body(), "multipart/form-data; boundary=bad!charset",
-        forms::multipart_limits{},
-        http::outcome_code::invalid_argument, 0).empty());
 LT_END_AUTO_TEST(abort_fires_exactly_once)
 
 // (3) Typed verdicts: malformed bodies and unusable Content-Types

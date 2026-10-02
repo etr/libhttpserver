@@ -32,7 +32,10 @@
 //   - the decoder-level caps: a body one byte past max_total_bytes
 //     and one part past max_parts both answer 413 with the explicit
 //     Content-Length: 0 framing and the handler never runs (the
-//     distinct branch from the drain-level 413 of the gate path);
+//     distinct branch from the gate path's drain-level 413, driven in
+//     the type-gate test: one 413 with BARE fields -- no explicit
+//     Content-Length -- zero handler invocations, zero writer
+//     traffic);
 //   - a malformed multipart body answers 400 with the length-framed
 //     empty body;
 //   - the v2 content-type gate: a non-multipart type (value end,
@@ -90,8 +93,7 @@ namespace fake = httpserver_test;
 
 namespace {
 
-constexpr const char* k_type =
-    "multipart/form-data; boundary=PARITY096B";
+constexpr const char* k_type = "multipart/form-data; boundary=PARITY096B";
 
 srv::resource_budget budget_with_routes(std::size_t capacity) {
     srv::budget_limits limits;
@@ -335,11 +337,14 @@ LT_END_AUTO_TEST(multipart_route_repeats)
 // cap one past the body size and the part-count cap one past the
 // begun parts (distinct from the gate path's drain-level 413).
 LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, multipart_route_cap_413)
+    // The byte cap one past the body size: one 413, Content-Length: 0,
+    // the handler never invoked (seen stays at zero invocations for
+    // both blocks below).
+    form_observed seen;
     {
         srv::route_registry registry;
         LT_CHECK(srv::route_registry::create(budget_with_routes(4),
                                              registry).ok());
-        form_observed seen;
         const forms::multipart_limits byte_capped{
             static_cast<std::uint64_t>(two_part_body().size() - 1), 64,
             65536, 8192};
@@ -375,7 +380,6 @@ LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, multipart_route_cap_413)
         srv::route_registry registry;
         LT_CHECK(srv::route_registry::create(budget_with_routes(4),
                                              registry).ok());
-        form_observed seen;
         const forms::multipart_limits part_capped{65536, 2, 65536, 8192};
         LT_CHECK(install_upload_route(registry, seen, part_capped).ok());
         const std::string three =
@@ -515,6 +519,43 @@ LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, multipart_route_type_gate)
         LT_CHECK_EQ(sink.code, static_cast<std::uint16_t>(400));
         LT_CHECK(sink.responded.first("content-length").value_or("") == "0");
     }
+
+    // The gate path's drain-level 413: a wrong (non-multipart) type
+    // whose body is one byte past the cap answers 413 without invoking
+    // the handler or touching the writer. The gate path passes bare
+    // fields (no explicit Content-Length: 0) -- the deliberate framing
+    // delta from the decoder-path 413 above and in the cap test.
+    {
+        srv::route_registry capped_registry;
+        LT_CHECK(srv::route_registry::create(budget_with_routes(4),
+                                             capped_registry).ok());
+        form_observed capped_seen;
+        const forms::multipart_limits drain_capped{8, 64, 65536, 8192};
+        LT_CHECK(install_upload_route(capped_registry, capped_seen,
+                                      drain_capped).ok());
+
+        capturing_sink sink;
+        fake::scripted_body_source source;
+        fake::scripted_body_sink responses;
+        source.stage(bytes("012345678"));  // nine bytes, one past 8
+        source.stage_end();
+        exchange x(make_head("text/plain"), &sink, 0, &source, &responses);
+        manual_executor ex;
+        int deliveries = 0;
+        spawn(ex, detail::run_route(capped_registry, x),
+              [&](task_result<void>) { ++deliveries; });
+        drain(ex);
+        LT_CHECK_EQ(deliveries, 1);
+        LT_CHECK_EQ(capped_seen.invoked, 0);
+        LT_CHECK_EQ(sink.admit_calls, 1);
+        LT_CHECK_EQ(sink.respond_calls, 1);
+        LT_CHECK_EQ(sink.code, static_cast<std::uint16_t>(413));
+        LT_CHECK(sink.responded.empty());
+        LT_CHECK_EQ(responses.push_calls(), 0);
+        LT_CHECK_EQ(responses.end_calls(), 0);
+        LT_CHECK_EQ(sink.abort_calls, 0);
+        LT_CHECK(x.state() == exchange_state::responded);
+    }
 LT_END_AUTO_TEST(multipart_route_type_gate)
 
 // (6) Matching content types: parameters after the media type are
@@ -618,6 +659,7 @@ LT_END_AUTO_TEST(multipart_route_segmented)
 LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, read_disconnect_aborts_once)
     // The counting sink observes the abort contract through
     // read_multipart itself.
+    counting_sink parts;
     {
         capturing_sink sink;
         fake::scripted_body_source source;
@@ -627,7 +669,6 @@ LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, read_disconnect_aborts_once)
                            "\r\n"));
         exchange x(make_head(k_type), &sink, 0, &source, &responses);
         manual_executor ex;
-        counting_sink parts;
         int deliveries = 0;
         spawn(ex, fake::watch_stop_and_cancel(x, source),
               [](task_result<void>) { });
@@ -729,7 +770,7 @@ LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, multipart_factory_validates)
             forms::multipart_limits{}, quiet);
         static_cast<void>(h);
     } catch (const std::invalid_argument&) {
-        threw = false;
+        threw = true;
     }
     LT_CHECK(!threw);
 LT_END_AUTO_TEST(multipart_factory_validates)

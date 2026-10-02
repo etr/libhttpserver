@@ -47,6 +47,11 @@
 //     and header-block caps, each exactly-at-cap success and +1
 //     typed limit_exceeded, sticky, with the emitted prefix
 //     provably stopping at the failing feed;
+//   - transport padding after a delimiter is bounded to the boundary
+//     length plus 8 LWSP bytes (the streaming invariant: an
+//     unterminated padding run cannot grow the pending window or the
+//     per-feed rescan; one byte past the bound is the typed sticky
+//     strictness rejection);
 //   - boundary validation at driver setup: RFC 2046 bchars, length
 //     1..256, and boundary extraction from a Content-Type value.
 
@@ -334,25 +339,27 @@ std::string failure_is_sticky(const std::string& body,
 }
 
 // The multipart_field corpus body (forms.tseq), one field part.
-const std::string k_field_body =
-    "--PARITY096B\r\n"
-    "Content-Disposition: form-data; name=\"note\"\r\n"
-    "\r\n"
-    "hello\r\n"
-    "--PARITY096B--\r\n";
+std::string field_body() {
+    return "--PARITY096B\r\n"
+           "Content-Disposition: form-data; name=\"note\"\r\n"
+           "\r\n"
+           "hello\r\n"
+           "--PARITY096B--\r\n";
+}
 
 // A field part and a file part, the canonical two-part shape.
-const std::string k_two_part_body =
-    "--B\r\n"
-    "Content-Disposition: form-data; name=\"field1\"\r\n"
-    "\r\n"
-    "value1\r\n"
-    "--B\r\n"
-    "Content-Disposition: form-data; name=\"file1\"; filename=\"a.txt\"\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n"
-    "file bytes\r\n"
-    "--B--\r\n";
+std::string two_part_body() {
+    return "--B\r\n"
+           "Content-Disposition: form-data; name=\"field1\"\r\n"
+           "\r\n"
+           "value1\r\n"
+           "--B\r\n"
+           "Content-Disposition: form-data; name=\"file1\"; filename=\"a.txt\"\r\n"
+           "Content-Type: text/plain\r\n"
+           "\r\n"
+           "file bytes\r\n"
+           "--B--\r\n";
+}
 
 std::vector<part_record> field_part() {
     return {part_record{"note", "", "", "", "hello"}};
@@ -377,11 +384,11 @@ LT_END_SUITE(multipart_decoder_suite)
 // (1) The canonical shapes decode one-shot: the multipart_field corpus
 // body and the two-part field+file body.
 LT_BEGIN_AUTO_TEST(multipart_decoder_suite, canonical_shapes_decode)
-    LT_CHECK(decodes_to(k_field_body, "PARITY096B", caps{},
+    LT_CHECK(decodes_to(field_body(), "PARITY096B", caps{},
                         field_part()).empty());
-    LT_CHECK(decodes_to(k_two_part_body, "B", caps{}, two_parts()).empty());
+    LT_CHECK(decodes_to(two_part_body(), "B", caps{}, two_parts()).empty());
     // A leading CRLF before the first delimiter is a legal preamble.
-    LT_CHECK(decodes_to("\r\n" + k_two_part_body, "B", caps{},
+    LT_CHECK(decodes_to("\r\n" + two_part_body(), "B", caps{},
                         two_parts()).empty());
 LT_END_AUTO_TEST(canonical_shapes_decode)
 
@@ -390,11 +397,11 @@ LT_END_AUTO_TEST(canonical_shapes_decode)
 // the header lines, and the CRLF pairs -- and fixed-size chunking
 // (bytes at a time) does too.
 LT_BEGIN_AUTO_TEST(multipart_decoder_suite, every_split_decodes)
-    LT_CHECK(every_split_decodes_to(k_two_part_body, "B",
+    LT_CHECK(every_split_decodes_to(two_part_body(), "B",
                                     two_parts()).empty());
     for (std::size_t chunk = 1; chunk <= 9; ++chunk) {
         const std::string diff =
-            segmented_decodes_to(k_two_part_body, "B", chunk, caps{},
+            segmented_decodes_to(two_part_body(), "B", chunk, caps{},
                                  two_parts());
         if (!diff.empty()) {
             std::cerr << "[chunk " << chunk << "] " << diff << std::endl;
@@ -409,7 +416,7 @@ LT_END_AUTO_TEST(every_split_decodes)
 LT_BEGIN_AUTO_TEST(multipart_decoder_suite, preamble_and_epilogue)
     const std::string padded =
         "preamble junk with --B lookalikes\r\nmore\r\n"
-        + k_two_part_body + "epilogue bytes anything at all";
+        + two_part_body() + "epilogue bytes anything at all";
     // The preamble's "--B lookalikes" line is NOT a delimiter (the
     // boundary is followed by junk), so decoding starts at the real
     // first delimiter.
@@ -539,16 +546,16 @@ LT_BEGIN_AUTO_TEST(multipart_decoder_suite, caps_boundary)
     // CRLF of the closing delimiter lives in the epilogue drain) fails
     // typed with both complete parts emitted.
     const std::uint64_t whole =
-        static_cast<std::uint64_t>(k_two_part_body.size());
-    LT_CHECK(decodes_to(k_two_part_body, "B", caps{whole},
+        static_cast<std::uint64_t>(two_part_body().size());
+    LT_CHECK(decodes_to(two_part_body(), "B", caps{whole},
                         two_parts()).empty());
-    LT_CHECK(fails_with(k_two_part_body, "B",
+    LT_CHECK(fails_with(two_part_body(), "B",
                         http::outcome_code::limit_exceeded,
                         caps{whole - 1}, two_parts()).empty());
     // A cap in the middle of part data: the failure is typed and the
     // emission provably stops (prefix, never more).
     LT_CHECK(fails_with_prefix(
-        k_two_part_body, "B", http::outcome_code::limit_exceeded,
+        two_part_body(), "B", http::outcome_code::limit_exceeded,
         caps{55}, two_parts()).empty());
 
     // Part-count cap: two parts at cap 3 succeed; the third part's
@@ -578,7 +585,7 @@ LT_BEGIN_AUTO_TEST(multipart_decoder_suite, caps_boundary)
         "B", caps{default_bytes, default_parts, 6},
         {part_record{"f", "", "", "", "123456"}}).empty());
     LT_CHECK(fails_with_prefix(
-        k_two_part_body, "B", http::outcome_code::limit_exceeded,
+        two_part_body(), "B", http::outcome_code::limit_exceeded,
         caps{default_bytes, default_parts, 7}, two_parts()).empty());
 
     // Header-block cap: exactly-at-cap succeeds; one less fails (the
@@ -612,7 +619,78 @@ LT_BEGIN_AUTO_TEST(multipart_decoder_suite, caps_boundary)
         caps{default_bytes, 2}, first_two).empty());
 LT_END_AUTO_TEST(caps_boundary)
 
-// (8) Boundary validation and extraction at driver setup: RFC 2046
+// (8) Transport padding after a delimiter is optional LWSP bounded to
+// the documented strictness bound (the boundary length plus 8): at the
+// bound the decode succeeds under every split, one byte past is the
+// typed sticky invalid_argument with the undecided candidate's data
+// held back, and an unterminated run fed as many 512-byte chunks never
+// accumulates -- the typed verdict arrives during a feed.
+LT_BEGIN_AUTO_TEST(multipart_decoder_suite, transport_padding_bounds)
+    // Boundary "B": the accepted padding run is 1 + 8 = 9 bytes.
+    const std::string first_part =
+        "--B\r\n"
+        "Content-Disposition: form-data; name=\"n\"\r\n"
+        "\r\n"
+        "v\r\n--B";
+    const std::string second_headers =
+        "Content-Disposition: form-data; name=\"m\"\r\n"
+        "\r\n"
+        "w\r\n--B--";
+
+    const std::vector<part_record> both{
+        part_record{"n", "", "", "", "v"},
+        part_record{"m", "", "", "", "w"}};
+
+    // At the bound the delimiter resolves: the decode succeeds, split
+    // anywhere (the padding window survives feed boundaries; padding
+    // after the final "--" is epilogue, drained unbounded).
+    const std::string at_bound = first_part + std::string(9, ' ')
+        + "\r\n" + second_headers + std::string(9, '\t') + "\r\nepilogue";
+    LT_CHECK(decodes_to(at_bound, "B", caps{}, both).empty());
+    LT_CHECK(every_split_decodes_to(at_bound, "B", both).empty());
+
+    // One byte past the bound: the typed sticky rejection with the
+    // undecided candidate's data held back (the prefix stops at "v").
+    const std::string past_bound =
+        first_part + std::string(10, ' ') + "\r\n" + second_headers
+        + "\r\n";
+    LT_CHECK(failure_is_sticky(
+        past_bound, "B", http::outcome_code::invalid_argument, caps{},
+        {part_record{"n", "", "", "", ""}}).empty());
+
+    // An unterminated padding run over many 512-byte feeds is rejected
+    // DURING a feed (never only at finish), so the pending window
+    // cannot grow with the padding: 100 x 512 bytes stays under the
+    // raw-byte cap, so only the padding bound can reject.
+    {
+        recording_events events;
+        multipart_decoder d("B", default_bytes, default_parts,
+                            default_part_bytes, default_header_bytes,
+                            events);
+        LT_CHECK(d.feed(bytes_of(first_part)).ok());
+        http::outcome observed = http::outcome::okay();
+        std::size_t feeds = 0;
+        for (; feeds < 100; ++feeds) {
+            observed = d.feed(bytes_of(std::string(512, ' ')));
+            if (!observed.ok()) break;
+        }
+        LT_CHECK(!observed.ok());
+        LT_CHECK(observed.code()
+                 == http::outcome_code::invalid_argument);
+        LT_CHECK(feeds < 100);
+        LT_CHECK(d.finish().code()
+                 == http::outcome_code::invalid_argument);
+        // The first feed ended exactly at the delimiter candidate, so
+        // "v" was released as a prefix before any padding arrived; the
+        // rejection then stops everything later (a prefix, never more).
+        const std::string diff =
+            parts_diff(events.parts, {part_record{"n", "", "", "", "v"}});
+        if (!diff.empty()) std::cerr << diff << std::endl;
+        LT_CHECK(diff.empty());
+    }
+LT_END_AUTO_TEST(transport_padding_bounds)
+
+// (9) Boundary validation and extraction at driver setup: RFC 2046
 // bchars, length 1..256, boundary= in token and quoted forms.
 LT_BEGIN_AUTO_TEST(multipart_decoder_suite, boundary_validation)
     LT_CHECK(validate_boundary("B").ok());
