@@ -34,9 +34,12 @@
 #include <cstdint>
 #include <utility>
 
+#include <httpserver/auth/basic_auth.hpp>
 #include <httpserver/exchange.hpp>
+#include <httpserver/http/fields.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/outcome.hpp>
+#include <httpserver/http/request_head.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/server.hpp>
 
@@ -73,6 +76,25 @@ int audit_link_surface() {
     return quiet && unbound == 0 ? 0 : 1;
 }
 
+// TASK-114: the Basic auth policy is part of the v3core surface
+// (detail/auth_basic.cpp). Constructing it and classifying one head
+// here forces the audit binary to link the auth object, keeping the
+// in-tree-only claim (no openssl/gnutls) executable for this area too.
+int audit_basic_auth_link() {
+    httpserver::auth::basic_auth_policy policy;
+    const http::outcome created = httpserver::auth::basic_auth_policy::create(
+        "transcript", "alice", "wonderland", policy);
+    if (!created.ok()) return 1;
+    http::request_head head;
+    head.request_method = http::method::known(http::method_id::get);
+    head.head_fields.append("Authorization",
+                            "Basic YWxpY2U6d29uZGVybGFuZA==");
+    const httpserver::auth::basic_auth_verdict verdict =
+        policy.check(head);
+    return verdict.allowed() ? 0 : 1;
+}
+
 }  // namespace
 
-int main() { return audit_link_surface(); }
+// Both audits always run: plain | does not short-circuit.
+int main() { return audit_link_surface() | audit_basic_auth_link(); }

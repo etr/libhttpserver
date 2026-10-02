@@ -64,6 +64,7 @@ src/httpserver/server/server.hpp
 src/httpserver/exchange.hpp
 src/httpserver/body_reader.hpp
 src/httpserver/response_writer.hpp
+src/httpserver/auth/basic_auth.hpp
 "
 
 V3CORE_SOURCES="
@@ -76,10 +77,23 @@ src/detail/connection_engine.cpp
 src/detail/connection_engine_request.cpp
 src/detail/listener_engine.cpp
 src/detail/server.cpp
+src/detail/auth_basic.cpp
+"
+
+# TASK-114: the in-tree codec/hash/entropy primitives the auth TU and
+# the ws/digest milestones consume. Private (never installed), but they
+# are part of the native TLS-off surface and stay under the same ban.
+V3_DETAIL_HEADERS="
+src/httpserver/detail/base64.hpp
+src/httpserver/detail/sha1.hpp
+src/httpserver/detail/md5.hpp
+src/httpserver/detail/sha256.hpp
+src/httpserver/detail/secure_compare.hpp
+src/httpserver/detail/entropy_sys.hpp
 "
 
 violations=0
-for f in $V3_PUBLIC_HEADERS $V3CORE_SOURCES; do
+for f in $V3_PUBLIC_HEADERS $V3CORE_SOURCES $V3_DETAIL_HEADERS; do
     path="$SRC_DIR/$f"
     if [[ ! -f "$path" ]]; then
         echo "audit-v3-native-linkage: missing source $f" >&2
