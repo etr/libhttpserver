@@ -38,6 +38,7 @@
 #include "./digest_client.hpp"
 #include <httpserver/auth/basic_auth.hpp>
 #include <httpserver/auth/digest_auth.hpp>
+#include <httpserver/forms/urlencoded.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/fields.hpp>
 #include <httpserver/http/method.hpp>
@@ -135,10 +136,43 @@ int audit_digest_auth_link() {
     return verdict.allowed() ? 0 : 1;
 }
 
+// TASK-116: the urlencoded form surface is part of the v3core surface
+// (detail/forms_urlencoded.cpp). Decoding one bounded body and
+// exercising the rejection vocabulary here forces the audit binary to
+// link the forms object, keeping the in-tree-only claim (no
+// microhttpd, no TLS library) executable for this area too.
+int audit_forms_link() {
+    using httpserver::forms::form_fields;
+    using httpserver::forms::urlencoded_limits;
+    urlencoded_limits limits;
+    const http::outcome created =
+        urlencoded_limits::create(16, 4, limits);
+    if (!created.ok()) return 1;
+
+    const std::string body = "a=1&b=%2F";
+    const std::span<const std::byte> raw(
+        reinterpret_cast<const std::byte*>(body.data()), body.size());
+    form_fields fields;
+    const http::outcome decoded =
+        httpserver::forms::decode_urlencoded(raw, limits, fields);
+    if (!decoded.ok()) return 1;
+    if (fields.value("b").value_or("") != "/") return 1;
+
+    httpserver::forms::form_read malformed;
+    malformed.status = http::outcome(
+        http::outcome_code::invalid_argument, "probe");
+    return malformed.reject_status().code() == 400
+               && malformed.reject_fields().first("content-length")
+                          .value_or("")
+                      == "0"
+               ? 0
+               : 1;
+}
+
 }  // namespace
 
 // All audits always run: plain | does not short-circuit.
 int main() {
     return audit_link_surface() | audit_basic_auth_link()
-           | audit_digest_auth_link();
+           | audit_digest_auth_link() | audit_forms_link();
 }

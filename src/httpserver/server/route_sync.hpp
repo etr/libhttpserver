@@ -67,6 +67,30 @@ inline void pin_value_framing(http::fields& f, std::size_t body_size) {
     }
 }
 
+// The shared commit tail of the value-returning route adapters (the
+// sync route and the urlencoded form route): an invalid status ends
+// without a terminal decision (the runner synthesizes the 500),
+// framing is pinned when the handler framed nothing, an empty body
+// commits one-shot with no writer traffic, and a body commits the
+// head then streams the bytes and the end. A failure after the
+// committed head leaves the exchange terminal; the engine owns the
+// connection's fate.
+inline task<void> commit_sync_value(exchange& x, sync_response value) {
+    if (!value.status.valid()) co_return;
+    pin_value_framing(value.fields, value.body.size());
+    if (value.body.empty()) {
+        static_cast<void>(x.respond(value.status, value.fields));
+        co_return;
+    }
+    // A value knows its whole body: commit the head, then push the
+    // bytes and the end through the writer.
+    if (!x.start_response(value.status, value.fields).ok()) co_return;
+    const body_write written = co_await x.writer().write(
+        std::span<const std::byte>(value.body.data(), value.body.size()));
+    if (!written.status.ok()) co_return;
+    co_await x.writer().finish();
+}
+
 }  // namespace detail
 
 // Wraps a value-returning handler into the canonical route_handler
@@ -102,22 +126,7 @@ inline route_handler make_sync_route(sync_route_handler handler,
         sync_response value = call(
             x.head(), std::span<const std::byte>(collected.data.data(),
                                                  collected.data.size()));
-        if (!value.status.valid()) co_return;
-        detail::pin_value_framing(value.fields, value.body.size());
-        if (value.body.empty()) {
-            static_cast<void>(x.respond(value.status, value.fields));
-            co_return;
-        }
-        // A value knows its whole body: commit the head, then push the
-        // bytes and the end through the writer. A failure after the
-        // committed head leaves the exchange terminal; the engine owns
-        // the connection's fate.
-        if (!x.start_response(value.status, value.fields).ok()) co_return;
-        const body_write written = co_await x.writer().write(
-            std::span<const std::byte>(value.body.data(),
-                                       value.body.size()));
-        if (!written.status.ok()) co_return;
-        co_await x.writer().finish();
+        co_await detail::commit_sync_value(x, std::move(value));
     };
 }
 

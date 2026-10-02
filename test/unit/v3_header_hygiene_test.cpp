@@ -110,6 +110,10 @@ const std::vector<const char*>& header_files() {
         // tokens; the nonce, ledger, parser, and hashes stay in
         // detail/).
         "/auth/digest_auth.hpp",
+        // TASK-116: the urlencoded form vocabulary joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; the decoder and adapters stay in detail/).
+        "/forms/urlencoded.hpp",
     };
     return files;
 }

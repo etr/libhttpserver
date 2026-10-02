@@ -50,6 +50,7 @@
 #include <httpserver/body_reader.hpp>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/exchange.hpp>
+#include <httpserver/forms/urlencoded.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/response_definition.hpp>
@@ -257,6 +258,32 @@ std::atomic<int> e2e_suspend_outcome{-1};   // resume_outcome as int
 // TASK-111 sync-route state: /sync-echo counts its invocations so the
 // over-cap case can prove the handler never ran.
 std::atomic<int> sync_echo_invocations{0};
+
+// TASK-116 form-route state: /echo_form counts its invocations so the
+// over-cap and malformed cases can prove the handler never ran.
+std::atomic<int> form_echo_invocations{0};
+
+// TASK-116: the /echo_form handler value -- every decoded entry echoed
+// as name=value joined by ';' (for the parity body "a=1&b=two" this is
+// exactly the v2 fixture's "a=1;b=two").
+srv::sync_response form_echo_value(
+    const httpserver::forms::form_fields& fields) {
+    ++form_echo_invocations;
+    std::string echo;
+    bool first = true;
+    for (const std::pair<std::string, std::string>& e :
+         fields.entries()) {
+        if (!first) echo += ";";
+        first = false;
+        echo += e.first + "=" + e.second;
+    }
+    srv::sync_response out;
+    out.status = http::status::from_code(200);
+    out.fields.append("Content-Type", "text/plain");
+    const std::byte* raw = reinterpret_cast<const std::byte*>(echo.data());
+    out.body.assign(raw, raw + echo.size());
+    return out;
+}
 
 // POST /late_admit: parks on the shared gate BEFORE admitting (the
 // wire must stay silent until admission), then collects + echoes. The
@@ -482,6 +509,17 @@ class server_fixture {
                 return out;
             },
             16));
+        // TASK-116: the bounded urlencoded form route (16-byte body
+        // cap, the adapter's default field budget).
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::post), "/echo_form",
+            httpserver::forms::make_urlencoded_route(
+                httpserver::forms::urlencoded_limits{16, 64},
+                [](const http::request_head&,
+                   const httpserver::forms::form_fields& fields)
+                    -> srv::sync_response {
+                    return form_echo_value(fields);
+                })));
         static_cast<void>(server_.listen());
     }
 
@@ -524,6 +562,7 @@ LT_BEGIN_SUITE(native_http1_e2e_suite)
         e2e_late_gate = resume_signal{};
         e2e_suspend_outcome.store(-1);
         sync_echo_invocations.store(0);
+        form_echo_invocations.store(0);
         e2e_drain_gate = resume_signal{};
         e2e_drain_entered.store(false);
         e2e_hang_entered.store(false);
@@ -1626,6 +1665,164 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, digest_sha256_round_trip)
         LT_CHECK_EQ(seen[1].framing, std::string("content-length"));
     }
 LT_END_AUTO_TEST(digest_sha256_round_trip)
+
+// (35) TASK-116: the urlencoded form route round-trips over the wire
+// -- decoded fields (repeats in order, %HH decoded) reach the handler
+// and the echoed value is length-framed -- and the connection stays
+// keep-alive.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_form_round_trip)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /echo_form HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: application/x-www-form-urlencoded\r\n"
+                         "Content-Length: 14\r\n\r\n"
+                         "k=1&k=2&x=%2Fp"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        // Repeats in arrival order, the escape decoded.
+        LT_CHECK_EQ(seen[0].body, std::string("k=1;k=2;x=/p"));
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(form_echo_invocations.load(), 1);
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
+LT_END_AUTO_TEST(http11_post_form_round_trip)
+
+// (36) TASK-116: a form body past the adapter's byte cap answers 413
+// without invoking the handler; the admitted-undrained settle discards
+// the remainder and the connection is reused.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_form_over_cap_413)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /echo_form HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: application/x-www-form-urlencoded\r\n"
+                         "Content-Length: 19\r\n\r\n"
+                         "a=xxxxxxxxxxxxxxxxx"));   // cap is 16
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) LT_CHECK_EQ(seen[0].status, 413);
+    LT_CHECK_EQ(form_echo_invocations.load(), 0);
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].body, std::string("hello"));
+    LT_CHECK_EQ(form_echo_invocations.load(), 0);
+LT_END_AUTO_TEST(http11_post_form_over_cap_413)
+
+// (37) TASK-116: a malformed %HH in a form body answers 400 with the
+// length-framed empty body; the handler never runs.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_form_malformed_400)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /echo_form HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: application/x-www-form-urlencoded\r\n"
+                         "Content-Length: 5\r\n\r\n"
+                         "a=%G1"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 400);
+        LT_CHECK_EQ(seen[0].body, std::string());
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(form_echo_invocations.load(), 0);
+LT_END_AUTO_TEST(http11_post_form_malformed_400)
+
+// (38) TASK-116: the body arrives as three separate TCP writes -- the
+// escape accumulator must survive the segmentation end to end.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_form_segmented_body)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /echo_form HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: application/x-www-form-urlencoded\r\n"
+                         "Content-Length: 11\r\n\r\n"));
+    LT_CHECK(client.send("a=1&b=tw"));
+    LT_CHECK(client.send("%6F"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string("a=1;b=two"));
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(form_echo_invocations.load(), 1);
+LT_END_AUTO_TEST(http11_post_form_segmented_body)
+
+// (39) TASK-116: a BODYLESS POST reaches the form handler with empty
+// fields (the engine hands the exchange no body source).
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_form_bodyless)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /echo_form HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string());
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(form_echo_invocations.load(), 1);
+LT_END_AUTO_TEST(http11_post_form_bodyless)
+
+// (40) TASK-116: the v2 content-type gate over the wire -- a
+// non-matching Content-Type reaches the handler with EMPTY fields
+// (v2 ran no form processing there), never 4xx.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_form_wrong_type_empty)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /echo_form HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: text/plain\r\n"
+                         "Content-Length: 9\r\n\r\n"
+                         "a=1&b=two"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string());
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(form_echo_invocations.load(), 1);
+LT_END_AUTO_TEST(http11_post_form_wrong_type_empty)
+
+// (41) TASK-116: framing independence -- the same form body carried
+// with chunked transfer-coding decodes exactly like the
+// length-framed one.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, http11_post_form_chunked_body)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("POST /echo_form HTTP/1.1\r\nHost: h\r\n"
+                         "Content-Type: application/x-www-form-urlencoded\r\n"
+                         "Transfer-Encoding: chunked\r\n\r\n"
+                         "5\r\na=1&b\r\n"
+                         "4\r\n=two\r\n"
+                         "0\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string("a=1;b=two"));
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK_EQ(form_echo_invocations.load(), 1);
+LT_END_AUTO_TEST(http11_post_form_chunked_body)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
