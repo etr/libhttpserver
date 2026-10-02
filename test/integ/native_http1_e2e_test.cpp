@@ -37,6 +37,7 @@
 #include <cctype>
 #include <cstdint>
 #include <deque>
+#include <iostream>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -45,6 +46,7 @@
 #include <vector>
 
 #include <httpserver/auth/basic_auth.hpp>
+#include <httpserver/auth/digest_auth.hpp>
 #include <httpserver/body_reader.hpp>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/exchange.hpp>
@@ -54,6 +56,7 @@
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/server.hpp>
 
+#include "./digest_client.hpp"
 #include "../integ/raw_http_client.hpp"
 #include "../unit/response_source_rig.hpp"
 #include "./littletest.hpp"
@@ -62,6 +65,8 @@ namespace {
 
 namespace srv = httpserver::server;
 namespace http = httpserver::http;
+namespace auth = httpserver::auth;
+namespace dclient = httpserver_test;
 namespace raw = raw_http;
 
 using httpserver::body_collect;
@@ -96,6 +101,20 @@ task<void> secret_handler(exchange& x) {
     f.append("Content-Length", "9");
     static_cast<void>(x.start_response(http::status::from_code(200), f));
     const std::string body = "secret-ok";
+    const std::byte* raw = reinterpret_cast<const std::byte*>(body.data());
+    co_await x.writer().write(std::span<const std::byte>(raw, body.size()));
+    co_await x.writer().finish();
+}
+
+// TASK-115: GET /digest* behind make_digest_guard -- the parity
+// fixture's Digest success response (text/plain, Content-Length: 9,
+// "digest-ok").
+task<void> digest_ok_handler(exchange& x) {
+    http::fields f;
+    f.append("Content-Type", "text/plain");
+    f.append("Content-Length", "9");
+    static_cast<void>(x.start_response(http::status::from_code(200), f));
+    const std::string body = "digest-ok";
     const std::byte* raw = reinterpret_cast<const std::byte*>(body.data());
     co_await x.writer().write(std::span<const std::byte>(raw, body.size()));
     co_await x.writer().finish();
@@ -350,6 +369,24 @@ task<void> drain_caller_handler(exchange& x) {
 
 // -- fixtures ----------------------------------------------------------------
 
+// One Digest-guarded route under the parity fixture's posture (realm
+// "transcript", bob/builder, the "digest required" challenge body),
+// with the scenario's ttl and algorithm.
+void route_digest(srv::native_server& server, const char* path,
+                  std::chrono::seconds ttl,
+                  auth::digest_algorithm algorithm) {
+    auth::digest_auth_policy policy;
+    auth::digest_auth_options options;
+    options.algorithm = algorithm;
+    options.nonce_ttl = ttl;
+    options.challenge_body = "digest required";
+    static_cast<void>(auth::digest_auth_policy::create(
+        "transcript", "bob", "builder", options, policy));
+    static_cast<void>(server.route(
+        http::method::known(http::method_id::get), path,
+        auth::make_digest_guard(std::move(policy), digest_ok_handler)));
+}
+
 srv::server_options base_options() {
     srv::server_options options;
     srv::listener_options listener;
@@ -377,6 +414,17 @@ class server_fixture {
             http::method::known(http::method_id::get), "/secret",
             httpserver::auth::make_basic_guard(
                 std::move(secret_policy), secret_handler)));
+        // TASK-115: the /digest family answers through the Digest auth
+        // guard (the v2 parity fixture's credentials and realm; the
+        // "digest required" challenge body). One route per posture:
+        // the default MD5 policy, a ttl=0 stale-exercise policy, and a
+        // SHA-256 policy.
+        route_digest(server_, "/digest", std::chrono::seconds(300),
+                     auth::digest_algorithm::md5);
+        route_digest(server_, "/digest-stale", std::chrono::seconds(0),
+                     auth::digest_algorithm::md5);
+        route_digest(server_, "/digest-sha", std::chrono::seconds(300),
+                     auth::digest_algorithm::sha_256);
         static_cast<void>(server_.route(
             http::method::known(http::method_id::post), "/echo",
             echo_handler));
@@ -1275,6 +1323,309 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, basic_auth_guard_secret_round_trip)
         LT_CHECK_EQ(seen[2].framing, std::string("content-length"));
     }
 LT_END_AUTO_TEST(basic_auth_guard_secret_round_trip)
+
+// TASK-115: the Digest e2e scenarios share one client-side posture:
+// fetch the challenge with a bare request, answer it with the
+// INDEPENDENT test-side RFC 7616 client, and ship the computed
+// Authorization on the SAME keep-alive connection.
+namespace {
+
+const std::string* challenge_of(const observed_response& r) {
+    for (const auto& h : r.headers) {
+        if (lowered_header_name(h.name) == "www-authenticate") {
+            return &h.value;
+        }
+    }
+    return nullptr;
+}
+
+bool is_lower_hex(const std::string& s) {
+    for (const char c : s) {
+        const bool digit = c >= '0' && c <= '9';
+        const bool lower = c >= 'a' && c <= 'f';
+        if (!digit && !lower) return false;
+    }
+    return !s.empty();
+}
+
+// The Authorization value answering @p challenge as @p user/@p
+// password under @p hash (one cnonce drawn for both the response and
+// the header).
+std::string answered_digest(const dclient::parsed_challenge& challenge,
+                            dclient::digest_hash hash, const char* user,
+                            const char* password, const char* uri) {
+    const std::string cnonce = dclient::make_cnonce();
+    const std::string response = dclient::compute_response_cleartext(
+        challenge, hash, "GET", uri, user, password, cnonce, "00000001");
+    return dclient::build_authorization_header(
+        challenge, user, uri, cnonce, "00000001", response);
+}
+
+const char* const k_digest_prefix = "Digest realm=\"transcript\", qop=\"auth\", algorithm=";
+const char* const k_digest_suffix = ", charset=UTF-8";
+constexpr std::size_t k_opaque_marker_width = 11;  // closing quote + ", opaque=" + opening quote
+
+// Asserts the pinned challenge shape on a 401: the six fields in the
+// pinned order and quoting, a 112-hex nonce, a 32-hex opaque, no
+// stale hint, the pinned framing and challenge body. Returns the
+// first violated pin ("" = the shape held) -- littletest checks only
+// run inside test bodies, so the helper reports instead.
+std::string digest_challenge_diff(const observed_response& r,
+                                  const char* algorithm) {
+    if (r.status != 401) return "challenge status " + std::to_string(r.status);
+    if (r.framing != "content-length") {
+        return "challenge framing " + r.framing;
+    }
+    if (r.body != "digest required") return "challenge body " + r.body;
+    const std::string* challenge = challenge_of(r);
+    if (challenge == nullptr) return "no WWW-Authenticate on the 401";
+    const std::string prefix =
+        std::string(k_digest_prefix) + algorithm + ", nonce=\"";
+    if (challenge->rfind(prefix, 0) != 0) {
+        return "challenge does not open with the pinned prefix: "
+            + *challenge;
+    }
+    const std::size_t opaque_marker = challenge->find("\", opaque=\"");
+    const std::size_t suffix_at = challenge->find(k_digest_suffix);
+    if (opaque_marker == std::string::npos
+            || suffix_at == std::string::npos
+            || suffix_at < opaque_marker) {
+        return "challenge missing the opaque/charset fields: " + *challenge;
+    }
+    const std::size_t nonce_at = prefix.size();
+    const std::size_t opaque_at = opaque_marker + k_opaque_marker_width;
+    const std::string nonce =
+        challenge->substr(nonce_at, opaque_marker - nonce_at);
+    // The opaque's closing quote sits immediately before ", charset".
+    const std::string opaque =
+        challenge->substr(opaque_at, suffix_at - opaque_at - 1);
+    if (nonce.size() != 112 || !is_lower_hex(nonce)) {
+        return "nonce is not 112 lowercase hex: " + nonce;
+    }
+    if (opaque.size() != 32 || !is_lower_hex(opaque)) {
+        return "opaque is not 32 lowercase hex: " + opaque;
+    }
+    if (challenge->substr(suffix_at) != k_digest_suffix) {
+        return "challenge does not end at charset: " + *challenge;
+    }
+    if (challenge->find("stale") != std::string::npos) {
+        return "challenge carries a stale hint: " + *challenge;
+    }
+    return "";
+}
+
+}  // namespace
+
+// (30) TASK-115: the Digest valid flow on ONE keep-alive connection:
+// the bare GET answers the pinned 401 challenge; the answered request
+// is served the secret; the connection is still serving afterwards.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, digest_auth_guard_round_trip)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.send("GET /digest HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        const std::string diff = digest_challenge_diff(seen[0], "MD5");
+        if (!diff.empty()) std::cerr << "[digest e2e] " << diff << "\n";
+        LT_CHECK(diff.empty());
+        const std::string* value = challenge_of(seen[0]);
+        if (value != nullptr) {
+            const auto parsed = dclient::parse_www_authenticate(*value);
+            LT_CHECK(parsed.has_value());
+            if (parsed.has_value()) {
+                LT_CHECK(client.send(
+                    "GET /digest HTTP/1.1\r\nHost: h\r\nAuthorization: "
+                    + answered_digest(*parsed, dclient::digest_hash::md5,
+                                      "bob", "builder", "/digest")
+                    + "\r\n\r\n"));
+                LT_CHECK(client.receive(2, seen));
+                LT_CHECK_EQ(seen.size(), 2u);
+                if (seen.size() == 2) {
+                    LT_CHECK_EQ(seen[1].status, 200);
+                    LT_CHECK_EQ(seen[1].body, std::string("digest-ok"));
+                    LT_CHECK_EQ(seen[1].framing,
+                                std::string("content-length"));
+                }
+            }
+        }
+    }
+    // The 401 never poisoned the pipeline: the connection still serves.
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(seen.size() + 1, seen));
+    LT_CHECK_EQ(seen.back().body, std::string("hello"));
+LT_END_AUTO_TEST(digest_auth_guard_round_trip)
+
+// (31) TASK-115: a ttl=0 nonce is expired by the time the answer
+// arrives: the re-challenge carries stale=TRUE and a FRESH nonce.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, digest_stale_nonce_rechallenges)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.send("GET /digest-stale HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() != 1) return;
+    const std::string* first_challenge = challenge_of(seen[0]);
+    LT_CHECK(first_challenge != nullptr);
+    if (first_challenge == nullptr) return;
+    const auto parsed = dclient::parse_www_authenticate(*first_challenge);
+    LT_CHECK(parsed.has_value());
+    if (!parsed.has_value()) return;
+    // ttl=0: the offered nonce expires when the wall clock advances.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    LT_CHECK(client.send(
+        "GET /digest-stale HTTP/1.1\r\nHost: h\r\nAuthorization: "
+        + answered_digest(*parsed, dclient::digest_hash::md5, "bob",
+                          "builder", "/digest-stale")
+        + "\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) {
+        LT_CHECK_EQ(seen[1].status, 401);
+        const std::string* re_challenge = challenge_of(seen[1]);
+        LT_CHECK(re_challenge != nullptr);
+        if (re_challenge != nullptr) {
+            LT_CHECK(re_challenge->find("stale=TRUE")
+                     != std::string::npos);
+            LT_CHECK_EQ(re_challenge->substr(
+                            re_challenge->size()
+                            - std::string(", stale=TRUE").size()),
+                        std::string(", stale=TRUE"));
+            // The stale re-challenge offers a NEW nonce.
+            LT_CHECK(*re_challenge != *first_challenge);
+        }
+    }
+LT_END_AUTO_TEST(digest_stale_nonce_rechallenges)
+
+// (32) TASK-115: identical Authorization bytes twice on one
+// connection: the first authenticates, the second is a replay that
+// answers 401 WITHOUT the stale hint.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, digest_replayed_nonce_rejected)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.send("GET /digest HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() != 1) return;
+    const std::string* value = challenge_of(seen[0]);
+    LT_CHECK(value != nullptr);
+    if (value == nullptr) return;
+    const auto parsed = dclient::parse_www_authenticate(*value);
+    LT_CHECK(parsed.has_value());
+    if (!parsed.has_value()) return;
+    const std::string authorization =
+        answered_digest(*parsed, dclient::digest_hash::md5, "bob",
+                        "builder", "/digest");
+    LT_CHECK(client.send("GET /digest HTTP/1.1\r\nHost: h\r\nAuthorization: "
+                         + authorization + "\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) {
+        LT_CHECK_EQ(seen[1].status, 200);
+        LT_CHECK_EQ(seen[1].body, std::string("digest-ok"));
+    }
+    // The replay: byte-identical Authorization.
+    LT_CHECK(client.send("GET /digest HTTP/1.1\r\nHost: h\r\nAuthorization: "
+                         + authorization + "\r\n\r\n"));
+    LT_CHECK(client.receive(3, seen));
+    LT_CHECK_EQ(seen.size(), 3u);
+    if (seen.size() == 3) {
+        LT_CHECK_EQ(seen[2].status, 401);
+        const std::string* re_challenge = challenge_of(seen[2]);
+        LT_CHECK(re_challenge != nullptr);
+        if (re_challenge != nullptr) {
+            LT_CHECK(re_challenge->find("stale") == std::string::npos);
+        }
+    }
+LT_END_AUTO_TEST(digest_replayed_nonce_rejected)
+
+// (33) TASK-115: a malformed Digest field answers the standard 401
+// challenge (never a 400); a well-formed but WRONG password answers
+// the same challenge without stale -- both on one connection.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, digest_malformed_and_wrong_password)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.send("GET /digest HTTP/1.1\r\nHost: h\r\n"
+                         "Authorization: Digest not-an-auth-param\r\n\r\n"));
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        const std::string diff = digest_challenge_diff(seen[0], "MD5");
+        if (!diff.empty()) std::cerr << "[digest e2e] " << diff << "\n";
+        LT_CHECK(diff.empty());
+    }
+
+    // A well-formed answer under the wrong password.
+    LT_CHECK(client.send("GET /digest HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() != 2) return;
+    const std::string* value = challenge_of(seen[1]);
+    LT_CHECK(value != nullptr);
+    if (value == nullptr) return;
+    const auto parsed = dclient::parse_www_authenticate(*value);
+    LT_CHECK(parsed.has_value());
+    if (!parsed.has_value()) return;
+    LT_CHECK(client.send(
+        "GET /digest HTTP/1.1\r\nHost: h\r\nAuthorization: "
+        + answered_digest(*parsed, dclient::digest_hash::md5, "bob",
+                          "wrong", "/digest")
+        + "\r\n\r\n"));
+    LT_CHECK(client.receive(3, seen));
+    LT_CHECK_EQ(seen.size(), 3u);
+    if (seen.size() == 3) {
+        LT_CHECK_EQ(seen[2].status, 401);
+        LT_CHECK_EQ(seen[2].body, std::string("digest required"));
+        const std::string* re_challenge = challenge_of(seen[2]);
+        LT_CHECK(re_challenge != nullptr);
+        if (re_challenge != nullptr) {
+            LT_CHECK(re_challenge->find("stale") == std::string::npos);
+        }
+    }
+LT_END_AUTO_TEST(digest_malformed_and_wrong_password)
+
+// (34) TASK-115: the SHA-256 policy round-trips with the same
+// contract: the challenge names algorithm=SHA-256 and the answered
+// request is served the secret.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, digest_sha256_round_trip)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.send("GET /digest-sha HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() != 1) return;
+    const std::string sha_diff = digest_challenge_diff(seen[0], "SHA-256");
+    if (!sha_diff.empty()) std::cerr << "[digest e2e] " << sha_diff << "\n";
+    LT_CHECK(sha_diff.empty());
+    const std::string* value = challenge_of(seen[0]);
+    LT_CHECK(value != nullptr);
+    if (value == nullptr) return;
+    const auto parsed = dclient::parse_www_authenticate(*value);
+    LT_CHECK(parsed.has_value());
+    if (!parsed.has_value()) return;
+    LT_CHECK(client.send(
+        "GET /digest-sha HTTP/1.1\r\nHost: h\r\nAuthorization: "
+        + answered_digest(*parsed, dclient::digest_hash::sha256, "bob",
+                          "builder", "/digest-sha")
+        + "\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) {
+        LT_CHECK_EQ(seen[1].status, 200);
+        LT_CHECK_EQ(seen[1].body, std::string("digest-ok"));
+        LT_CHECK_EQ(seen[1].framing, std::string("content-length"));
+    }
+LT_END_AUTO_TEST(digest_sha256_round_trip)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

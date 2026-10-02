@@ -105,6 +105,11 @@ const std::vector<const char*>& header_files() {
         // scan with the same rules (no config gates, no backend/OS
         // tokens; parsing and codecs stay in the library's detail/).
         "/auth/basic_auth.hpp",
+        // TASK-115: the Digest authentication policy joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; the nonce, ledger, parser, and hashes stay in
+        // detail/).
+        "/auth/digest_auth.hpp",
     };
     return files;
 }

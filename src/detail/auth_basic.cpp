@@ -44,6 +44,7 @@
 #include <vector>
 
 #include <httpserver/auth/basic_auth.hpp>
+#include <httpserver/detail/auth_text.hpp>
 #include <httpserver/detail/base64.hpp>
 #include <httpserver/detail/secure_compare.hpp>
 #include <httpserver/detail/secure_zero.hpp>
@@ -60,19 +61,7 @@ constexpr std::string_view k_authorization_field = "Authorization";
 constexpr std::string_view k_forbidden_realm_chars("\r\n\0", 3);
 constexpr std::size_t k_not_present = static_cast<std::size_t>(-1);
 
-char lowered(char c) noexcept {
-    return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a')
-                                  : c;
-}
-
-bool ascii_iequal(std::string_view left,
-                  std::string_view right) noexcept {
-    if (left.size() != right.size()) return false;
-    for (std::size_t i = 0; i < left.size(); ++i) {
-        if (lowered(left[i]) != lowered(right[i])) return false;
-    }
-    return true;
-}
+using detail::auth_text::ascii_iequal;
 
 bool is_separator(char c) noexcept {
     return c == ' ' || c == '\t';
