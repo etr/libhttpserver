@@ -34,6 +34,9 @@
 
 #include <unistd.h>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -41,6 +44,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -164,6 +168,17 @@ send_report run_send(exchange& x, manual_executor& ex,
           });
     ex.run_pending();
     return seen;
+}
+
+// Drains the executor until `flag` turns non-zero (one millisecond per
+// spin), for the cross-thread disconnect round whose wake-ups post
+// from another thread.
+bool drain_until(manual_executor& ex, int& flag, int spins) {
+    for (int i = 0; i < spins && flag == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        ex.run_pending();
+    }
+    return flag != 0;
 }
 
 // (S3 rig) RAII scratch file: created from `content`, rewritable,
@@ -979,6 +994,272 @@ LT_BEGIN_AUTO_TEST(response_definition_suite, factory_send_empty_producer_pre_co
     LT_CHECK_EQ(sink.respond_calls, 0);
     LT_CHECK(x.state() == exchange_state::head);
 LT_END_AUTO_TEST(factory_send_empty_producer_pre_commit)
+
+// (S4.1) Four sends of ONE shared owned_bytes definition interleaved
+// on one executor (each parked mid-body, all woken together): every
+// sink receives the full payload, every head carries only its own
+// overlay, and the definition is bit-for-bit untouched.
+LT_BEGIN_AUTO_TEST(response_definition_suite, interleaved_sends_one_definition_independent)
+    constexpr int k_sends = 4;
+    const std::string payload = repeating(32);
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), base_fields(), bytes(payload),
+        def).ok());
+    const http::fields fields_before = def.fields();
+    const http::fields* const state_before = &def.fields();
+
+    std::vector<std::unique_ptr<capturing_sink>> sinks;
+    std::vector<std::unique_ptr<fake::scripted_body_sink>> outs;
+    std::vector<std::unique_ptr<exchange>> exchanges;
+    std::vector<send_report> reports(k_sends);
+    std::vector<int> done(k_sends, 0);
+    manual_executor ex;
+
+    for (int k = 0; k < k_sends; ++k) {
+        sinks.emplace_back(new capturing_sink);
+        outs.emplace_back(new fake::scripted_body_sink(8));
+        exchanges.emplace_back(
+            new exchange(make_head(), sinks.back().get(), 0, nullptr,
+                         outs.back().get()));
+        response_overlay overlay;
+        overlay.headers.append("X-Conn", std::to_string(k));
+        spawn(ex, send_definition(*exchanges[k], def, overlay),
+              [&, k](task_result<send_report> r) {
+                  ++done[k];
+                  if (r.has_value()) reports[k] = r.value();
+              });
+    }
+    // One drain drives all four coroutines: each runs to its mid-body
+    // park, so the sends provably interleave on the shared executor.
+    ex.run_pending();
+    for (int k = 0; k < k_sends; ++k) {
+        LT_CHECK(outs[k]->parked());
+    }
+
+    // Rounds of engine progress: drain every sink, let every parked
+    // send push its next capacity worth. 32 bytes over an 8-byte queue
+    // needs a handful of rounds; 16 is a generous failure bound.
+    int rounds = 0;
+    while (std::find(done.begin(), done.end(), 0) != done.end()
+            && rounds < 16) {
+        for (int k = 0; k < k_sends; ++k) {
+            LT_CHECK(outs[k]->drain(1u << 20) <= 8);
+        }
+        ex.run_pending();
+        ++rounds;
+    }
+    for (int k = 0; k < k_sends; ++k) {
+        LT_CHECK_EQ(done[k], 1);
+    }
+
+    for (int k = 0; k < k_sends; ++k) {
+        LT_CHECK(reports[k].status.ok());
+        LT_CHECK_EQ(reports[k].body_bytes, payload.size());
+        LT_CHECK(of(outs[k]->drained_bytes()) == payload);
+        LT_CHECK_EQ(sinks[k]->respond_calls, 1);
+        LT_CHECK_EQ(sinks[k]->responded.count("x-conn"),
+                    static_cast<std::size_t>(1));
+        LT_CHECK(sinks[k]->responded.first("x-conn").value_or("")
+                 == std::to_string(k));
+    }
+
+    LT_CHECK(def.fields() == fields_before);
+    LT_CHECK(&def.fields() == state_before);
+LT_END_AUTO_TEST(interleaved_sends_one_definition_independent)
+
+// (S4.2) True concurrency: four threads, each with its own executor,
+// exchange, and sink, all sending ONE shared definition; every body
+// arrives whole and every head carries its own connection tag only.
+LT_BEGIN_AUTO_TEST(response_definition_suite, threaded_sends_of_one_definition_stay_independent)
+    constexpr int k_threads = 4;
+    const std::string payload = repeating(2048);
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), base_fields(), bytes(payload),
+        def).ok());
+    const http::fields fields_before = def.fields();
+
+    std::vector<int> done(k_threads, 0);
+    std::vector<std::string> bodies(k_threads);
+    std::vector<std::string> tags(k_threads);
+    std::vector<std::thread> workers;
+    for (int k = 0; k < k_threads; ++k) {
+        workers.emplace_back([&, k] {
+            capturing_sink sink;
+            fake::scripted_body_sink out;
+            exchange x(make_head(), &sink, 0, nullptr, &out);
+            manual_executor ex;
+            response_overlay overlay;
+            overlay.headers.append("X-Conn", std::to_string(k));
+            spawn(ex, send_definition(x, def, overlay),
+                  [&](task_result<send_report> r) {
+                      if (r.has_value() && r.value().status.ok()) {
+                          done[k] = 1;
+                      }
+                  });
+            const auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::seconds(5);
+            while (done[k] == 0
+                    && std::chrono::steady_clock::now() < deadline) {
+                ex.run_pending();
+                out.drain(1u << 20);
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(1));
+            }
+            out.drain(1u << 20);
+            bodies[k] = of(out.drained_bytes());
+            tags[k] = std::string(
+                sink.responded.first("x-conn").value_or(""));
+        });
+    }
+    for (std::thread& t : workers) t.join();
+
+    for (int k = 0; k < k_threads; ++k) {
+        LT_CHECK_EQ(done[k], 1);
+        LT_CHECK(bodies[k] == payload);
+        LT_CHECK(tags[k] == std::to_string(k));
+    }
+    LT_CHECK(def.fields() == fields_before);
+LT_END_AUTO_TEST(threaded_sends_of_one_definition_stay_independent)
+
+// (S4.3) The factory variant under the same four-thread concurrency:
+// four producers in flight at once (each first pull waits for all
+// four), one invocation per send, and each send's body matches its
+// own invocation tag only.
+LT_BEGIN_AUTO_TEST(response_definition_suite, threaded_factory_sends_run_concurrent_producers)
+    constexpr int k_threads = 4;
+    std::atomic<int> invocations{0};
+    std::atomic<int> arrived{0};
+    std::atomic<bool> saw_all_four{true};
+
+    response_definition def;
+    LT_CHECK(response_definition::factory(
+        http::status::from_code(200), http::fields(),
+        [&]() -> body_producer {
+            const int index = invocations.fetch_add(1) + 1;
+            const auto tag = std::make_shared<std::string>(
+                "thread-" + std::to_string(index));
+            return [&, tag, sent = false]() mutable -> body_chunk {
+                if (sent) {
+                    return body_chunk{http::outcome::okay(), {}, true};
+                }
+                sent = true;
+                arrived.fetch_add(1);
+                const auto deadline = std::chrono::steady_clock::now()
+                    + std::chrono::seconds(5);
+                while (arrived.load() < k_threads) {
+                    if (std::chrono::steady_clock::now() >= deadline) {
+                        saw_all_four.store(false);
+                        break;
+                    }
+                    std::this_thread::yield();
+                }
+                return body_chunk{
+                    http::outcome::okay(),
+                    std::span<const std::byte>(
+                        reinterpret_cast<const std::byte*>(tag->data()),
+                        tag->size()),
+                    false};
+            };
+        }, def).ok());
+    const http::fields fields_before = def.fields();
+
+    std::vector<int> done(k_threads, 0);
+    std::vector<std::string> bodies(k_threads);
+    std::vector<std::thread> workers;
+    for (int k = 0; k < k_threads; ++k) {
+        workers.emplace_back([&, k] {
+            capturing_sink sink;
+            fake::scripted_body_sink out;
+            exchange x(make_head(), &sink, 0, nullptr, &out);
+            manual_executor ex;
+            spawn(ex, send_definition(x, def, {}),
+                  [&](task_result<send_report> r) {
+                      if (r.has_value() && r.value().status.ok()) {
+                          done[k] = 1;
+                      }
+                  });
+            const auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::seconds(8);
+            while (done[k] == 0
+                    && std::chrono::steady_clock::now() < deadline) {
+                ex.run_pending();
+                out.drain(1u << 20);
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(1));
+            }
+            out.drain(1u << 20);
+            bodies[k] = of(out.drained_bytes());
+        });
+    }
+    for (std::thread& t : workers) t.join();
+
+    LT_CHECK(saw_all_four.load());
+    LT_CHECK_EQ(invocations.load(), k_threads);
+    std::vector<std::string> expected;
+    for (int k = 1; k <= k_threads; ++k) {
+        expected.push_back("thread-" + std::to_string(k));
+    }
+    for (int k = 0; k < k_threads; ++k) {
+        LT_CHECK_EQ(done[k], 1);
+        LT_CHECK(std::find(expected.begin(), expected.end(),
+                           bodies[k]) != expected.end());
+    }
+    std::sort(bodies.begin(), bodies.end());
+    LT_CHECK(bodies == expected);
+    LT_CHECK(def.fields() == fields_before);
+LT_END_AUTO_TEST(threaded_factory_sends_run_concurrent_producers)
+
+// (S4.4) Cancellation independence: send A parked on a full sink,
+// send B flowing; disconnecting A cancels only A — B has already
+// completed — and the shared definition is untouched.
+LT_BEGIN_AUTO_TEST(response_definition_suite, disconnect_cancels_only_its_own_send)
+    const std::string payload = "park-me-please";
+
+    response_definition def;
+    LT_CHECK(response_definition::owned_bytes(
+        http::status::from_code(200), http::fields(), bytes(payload),
+        def).ok());
+    const http::fields fields_before = def.fields();
+
+    capturing_sink sink_a;
+    fake::scripted_body_sink out_a(4);   // parks mid-body
+    exchange a(make_head(), &sink_a, 0, nullptr, &out_a);
+    manual_executor ex_a;
+    spawn(ex_a, fake::watch_stop_and_resume(a, out_a),
+          [&](task_result<void>) { });
+    send_report seen_a;
+    int done_a = 0;
+    spawn(ex_a, send_definition(a, def, {}),
+          [&](task_result<send_report> r) {
+              ++done_a;
+              if (r.has_value()) seen_a = r.value();
+          });
+    ex_a.run_pending();
+    LT_CHECK(out_a.parked());
+
+    capturing_sink sink_b;
+    fake::scripted_body_sink out_b;
+    exchange b(make_head(), &sink_b, 0, nullptr, &out_b);
+    manual_executor ex_b;
+    const send_report seen_b = run_send(b, ex_b, def, {});
+    LT_CHECK(seen_b.status.ok());
+    LT_CHECK_EQ(out_b.drain(64), payload.size());
+    LT_CHECK(of(out_b.drained_bytes()) == payload);
+    LT_CHECK_EQ(out_b.end_calls(), 1);
+
+    LT_CHECK(a.disconnect(http::outcome_code::connection_closed,
+                          "peer went away").ok());
+    LT_CHECK(drain_until(ex_a, done_a, 400));
+    LT_CHECK_EQ(done_a, 1);
+    LT_CHECK(seen_a.status.code() == http::outcome_code::cancelled);
+    LT_CHECK_EQ(out_a.end_calls(), 0);
+
+    LT_CHECK(def.fields() == fields_before);
+LT_END_AUTO_TEST(disconnect_cancels_only_its_own_send)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
