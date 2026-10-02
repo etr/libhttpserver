@@ -38,6 +38,7 @@
 #include "./digest_client.hpp"
 #include <httpserver/auth/basic_auth.hpp>
 #include <httpserver/auth/digest_auth.hpp>
+#include <httpserver/forms/multipart.hpp>
 #include <httpserver/forms/urlencoded.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/fields.hpp>
@@ -169,10 +170,58 @@ int audit_forms_link() {
                : 1;
 }
 
+// TASK-117: the multipart form surface is part of the v3core surface
+// (detail/forms_multipart.cpp and detail/forms_multipart_files.cpp).
+// Decoding one bounded body AND constructing the temp-file sink here
+// forces the audit binary to link both form objects -- the file-I/O
+// uses only std::fstream and remove(), so the no-microhttpd /
+// no-TLS-library claim stays executable for this area too.
+int audit_multipart_link() {
+    using httpserver::forms::multipart_limits;
+    using httpserver::forms::multipart_read;
+    using httpserver::forms::part_descriptor;
+    using httpserver::forms::part_sink;
+    using httpserver::forms::temp_file_part_sink;
+
+    class drop_all final : public part_sink {
+     public:
+        http::outcome on_part_begin(const part_descriptor&) override {
+            return http::outcome::okay();
+        }
+        http::outcome on_part_data(std::span<const std::byte>) override {
+            return http::outcome::okay();
+        }
+        http::outcome on_part_end() override {
+            return http::outcome::okay();
+        }
+        void on_part_abort(http::outcome) override { }
+    };
+
+    const std::string body =
+        "--AUDITB\r\nContent-Disposition: form-data; name=\"q\"\r\n"
+        "\r\nok\r\n--AUDITB--\r\n";
+    drop_all sink;
+    multipart_read read;
+    const http::outcome decoded = httpserver::forms::decode_multipart(
+        std::span<const std::byte>(
+            reinterpret_cast<const std::byte*>(body.data()), body.size()),
+        std::optional<std::string_view>(
+            "multipart/form-data; boundary=AUDITB"),
+        multipart_limits{}, sink, read);
+    if (!decoded.ok()) return 1;
+    if (read.parts_completed != 1) return 1;
+
+    // The temp-file sink's construction and destruction run the
+    // file-I/O members (no file survives: the default removes).
+    temp_file_part_sink files;
+    return 0;
+}
+
 }  // namespace
 
 // All audits always run: plain | does not short-circuit.
 int main() {
     return audit_link_surface() | audit_basic_auth_link()
-           | audit_digest_auth_link() | audit_forms_link();
+           | audit_digest_auth_link() | audit_forms_link()
+           | audit_multipart_link();
 }
