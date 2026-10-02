@@ -24,4 +24,4 @@ Provide Basic authentication and in-tree hash/entropy primitives for libhttpserv
 **Related Requirements:** PRD-V3N-REQ-002, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
