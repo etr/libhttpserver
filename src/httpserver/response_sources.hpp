@@ -79,6 +79,40 @@ using body_producer = concurrency::unique_function<body_chunk()>;
 // concurrently (one invocation per in-flight send).
 using body_factory = concurrency::unique_function<body_producer()>;
 
+// A lifetime lease for borrowed body memory (REQ-028, DR-V3-005): one
+// shared keeper pinning the application's buffer alive. The
+// definition stores the lease beside the borrowed span, so every send
+// — and the frozen definition itself — provably outlives the memory:
+// releasing the last definition releases the keeper. Application
+// contract: while the definition lives, the keeper keeps
+// [data, data + size) unchanged and alive (that immutability is what
+// makes a borrowed body replayable, unlike a one-shot pipe).
+//
+// Interpretation note (§3.2 / DR-V3-005): "borrowed memory requires a
+// lease spanning send completion" combined with "reject sharing a
+// borrowed body without a valid lease" reads coherently only if a
+// LEASED borrowed body may be shared across sends; this class encodes
+// that reading. The lease is structural, not advisory — there is no
+// releasable token, so the invariant cannot be violated.
+class body_lease {
+ public:
+    body_lease() noexcept = default;
+
+    // Pins `keeper` (typically the buffer's owner) for the
+    // definition's lifetime.
+    template <typename T>
+    explicit body_lease(std::shared_ptr<T> keeper) noexcept
+        : keeper_(std::move(keeper)) {
+    }
+
+    // True iff the lease pins something. borrowed() rejects an empty
+    // lease before a definition exists.
+    bool valid() const noexcept { return keeper_ != nullptr; }
+
+ private:
+    std::shared_ptr<const void> keeper_;
+};
+
 // The source-kind taxonomy of a response body (REQ-026/028): what a
 // definition froze at factory time, and therefore how a send must
 // treat it. response_definition re-exports this as
@@ -87,6 +121,7 @@ enum class response_source_kind : std::uint8_t {
     owned_bytes,
     reopen_file,
     factory,
+    borrowed,
 };
 
 namespace detail {
@@ -140,6 +175,8 @@ struct response_body_source {
     std::vector<std::byte> bytes;   // owned_bytes
     std::string path;               // reopen_file
     body_factory make;              // factory
+    std::span<const std::byte> view;  // borrowed: the application body
+    body_lease lease;               // borrowed: pins view alive
 };
 
 // One send's private body state, allocated in send_definition's
@@ -152,22 +189,24 @@ class send_cursor {
  public:
     // Binds to `source` (one definition's frozen body block) and takes
     // this send's snapshot of it against the merged framing
-    // `framing`: the bytes aliased (the definition pins them alive),
-    // the file freshly opened with its read bound taken from an
-    // explicit Content-Length when the merged fields carry one (the
-    // observed size otherwise), or one fresh producer invoked.
+    // `framing`: the bytes or leased span aliased (the source pins
+    // them alive), the file freshly opened with its read bound taken
+    // from an explicit Content-Length when the merged fields carry one
+    // (the observed size otherwise), or one fresh producer invoked.
     http::outcome prepare(std::shared_ptr<const response_body_source> source,
                           const http::fields& framing) {
         owner_ = std::move(source);
         switch (owner_->kind) {
             case response_source_kind::owned_bytes:
-                offset_ = 0;
-                total_ = owner_->bytes.size();
+                bind_span(owner_->bytes);
                 return http::outcome::okay();
             case response_source_kind::reopen_file:
                 return prepare_file(framing);
             case response_source_kind::factory:
                 return prepare_factory();
+            case response_source_kind::borrowed:
+                bind_span(owner_->view);
+                return http::outcome::okay();
         }
         return http::outcome::okay();
     }
@@ -178,7 +217,8 @@ class send_cursor {
     body_chunk pull() {
         switch (owner_->kind) {
             case response_source_kind::owned_bytes:
-                return pull_bytes();
+            case response_source_kind::borrowed:
+                return pull_span();
             case response_source_kind::reopen_file:
                 return pull_file();
             case response_source_kind::factory:
@@ -192,6 +232,15 @@ class send_cursor {
     std::uint64_t file_size() const noexcept { return file_size_; }
 
  private:
+    // owned_bytes and borrowed share one streaming shape: a frozen
+    // span this send walks once — the source's own bytes, or the
+    // leased application span.
+    void bind_span(std::span<const std::byte> body) noexcept {
+        view_ = body;
+        offset_ = 0;
+        total_ = body.size();
+    }
+
     // One fresh private handle per send: concurrent sends of one
     // reopen_file definition never share seek state. The size observed
     // here is this send's pinned Content-Length; an explicit
@@ -234,14 +283,14 @@ class send_cursor {
         return http::outcome::okay();
     }
 
-    // owned_bytes: the whole remainder in one chunk carrying end (the
-    // writer's internal loop paces it against queue capacity, so
-    // backpressure stays the writer's).
-    body_chunk pull_bytes() {
+    // owned_bytes / borrowed: the whole remaining span in one chunk
+    // carrying end (the writer's internal loop paces it against queue
+    // capacity, so backpressure stays the writer's).
+    body_chunk pull_span() {
         if (offset_ >= total_) {
             return body_chunk{http::outcome::okay(), {}, true};
         }
-        const std::byte* const base = owner_->bytes.data() + offset_;
+        const std::byte* const base = view_.data() + offset_;
         const std::size_t rest =
             static_cast<std::size_t>(total_ - offset_);
         offset_ = total_;
@@ -298,8 +347,9 @@ class send_cursor {
     }
 
     std::shared_ptr<const response_body_source> owner_;
-    std::uint64_t offset_ = 0;     // owned_bytes cursor into shared bytes
-    std::uint64_t total_ = 0;      // owned_bytes total
+    std::span<const std::byte> view_;  // owned_bytes/borrowed: the span
+    std::uint64_t offset_ = 0;     // owned_bytes/borrowed span cursor
+    std::uint64_t total_ = 0;      // owned_bytes/borrowed span total
     std::uint64_t file_size_ = 0;  // reopen_file pinned size
     std::uint64_t remaining_ = 0;  // reopen_file bytes left to pinned size
     std::ifstream file_;           // reopen_file: this send's private handle

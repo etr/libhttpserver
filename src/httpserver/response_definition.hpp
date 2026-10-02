@@ -231,6 +231,28 @@ class response_definition {
         return commit(std::move(state), out);
     }
 
+    // Body borrowed from application memory under an explicit lease:
+    // the library stores only the view and the lease, never a copy.
+    // The keeper keeps [body.data(), body.data() + body.size())
+    // unchanged and alive while the definition lives (that
+    // immutability is what makes a borrowed body replayable);
+    // releasing the last definition releases the keeper. An invalid
+    // lease is rejected before a definition exists — sharing a
+    // borrowed body without a valid lease has no safe send (REQ-028).
+    static http::outcome borrowed(const http::status& s, http::fields f,
+                                  std::span<const std::byte> body,
+                                  body_lease lease,
+                                  response_definition& out) {
+        build state;
+        state.status = s;
+        detail::pin_content_length(f, body.size());
+        state.fields = std::move(f);
+        state.body.kind = source_kind::borrowed;
+        state.body.view = body;
+        state.body.lease = std::move(lease);
+        return commit(std::move(state), out);
+    }
+
     // The empty, not-yet-valid definition; valid() reports false.
     response_definition() noexcept = default;
     response_definition(const response_definition&) noexcept = default;
@@ -313,6 +335,12 @@ class response_definition {
             return http::outcome(
                 http::outcome_code::invalid_argument,
                 "response_definition: factory requires a callable");
+        }
+        if (state.body.kind == source_kind::borrowed
+                && !state.body.lease.valid()) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "response_definition: borrowed requires a lease");
         }
         return http::outcome::okay();
     }
