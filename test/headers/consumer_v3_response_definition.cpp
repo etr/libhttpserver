@@ -29,6 +29,7 @@
 // library is ever constructed.
 
 #include <cstddef>
+#include <cstdio>
 #include <span>
 #include <string>
 #include <type_traits>
@@ -112,6 +113,21 @@ static_assert(std::is_same_v<
               decltype(&response_definition::factory),
               http::outcome (*)(const http::status&, http::fields,
                                 body_factory, response_definition&)>);
+
+// The TASK-113 factories (REQ-028): borrowed takes the span and the
+// lease; the transfer kinds take the handle, optionally with the
+// custom close operation riding the transfer. Each static_cast
+// selects one of an overloaded pair by signature, so a changed or
+// missing factory fails the build here.
+using borrowed_fn = http::outcome (*)(const http::status&, http::fields, std::span<const std::byte>, httpserver::body_lease, response_definition&);
+using owned_file_fn = http::outcome (*)(const http::status&, http::fields, std::FILE*, response_definition&);
+using owned_file_close_fn = http::outcome (*)(const http::status&, http::fields, std::FILE*, httpserver::owned_close_fn, response_definition&);
+using owned_pipe_close_fn = http::outcome (*)(const http::status&, http::fields, std::FILE*, httpserver::owned_close_fn, response_definition&);
+static_assert(std::is_same_v<decltype(static_cast<borrowed_fn>(&response_definition::borrowed)), borrowed_fn>);
+static_assert(std::is_same_v<decltype(static_cast<owned_file_fn>(&response_definition::owned_file)), owned_file_fn>);
+static_assert(std::is_same_v<decltype(static_cast<owned_file_close_fn>(&response_definition::owned_file)), owned_file_close_fn>);
+static_assert(std::is_same_v<decltype(static_cast<owned_file_fn>(&response_definition::owned_pipe)), owned_file_fn>);
+static_assert(std::is_same_v<decltype(static_cast<owned_pipe_close_fn>(&response_definition::owned_pipe)), owned_pipe_close_fn>);
 
 // The per-send overlay (REQ-030) and the send report: plain deep
 // value types.

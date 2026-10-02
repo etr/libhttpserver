@@ -58,6 +58,7 @@
 
 #include "./body_sink_fake.hpp"
 #include "./littletest.hpp"
+#include "./response_source_rig.hpp"
 
 using httpserver::body_chunk;
 using httpserver::body_factory;
@@ -181,35 +182,9 @@ bool drain_until(manual_executor& ex, int& flag, int spins) {
     return flag != 0;
 }
 
-// (S3 rig) RAII scratch file: created from `content`, rewritable,
-// removed on destruction.
-class temp_file {
- public:
-    explicit temp_file(const std::string& content) {
-        char pattern[] = "/tmp/libhttpserver_task112_XXXXXX";
-        const int fd = ::mkstemp(pattern);
-        if (fd < 0) throw std::runtime_error("task112: mkstemp failed");
-        ::close(fd);
-        path_ = pattern;
-        rewrite(content);
-    }
-
-    ~temp_file() { ::unlink(path_.c_str()); }
-
-    temp_file(const temp_file&) = delete;
-    temp_file& operator=(const temp_file&) = delete;
-
-    const std::string& path() const noexcept { return path_; }
-
-    void rewrite(const std::string& content) {
-        std::ofstream out(path_, std::ios::binary | std::ios::trunc);
-        out.write(content.data(),
-                  static_cast<std::streamsize>(content.size()));
-    }
-
- private:
-    std::string path_;
-};
+// (S3 rig) the temp_file scratch asset moved to
+// response_source_rig.hpp with TASK-113's file-backed source suites
+// (fake::temp_file).
 
 std::string repeating(std::size_t n) {
     std::string out;
@@ -721,7 +696,7 @@ LT_END_AUTO_TEST(send_gates_fail_typed)
 // the cursor's 16 KiB reads, with Content-Length pinned per send.
 LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_streams_whole_body)
     const std::string payload = repeating(40 * 1024);
-    temp_file asset(payload);
+    fake::temp_file asset(payload);
 
     capturing_sink sink;
     fake::scripted_body_sink out;
@@ -748,7 +723,7 @@ LT_END_AUTO_TEST(file_send_streams_whole_body)
 // sends changes the next send's pinned length and body, and the
 // definition's own fields never gain a Content-Length.
 LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_reopens_per_send)
-    temp_file asset("one");
+    fake::temp_file asset("one");
 
     response_definition def;
     LT_CHECK(response_definition::reopen_file(
@@ -809,7 +784,7 @@ LT_END_AUTO_TEST(file_send_missing_file_fails_pre_commit)
 // engine owns the connection's fate).
 LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_short_of_declared_length_fails)
     const std::string payload = repeating(40 * 1024);
-    temp_file asset(payload);
+    fake::temp_file asset(payload);
 
     http::fields framed;
     framed.append("Content-Length", std::to_string(payload.size()));
@@ -839,7 +814,7 @@ LT_END_AUTO_TEST(file_send_short_of_declared_length_fails)
 // next pull meets a clean EOF with bytes still owed.
 LT_BEGIN_AUTO_TEST(response_definition_suite, file_send_truncated_mid_send_fails)
     const std::string payload = repeating(40 * 1024);
-    temp_file asset(payload);
+    fake::temp_file asset(payload);
 
     response_definition def;
     LT_CHECK(response_definition::reopen_file(

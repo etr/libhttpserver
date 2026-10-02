@@ -97,6 +97,10 @@ const std::vector<const char*>& header_files() {
         // sentinel scan with the same rules (no config gates, no
         // backend/OS tokens; response value and send vocabulary only).
         "/response_definition.hpp",
+        // TASK-113: the response body-source vocabulary (split from
+        // response_definition.hpp) joins the sentinel scan with the
+        // same rules (no config gates, no backend/OS tokens).
+        "/response_sources.hpp",
     };
     return files;
 }

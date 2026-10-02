@@ -54,6 +54,7 @@
 #include <httpserver/server/server.hpp>
 
 #include "../integ/raw_http_client.hpp"
+#include "../unit/response_source_rig.hpp"
 #include "./littletest.hpp"
 
 namespace {
@@ -145,6 +146,33 @@ task<void> asset_handler(exchange& x) {
                            std::to_string(x.connection_id()));
     static_cast<void>(co_await httpserver::send_definition(
         x, asset_definition(), overlay));
+}
+
+// TASK-113: GET /one-shot-asset serves a TRANSFERRED std::FILE* to
+// the first request only. That send claims the one-shot definition
+// and streams it; every later request's send fails invalid_state
+// BEFORE any head or body traffic, and the handler co_returns without
+// a terminal action, so run_route synthesizes the 500 (the same
+// posture as /throwing). The scratch asset is only the transfer's
+// origin: once handed over, the library's handle is the memory's
+// only owner that matters.
+httpserver::response_definition& one_shot_definition() {
+    static httpserver_test::temp_file asset{std::string(1536, 'z')};
+    static httpserver::response_definition def = [] {
+        httpserver::response_definition built;
+        http::fields f;
+        f.append("Content-Type", "application/octet-stream");
+        static_cast<void>(httpserver::response_definition::owned_file(
+            http::status::from_code(200), f,
+            httpserver_test::open_for_read(asset), built));
+        return built;
+    }();
+    return def;
+}
+
+task<void> one_shot_asset_handler(exchange& x) {
+    static_cast<void>(co_await httpserver::send_definition(
+        x, one_shot_definition(), {}));
 }
 
 // Rendezvous for the concurrency case: the response comes only once
@@ -337,6 +365,9 @@ class server_fixture {
         static_cast<void>(server_.route(
             http::method::known(http::method_id::get), "/asset",
             asset_handler));
+        static_cast<void>(server_.route(
+            http::method::known(http::method_id::get), "/one-shot-asset",
+            one_shot_asset_handler));
         static_cast<void>(server_.route(
             http::method::known(http::method_id::get), "/rendezvous",
             rendezvous_handler));
@@ -1134,6 +1165,30 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, shared_definition_serves_two_connecti
     LT_CHECK(!conn_tags[1].empty());
     LT_CHECK(conn_tags[0] != conn_tags[1]);
 LT_END_AUTO_TEST(shared_definition_serves_two_connections)
+
+// (28) TASK-113: a transferred one-shot file handle serves exactly
+// once over the wire: the first GET streams the exact body under the
+// probed Content-Length; the second GET finds the definition spent,
+// its send failing before anything is written, so the engine
+// synthesizes the 500 on the SAME keep-alive connection.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, one_shot_definition_serves_once_then_500)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /one-shot-asset HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK_EQ(seen[0].body, std::string(1536, 'z'));
+        LT_CHECK_EQ(seen[0].framing, std::string("content-length"));
+    }
+    LT_CHECK(client.send("GET /one-shot-asset HTTP/1.1\r\nHost: h\r\n\r\n"));
+    LT_CHECK(client.receive(2, seen));
+    LT_CHECK_EQ(seen.size(), 2u);
+    if (seen.size() == 2) LT_CHECK_EQ(seen[1].status, 500);
+LT_END_AUTO_TEST(one_shot_definition_serves_once_then_500)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
