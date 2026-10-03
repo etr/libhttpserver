@@ -47,12 +47,46 @@ LT_BEGIN_AUTO_TEST(websocket_session_test_suite, session_send_admission_and_owne
         LT_CHECK_EQ(output(s).size(), std::size_t{4});
     }
 LT_END_AUTO_TEST(session_send_admission_and_owned_wire)
+LT_BEGIN_AUTO_TEST(websocket_session_test_suite, session_text_send_preserves_opcode_and_payload)
+    test_session s(small());
+    auto sent = s.try_send(ws::message_kind::text, bytes("hello"));
+    LT_CHECK(sent.status.ok());
+    LT_CHECK(sent.disposition == ws::send_disposition::accepted);
+    LT_CHECK(output(s) == frame(1, bytes("hello"), true, false));
+LT_END_AUTO_TEST(session_text_send_preserves_opcode_and_payload)
 LT_BEGIN_AUTO_TEST(websocket_session_test_suite, session_receive_and_release)
     test_session s(small()); auto wire = frame(1, bytes("hello"));
     LT_CHECK(s.feed(wire).status.ok()); auto m = receive(s);
     LT_CHECK(m.status.ok()); LT_CHECK(m.value.has_value()); LT_CHECK(m.value->data == bytes("hello"));
+    LT_CHECK(m.value->kind == ws::message_kind::text);
     LT_CHECK_EQ(s.usage().incoming_bytes, std::size_t{0});
 LT_END_AUTO_TEST(session_receive_and_release)
+LT_BEGIN_AUTO_TEST(websocket_session_test_suite, session_receive_binary_preserves_kind)
+    test_session s(small());
+    LT_CHECK(s.feed(frame(2, bytes("\xff\x80"))).status.ok());
+    auto m = receive(s);
+    LT_CHECK(m.status.ok()); LT_CHECK(m.value.has_value());
+    LT_CHECK(m.value->kind == ws::message_kind::binary);
+    LT_CHECK(m.value->data == bytes("\xff\x80"));
+LT_END_AUTO_TEST(session_receive_binary_preserves_kind)
+LT_BEGIN_AUTO_TEST(websocket_session_test_suite, session_receive_fragmented_text_preserves_kind)
+    test_session s(small());
+    LT_CHECK(s.feed(frame(1, bytes("hel"), false)).status.ok());
+    LT_CHECK(s.feed(frame(0, bytes("lo"))).status.ok());
+    auto m = receive(s);
+    LT_CHECK(m.status.ok()); LT_CHECK(m.value.has_value());
+    LT_CHECK(m.value->kind == ws::message_kind::text);
+    LT_CHECK(m.value->data == bytes("hello"));
+LT_END_AUTO_TEST(session_receive_fragmented_text_preserves_kind)
+LT_BEGIN_AUTO_TEST(websocket_session_test_suite, session_receive_fragmented_binary_preserves_kind)
+    test_session s(small());
+    LT_CHECK(s.feed(frame(2, bytes("\xff"), false)).status.ok());
+    LT_CHECK(s.feed(frame(0, bytes("\x80"))).status.ok());
+    auto m = receive(s);
+    LT_CHECK(m.status.ok()); LT_CHECK(m.value.has_value());
+    LT_CHECK(m.value->kind == ws::message_kind::binary);
+    LT_CHECK(m.value->data == bytes("\xff\x80"));
+LT_END_AUTO_TEST(session_receive_fragmented_binary_preserves_kind)
 LT_BEGIN_AUTO_TEST(websocket_session_test_suite, session_controls_and_partial_frame_priority)
     test_session s(small()); s.try_send(ws::message_kind::binary, bytes("12345678"));
     std::byte first;

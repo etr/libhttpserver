@@ -92,6 +92,43 @@ LT_BEGIN_AUTO_TEST(websocket_session_race_test_suite, session_writable_registrat
         s.cancel({httpserver::http::outcome_code::cancelled, "cancel"}); ex.run_pending(); LT_CHECK_EQ(done, 1);
     }
 LT_END_AUTO_TEST(session_writable_registration_versus_drain_and_cancel)
+LT_BEGIN_AUTO_TEST(websocket_session_race_test_suite, session_parked_writable_local_close_completes_once)
+    httpserver::manual_executor ex; test_session s(small());
+    LT_CHECK(s.try_send(ws::message_kind::binary, bytes("12345678")).disposition == ws::send_disposition::accepted);
+    int done = 0;
+    httpserver::spawn(ex, s.writable(), [&](httpserver::task_result<httpserver::http::outcome> r) {
+        ++done; LT_CHECK(r.has_value());
+        LT_CHECK(r.value().code() == httpserver::http::outcome_code::connection_closed);
+    });
+    ex.run_pending();
+    LT_CHECK_EQ(done, 0); LT_CHECK_EQ(s.usage().output_bytes, std::size_t{10});
+
+    LT_CHECK(s.close(1000).ok());
+    ex.run_pending(); LT_CHECK_EQ(done, 1);
+
+    LT_CHECK(s.close(1000).code() == httpserver::http::outcome_code::invalid_state);
+    s.eof(); s.cancel({httpserver::http::outcome_code::cancelled, "again"});
+    ex.run_pending(); LT_CHECK_EQ(done, 1);
+LT_END_AUTO_TEST(session_parked_writable_local_close_completes_once)
+LT_BEGIN_AUTO_TEST(websocket_session_race_test_suite, session_parked_writable_cancel_preserves_result_once)
+    httpserver::manual_executor ex; test_session s(small());
+    LT_CHECK(s.try_send(ws::message_kind::binary, bytes("12345678")).disposition == ws::send_disposition::accepted);
+    int done = 0;
+    httpserver::spawn(ex, s.writable(), [&](httpserver::task_result<httpserver::http::outcome> r) {
+        ++done; LT_CHECK(r.has_value());
+        LT_CHECK(r.value().code() == httpserver::http::outcome_code::cancelled);
+        LT_CHECK_EQ(r.value().message(), "disconnect");
+    });
+    ex.run_pending();
+    LT_CHECK_EQ(done, 0); LT_CHECK_EQ(s.usage().output_bytes, std::size_t{10});
+
+    s.cancel({httpserver::http::outcome_code::cancelled, "disconnect"});
+    ex.run_pending(); LT_CHECK_EQ(done, 1);
+
+    s.cancel({httpserver::http::outcome_code::cancelled, "again"}); s.eof();
+    LT_CHECK(s.close(1000).code() == httpserver::http::outcome_code::invalid_state);
+    ex.run_pending(); LT_CHECK_EQ(done, 1);
+LT_END_AUTO_TEST(session_parked_writable_cancel_preserves_result_once)
 LT_BEGIN_AUTO_TEST(websocket_session_race_test_suite, session_callback_target_destroyed_after_invocation)
     struct probe {
         bool* armed; bool* called; int* premature; test_session** session;
