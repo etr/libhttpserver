@@ -9,9 +9,9 @@
 Provide SHOUTcast and remaining HTTP/1 parity cases for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Port SHOUTcast response semantics into HTTP/1 output.
-- [ ] Inventory other documented HTTP/1 edge cases.
-- [ ] Replay each against the v2 observable-behavior matrix.
+- [x] Port SHOUTcast response semantics into HTTP/1 output.
+- [x] Inventory other documented HTTP/1 edge cases.
+- [x] Replay each against the v2 observable-behavior matrix.
 
 **Dependencies:**
 - Blocked by: TASK-108, TASK-118
@@ -24,4 +24,4 @@ Provide SHOUTcast and remaining HTTP/1 parity cases for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-004, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** In Progress
+**Status:** Complete
