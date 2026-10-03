@@ -124,7 +124,7 @@ std::string framed_exchange(const http::request_head& request,
                             std::uint16_t status, const http::fields& fields,
                             const std::string& body,
                             parity::normalized_exchange& out) {
-    http1_response_framer framer({}, {});
+    http1_response_framer framer;
     std::string wire;
     const http::outcome head_out = framer.start_head(
         wire, request, http::status::from_code(status), fields);

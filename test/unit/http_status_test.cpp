@@ -147,6 +147,20 @@ LT_BEGIN_AUTO_TEST(http_status_suite, copy_keeps_value)
     LT_CHECK(copy.client_error());
 LT_END_AUTO_TEST(copy_keeps_value)
 
+LT_BEGIN_AUTO_TEST(http_status_suite, shoutcast_metadata_is_copied_and_compared)
+    const status ordinary = status::from_code(200);
+    const status icy = ordinary.with_shoutcast();
+    LT_CHECK_EQ(icy.code(), ordinary.code());
+    LT_CHECK(icy.valid() && icy.success() && icy.is_shoutcast());
+    LT_CHECK(!ordinary.is_shoutcast());
+    LT_CHECK(icy == ordinary);
+    const status copy = icy;
+    LT_CHECK(copy == icy && copy.is_shoutcast());
+    LT_CHECK(icy.with_shoutcast() == icy);
+    LT_CHECK(!status().with_shoutcast().valid());
+    LT_CHECK(status::from_code(500).with_shoutcast().server_error());
+LT_END_AUTO_TEST(shoutcast_metadata_is_copied_and_compared)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

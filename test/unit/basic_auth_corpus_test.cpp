@@ -135,7 +135,7 @@ std::string replay_case(const char* case_name) {
         fields = verdict.challenge_fields();
     }
 
-    http1_response_framer framer({}, {});
+    http1_response_framer framer;
     std::string wire;
     const http::request_head& request = case_request(*found);
     const http::outcome head_out = framer.start_head(

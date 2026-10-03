@@ -46,6 +46,18 @@ class status {
         return status(code);
     }
 
+    // v3 equivalent of http_response::shoutCAST(): marks this copied
+    // response for the fixed ICY status-line token on HTTP/1 output.
+    // Numeric validity and category are unchanged. No audio metadata
+    // or streaming policy is implied; ordinary statuses remain HTTP.
+    constexpr status with_shoutcast() const noexcept {
+        status copy = *this;
+        copy.shoutcast_ = true;
+        return copy;
+    }
+
+    constexpr bool is_shoutcast() const noexcept { return shoutcast_; }
+
     // The stored numeric code, valid or not.
     constexpr std::uint16_t code() const noexcept { return code_; }
 
@@ -76,6 +88,7 @@ class status {
         return valid() && code_ >= 500;
     }
 
+    // Equality compares the semantic numeric code, excluding wire metadata.
     friend constexpr bool operator==(const status& a, const status& b) noexcept {
         return a.code_ == b.code_;
     }
@@ -91,6 +104,7 @@ class status {
     constexpr explicit status(std::uint16_t code) noexcept : code_(code) { }
 
     std::uint16_t code_ = 0;
+    bool shoutcast_ = false;
 };
 
 }  // namespace http

@@ -36,6 +36,11 @@
 #include <httpserver/http/status.hpp>
 #include <httpserver/server/routes.hpp>
 
+static_assert(httpserver::http::status::from_code(200).with_shoutcast().is_shoutcast());
+static_assert(httpserver::http::status::from_code(200).with_shoutcast().code() == 200);
+static_assert(httpserver::http::status::from_code(200).with_shoutcast()
+              == httpserver::http::status::from_code(200));
+
 int use_v3_exchange_types(httpserver::exchange& x) {
     using httpserver::body_policy;
     using httpserver::exchange_state;

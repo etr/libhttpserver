@@ -1,0 +1,45 @@
+case file_ok
+expect status 200
+expect header Content-Type: application/octet-stream
+expect header Content-Length: 21
+expect body "test content of file\n"
+expect framing content-length
+# connection_outcome: ok
+
+case file_empty
+expect status 200
+expect header Content-Type: application/octet-stream
+expect header Content-Length: 0
+expect body ""
+expect framing content-length
+# connection_outcome: ok
+
+case file_missing
+expect status 500
+expect header Content-Type: text/plain
+expect header Content-Length: 21
+expect body "Internal Server Error"
+expect framing content-length
+# connection_outcome: ok
+
+case pipe_body
+expect status 200
+expect header Transfer-Encoding: chunked
+expect body "abcXYZ"
+expect framing chunked
+# connection_outcome: ok
+
+case iovec_body
+expect status 200
+expect header Content-Length: 6
+expect body "abcXYZ"
+expect framing content-length
+# connection_outcome: ok
+
+case deferred_body
+expect status 200
+expect header Transfer-Encoding: chunked
+expect body "abcXYZ"
+expect framing chunked
+# connection_outcome: ok
+
