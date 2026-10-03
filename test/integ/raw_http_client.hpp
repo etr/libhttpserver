@@ -61,6 +61,12 @@ class connection {
  public:
     connection() : socket_(pollsys::open_stream()) { }
 
+    // TASK-119: the IPv6 twin -- an AF_INET6 stream for ::1 dials
+    // (connect via connect_v6()).
+    struct ipv6_tag { };
+    static constexpr ipv6_tag ipv6{};
+    explicit connection(ipv6_tag) : socket_(pollsys::open_stream_v6()) { }
+
     ~connection() { close(); }
 
     connection(const connection&) = delete;

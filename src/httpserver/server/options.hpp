@@ -482,8 +482,8 @@ constexpr bool valid_v4_wildcard(std::string_view v) noexcept {
 
 // One pattern spelling per the net vocabulary's grammar.
 constexpr bool valid_peer_pattern(std::string_view v) noexcept {
-    if (v.empty() || v.find('*') != std::string_view::npos
-            && !v.ends_with(".*")) {
+    if (v.empty() || (v.find('*') != std::string_view::npos
+                      && !v.ends_with(".*"))) {
         return false;
     }
     const std::size_t slash = v.find('/');
