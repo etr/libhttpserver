@@ -21,7 +21,9 @@
 
 #ifndef SRC_HTTPSERVER_DETAIL_WEBSOCKET_SESSION_STATE_HPP_
 #define SRC_HTTPSERVER_DETAIL_WEBSOCKET_SESSION_STATE_HPP_
+#include <functional>
 #include <atomic>
+#include <chrono>
 #include <deque>
 #include <mutex>
 #include <memory>
@@ -41,6 +43,7 @@ struct session_notifications {
     std::shared_ptr<session_wait_node> receive, writable;
     std::unique_ptr<session::close_callback> callback;
     close_info info;
+    std::shared_ptr<const std::function<void()>> progress;
     void deliver() noexcept;
 };
 struct wire_frame {
@@ -57,6 +60,7 @@ struct session_state {
     bool input_stopped() const { return done || peer_close; }
     bool writable_ready() const;
     bool receive_ready() const;
+    bool output_pending() const;
     session_notifications notifications();  // caller holds mu
     void terminal(http::outcome reason, bool clean = false);  // caller holds mu
     void begin_close(std::span<const std::byte> payload);  // caller holds mu
@@ -66,11 +70,15 @@ struct session_state {
     close_info best_reason() const;
 
     std::mutex mu;
+    std::shared_ptr<const std::function<void()>> progress;
     options limits;
     httpserver::detail::websocket_codec codec;
     std::deque<wire_frame> data;
     std::optional<wire_frame> active, pong, close_frame;
     std::size_t output_bytes = 0, outgoing_messages = 0, offered = 0;
+    // Admission time belongs to the actual pending interval, independent
+    // of delayed or coalesced transport observer delivery.
+    std::optional<std::chrono::steady_clock::time_point> output_pending_since;
     bool closing = false, done = false, peer_close = false, close_sent = false;
     bool receive_pending = false, writable_pending = false;
     std::shared_ptr<session_wait_node> receive_wait, writable_wait;

@@ -90,6 +90,7 @@ task<bool> connection_engine::serve_one(
         seed.assign(self->parser_.residue_view());
         self->parser_.consume_residue(self->parser_.residue_size());
         head = self->parser_.take();
+        self->head_routed_ = true;
         seed.append(self->pending_tail_);
         self->pending_tail_.clear();
     }
@@ -203,6 +204,12 @@ bool connection_engine::finish_exchange(wake_body_sink& forwarding,
                                         const exchange& routed,
                                         http1_exchange_sink& engine_sink,
                                         const http1_body_mode& mode) {
+    if (engine_sink.upgraded()) {
+        // Route lifetime ended. Its owning session destruction cancels
+        // protocol state; no HTTP end marker or next-head recycle occurs.
+        wake_loops_ordered();
+        return false;
+    }
     // Head-only responses (respond() without a streaming body) still
     // need their end marker so the framing closes validly.
     if (!forwarding.ended() && !routed.disconnected()) {
@@ -234,6 +241,7 @@ void connection_engine::settle_exchange_state(bool& keep,
     // the response said about persistence: the next head (parked or
     // still on the wire) is dropped, and no rejection drain may hold
     // the connection for a remainder it will never serve (TASK-110).
+    head_routed_ = false;
     if (quiescing_) keep = false;
     if (body_undrained_locked(mode)) decide_drain_locked(keep, mode);
     // A kept verdict implies the body (if any) is accounted for, so
@@ -402,18 +410,11 @@ void http1_exchange_sink::on_respond(const http::status& s,
     engine_->rearm_watchdog();
 }
 
-void http1_exchange_sink::on_upgrade(const ws_upgrade_options& options) {
-    static_cast<void>(options);
-    // The upgrade handshake is out of scope for M8: the clean posture
-    // closes the connection once the committed head drains.
-    upgraded_ = true;
-    keepalive_ = http1_keepalive::close;
-    engine_->request_close();
-}
 
 void http1_exchange_sink::on_abort() {
     // Post-commit failure: reset instead of a second response.
-    outbox_.abandon();
+    engine_->fail_websocket({http::outcome_code::cancelled, "upgraded route aborted"});
+    if (!upgraded_) outbox_.abandon();
     keepalive_ = http1_keepalive::close;
     engine_->request_close();
 }

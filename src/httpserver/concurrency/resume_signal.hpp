@@ -300,8 +300,8 @@ class resume_waiter final {
                   std::chrono::steady_clock::time_point deadline)
         : state_(std::move(state)),
           node_(std::make_shared<detail::resume_node>()),
-          deadline_(deadline),
-          has_deadline_(true) { }
+          ticket_(std::make_shared<detail::timer_queue::ticket>()),
+          deadline_(deadline) { }
 
     resume_waiter& bind_frame(detail::task_frame_base* frame) noexcept {
         frame_ = frame;
@@ -320,39 +320,42 @@ class resume_waiter final {
     }
 
     std::coroutine_handle<> await_suspend(std::coroutine_handle<> awaiting) {
-        node_->awaiting = awaiting;
-        node_->witness = frame_ ? frame_->frame_witness_ptr() : nullptr;
-        node_->target = frame_ ? frame_->frame_executor() : current_executor();
+        // Publishing the node can resume and destroy this awaiter on
+        // another worker. Retain everything needed before publication;
+        // only these shared/local values are used afterwards.
+        auto state = state_;
+        auto node = node_;
+        auto ticket_slot = ticket_;
+        const auto deadline = deadline_;
+        node->awaiting = awaiting;
+        node->witness = frame_ ? frame_->frame_witness_ptr() : nullptr;
+        node->target = frame_ ? frame_->frame_executor() : current_executor();
 
-        bool already_fired = false;
-        int trigger = 0;
+        int trigger;
         {
-            std::lock_guard<std::mutex> lock(state_->mu);
-            trigger = state_->trigger.load(std::memory_order_seq_cst);
+            std::lock_guard<std::mutex> lock(state->mu);
+            trigger = state->trigger.load(std::memory_order_seq_cst);
             if (trigger == 0) {
-                node_->next = state_->head;
-                state_->head = node_;
-            } else {
-                already_fired = true;
+                node->next = state->head;
+                state->head = node;
             }
         }
-        if (already_fired) {
-            // The trigger raced the registration: complete via symmetric
-            // transfer, still on this frame's own thread.
-            node_->delivered.store(true, std::memory_order_relaxed);
-            node_->result = trigger == 1 ? resume_outcome::resumed
-                                         : resume_outcome::cancelled;
+        if (trigger != 0) {
+            // The trigger raced registration: symmetric transfer stays
+            // on the awaiting frame's own thread.
+            node->delivered.store(true, std::memory_order_relaxed);
+            node->result = trigger == 1 ? resume_outcome::resumed
+                                        : resume_outcome::cancelled;
             return awaiting;
         }
-        if (has_deadline_) {
-            // Armed only after linking, so a timeout delivery can never
-            // beat suspension; it races signal()/cancel() through the
-            // delivered-CAS like any other trigger. The ticket lives in
-            // the awaiter: destroying the waiter cancels the deadline.
-            ticket_ = detail::default_timer_queue().schedule(
-                deadline_, [node = node_] {
-                    detail::deliver(node, resume_outcome::timeout);
-                });
+        if (ticket_slot) {
+            auto ticket = detail::default_timer_queue().schedule(
+                deadline, [node] { detail::deliver(node, resume_outcome::timeout); });
+            std::lock_guard<std::mutex> lock(state->mu);
+            // The waiter may already have died before schedule returned.
+            // Serialize installation with destructor cancellation.
+            if (node->delivered.load(std::memory_order_acquire)) ticket.cancel();
+            else *ticket_slot = std::move(ticket);
         }
         return std::noop_coroutine();
     }
@@ -360,8 +363,9 @@ class resume_waiter final {
     resume_outcome await_resume() const noexcept { return node_->result; }
 
     ~resume_waiter() {
-        if (ticket_) ticket_.cancel();
         std::lock_guard<std::mutex> lock(state_->mu);
+        node_->delivered.store(true, std::memory_order_release);
+        if (ticket_) ticket_->cancel();
         std::shared_ptr<detail::resume_node>* link = &state_->head;
         while (*link) {
             if (link->get() == node_.get()) {
@@ -381,9 +385,8 @@ class resume_waiter final {
     std::shared_ptr<detail::resume_state> state_;
     std::shared_ptr<detail::resume_node> node_;
     detail::task_frame_base* frame_ = nullptr;
-    detail::timer_queue::ticket ticket_;
+    std::shared_ptr<detail::timer_queue::ticket> ticket_;
     std::chrono::steady_clock::time_point deadline_{};
-    bool has_deadline_ = false;
 };
 
 inline resume_waiter resume_signal::wait() const {

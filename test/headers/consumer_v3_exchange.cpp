@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 
+#include <type_traits>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/server/routes.hpp>
@@ -83,7 +84,8 @@ int use_v3_exchange_types(httpserver::exchange& x) {
     const bool admitted = x.admit_body(policy).ok();
     httpserver::resume_signal signal;
     const bool waiting = x.suspend(signal).ok();
-    const bool upgraded = x.upgrade(upgrade).ok();
+    auto upgrade_task = x.upgrade(upgrade);
+    static_assert(std::is_same_v<decltype(upgrade_task), task<httpserver::websocket_upgrade_result>>);
     const bool aborted = x.abort().ok();
     const bool gone = x.disconnect(http::outcome_code::connection_closed,
                                    "peer left").ok();
@@ -101,7 +103,7 @@ int use_v3_exchange_types(httpserver::exchange& x) {
         && state == exchange_state::head && !terminal && !suspended
         && !disconnected && reason.ok() && connection == 0
         && !cancellation.stop_requested()
-        && (responded || admitted || waiting || upgraded || aborted || gone)
+        && (responded || admitted || waiting || aborted || gone)
         && routed;
     return all_good ? 0 : 1;
 }

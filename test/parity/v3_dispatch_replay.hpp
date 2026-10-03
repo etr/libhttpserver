@@ -84,7 +84,7 @@ class framing_sink final : public httpserver::detail::exchange_sink {
         committed_fields_ = f;
     }
 
-    void on_upgrade(const httpserver::ws_upgrade_options&) override { }
+    httpserver::websocket_upgrade_result on_upgrade(const httpserver::ws_upgrade_options&) override {  httpserver::websocket_upgrade_result result; result.session.emplace(); return result; }
 
     void on_abort() override { }
 

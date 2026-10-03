@@ -111,6 +111,7 @@ void connection_engine::shutdown() noexcept {
         if (shutdown_) return;
         shutdown_ = true;
     }
+    fail_websocket({http::outcome_code::connection_closed, "WebSocket server stop"});
     disconnect_current(http::outcome_code::connection_closed,
                        "http1 connection engine: server stop");
     outbox_.abandon();
@@ -182,6 +183,10 @@ void connection_engine::absorb(std::string_view data) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (shutdown_) return;
+        if (phase_ != stream_phase::http) {
+            pending_tail_.append(data);
+            return;
+        }
         switch (gate_) {
             case body_gate::none:
                 absorb_head_locked(data);
@@ -291,7 +296,7 @@ bool connection_engine::admit_early_body() {
 void connection_engine::absorb_head_locked(std::string_view data) {
     // A complete untaken head accepts nothing: park the bytes for the
     // route loop (they are the body seed or the next head).
-    if (parser_.state() == http1_head_state::complete) {
+    if (head_routed_ || parser_.state() == http1_head_state::complete) {
         pending_tail_.append(data);
         return;
     }
@@ -346,6 +351,11 @@ bool connection_engine::absorb_drain_locked(std::string_view data) {
 }
 
 bool connection_engine::reader_may_read_locked() const {
+    if (websocket_) {
+        return websocket_->snapshot().input_ready;
+    }
+    if (head_routed_ && gate_ == body_gate::none)
+        return pending_tail_.size() < config_.body.max_staged_bytes;
     switch (gate_) {
         case body_gate::none:
             // A complete, untaken head plus no live exchange: parked
@@ -369,61 +379,27 @@ task<void> connection_engine::reader_loop(
     std::shared_ptr<connection_engine> self) {
     std::array<std::byte, k_read_buffer_bytes> buffer;
     for (;;) {
+        self->feed_websocket_tail();
         wake_operation gate_op(self->owner_, self->id_);
-        bool gated = false;
-        {
-            std::lock_guard<std::mutex> lock(self->mu_);
-            if (self->shutdown_ || self->close_after_drain_) co_return;
-            // The pre-admission memory bound: early bytes (or a parked
-            // pipelined tail) sit at the staging cap, so park instead
-            // of reading; every transition that moves the gate wakes
-            // the loops and spurious wakes re-check. A parked reader
-            // does not observe a silent peer FIN immediately, but each
-            // gated scenario ends in a transition (admission,
-            // rejection) or a watchdog deadline, so nothing hangs. The
-            // wake op registers under mu_ (the lost-wake closure,
-            // TASK-109): a gate transition either sees this op in the
-            // registry or its state change is visible at the re-check.
-            gated = !self->reader_may_read_locked();
-            if (gated) gate_op.submit(self->backend_);
-        }
-        if (gated) {
+        const auto posture = self->reader_posture(gate_op);
+        if (posture == io_posture::stop) co_return;
+        if (posture == io_posture::retry) continue;
+        if (posture == io_posture::park) {
             const io_result r = co_await std::move(gate_op);
             if (r.code != http::outcome_code::ok) co_return;
             continue;
         }
-        read_operation op(self->owner_, self->id_,
-                          std::span<std::byte>(buffer.data(), buffer.size()));
-        op.submit(self->backend_);
+        read_operation op(self->owner_, self->id_, buffer);
+        if (!self->submit_read(op)) continue;
         const io_result r = co_await std::move(op);
+        if (self->read_completed(r)) continue;
         if (r.code == http::outcome_code::ok) {
             self->absorb(std::string_view(
                 reinterpret_cast<const char*>(buffer.data()), r.transferred));
             self->wake_loops();
             continue;
         }
-        if (r.code == http::outcome_code::connection_closed) {
-            // Peer hangup: the route loop closes cleanly between
-            // requests; a mid-exchange hangup disconnects the live
-            // exchange so a parked body read unwinds.
-            bool routing = false;
-            {
-                std::lock_guard<std::mutex> lock(self->mu_);
-                self->eof_ = true;
-                routing = self->current_ != nullptr;
-            }
-            if (routing) {
-                self->disconnect_current(
-                    http::outcome_code::connection_closed,
-                    "http1 connection engine: peer hangup mid-exchange");
-            }
-        } else {
-            self->disconnect_current(http::outcome_code::connection_closed,
-                                     "http1 connection engine: transport"
-                                     " read failed");
-            self->request_close();
-        }
-        self->wake_loops();
+        self->handle_read_failure(r);
         co_return;
     }
 }
@@ -441,47 +417,35 @@ task<void> connection_engine::writer_loop(
     // visible as transport activity for the write-idle deadline.
     std::array<std::byte, k_write_buffer_bytes> buffer;
     for (;;) {
-        const std::size_t buffered = self->outbox_.copy_front(buffer);
+        std::shared_ptr<websocket_driver> driver;
+        const std::size_t buffered = self->copy_transport_output(buffer, driver);
         if (buffered == 0) {
             wake_operation op(self->owner_, self->id_);
-            {
-                std::lock_guard<std::mutex> lock(self->mu_);
-                const bool drained = self->outbox_drained();
-                const bool done = self->route_done_ || self->shutdown_;
-                // Exits only once the route loop is finished AND the
-                // outbox is drained, so a close-after-response never
-                // truncates a body. The writer owns the release on the
-                // close paths: every other loop is parked in a
-                // transport operation only a release can complete (a
-                // parked read on an idle keep-alive peer, for one).
-                if (drained && done) {
-                    if (self->close_after_drain_ || self->shutdown_) {
-                        self->backend_.release_connection(self->id_);
-                    }
-                    co_return;
-                }
-                // Nothing to flush yet, or the front waits on the
-                // handler: park. The op registers under mu_ and the
-                // outbox-appending sinks wake under the same mutex
-                // (wake_loops_ordered), so a push racing this park
-                // either fires the op or is visible at the re-check
-                // (the lost-wake closure, TASK-109). Wake ops coalesce
-                // globally -- a spurious completion re-checks; a
-                // terminal one means the transport is gone.
-                op.submit(self->backend_);
-            }
+            const auto posture = self->writer_posture(driver, op);
+            if (posture == io_posture::stop) co_return;
+            if (posture == io_posture::retry) continue;
             const io_result r = co_await std::move(op);
             if (r.code != http::outcome_code::ok) co_return;
             continue;
         }
         write_operation op(self->owner_, self->id_,
-                           std::span<const std::byte>(buffer.data(),
-                                                      buffered));
-        op.submit(self->backend_);
+                           std::span<const std::byte>(buffer.data(), buffered));
+        {
+            std::lock_guard lock(self->mu_);
+            if (self->shutdown_) co_return;
+            op.submit(self->backend_);
+        }
         const io_result r = co_await std::move(op);
-        if (r.code != http::outcome_code::ok) co_return;
-        self->outbox_.consume_front(r.transferred);
-        self->note_transport_activity();
+        if (r.code != http::outcome_code::ok) {
+            self->fail_websocket({http::outcome_code::connection_closed, "WebSocket transport write failed"});
+            self->shutdown();
+            co_return;
+        }
+        // Publish write progress before consume_output delivers its observer,
+        // so a concurrent watchdog never sees an expired pre-write anchor.
+        self->note_transport_activity(true);
+        if (driver) static_cast<void>(driver->consume_output(r.transferred));
+        else self->outbox_.consume_front(r.transferred);
     }
 }
 
@@ -524,7 +488,7 @@ connection_engine::drain_deadline_locked() const {
 
 connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     watchdog_plan plan;
-    if (shutdown_ || close_after_drain_) {
+    if (watchdog_terminal_locked()) {
         plan.exit = true;
         return plan;
     }
@@ -537,15 +501,23 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     // routed and no candidate applies, the plan defers -- the drain
     // ticket's deadline (or a stop) bounds that window instead
     // (TASK-110).
-    std::chrono::steady_clock::time_point candidates[4];
+    std::chrono::steady_clock::time_point candidates[5];
     std::size_t candidate_count = 0;
     if (body_decode_pending_locked()) {
         candidates[candidate_count++] =
             last_activity_ + config_.timeouts.body_idle;
     }
-    if (outbox_.queued_bytes() > 0) {
-        candidates[candidate_count++] =
-            last_activity_ + config_.timeouts.write_idle;
+    if (phase_ == stream_phase::websocket) {
+        // Read admission identity and pending state atomically. A new interval
+        // survives drain/requeue even when neither observer saw empty output.
+        update_websocket_write_anchor_locked(websocket_->snapshot());
+        if (websocket_write_anchor_) {
+            candidates[candidate_count++] = *websocket_write_anchor_ + config_.timeouts.write_idle;
+        }
+    } else if (transport_output_pending_locked()) {
+        candidates[candidate_count++] = last_activity_ + config_.timeouts.write_idle;
+    } else {
+        websocket_write_anchor_.reset();
     }
     if (const std::optional<std::chrono::steady_clock::time_point>
             suspended_until = suspension_deadline_locked()) {
@@ -555,8 +527,9 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
             drain_until = drain_deadline_locked()) {
         candidates[candidate_count++] = *drain_until;
     }
+    add_upgrade_deadline_locked(candidates, candidate_count);
     if (candidate_count == 0) {
-        if (current_ != nullptr) {
+        if (head_routed_) {
             plan.defer = true;
             return plan;
         }
@@ -587,10 +560,11 @@ void connection_engine::rearm_watchdog() noexcept {
     }
 }
 
-void connection_engine::note_transport_activity() {
+void connection_engine::note_transport_activity(bool written) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         last_activity_ = std::chrono::steady_clock::now();
+        if (written && phase_ == stream_phase::websocket) websocket_write_anchor_ = last_activity_;
     }
     rearm_watchdog();
 }
@@ -601,6 +575,7 @@ void connection_engine::enforce_timeout() noexcept {
     // unwinds through run_route), mark the close, and release the
     // transport so every parked loop terminal-completes. No response
     // is synthesized: a timed-out peer is not reading one.
+    fail_websocket({http::outcome_code::timeout, "WebSocket watchdog timeout"});
     disconnect_current(http::outcome_code::timeout,
                        "http1 connection engine: watchdog timeout");
     {
@@ -624,11 +599,7 @@ task<void> connection_engine::watchdog_loop(
             ? std::chrono::steady_clock::now() + k_watchdog_tick
             : plan.deadline;
         timer_operation op(self->owner_, self->id_, deadline);
-        {
-            std::lock_guard<std::mutex> lock(self->mu_);
-            self->pending_timer_ = op.state();
-        }
-        op.submit(self->backend_);
+        if (!self->arm_watchdog(op, plan)) continue;
         const io_result r = co_await std::move(op);
         {
             std::lock_guard<std::mutex> lock(self->mu_);

@@ -37,6 +37,7 @@
 // The suite runs against detail::recording_sink, a call-counting fake
 // of the engine seam, so no transport exists yet.
 
+#include <utility>
 #include <chrono>
 #include <string>
 #include <thread>
@@ -77,6 +78,12 @@ static_assert(!std::is_copy_assignable_v<exchange>,
               "one exchange per request head; copies are a bug");
 
 namespace {
+
+http::outcome decide_upgrade(exchange& x, ws_upgrade_options options) {
+    manual_executor ex; std::optional<http::outcome> result;
+    spawn(ex, x.upgrade(std::move(options)), [&](auto r) { result.emplace(r.value().status); });
+    ex.run_pending(); return *result;
+}
 
 enum class wait_note { none, resumed, timeout, cancelled };
 
@@ -248,7 +255,7 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_upgrade_from_1_1_head)
 
     ws_upgrade_options options;
     options.subprotocols.push_back("chat.example");
-    const http::outcome upgraded = x.upgrade(options);
+    const http::outcome upgraded = decide_upgrade(x, options);
     LT_CHECK(upgraded.ok());
     LT_CHECK(x.state() == exchange_state::upgraded);
     LT_CHECK(x.terminal());
@@ -260,7 +267,7 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_upgrade_on_1_0_refused)
     detail::recording_sink sink;
     exchange x(make_head(http::protocol::http_1_0), &sink);
 
-    const http::outcome refused = x.upgrade(ws_upgrade_options());
+    const http::outcome refused = decide_upgrade(x, ws_upgrade_options());
     LT_CHECK(refused.code() == http::outcome_code::not_supported);
     LT_CHECK(!refused.message().empty());
     LT_CHECK(x.state() == exchange_state::head);
@@ -272,7 +279,7 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_upgrade_after_admit_fails)
     exchange x(make_head(), &sink);
 
     LT_CHECK(x.admit_body(body_policy()).ok());
-    const http::outcome refused = x.upgrade(ws_upgrade_options());
+    const http::outcome refused = decide_upgrade(x, ws_upgrade_options());
     LT_CHECK(refused.code() == http::outcome_code::invalid_state);
     LT_CHECK(x.state() == exchange_state::admitted);
     LT_CHECK_EQ(sink.upgrade_calls, 0);
@@ -283,7 +290,7 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_upgrade_after_respond_fail
     exchange x(make_head(), &sink);
 
     LT_CHECK(x.respond(http::status::from_code(200), http::fields()).ok());
-    const http::outcome refused = x.upgrade(ws_upgrade_options());
+    const http::outcome refused = decide_upgrade(x, ws_upgrade_options());
     LT_CHECK(refused.code() == http::outcome_code::invalid_state);
     LT_CHECK(x.state() == exchange_state::responded);
     LT_CHECK_EQ(sink.upgrade_calls, 0);
@@ -324,7 +331,7 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_admit_after_terminal_fails
              == http::outcome_code::invalid_state);
 
     exchange upgraded(make_head(), &sink);
-    LT_CHECK(upgraded.upgrade(ws_upgrade_options()).ok());
+    LT_CHECK(decide_upgrade(upgraded, ws_upgrade_options()).ok());
     LT_CHECK(upgraded.admit_body(body_policy()).code()
              == http::outcome_code::invalid_state);
     LT_CHECK_EQ(sink.admit_calls, 0);
@@ -334,7 +341,7 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_respond_after_upgrade_fail
     detail::recording_sink sink;
     exchange x(make_head(), &sink);
 
-    LT_CHECK(x.upgrade(ws_upgrade_options()).ok());
+    LT_CHECK(decide_upgrade(x, ws_upgrade_options()).ok());
     const http::outcome refused = x.respond(http::status::from_code(200),
                                             http::fields());
     LT_CHECK(refused.code() == http::outcome_code::invalid_state);
@@ -346,8 +353,8 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_double_upgrade_fails)
     detail::recording_sink sink;
     exchange x(make_head(), &sink);
 
-    LT_CHECK(x.upgrade(ws_upgrade_options()).ok());
-    const http::outcome again = x.upgrade(ws_upgrade_options());
+    LT_CHECK(decide_upgrade(x, ws_upgrade_options()).ok());
+    const http::outcome again = decide_upgrade(x, ws_upgrade_options());
     LT_CHECK(again.code() == http::outcome_code::invalid_state);
     LT_CHECK_EQ(sink.upgrade_calls, 1);
 LT_END_AUTO_TEST(exchange_double_upgrade_fails)
@@ -469,7 +476,7 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_decisions_after_disconnect
     resume_signal sig;
     LT_CHECK(x.suspend(sig).code()
              == http::outcome_code::connection_closed);
-    LT_CHECK(x.upgrade(ws_upgrade_options()).code()
+    LT_CHECK(decide_upgrade(x, ws_upgrade_options()).code()
              == http::outcome_code::connection_closed);
 
     // Typed failures never mutate state and never reach the engine.
@@ -485,7 +492,7 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_disconnect_after_terminal)
     detail::recording_sink sink;
     exchange x(make_head(), &sink);
 
-    LT_CHECK(x.upgrade(ws_upgrade_options()).ok());
+    LT_CHECK(decide_upgrade(x, ws_upgrade_options()).ok());
     LT_CHECK(x.disconnect(http::outcome_code::connection_closed, "gone").ok());
     LT_CHECK(x.state() == exchange_state::upgraded);
     LT_CHECK(x.terminal());

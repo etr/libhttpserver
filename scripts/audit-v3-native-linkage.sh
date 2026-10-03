@@ -95,6 +95,8 @@ src/detail/server_hooks.cpp
 src/detail/request_lifecycle.cpp
 src/detail/net_address.cpp
 src/detail/peer_policy.cpp
+src/detail/http1_websocket_handshake.cpp
+src/detail/connection_engine_websocket.cpp
 src/detail/websocket_driver.cpp
 src/detail/websocket_codec.cpp
 src/detail/websocket_session_state.cpp
@@ -106,6 +108,7 @@ src/detail/websocket_session.cpp
 # are part of the native TLS-off surface and stay under the same ban.
 # TASK-115 adds the Digest nonce/ledger/parser/response chain.
 V3_DETAIL_HEADERS="
+src/httpserver/detail/http1_websocket_handshake.hpp
 src/httpserver/detail/websocket_driver.hpp
 src/httpserver/detail/websocket_codec.hpp
 src/httpserver/detail/websocket_session_state.hpp

@@ -62,9 +62,12 @@ class recording_sink final : public exchange_sink {
         respond_fields_size = f.size();
     }
 
-    void on_upgrade(const ws_upgrade_options& options) override {
+    websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override {
         ++upgrade_calls;
         upgrade_subprotocols = options.subprotocols.size();
+        websocket_upgrade_result result;
+        result.session.emplace(options.limits);
+        return result;
     }
 
     void on_abort() override {

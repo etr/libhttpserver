@@ -37,6 +37,7 @@
 
 #include <httpserver/websocket/session.hpp>
 #include <httpserver/detail/websocket_driver.hpp>
+#include <httpserver/detail/http1_websocket_handshake.hpp>
 #include "./digest_client.hpp"
 #include <httpserver/auth/basic_auth.hpp>
 #include <httpserver/auth/digest_auth.hpp>
@@ -285,9 +286,22 @@ int audit_hooks_link() {
 
 }  // namespace
 
+int audit_websocket_upgrade_link() {
+    http::request_head head;
+    head.request_method = http::method::known(http::method_id::get);
+    head.request_protocol = http::protocol::http_1_1;
+    head.head_fields.append("Host", "example.com");
+    head.head_fields.append("Connection", "Upgrade");
+    head.head_fields.append("Upgrade", "websocket");
+    head.head_fields.append("Sec-WebSocket-Version", "13");
+    head.head_fields.append("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==");
+    auto plan = httpserver::detail::negotiate_http1_websocket(head, {});
+    return !plan.status.ok() || plan.accept != "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
+}
+
 // All audits always run: plain | does not short-circuit.
 int main() {
     return audit_link_surface() | audit_basic_auth_link()
            | audit_digest_auth_link() | audit_forms_link()
-           | audit_multipart_link() | audit_hooks_link();
+           | audit_multipart_link() | audit_hooks_link() | audit_websocket_upgrade_link();
 }

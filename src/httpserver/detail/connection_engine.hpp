@@ -107,6 +107,7 @@
 #include <httpserver/detail/io_operation.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
+#include <httpserver/detail/websocket_driver.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/net/address.hpp>
@@ -132,6 +133,7 @@ struct connection_engine_config {
     http1_head_budget head;
     http1_body_budget body;
     http1_outbox_budget outbox;
+    websocket::options websocket_limits;
     // The watchdog's deadline inventory (§3.4): header covers awaiting
     // a head and the idle keep-alive gap, body_idle a decoding body
     // with no new octets, write_idle a non-empty outbox with a stalled
@@ -149,6 +151,7 @@ struct connection_engine_config {
         config.head = http1_head_budget::from_budget_limits(limits);
         config.body = http1_body_budget::from_budget_limits(limits);
         config.outbox = http1_outbox_budget::from_budget_limits(limits);
+        config.websocket_limits = websocket::options::from_budgets(limits);
         return config;
     }
 };
@@ -230,6 +233,7 @@ class connection_engine final
     static constexpr std::chrono::milliseconds k_watchdog_tick{1000};
 
  private:
+    friend struct connection_engine_test_access;  // private native regression seam
     friend class http1_exchange_sink;
     friend class wake_body_sink;
 
@@ -290,9 +294,9 @@ class connection_engine final
     // (exactly-once claim resolves the race with a firing deadline).
     void rearm_watchdog() noexcept;
     // Records transport progress (a read or a completed write) and
-    // re-arms: every inventory deadline except suspension anchors at
-    // the last activity instant.
-    void note_transport_activity();
+    // re-arms ordinary HTTP activity deadlines. Established WebSocket
+    // output idle slides only for a successful write.
+    void note_transport_activity(bool written = false);
     // A fired deadline: disconnect the live exchange, mark the close,
     // release the transport, wake the loops.
     void enforce_timeout() noexcept;
@@ -378,6 +382,28 @@ class connection_engine final
     // held.
     void decide_drain_locked(bool& keep, const http1_body_mode& mode);
 
+    // Protocol calls never hold mu_; observer delivery is outside the
+    // session lock. Snapshot reads may take the session lock under mu_:
+    // no session->engine lock edge exists during a mutation.
+    enum class io_posture : std::uint8_t { stop, retry, park, proceed };
+    io_posture reader_posture(wake_operation& wake);
+    bool submit_read(read_operation& read);
+    bool read_completed(const io_result& result);
+    void handle_read_failure(const io_result& result);
+    std::shared_ptr<websocket_driver> websocket_output_driver();
+    std::size_t copy_transport_output(std::span<std::byte> buffer, std::shared_ptr<websocket_driver>& driver);
+    io_posture writer_posture(const std::shared_ptr<websocket_driver>& driver,
+                             wake_operation& wake);
+    bool transport_output_pending_locked() const;
+    bool watchdog_terminal_locked() const;
+    bool arm_watchdog(timer_operation& timer, const watchdog_plan& plan);
+    void add_upgrade_deadline_locked(std::span<std::chrono::steady_clock::time_point> candidates,
+                                    std::size_t& count) const;
+    void observe_websocket_driver(const std::shared_ptr<websocket_driver>& driver);
+    void websocket_progressed();
+    void update_websocket_write_anchor_locked(const websocket_progress& progress);
+    void fail_websocket(http::outcome reason);
+    void feed_websocket_tail();
     void loop_finished();
     void finalize();
 
@@ -405,6 +431,18 @@ class connection_engine final
     http1_head_parser parser_;
     http1_response_outbox outbox_;
     std::unique_ptr<http1_body_source> body_;
+    enum class stream_phase : std::uint8_t { http, upgrade_pending_flush, websocket, terminal };
+    stream_phase phase_ = stream_phase::http;
+    std::shared_ptr<websocket_driver> websocket_;
+    std::optional<std::chrono::steady_clock::time_point> upgrade_anchor_;
+    // Established WebSocket output idle starts when output becomes pending,
+    // slides only on successful writes, and clears when the queue drains.
+    std::optional<std::chrono::steady_clock::time_point> websocket_write_anchor_;
+    // Only the reader consumes this retained buffer. No suffix copy is
+    // needed while admission releases one message at a time.
+    std::size_t websocket_tail_offset_ = 0;
+    bool websocket_codec_blocked_ = false;
+    bool head_routed_ = false;
     std::string pending_tail_;   // bytes no consumer could take yet
     std::string early_bytes_;    // pre-admission parking (bounded)
     body_gate gate_ = body_gate::none;
@@ -418,6 +456,7 @@ class connection_engine final
     // timer's own completion never dereferences a dead handle (the
     // op handle itself lives in the watchdog's frame).
     std::shared_ptr<op_state> pending_timer_;
+    std::shared_ptr<op_state> pending_read_;
     // Suspension deadline anchor: set at first sight of the suspended
     // exchange, held until the exchange leaves the suspended state.
     std::optional<std::chrono::steady_clock::time_point>
@@ -466,7 +505,7 @@ class http1_exchange_sink final : public exchange_sink {
  private:
     void on_admit(const body_policy& policy) override;
     void on_respond(const http::status& s, const http::fields& f) override;
-    void on_upgrade(const ws_upgrade_options& options) override;
+    websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override;
     void on_abort() override;
 
     std::shared_ptr<connection_engine> engine_;
