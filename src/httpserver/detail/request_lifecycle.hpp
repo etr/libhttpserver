@@ -39,6 +39,7 @@
 #include <httpserver/exchange.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
+#include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/routes.hpp>
 
 namespace httpserver {
@@ -70,10 +71,19 @@ struct error_page_factories {
 // at response-head commit (see lifecycle_sink.hpp); a head the engine
 // refused fails request_completed. A handler exception never crosses
 // the boundary.
+// @p peers is the server-wide peer policy (TASK-119): when non-null,
+// the head of the pipeline revalidates the exchange's peer snapshot
+// against it BEFORE any phase fires -- a runtime deny takes effect on
+// the next request of an established connection. A refusal settles
+// the exchange with zero application bytes: disconnect(peer_refused)
+// plus the request_completed tail (succeeded=false, the typed reason;
+// accept_decision does NOT fire again at revalidation). The default
+// (null) skips the gate -- the rig and v2-parity paths.
 task<void> dispatch_request(const server::route_registry& routes,
                             const server::hook_bus& bus,
                             const error_page_factories& pages,
-                            lifecycle_sink& sink, exchange& x);
+                            lifecycle_sink& sink, exchange& x,
+                            const server::peer_policy* peers = nullptr);
 
 }  // namespace detail
 

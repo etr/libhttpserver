@@ -45,6 +45,7 @@ enum class outcome_code : std::uint8_t {
     cancelled,            // cancellation completed the operation
     timeout,
     would_deadlock,       // e.g. drain-ticket wait from counted work (DR-V3-008)
+    peer_refused,         // the peer policy refused admission (TASK-119)
 };
 
 // Operation result for API surface that can fail. Default-constructed

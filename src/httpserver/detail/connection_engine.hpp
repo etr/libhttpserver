@@ -110,6 +110,7 @@
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/net/address.hpp>
+#include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/budgets.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
@@ -174,7 +175,8 @@ class connection_engine final
                       const server::resource_budget& budget,
                       drain_scope& scope, connection_engine_config config,
                       std::uint64_t id, stopped_callback on_stopped,
-                      net::peer_address peer = net::peer_address{});
+                      net::peer_address peer = net::peer_address{},
+                      const server::peer_policy* peers = nullptr);
 
     connection_engine(const connection_engine&) = delete;
     connection_engine& operator=(const connection_engine&) = delete;
@@ -392,6 +394,11 @@ class connection_engine final
     // The immutable accept-time snapshot; stamped onto every exchange
     // of this connection (TASK-119 plan D3).
     const net::peer_address peer_;
+    // The server-wide policy the head-of-pipeline revalidation
+    // consults (TASK-119 plan D1); null on rigged engines skips the
+    // gate. A borrowed reference: the native_server's policy member
+    // outlives every listener and engine.
+    const server::peer_policy* peers_ = nullptr;
 
     // --- coordination state (guarded by mu_) ---------------------------
     mutable std::mutex mu_;

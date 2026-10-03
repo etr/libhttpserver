@@ -171,7 +171,8 @@ void listener_engine::adopt_accepted(std::uint64_t connection,
         }
         engine = std::make_shared<connection_engine>(
             backend_, pool_, routes_, hooks_, budget_, scope_, config_,
-            connection, [this, connection] { erase(connection); }, peer);
+            connection, [this, connection] { erase(connection); }, peer,
+            &peers_);
         connections_.emplace(connection, engine);
     }
     // Outside the lock: a budget-refusing engine reports its stop from

@@ -133,7 +133,8 @@ task<bool> connection_engine::serve_one(
                                &head_refused);
     wake_body_sink forwarding(*self);
     exchange routed(head, &interceptor, self->id_,
-                    body_present ? self->body_.get() : nullptr, &forwarding);
+                    body_present ? self->body_.get() : nullptr, &forwarding,
+                    self->peer_);
     http1_response_sink& slot = self->outbox_.open(sequence,
                                                    routed.cancellation());
     engine_sink.bind(slot);
@@ -154,7 +155,8 @@ task<bool> connection_engine::serve_one(
     // behind a stale header timer).
     self->rearm_watchdog();
     co_await dispatch_request(self->routes_, self->hooks_,
-                              *self->config_.pages, interceptor, routed);
+                              *self->config_.pages, interceptor, routed,
+                              self->peers_);
     {
         std::lock_guard<std::mutex> lock(self->mu_);
         self->current_ = nullptr;

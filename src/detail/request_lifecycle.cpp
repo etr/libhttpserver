@@ -371,13 +371,37 @@ void fire_completed(const server::hook_bus& bus, const exchange& x,
     (void)bus.fire<server::hook_phase::request_completed>(ctx);
 }
 
+// The revalidation refusal detail: the v2 reason names.
+std::string refusal_detail(server::peer_refusal reason) {
+    if (reason == server::peer_refusal::not_on_allow_list) {
+        return "request_lifecycle: the peer is not on the allow list";
+    }
+    return "request_lifecycle: the peer is denied by policy";
+}
+
 }  // namespace
 
 task<void> dispatch_request(const server::route_registry& routes,
                             const server::hook_bus& bus,
                             const error_page_factories& pages,
-                            lifecycle_sink& sink, exchange& x) {
+                            lifecycle_sink& sink, exchange& x,
+                            const server::peer_policy* peers) {
     dispatch_state st;
+    // TASK-119 (plan D1 point 2): the pre-route revalidation. The
+    // gate sits before every phase -- a refusal answers nothing (zero
+    // application bytes, the pinned refusal shape), settles the
+    // exchange through the never-responded path, and only the
+    // request_completed tail observes it.
+    if (peers != nullptr) {
+        const server::peer_verdict verdict = peers->classify(x.peer());
+        if (!verdict.accepted) {
+            static_cast<void>(x.disconnect(
+                http::outcome_code::peer_refused,
+                refusal_detail(verdict.reason)));
+            fire_completed(bus, x, sink);
+            co_return;
+        }
+    }
     // A peer that is already gone answers nothing; the tail still
     // reports the settle.
     if (x.disconnected()) {
