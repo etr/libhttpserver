@@ -142,6 +142,22 @@ class native_server::impl {
         pages->method_not_allowed = options_.method_not_allowed_response();
         config.pages = std::move(pages);
 
+        // TASK-119: seed the live policy from the options. V12 judged
+        // every spelling with this header's own grammar; the store
+        // parses with the library's. A disagreement here would be a
+        // grammar split between the two, so it fails listen() typed
+        // instead of silently dropping the entry.
+        peers_.set_enabled(options_.peer_policy().enabled);
+        peers_.set_mode(options_.peer_policy().mode);
+        for (const std::string& pattern : options_.peer_policy().deny) {
+            const http::outcome seeded = peers_.deny(pattern);
+            if (!seeded.ok()) return seeded;
+        }
+        for (const std::string& pattern : options_.peer_policy().allow) {
+            const http::outcome seeded = peers_.allow(pattern);
+            if (!seeded.ok()) return seeded;
+        }
+
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             listeners_.push_back(std::make_shared<engine::listener_engine>(
                 backend_, pool_, registry_, hooks_, budget_, peers_,
@@ -243,6 +259,8 @@ class native_server::impl {
     }
 
     hook_bus& hooks() const noexcept { return hooks_; }
+
+    server::peer_policy& peers() const noexcept { return peers_; }
 
  private:
     // Destruction order (reverse declaration): the flags, the transport
@@ -366,6 +384,10 @@ std::uint16_t native_server::get_bound_port(
 
 hook_bus& native_server::hooks() const noexcept {
     return impl_->hooks();
+}
+
+peer_policy& native_server::peer_policy() const noexcept {
+    return impl_->peers();
 }
 
 }  // namespace server

@@ -397,6 +397,41 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, tls_combination_controls)
     LT_CHECK(validates_ok(psk_tls));
 LT_END_AUTO_TEST(tls_combination_controls)
 
+// V12 (TASK-119): every peer-policy pattern must be a spelling the
+// live store accepts; the gate runs pre-listen with the rest.
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, peer_policy_patterns_validated)
+    // The defaults validate.
+    srv::server_options defaults = with_listener("*", 0, false);
+    LT_CHECK(validates_ok(defaults));
+
+    // Every accepted spelling passes on both lists.
+    srv::server_options rich = with_listener("*", 0, false);
+    rich.peer_policy().deny.push_back("10.0.0.0/8");
+    rich.peer_policy().deny.push_back("192.0.2.1");
+    rich.peer_policy().deny.push_back("192.0.2.*");
+    rich.peer_policy().allow.push_back("2001:db8::/32");
+    rich.peer_policy().allow.push_back("::1");
+    rich.peer_policy().mode = srv::peer_policy_mode::reject_all;
+    rich.peer_policy().enabled = false;
+    LT_CHECK(validates_ok(rich));
+
+    // The rejected shapes fail typed: middle wildcards, bad CIDR,
+    // garbage, and a v6 wildcard (CIDR is the v6 compression form).
+    const char* const rejected[] = {
+        "127.*.0.1", "*.*.*.*", "10.0.0.0/33", "2001:db8::/129",
+        "10.0.0.0/", "10.0.0.0/abc", "nonsense", "2001:db8::*",
+        "10.0.0.1:80", "",
+    };
+    for (const char* pattern : rejected) {
+        srv::server_options bad = with_listener("*", 0, false);
+        bad.peer_policy().deny.push_back(pattern);
+        LT_CHECK(fails_with(bad, outcome_code::invalid_argument));
+        srv::server_options bad_allow = with_listener("*", 0, false);
+        bad_allow.peer_policy().allow.push_back(pattern);
+        LT_CHECK(fails_with(bad_allow, outcome_code::invalid_argument));
+    }
+LT_END_AUTO_TEST(peer_policy_patterns_validated)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

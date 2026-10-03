@@ -36,6 +36,7 @@
 #include <httpserver/http/protocol.hpp>
 #include <httpserver/server/budgets.hpp>
 #include <httpserver/server/hooks.hpp>
+#include <httpserver/server/peer_policy.hpp>
 
 namespace httpserver {
 
@@ -131,6 +132,20 @@ struct concurrency_options {
 struct tls_options {
     tls_provider provider = tls_provider::none;
     tls_profile profile = tls_profile::none;
+};
+
+// TASK-119: the construction-time stance of the server-wide peer
+// policy (the v2 default_policy + ip_access_control pair). The lists
+// hold pattern spellings exactly as net::parse_pattern accepts them
+// (exact literals, trailing-* IPv4 wildcards, CIDR over both
+// families); validate() (V12) judges every entry pre-listen and
+// listen() seeds the live policy. Runtime mutation afterwards goes
+// through native_server::peer_policy() (thread-safe, DR-V3-008).
+struct peer_policy_options {
+    bool enabled = true;
+    peer_policy_mode mode = peer_policy_mode::accept_all;
+    std::vector<std::string> deny;
+    std::vector<std::string> allow;
 };
 
 namespace detail {
@@ -427,6 +442,85 @@ inline http::outcome check_plaintext_listeners(
     return http::outcome::okay();
 }
 
+// V12 grammar, header-resident by necessity: server_options must stay
+// compilable and linkable without the library (consumer_v3_server is
+// the proof), so the check reuses this header's own constexpr literal
+// validators over the SAME grammar the live store parses -- exact
+// literals, one trailing '*' on a dotted quad, one '/n' within the
+// family's bit count, no middle wildcards, no v6 wildcard (CIDR is
+// the compression form). listen() turns any residual divergence
+// between this judgment and the store's parse into a typed failure
+// instead of a silently dropped entry.
+
+// A '/n' suffix: one to three digits, no leading zero unless exactly
+// "0", at most @p limit.
+constexpr bool valid_prefix_bits(std::string_view digits,
+                                 unsigned limit) noexcept {
+    if (digits.empty() || digits.size() > 3) return false;
+    if (digits.size() > 1 && digits[0] == '0') return false;
+    unsigned value = 0;
+    for (const char c : digits) {
+        if (!is_digit(c)) return false;
+        value = value * 10u + static_cast<unsigned>(c - '0');
+    }
+    return value <= limit;
+}
+
+// "a.b.c.*": three valid dotted-quad fields then the wildcard.
+constexpr bool valid_v4_wildcard(std::string_view v) noexcept {
+    if (!v.ends_with(".*")) return false;
+    const std::string_view head = v.substr(0, v.size() - 1);
+    std::size_t pos = 0;
+    for (int field = 0; field < 3; ++field) {
+        const std::size_t dot = head.find('.', pos);
+        if (dot == std::string_view::npos) return false;
+        if (!valid_ipv4_field(head.substr(pos, dot - pos))) return false;
+        pos = dot + 1;
+    }
+    return pos == head.size();
+}
+
+// One pattern spelling per the net vocabulary's grammar.
+constexpr bool valid_peer_pattern(std::string_view v) noexcept {
+    if (v.empty() || v.find('*') != std::string_view::npos
+            && !v.ends_with(".*")) {
+        return false;
+    }
+    const std::size_t slash = v.find('/');
+    const std::string_view literal =
+        slash == std::string_view::npos ? v : v.substr(0, slash);
+    const bool v6 = literal.find(':') != std::string_view::npos;
+    if (slash != std::string_view::npos
+            && (slash == 0
+                || !valid_prefix_bits(v.substr(slash + 1),
+                                      v6 ? 128u : 32u))) {
+        return false;
+    }
+    if (!v6 && valid_v4_wildcard(v)) return slash == std::string_view::npos;
+    // A v4-mapped v6 literal stays an exact pattern in the store; the
+    // store rejects a mapped CIDR, so does the gate.
+    if (v6 && slash != std::string_view::npos
+            && literal.substr(0, 7) == "::ffff:") {
+        return false;
+    }
+    return v6 ? valid_ipv6(literal) : valid_ipv4(literal);
+}
+
+// V12: every peer-policy entry must be a valid pattern spelling.
+inline http::outcome check_peer_policy(
+        const std::vector<std::string>& entries, const char* list) {
+    for (const std::string& entry : entries) {
+        if (!valid_peer_pattern(entry)) {
+            return http::outcome(
+                http::outcome_code::invalid_argument,
+                "server_options: peer policy " + std::string(list)
+                    + " entry '" + entry + "' is not an address,"
+                      " trailing-wildcard, or CIDR spelling");
+        }
+    }
+    return http::outcome::okay();
+}
+
 // V7-V11: provider, profile, protocol, and per-listener TLS flags must
 // combine into a servable configuration.
 inline http::outcome check_tls_protocol_combination(
@@ -571,7 +665,24 @@ class server_options {
             !result.ok()) {
             return result;
         }
+        if (const http::outcome result =
+                detail::check_peer_policy(peers_.deny, "deny");
+            !result.ok()) {
+            return result;
+        }
+        if (const http::outcome result =
+                detail::check_peer_policy(peers_.allow, "allow");
+            !result.ok()) {
+            return result;
+        }
         return http::outcome::okay();
+    }
+
+    // TASK-119: the peer policy stance, seeded into the live policy
+    // at listen().
+    peer_policy_options& peer_policy() noexcept { return peers_; }
+    const peer_policy_options& peer_policy() const noexcept {
+        return peers_;
     }
 
  private:
@@ -581,6 +692,7 @@ class server_options {
     tls_options tls_;
     protocol_set protocols_;
     budget_limits budgets_;
+    peer_policy_options peers_;
     std::shared_ptr<const response_factory> not_found_response_;
     std::shared_ptr<const response_factory> method_not_allowed_response_;
 };

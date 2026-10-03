@@ -81,17 +81,13 @@ class connection {
     // stream to nonblocking for the deadline-bounded exchanges. True on
     // success.
     bool connect(std::uint16_t port) {
-        const auto deadline = std::chrono::steady_clock::now()
-            + kExchangeBudget;
-        for (;;) {
-            if (pollsys::connect_loopback(socket_, port)) {
-                pollsys::set_nonblocking(socket_, true);
-                return true;
-            }
-            // A fresh listener may not have reached the backlog yet.
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-            if (std::chrono::steady_clock::now() >= deadline) return false;
-        }
+        return dial_until(&pollsys::connect_loopback, port);
+    }
+
+    // TASK-119: the [::1] twin of connect(), for endpoints served on
+    // the IPv6 loopback.
+    bool connect_v6(std::uint16_t port) {
+        return dial_until(&pollsys::connect_loopback_v6, port);
     }
 
     // Sends every byte of @p bytes before @p budget elapses.
@@ -209,6 +205,25 @@ class connection {
     }
 
  private:
+    // The shared retry-dial loop of connect()/connect_v6(): blocks on
+    // @p attempt until it lands or the exchange budget elapses, then
+    // flips the stream to nonblocking.
+    bool dial_until(bool (*attempt)(pollsys::native_socket_t,
+                                    std::uint16_t),
+                    std::uint16_t port) {
+        const auto deadline = std::chrono::steady_clock::now()
+            + kExchangeBudget;
+        for (;;) {
+            if (attempt(socket_, port)) {
+                pollsys::set_nonblocking(socket_, true);
+                return true;
+            }
+            // A fresh listener may not have reached the backlog yet.
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            if (std::chrono::steady_clock::now() >= deadline) return false;
+        }
+    }
+
     pollsys::native_socket_t socket_;
     response_frame_parser parser_;
     bool peer_closed_ = false;

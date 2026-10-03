@@ -612,6 +612,20 @@ inline bool connect_loopback(native_socket_t socket, std::uint16_t port) {
                      sizeof(address)) == 0;
 }
 
+// The IPv6 loopback twin (TASK-119 e2e: ::1-served endpoints). Same
+// contract as connect_loopback.
+inline bool connect_loopback_v6(native_socket_t socket,
+                                std::uint16_t port) {
+    sockaddr_in6 address{};
+    address.sin6_family = AF_INET6;
+    address.sin6_port = htons(port);
+    if (::inet_pton(AF_INET6, "::1", &address.sin6_addr) != 1) {
+        return false;
+    }
+    return ::connect(socket, reinterpret_cast<sockaddr*>(&address),
+                     sizeof(address)) == 0;
+}
+
 // A connected bidirectional pair for local transfers: an AF_UNIX
 // socket pair on POSIX, a 127.0.0.1 TCP pair on Windows (no socketpair
 // exists there). Both ends come back blocking; callers choose modes. On
