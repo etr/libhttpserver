@@ -20,9 +20,9 @@
 */
 
 // TASK-118 step 2: the v3 lifecycle hook vocabulary and bus (plan D4).
-// Seven request-scoped phases with the v2 names kept where the native
-// point exists; four v2 phases (connection_opened, connection_closed,
-// accept_decision, body_chunk) are migration-noted away. The bus keeps
+// TASK-119 added the accept_decision admission phase (the eighth).
+// Three v2 phases (connection_opened, connection_closed, body_chunk)
+// stay migration-noted away. The bus keeps
 // the v2 contracts: registration order within a phase, snapshot-copy
 // firing (a hook may add or remove hooks mid-fire), short-circuit on
 // the first respond_with, zero-cost-when-unused per-phase atomics, and
@@ -31,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -52,8 +53,8 @@ using srv::hook_phase;
 
 // --- shape pins (DR-V3-001: semantic-exchange-only contexts) ---------------
 
-static_assert(static_cast<std::size_t>(hook_phase::count_) == std::size_t{7},
-              "seven request-scoped phases plus the sentinel");
+static_assert(static_cast<std::size_t>(hook_phase::count_) == std::size_t{8},
+              "accept_decision plus the seven request-scoped phases");
 
 static_assert(std::is_same_v<decltype(
                   std::declval<const srv::request_received_ctx&>().request),
@@ -126,6 +127,19 @@ http::request_head sample_head() {
 hook_action fire_received(srv::hook_bus& bus, const http::request_head& head) {
     srv::request_received_ctx ctx{head};
     return bus.fire<hook_phase::request_received>(ctx);
+}
+
+// Fires the admission phase over one loopback-shaped peer verdict.
+hook_action fire_admission(srv::hook_bus& bus, bool accepted,
+                           srv::peer_refusal reason) {
+    srv::accept_decision_ctx ctx;
+    ctx.peer.address =
+        httpserver::net::parse_address("127.0.0.1").value_or(
+            httpserver::net::address{});
+    ctx.peer.port = 50000;
+    ctx.accepted = accepted;
+    ctx.reason = reason;
+    return bus.fire<hook_phase::accept_decision>(ctx);
 }
 
 hook_action fire_resolved(srv::hook_bus& bus, const http::request_head& head) {
@@ -427,6 +441,110 @@ LT_BEGIN_AUTO_TEST(server_hooks_suite, handle_outlives_bus)
     stranded.remove();  // must not crash
     LT_CHECK(!stranded.armed());
 LT_END_AUTO_TEST(handle_outlives_bus)
+
+// TASK-119: the admission phase observes the fixed verdict: the peer
+// snapshot, the acceptance, and the typed refusal reason all cross
+// the context untouched.
+LT_BEGIN_AUTO_TEST(server_hooks_suite, admission_observes_verdict_and_peer)
+    srv::hook_bus bus;
+    httpserver::net::peer_address seen;
+    bool accepted_seen = true;
+    srv::peer_refusal reason_seen = srv::peer_refusal::none;
+    (void)bus.add<hook_phase::accept_decision>(
+        [&seen, &accepted_seen, &reason_seen](
+            srv::accept_decision_ctx& ctx) -> hook_action {
+            seen = ctx.peer;
+            accepted_seen = ctx.accepted;
+            reason_seen = ctx.reason;
+            return hook_action::pass();
+        }).detach();
+    const hook_action outcome = fire_admission(
+        bus, false, srv::peer_refusal::not_on_allow_list);
+    LT_CHECK(outcome.is_pass());
+    LT_CHECK(!accepted_seen);
+    LT_CHECK(reason_seen == srv::peer_refusal::not_on_allow_list);
+    LT_CHECK(seen.address.to_string() == "127.0.0.1");
+    LT_CHECK_EQ(seen.port, std::uint16_t{50000});
+    // The phase is distinct from the request-scoped phases: firing it
+    // runs only its own hooks.
+    LT_CHECK(bus.any_hooks(hook_phase::accept_decision));
+    LT_CHECK(!bus.any_hooks(hook_phase::request_received));
+LT_END_AUTO_TEST(admission_observes_verdict_and_peer)
+
+// TASK-119: admission is observation only. The bus contracts are
+// unchanged from the other phases: a respond_with short-circuits the
+// remaining hooks of the phase and comes back as the action (the
+// LISTENER discards it -- the verdict was fixed before firing; that
+// engine-side ignore is pinned by the e2e and corpus suites), and a
+// throwing hook is contained as pass() with the chain continuing.
+LT_BEGIN_AUTO_TEST(server_hooks_suite, admission_ignores_and_contains)
+    srv::hook_bus bus;
+    const visit_log visits = std::make_shared<std::vector<std::string>>();
+    (void)bus.add<hook_phase::accept_decision>(
+        [visits](srv::accept_decision_ctx&) -> hook_action {
+            visits->push_back("responds");
+            return respond(403, "no");
+        }).detach();
+    (void)bus.add<hook_phase::accept_decision>(
+        [visits](srv::accept_decision_ctx&) -> hook_action {
+            visits->push_back("skipped");
+            return hook_action::pass();
+        }).detach();
+    hook_action outcome = fire_admission(bus, true,
+                                         srv::peer_refusal::none);
+    LT_CHECK(!outcome.is_pass());
+    const srv::hook_response taken = std::move(outcome).take_response();
+    LT_CHECK_EQ(taken.status.code(), std::uint16_t{403});
+    // The bus short-circuit still applies within the phase.
+    LT_CHECK(joined(*visits) == "responds");
+
+    srv::hook_bus throwing;
+    const visit_log order = std::make_shared<std::vector<std::string>>();
+    (void)throwing.add<hook_phase::accept_decision>(
+        [order](srv::accept_decision_ctx&) -> hook_action {
+            order->push_back("throws");
+            throw std::runtime_error("hook blew up");
+        }).detach();
+    (void)throwing.add<hook_phase::accept_decision>(
+        [order](srv::accept_decision_ctx&) -> hook_action {
+            order->push_back("continues");
+            return hook_action::pass();
+        }).detach();
+    const hook_action contained = fire_admission(
+        throwing, true, srv::peer_refusal::none);
+    LT_CHECK(contained.is_pass());
+    LT_CHECK(joined(*order) == "throws,continues");
+LT_END_AUTO_TEST(admission_ignores_and_contains)
+
+// TASK-119: the admission phase sits before every request-scoped
+// phase in the firing order (the enum order pins the v2 accept-time
+// position).
+LT_BEGIN_AUTO_TEST(server_hooks_suite, admission_precedes_request_phases)
+    static_assert(hook_phase::accept_decision
+                      < hook_phase::request_received,
+                  "admission fires at accept, before any exchange");
+    static_assert(hook_phase::accept_decision < hook_phase::count_,
+                  "the sentinel stays last");
+    const visit_log visits = std::make_shared<std::vector<std::string>>();
+    srv::hook_bus bus;
+    (void)bus.add<hook_phase::accept_decision>(
+        [visits](srv::accept_decision_ctx&) -> hook_action {
+            visits->push_back("admission");
+            return hook_action::pass();
+        }).detach();
+    (void)bus.add<hook_phase::request_received>(
+        [visits](srv::request_received_ctx&) -> hook_action {
+            visits->push_back("received");
+            return hook_action::pass();
+        }).detach();
+    const hook_action admission = fire_admission(
+        bus, true, srv::peer_refusal::none);
+    const http::request_head head = sample_head();
+    const hook_action received = fire_received(bus, head);
+    LT_CHECK(admission.is_pass());
+    LT_CHECK(received.is_pass());
+    LT_CHECK(joined(*visits) == "admission,received");
+LT_END_AUTO_TEST(admission_precedes_request_phases)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

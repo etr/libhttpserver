@@ -74,11 +74,15 @@
 #include <unistd.h>
 #endif
 
+#include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <string>
+
+#include <httpserver/net/address.hpp>
 
 #if defined(_WIN32)
 #include <mutex>
@@ -354,10 +358,52 @@ inline sys_result write_some(native_socket_t socket, const std::byte* data,
 
 // accept() one connection; the accepted socket comes back nonblocking
 // and prepared. Only would_block is non-terminal for the listener.
+// When @p peer is non-null it receives the accepted transport's peer
+// snapshot (network-order bytes, host-order port; a v4-mapped v6
+// address normalizes to family ipv4; any other family reports
+// unspec). TASK-119: the v2 engine discarded this address at accept;
+// the v3 peer policy consults it.
+inline void fill_peer(const sockaddr_storage& storage,
+                      net::peer_address& peer) noexcept {
+    const auto* const in4 =
+        reinterpret_cast<const sockaddr_in*>(&storage);
+    const auto* const in6 =
+        reinterpret_cast<const sockaddr_in6*>(&storage);
+    peer = net::peer_address{};
+    if (storage.ss_family == AF_INET) {
+        peer.address.family = net::address_family::ipv4;
+        static_assert(sizeof(in4->sin_addr.s_addr) == 4);
+        std::memcpy(peer.address.bytes.data() + 12, &in4->sin_addr.s_addr,
+                    4);
+        peer.port = ntohs(in4->sin_port);
+        return;
+    }
+    if (storage.ss_family == AF_INET6) {
+        std::memcpy(peer.address.bytes.data(), &in6->sin6_addr, 16);
+        if (peer.address.bytes[10] == std::byte{0xff}
+                && peer.address.bytes[11] == std::byte{0xff}) {
+            // v4-mapped: equal to the plain IPv4 literal.
+            const std::array<std::byte, 4> tail = {
+                peer.address.bytes[12], peer.address.bytes[13],
+                peer.address.bytes[14], peer.address.bytes[15]};
+            peer.address.bytes.fill(std::byte{0});
+            std::memcpy(peer.address.bytes.data() + 12, tail.data(), 4);
+            peer.address.family = net::address_family::ipv4;
+        } else {
+            peer.address.family = net::address_family::ipv6;
+        }
+        peer.port = ntohs(in6->sin6_port);
+    }
+}
+
 inline sys_result accept_one(native_socket_t listener,
-                             native_socket_t* out) {
+                             native_socket_t* out,
+                             net::peer_address* peer = nullptr) {
+    sockaddr_storage storage;
 #if defined(_WIN32)
-    const native_socket_t fresh = ::accept(listener, nullptr, nullptr);
+    int length = sizeof(storage);
+    const native_socket_t fresh =
+        ::accept(listener, reinterpret_cast<sockaddr*>(&storage), &length);
     if (fresh == INVALID_SOCKET) {
         switch (::WSAGetLastError()) {
             case WSAEWOULDBLOCK:
@@ -368,7 +414,9 @@ inline sys_result accept_one(native_socket_t listener,
         }
     }
 #else
-    const native_socket_t fresh = ::accept(listener, nullptr, nullptr);
+    socklen_t length = sizeof(storage);
+    const native_socket_t fresh =
+        ::accept(listener, reinterpret_cast<sockaddr*>(&storage), &length);
     if (fresh < 0) {
         switch (errno) {
             case EAGAIN:
@@ -385,6 +433,7 @@ inline sys_result accept_one(native_socket_t listener,
 #endif
     set_nonblocking(fresh, true);
     prepare_stream_socket(fresh);
+    if (peer != nullptr) fill_peer(storage, *peer);
     *out = fresh;
     return sys_result{sys_status::ok, 0};
 }

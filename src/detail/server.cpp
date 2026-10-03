@@ -40,6 +40,7 @@
 #include <httpserver/detail/listener_engine.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/server/hooks.hpp>
+#include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/route_sync.hpp>
 
 namespace httpserver {
@@ -143,8 +144,8 @@ class native_server::impl {
 
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             listeners_.push_back(std::make_shared<engine::listener_engine>(
-                backend_, pool_, registry_, hooks_, budget_, *scope_,
-                config));
+                backend_, pool_, registry_, hooks_, budget_, peers_,
+                *scope_, config));
             const http::outcome bound =
                 listeners_.back()->listen(options_.listener(i), i);
             if (!bound.ok()) {
@@ -261,6 +262,12 @@ class native_server::impl {
     // reference the bus for their whole live window, so the bus
     // outlives them (reverse destruction order).
     mutable hook_bus hooks_;
+    // TASK-119: the server-wide peer policy. Seeded from the options
+    // at listen() and live-mutable afterwards (DR-V3-008); declared
+    // before the listeners, which hold a reference for their whole
+    // live window. peer_policy() (native_server) hands out the
+    // consumer-side view.
+    mutable server::peer_policy peers_;
     std::vector<std::shared_ptr<engine::listener_engine>> listeners_;
     engine::worker_pool pool_;
     engine::io_poll_backend backend_;

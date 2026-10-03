@@ -63,6 +63,7 @@
 #include <httpserver/concurrency/executor.hpp>
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/http/outcome.hpp>
+#include <httpserver/net/address.hpp>
 
 namespace httpserver {
 namespace detail {
@@ -87,6 +88,10 @@ struct io_result {
     http::outcome_code code = http::outcome_code::ok;
     std::size_t transferred = 0;   // read/write: bytes; other kinds: 0
     std::uint64_t accepted_id = 0;  // accept only: fabricated connection id
+    // Accept only (TASK-119): the accepted transport's peer snapshot,
+    // captured at accept; unspec when the platform reported no
+    // address or the completion is another kind.
+    net::peer_address peer;
 };
 
 // Per-kind owned payload carried inside op_state. Buffers are
