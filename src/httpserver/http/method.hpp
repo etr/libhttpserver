@@ -200,6 +200,78 @@ inline constexpr std::string_view to_string(const method& m) noexcept {
     return m.name();
 }
 
+// TASK-118: a set over the nine known method slots (the v2 route
+// family vocabulary). Extension methods are not representable -- they
+// register singly through route_registry::route -- and the unknown_
+// state is never a member. A constexpr bitset: build via set(), probe
+// via contains(), and render with to_string() in method_id order (the
+// Allow wire form, comma-space separated).
+class method_set {
+ public:
+    constexpr method_set() noexcept = default;
+
+    // Sets one known-method slot. extension and unknown_ ids are
+    // ignored (an extension method has no slot to occupy).
+    constexpr void set(method_id id) noexcept {
+        if (is_known(id)) mask_ |= bit(id);
+    }
+
+    // True iff @p m is a known method whose slot is set. Extension
+    // methods and the unknown_ state are never members.
+    constexpr bool contains(const method& m) const noexcept {
+        return m.valid() && !m.is_extension() && (mask_ & bit(m.id())) != 0;
+    }
+
+    // False only for the empty set.
+    constexpr bool any() const noexcept { return mask_ != 0; }
+
+    // Union in place (the registry's Allow merge).
+    constexpr void merge(const method_set& other) noexcept {
+        mask_ |= other.mask_;
+    }
+
+    friend constexpr bool operator==(const method_set& a,
+                                     const method_set& b) noexcept {
+        return a.mask_ == b.mask_;
+    }
+
+    friend constexpr bool operator!=(const method_set& a,
+                                     const method_set& b) noexcept {
+        return !(a == b);
+    }
+
+ private:
+    static constexpr std::size_t known_slots =
+        static_cast<std::size_t>(method_id::extension);
+
+    static constexpr bool is_known(method_id id) noexcept {
+        return static_cast<std::size_t>(id) < known_slots;
+    }
+
+    static constexpr std::uint16_t bit(method_id id) noexcept {
+        return static_cast<std::uint16_t>(
+            1u << static_cast<unsigned>(id));
+    }
+
+    std::uint16_t mask_ = 0;
+};
+
+// The Allow wire form: every set slot's wire token in method_id order
+// (GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH),
+// comma-space separated; empty for the empty set.
+inline std::string to_string(const method_set& set) {
+    std::string out;
+    for (std::size_t id = 0; id < static_cast<std::size_t>(method_id::extension);
+            ++id) {
+        if (!set.contains(method::known(static_cast<method_id>(id)))) {
+            continue;
+        }
+        if (!out.empty()) out.append(", ");
+        out.append(detail::method_tokens[id]);
+    }
+    return out;
+}
+
 }  // namespace http
 
 }  // namespace httpserver

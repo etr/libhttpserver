@@ -45,6 +45,7 @@
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/request_head.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/server.hpp>
 
@@ -217,11 +218,68 @@ int audit_multipart_link() {
     return 0;
 }
 
+// TASK-118: the lifecycle hook bus and the error-page factories are
+// part of the v3core surface (detail/server_hooks.cpp and the
+// dispatcher's page plumbing). Registering a hook, probing the phase
+// emptiness, and setting both factories here forces the audit binary
+// to link those objects, keeping the in-tree-only claim executable for
+// the routing/hook area too.
+int audit_hooks_link() {
+    srv::server_options options;
+    options.not_found_response([](const http::request_head&) {
+        srv::hook_response page;
+        page.status = http::status::from_code(404);
+        return page;
+    });
+    options.method_not_allowed_response([](const http::request_head&) {
+        srv::hook_response page;
+        page.status = http::status::from_code(405);
+        return page;
+    });
+    srv::listener_options listener;
+    listener.address = "127.0.0.1";
+    listener.port = 0;
+    options.add_listener(listener);
+
+    srv::native_server server(std::move(options));
+    srv::hook_bus& bus = server.hooks();
+    if (bus.any_hooks(srv::hook_phase::request_received)) return 1;
+    srv::hook_handle handle = bus.add<srv::hook_phase::request_received>(
+        [](srv::request_received_ctx&) -> srv::hook_action {
+            return srv::hook_action::pass();
+        });
+    if (!bus.any_hooks(srv::hook_phase::request_received)) return 1;
+    handle.remove();
+    if (bus.any_hooks(srv::hook_phase::request_received)) return 1;
+
+    // The route-family registrations ride the same linkage claim.
+    http::method_set get;
+    get.set(http::method_id::get);
+    if (!server.route(get, "/health",
+                      [](httpserver::exchange&) -> httpserver::task<void> {
+                          co_return;
+                      })
+             .ok()) {
+        return 1;
+    }
+    if (!server.route_prefix(get, "/",
+                             [](httpserver::exchange&)
+                                    -> httpserver::task<void> {
+                                 co_return;
+                             })
+             .ok()) {
+        return 1;
+    }
+    server.request_stop();
+    server.stop();
+    return 0;
+}
+
 }  // namespace
 
 // All audits always run: plain | does not short-circuit.
 int main() {
     return audit_link_surface() | audit_basic_auth_link()
            | audit_digest_auth_link() | audit_forms_link()
-           | audit_multipart_link();
+           | audit_multipart_link() | audit_hooks_link();
 }

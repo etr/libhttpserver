@@ -92,6 +92,17 @@ inline void commit_error(exchange& x, std::uint16_t code) {
                                 http::fields()));
 }
 
+// Starts and awaits one handler task -- the invocation core shared by
+// run_route and the lifecycle dispatcher (TASK-118). A throw while
+// creating the task and a throw inside it both propagate to the
+// caller, which owns the exception paths (the dispatcher consults
+// handler_exception; run_route synthesizes the 500).
+inline task<void> invoke_route_handler(const server::route_handler& handler,
+                                       exchange& x) {
+    task<void> handler_task = handler(x);
+    co_await std::move(handler_task);
+}
+
 // Runs one complete request head through the exchange state machine on
 // the awaiting executor (architecture §3.1, DR-V3-003). Exactly one
 // terminal response is guaranteed: the handler's own, a synthesized
@@ -116,17 +127,8 @@ inline task<void> run_route(const server::route_registry& routes,
         commit_error(x, 404);
         co_return;
     }
-    task<void> handler_task;
     try {
-        // A throw while creating the handler task (frame allocation,
-        // user wrapper) is contained like any other route failure.
-        handler_task = (*found.handler)(x);
-    } catch (...) {
-        commit_error(x, 500);
-        co_return;
-    }
-    try {
-        co_await std::move(handler_task);
+        co_await invoke_route_handler(*found.handler, x);
     } catch (const cancelled_exception&) {
         // Disconnect cancellation is a quiet end, not an error: the
         // engine already owns the connection's fate.
@@ -135,7 +137,10 @@ inline task<void> run_route(const server::route_registry& routes,
             // The response was already committed; the engine resets or
             // closes instead of committing a second response.
             static_cast<void>(x.abort());
+        } else {
+            commit_error(x, 500);
         }
+        co_return;
     }
     if (!x.terminal()) commit_error(x, 500);
 }

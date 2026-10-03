@@ -39,6 +39,7 @@
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/listener_engine.hpp>
 #include <httpserver/detail/worker_pool.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/route_sync.hpp>
 
 namespace httpserver {
@@ -68,6 +69,28 @@ class native_server::impl {
                 "native_server: route() after listen() is not allowed");
         }
         return registry_.route(method, pattern, std::move(handler));
+    }
+
+    http::outcome route(const http::method_set& methods,
+                        std::string_view pattern, route_handler handler) {
+        if (running_.load(std::memory_order_acquire)) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "native_server: route() after listen() is not allowed");
+        }
+        return registry_.route(methods, pattern, std::move(handler));
+    }
+
+    http::outcome route_prefix(const http::method_set& methods,
+                               std::string_view pattern,
+                               route_handler handler) {
+        if (running_.load(std::memory_order_acquire)) {
+            return http::outcome(
+                http::outcome_code::invalid_state,
+                "native_server: route_prefix() after listen() is not"
+                " allowed");
+        }
+        return registry_.route_prefix(methods, pattern, std::move(handler));
     }
 
     http::outcome route_sync(const http::method& method,
@@ -113,10 +136,15 @@ class native_server::impl {
         engine::connection_engine_config config =
             engine::connection_engine_config::from_budget_limits(options_.budgets());
         config.timeouts = options_.timeouts();
+        auto pages = std::make_shared<engine::error_page_factories>();
+        pages->not_found = options_.not_found_response();
+        pages->method_not_allowed = options_.method_not_allowed_response();
+        config.pages = std::move(pages);
 
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             listeners_.push_back(std::make_shared<engine::listener_engine>(
-                backend_, pool_, registry_, budget_, *scope_, config));
+                backend_, pool_, registry_, hooks_, budget_, *scope_,
+                config));
             const http::outcome bound =
                 listeners_.back()->listen(options_.listener(i), i);
             if (!bound.ok()) {
@@ -213,6 +241,8 @@ class native_server::impl {
         return listeners_[listener_index]->bound_port();
     }
 
+    hook_bus& hooks() const noexcept { return hooks_; }
+
  private:
     // Destruction order (reverse declaration): the flags, the transport
     // engine (close), the pool (drain), the listeners, the registry,
@@ -227,6 +257,10 @@ class native_server::impl {
     resource_budget budget_;
     route_registry registry_;
     http::outcome registry_state_;
+    // Declared before the listeners and the pool: connection engines
+    // reference the bus for their whole live window, so the bus
+    // outlives them (reverse destruction order).
+    mutable hook_bus hooks_;
     std::vector<std::shared_ptr<engine::listener_engine>> listeners_;
     engine::worker_pool pool_;
     engine::io_poll_backend backend_;
@@ -280,6 +314,18 @@ http::outcome native_server::route(const http::method& method,
     return impl_->route(method, pattern, std::move(handler));
 }
 
+http::outcome native_server::route(const http::method_set& methods,
+                                   std::string_view pattern,
+                                   route_handler handler) {
+    return impl_->route(methods, pattern, std::move(handler));
+}
+
+http::outcome native_server::route_prefix(const http::method_set& methods,
+                                          std::string_view pattern,
+                                          route_handler handler) {
+    return impl_->route_prefix(methods, pattern, std::move(handler));
+}
+
 http::outcome native_server::route_sync(const http::method& method,
                                         std::string_view pattern,
                                         sync_route_handler handler,
@@ -307,8 +353,12 @@ bool native_server::is_running() const noexcept {
 }
 
 std::uint16_t native_server::get_bound_port(
-    std::size_t listener_index) const noexcept {
+        std::size_t listener_index) const noexcept {
     return impl_->get_bound_port(listener_index);
+}
+
+hook_bus& native_server::hooks() const noexcept {
+    return impl_->hooks();
 }
 
 }  // namespace server

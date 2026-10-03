@@ -119,6 +119,10 @@ const std::vector<const char*>& header_files() {
         // tokens; the wire decoder, the drivers, and the temp-file
         // sink stay in detail/).
         "/forms/multipart.hpp",
+        // TASK-118: the lifecycle hook vocabulary joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; the bus storage stays in detail/).
+        "/server/hooks.hpp",
     };
     return files;
 }

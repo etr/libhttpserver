@@ -102,12 +102,15 @@
 #include <httpserver/detail/http1_response_framer.hpp>
 #include <httpserver/detail/http1_response_outbox.hpp>
 #include <httpserver/detail/io_connection_owner.hpp>
+#include <httpserver/detail/lifecycle_sink.hpp>
+#include <httpserver/detail/request_lifecycle.hpp>
 #include <httpserver/detail/io_operation.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/routes.hpp>
 
@@ -133,6 +136,10 @@ struct connection_engine_config {
     // peer, suspension a suspended exchange.
     server::timeout_options timeouts;
     http1_response_framer::clock_source clock;
+    // TASK-118: the construction-time error-page factories (plan D3).
+    // Null means the v2 default pages; the engine normalizes a null to
+    // an empty set at construction.
+    std::shared_ptr<const error_page_factories> pages;
 
     static connection_engine_config from_budget_limits(
         const server::budget_limits& limits) noexcept {
@@ -159,6 +166,7 @@ class connection_engine final
     // counter, entered for the engine's whole live window (TASK-110).
     connection_engine(io_poll_backend& backend, worker_pool& pool,
                       const server::route_registry& routes,
+                      const server::hook_bus& hooks,
                       const server::resource_budget& budget,
                       drain_scope& scope, connection_engine_config config,
                       std::uint64_t id, stopped_callback on_stopped);
@@ -236,6 +244,12 @@ class connection_engine final
     static task<void> reader_loop(std::shared_ptr<connection_engine> self);
     static task<void> writer_loop(std::shared_ptr<connection_engine> self);
     static task<void> watchdog_loop(std::shared_ptr<connection_engine> self);
+
+    // True when the writer has nothing left to wait for: the outbox is
+    // empty, or its front slot FAILED (a refused or abandoned head can
+    // never queue more bytes, so its end marker will never arrive --
+    // TASK-118: the refusal close must complete).
+    bool outbox_drained() const;
 
     // The watchdog's next move: exit (the connection is closing), defer
     // (an exchange is routed and no inventory deadline applies), or arm
@@ -363,6 +377,7 @@ class connection_engine final
     io_poll_backend& backend_;
     worker_pool& pool_;
     const server::route_registry& routes_;
+    const server::hook_bus& hooks_;
     io_connection_owner owner_;
     const server::resource_budget& budget_;
     drain_scope& scope_;
@@ -407,9 +422,15 @@ class connection_engine final
 class http1_exchange_sink final : public exchange_sink {
  public:
     // @p head must outlive this sink (serve_one frames own it first).
+    // @p refused_flag, when not null, receives the acceptance verdict
+    // of on_respond: the engine sets it when the framer refuses the
+    // committed head, so the owning frame's lifecycle interceptor can
+    // observe the refusal (response_sent suppression, request_
+    // completed failure verdict).
     http1_exchange_sink(std::shared_ptr<connection_engine> engine,
                         http1_response_outbox& outbox,
-                        const http::request_head& head);
+                        const http::request_head& head,
+                        bool* refused_flag = nullptr);
 
     // Late binding: the outbox slot opens only after the exchange
     // exists (its disconnect token parks outbox waits); decisions fire
@@ -437,6 +458,7 @@ class http1_exchange_sink final : public exchange_sink {
     http1_response_outbox& outbox_;
     const http::request_head& head_;
     http1_response_sink* slot_ = nullptr;
+    bool* refused_flag_ = nullptr;
     http1_keepalive keepalive_ = http1_keepalive::close;
     bool responded_ = false;
     bool upgraded_ = false;

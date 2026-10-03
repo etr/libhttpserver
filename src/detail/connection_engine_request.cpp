@@ -36,6 +36,7 @@
 #include <httpserver/detail/exchange_runner.hpp>
 #include <httpserver/detail/http1_body_mode.hpp>
 #include <httpserver/detail/http1_response_mode.hpp>
+#include <httpserver/detail/request_lifecycle.hpp>
 #include <httpserver/http/outcome.hpp>
 
 namespace httpserver {
@@ -116,9 +117,22 @@ task<bool> connection_engine::serve_one(
         std::lock_guard<std::mutex> lock(self->mu_);
         return self->next_sequence_++;
     }();
-    http1_exchange_sink engine_sink(self, self->outbox_, head);
+    // TASK-118: the engine's head-acceptance verdict, shared by the
+    // engine sink (writer) and the lifecycle interceptor (reader) --
+    // both live in this frame.
+    bool head_refused = false;
+    http1_exchange_sink engine_sink(self, self->outbox_, head,
+                                    &head_refused);
+    // TASK-118: the lifecycle interceptor wraps the engine sink, so
+    // every committed head (handler, synthesized, or hook-supplied)
+    // crosses the after_handler/response_sent firing point (plan D5).
+    // The shared head_refused flag publishes the engine's acceptance
+    // verdict: a refused head never fires response_sent and fails
+    // request_completed.
+    lifecycle_sink interceptor(engine_sink, self->hooks_, head,
+                               &head_refused);
     wake_body_sink forwarding(*self);
-    exchange routed(head, &engine_sink, self->id_,
+    exchange routed(head, &interceptor, self->id_,
                     body_present ? self->body_.get() : nullptr, &forwarding);
     http1_response_sink& slot = self->outbox_.open(sequence,
                                                    routed.cancellation());
@@ -132,7 +146,15 @@ task<bool> connection_engine::serve_one(
         std::lock_guard<std::mutex> lock(self->mu_);
         self->current_ = &routed;
     }
-    co_await run_route(self->routes_, routed);
+    // The watchdog planned against a head-awaiting (or defer) posture;
+    // a routed exchange changes the candidate set (a suspended handler
+    // arms the suspension deadline), and the bodyless path stages no
+    // decoder that would re-arm it (TASK-118: the deferral tick must
+    // start at exchange start or a suspended bodyless request parks
+    // behind a stale header timer).
+    self->rearm_watchdog();
+    co_await dispatch_request(self->routes_, self->hooks_,
+                              *self->config_.pages, interceptor, routed);
     {
         std::lock_guard<std::mutex> lock(self->mu_);
         self->current_ = nullptr;
@@ -291,8 +313,10 @@ task<void> connection_engine::route_loop(
 
 http1_exchange_sink::http1_exchange_sink(
     std::shared_ptr<connection_engine> engine, http1_response_outbox& outbox,
-    const http::request_head& head)
-    : engine_(std::move(engine)), outbox_(outbox), head_(head) { }
+    const http::request_head& head, bool* refused_flag)
+    : engine_(std::move(engine)), outbox_(outbox), head_(head) {
+    refused_flag_ = refused_flag;
+}
 
 void http1_exchange_sink::bind(http1_response_sink& slot) noexcept {
     slot_ = &slot;
@@ -343,6 +367,11 @@ void http1_exchange_sink::on_respond(const http::status& s,
                                                engine_->config_.clock);
     if (!started.ok()) {
         // The framer refused the head: nothing is buffered; close.
+        // The refusal is published first so the lifecycle interceptor
+        // (firing response_sent after this returns) can observe it;
+        // the failed slot is terminal for the writer's drain, so the
+        // close release it owns completes.
+        if (refused_flag_ != nullptr) *refused_flag_ = true;
         keepalive_ = http1_keepalive::close;
         engine_->request_close();
         return;

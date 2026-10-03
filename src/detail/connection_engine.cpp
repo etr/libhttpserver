@@ -41,6 +41,7 @@ namespace detail {
 
 connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool,
                                      const server::route_registry& routes,
+                                     const server::hook_bus& hooks,
                                      const server::resource_budget& budget,
                                      drain_scope& scope,
                                      connection_engine_config config,
@@ -49,6 +50,7 @@ connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool
     : backend_(backend),
       pool_(pool),
       routes_(routes),
+      hooks_(hooks),
       owner_(pool),
       budget_(budget),
       scope_(scope),
@@ -57,6 +59,11 @@ connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool
       on_stopped_(std::move(on_stopped)),
       parser_(config_.head),
       outbox_(config_.outbox) {
+    if (config_.pages == nullptr) {
+        // The v2 default pages serve when the options carried no
+        // custom factories.
+        config_.pages = std::make_shared<const error_page_factories>();
+    }
 }
 
 void connection_engine::start() {
@@ -419,6 +426,10 @@ task<void> connection_engine::reader_loop(
 
 // -- writer side ------------------------------------------------------------
 
+bool connection_engine::outbox_drained() const {
+    return outbox_.empty() || outbox_.front_failed();
+}
+
 task<void> connection_engine::writer_loop(
     std::shared_ptr<connection_engine> self) {
     // The engine drives the socket writes itself (copy_front /
@@ -431,7 +442,7 @@ task<void> connection_engine::writer_loop(
             wake_operation op(self->owner_, self->id_);
             {
                 std::lock_guard<std::mutex> lock(self->mu_);
-                const bool drained = self->outbox_.empty();
+                const bool drained = self->outbox_drained();
                 const bool done = self->route_done_ || self->shutdown_;
                 // Exits only once the route loop is finished AND the
                 // outbox is drained, so a close-after-response never

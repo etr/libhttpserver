@@ -71,6 +71,11 @@ class connection {
     // True once the peer closed and the parser drained everything.
     bool peer_closed() const noexcept { return peer_closed_; }
 
+    // TASK-118: marks this client's requests as HEAD so the response
+    // parser completes headers-only responses (a HEAD response never
+    // carries body bytes however the head frames them).
+    void set_head_only(bool head_only) { parser_.set_head_only(head_only); }
+
     // Connects to 127.0.0.1:@p port (the dial itself blocks; retries
     // briefly while the server settles its listener), then flips the
     // stream to nonblocking for the deadline-bounded exchanges. True on

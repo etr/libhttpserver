@@ -51,6 +51,7 @@
 
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/outcome.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/routes.hpp>
 
@@ -122,6 +123,16 @@ class native_server {
     http::outcome route(const http::method& method, std::string_view pattern,
                         route_handler handler);
 
+    // TASK-118: the method-set and prefix-family registration forms
+    // (plan D1; admission and precedence per the route_registry
+    // contract). Both fail invalid_state once listen() ran.
+    http::outcome route(const http::method_set& methods,
+                        std::string_view pattern, route_handler handler);
+
+    http::outcome route_prefix(const http::method_set& methods,
+                               std::string_view pattern,
+                               route_handler handler);
+
     // Registers one bounded synchronous value-returning route: the
     // handler receives the complete request head and the body buffered
     // within body_cap, returns the response value, and writes no
@@ -169,6 +180,12 @@ class native_server {
     // True from a successful listen() until request_stop() (or the
     // destructor) runs.
     bool is_running() const noexcept;
+
+    // TASK-118: the server-wide lifecycle hook bus (server/hooks.hpp
+    // for the phase contract). Registration is runtime-safe before and
+    // after listen(); the returned reference is valid for the server's
+    // lifetime.
+    hook_bus& hooks() const noexcept;
 
     // The resolved port of listener @p listener_index (0 for an
     // ephemeral-port request reports the bound port; 0 before listen()
