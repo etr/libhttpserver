@@ -104,9 +104,12 @@ task<void> commit_value(exchange& x, lifecycle_sink& sink,
 // installed, else the v2 default (status, text/plain, fixed body).
 // The factory is user code in the request path and gets the handler
 // containment: a throwing or empty factory and a result with an
-// invalid status each degrade to the default page (v2 alias parity:
-// a throwing error page was answered with the default), so every
-// dispatch path reaches a commit.
+// invalid status each degrade to the default page with the error
+// status preserved, so every dispatch path reaches a commit. This
+// is v3 containment, not v2 parity: v2 answered a throwing 405
+// alias through the internal-error path (a 500-family answer) and
+// left a throwing 404 alias uncontained on the primary 404 path
+// (the parity inventory records the delta under REQ-038).
 server::hook_response build_page(
         const server::server_options::response_factory* custom,
         const http::request_head& head, std::uint16_t code,
