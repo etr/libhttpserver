@@ -69,6 +69,8 @@ src/httpserver/auth/digest_auth.hpp
 src/httpserver/forms/urlencoded.hpp
 src/httpserver/forms/multipart.hpp
 src/httpserver/server/hooks.hpp
+src/httpserver/net/address.hpp
+src/httpserver/server/peer_policy.hpp
 "
 
 V3CORE_SOURCES="
@@ -88,6 +90,8 @@ src/detail/forms_multipart.cpp
 src/detail/forms_multipart_files.cpp
 src/detail/server_hooks.cpp
 src/detail/request_lifecycle.cpp
+src/detail/net_address.cpp
+src/detail/peer_policy.cpp
 "
 
 # TASK-114: the in-tree codec/hash/entropy primitives the auth TU and
