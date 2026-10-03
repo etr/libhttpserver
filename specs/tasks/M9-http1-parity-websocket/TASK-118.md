@@ -9,9 +9,9 @@
 Provide route matching and lifecycle hook behavior for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Map v2 route families to the v3 route table.
-- [ ] Run lifecycle hooks at documented native-engine phases.
-- [ ] Replay route and hook parity fixtures with explicit migration exceptions.
+- [x] Map v2 route families to the v3 route table.
+- [x] Run lifecycle hooks at documented native-engine phases.
+- [x] Replay route and hook parity fixtures with explicit migration exceptions.
 
 **Dependencies:**
 - Blocked by: TASK-102, TASK-108
@@ -24,4 +24,4 @@ Provide route matching and lifecycle hook behavior for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-009, PRD-V3N-REQ-023, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
