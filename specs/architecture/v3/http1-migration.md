@@ -64,3 +64,79 @@ once the reader reaches end-of-body.
 The inventory records the existing routing/hook/IP migration exceptions.
 TLS and WebSocket are deferred to their owning tasks; TASK-120 does not
 claim native coverage for those protocols.
+
+## Native HTTP/1.1 WebSocket upgrade (TASK-122)
+
+Register a normal coroutine route. `co_await exchange.upgrade(options)`
+returns an owned `websocket_upgrade_result`; on success its move-only
+`session` owns the application's protocol state and
+`selected_subprotocol` names the server-preferred offered token. Success
+means the trusted 101 head entered bounded output. It does not promise
+TCP delivery. The transport writes the entire ordered HTTP outbox before
+any frame. No extension is negotiated, including permessage-deflate.
+This native path does not depend on the legacy `HAVE_WEBSOCKET` flag.
+
+```cpp
+task<void> native_echo(exchange& x) {
+    ws_upgrade_options options;
+    options.subprotocols = {"chat"};
+    options.allowed_origins = {"https://example.com"};
+    options.allow_absent_origin = false;
+    auto upgraded = co_await x.upgrade(std::move(options));
+    if (!upgraded.status.ok()) {
+        upgraded.rejection_fields.append("Content-Length", "0");
+        x.respond(upgraded.rejection_status, upgraded.rejection_fields);
+        co_return;
+    }
+    auto session = std::move(*upgraded.session);
+    resume_signal closed;
+    session.on_close([closed](websocket::close_info) mutable {
+        closed.signal();
+    });
+    for (;;) {
+        auto received = co_await session.receive();
+        if (!received.value) break;
+        for (;;) {
+            auto sent = session.try_send(received.value->kind,
+                                         received.value->data);
+            if (sent.disposition == websocket::send_disposition::accepted)
+                break;
+            if (sent.disposition != websocket::send_disposition::backpressured)
+                co_return;
+            if (!(co_await session.writable()).ok()) co_return;
+        }
+    }
+    co_await closed.wait_for(std::chrono::seconds(5));
+}
+```
+
+Refusal is nonterminal and leaves the exchange available for an ordinary
+response: malformed handshake 400; denied origin 403; otherwise-valid
+unsupported version 426 with `Sec-WebSocket-Version: 13`. Invalid API
+state and invalid configured limits remain typed failures. Upgrade is
+legal only before body admission or any other terminal decision.
+Callers must await the lazy task while the exchange is alive; options
+are copied or moved into that task before its first execution.
+
+Default origin policy permits an absent Origin and any syntactically
+valid serialized origin. A nonempty allowlist matches the complete
+serialized value exactly. Accepted values are `null`, or lower-case
+`http://` / `https://` plus an ASCII letter/digit/hyphen/dot hostname or
+bracketed IPv6 literal and an optional decimal port 1–65535. Paths,
+credentials, lists and repeated Origin fields are refused. Case and
+default ports are not normalized: `https://example.com:443` differs
+from `https://example.com`. Origin policy is not authentication.
+Subprotocols are case-sensitive tokens selected in server preference
+order; no match normally omits the response field. Set
+`require_subprotocol` to refuse no-match. Policies and offer lists each
+have a 256-entry bound in addition to head byte/field budgets. Session
+limits project down to connection budgets and may be tightened per route.
+
+Destroying the session cancels it. An application initiating a clean
+Close must register an `on_close` signal first, call `session.close()`,
+and retain the session while awaiting that signal with its own deadline.
+Returning immediately after `close()` can cancel unsent output. The
+transport's private progress observer is independent of this callback.
+Abrupt server stop safely cancels pending receive/writable work.
+WebSocket server drain Close/deadline orchestration belongs to TASK-123;
+this task supplies no claim of graceful WebSocket drain.

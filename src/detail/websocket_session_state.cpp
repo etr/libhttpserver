@@ -46,6 +46,7 @@ bool session_state::receive_ready() const { return codec.has_message() || done |
 close_info session_state::best_reason() const { return peer_close ? peer_info : local_info; }
 session_notifications session_state::notifications() {
     session_notifications out;
+    out.progress = progress;
     if (receive_ready()) out.receive = std::exchange(receive_wait, {});
     if (writable_ready()) out.writable = std::exchange(writable_wait, {});
     if (done && on_close) {
@@ -109,6 +110,9 @@ void session_wait_node::complete() noexcept {
     } catch (...) { }
 }
 void session_notifications::deliver() noexcept {
+    try {
+        if (progress) (*progress)();
+    } catch (...) { }
     if (receive) receive->complete();
     if (writable) writable->complete();
     try {
@@ -151,15 +155,24 @@ task<receive_result> receive_session(std::shared_ptr<session_state> state) {
     session_operation lease(state, true);
     if (!lease.admitted()) co_return receive_result{{http::outcome_code::invalid_state, "receive already outstanding"}, {}};
     for (;;) {
+        session_notifications notify;
+        std::optional<message> received;
         {
             std::lock_guard lock(state->mu);
-            if (auto message = state->codec.pop()) co_return receive_result{http::outcome::okay(), std::move(message)};
-            if (state->done) {
-                auto reason = state->final_info.status;
-                if (reason.ok()) reason = {http::outcome_code::connection_closed, "Close handshake complete"};
-                co_return receive_result{std::move(reason), {}};
+            received = state->codec.pop();
+            if (received) notify = state->notifications();
+            if (!received) {
+                if (state->done) {
+                    auto reason = state->final_info.status;
+                    if (reason.ok()) reason = {http::outcome_code::connection_closed, "Close handshake complete"};
+                    co_return receive_result{std::move(reason), {}};
+                }
+                if (state->peer_close) co_return receive_result{{http::outcome_code::connection_closed, "peer Close received"}, {}};
             }
-            if (state->peer_close) co_return receive_result{{http::outcome_code::connection_closed, "peer Close received"}, {}};
+        }
+        if (received) {
+            notify.deliver();
+            co_return receive_result{http::outcome::okay(), std::move(received)};
         }
         session_wait wait(state, true); co_await wait;
     }

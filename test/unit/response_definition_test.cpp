@@ -141,9 +141,9 @@ class capturing_sink final : public httpserver::detail::exchange_sink {
         responded = f;
     }
 
-    void on_upgrade(const httpserver::ws_upgrade_options&) override {
+    httpserver::websocket_upgrade_result on_upgrade(const httpserver::ws_upgrade_options&) override {
         ++upgrade_calls;
-    }
+     httpserver::websocket_upgrade_result result; result.session.emplace(); return result; }
 
     void on_abort() override {
         ++abort_calls;

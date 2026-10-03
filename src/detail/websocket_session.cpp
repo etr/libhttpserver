@@ -56,16 +56,21 @@ session& session::operator=(session&& other) noexcept {
 }
 send_result session::try_send(message_kind kind, std::span<const std::byte> payload) {
     if (!state_) return {closed(), send_disposition::closed};
-    std::lock_guard lock(state_->mu);
-    if (state_->closing) return {closed(), send_disposition::closed};
-    auto valid = validate_message(kind, payload, state_->limits.max_message_bytes);
-    if (!valid.ok()) return {std::move(valid), send_disposition::rejected};
-    const std::size_t overhead = payload.size() < 126 ? 2 : payload.size() <= 65535 ? 4 : 10;
-    const std::size_t bytes = payload.size() + overhead;
-    if (state_->outgoing_messages == state_->limits.outgoing_messages || bytes > state_->limits.output_bytes - state_->output_bytes)
-        return {http::outcome::okay(), send_disposition::backpressured};
-    state_->data.emplace_back(static_cast<unsigned>(kind), payload);
-    state_->output_bytes += bytes; ++state_->outgoing_messages;
+    detail::session_notifications notify;
+    {
+        std::lock_guard lock(state_->mu);
+        if (state_->closing) return {closed(), send_disposition::closed};
+        auto valid = validate_message(kind, payload, state_->limits.max_message_bytes);
+        if (!valid.ok()) return {std::move(valid), send_disposition::rejected};
+        const std::size_t overhead = payload.size() < 126 ? 2 : payload.size() <= 65535 ? 4 : 10;
+        const std::size_t bytes = payload.size() + overhead;
+        if (state_->outgoing_messages == state_->limits.outgoing_messages || bytes > state_->limits.output_bytes - state_->output_bytes)
+            return {http::outcome::okay(), send_disposition::backpressured};
+        state_->data.emplace_back(static_cast<unsigned>(kind), payload);
+        state_->output_bytes += bytes; ++state_->outgoing_messages;
+        notify = state_->notifications();
+    }
+    notify.deliver();
     return {http::outcome::okay(), send_disposition::accepted};
 }
 task<receive_result> session::receive() { return detail::receive_session(state_); }

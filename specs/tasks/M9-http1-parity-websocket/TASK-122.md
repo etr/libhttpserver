@@ -9,9 +9,9 @@
 Provide WebSocket over HTTP/1.1 upgrade for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Validate HTTP/1.1 Upgrade tokens, key, version, origin and subprotocol.
-- [ ] Hand the ordered byte stream to the shared codec.
-- [ ] Run independent echo and malformed-upgrade clients.
+- [x] Validate HTTP/1.1 Upgrade tokens, key, version, origin and subprotocol.
+- [x] Hand the ordered byte stream to the shared codec.
+- [x] Run independent echo and malformed-upgrade clients.
 
 **Dependencies:**
 - Blocked by: TASK-105, TASK-108, TASK-121
@@ -24,4 +24,12 @@ Provide WebSocket over HTTP/1.1 upgrade for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-010, PRD-V3N-REQ-012, PRD-V3N-REQ-013
 **Related Decisions:** DR-V3-001, DR-V3-003
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** [Native upgrade design and receipts](../../architecture/v3/TASK-122-design-evidence.md).
+Fresh serial tests: 216/216; focused replay: 27/27. Independent
+`websockets==15.0.1` handshake, echo, malformed refusal and real socket
+backpressure pass, including extension omission and ordered 64 MiB resume.
+ASan/UBSan, current-tree TSan, native linkage, installed consumers,
+source distribution and header/docs/install/hygiene checks pass.
+Caller validation and merge remain separate; TASK-123 owns server drain.

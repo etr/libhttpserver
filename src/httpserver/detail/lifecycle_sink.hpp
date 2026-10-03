@@ -112,11 +112,11 @@ class lifecycle_sink final : public exchange_sink {
         }
     }
 
-    void on_upgrade(const ws_upgrade_options& options) override {
+    websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override {
         // No response head is queued on the upgrade path: neither
         // after_handler nor response_sent fires here (the ws milestone
         // owns the session lifecycle).
-        inner_.on_upgrade(options);
+        return inner_.on_upgrade(options);
     }
 
     void on_abort() override {

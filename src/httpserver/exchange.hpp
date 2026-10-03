@@ -23,6 +23,7 @@
 #define SRC_HTTPSERVER_EXCHANGE_HPP_
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -38,6 +39,7 @@
 #include <httpserver/net/address.hpp>
 #include <httpserver/response_writer.hpp>
 #include <httpserver/server/routes.hpp>
+#include <httpserver/websocket/session.hpp>
 
 namespace httpserver {
 
@@ -61,11 +63,27 @@ struct body_policy {
     std::uint64_t max_buffer_bytes = 0;
 };
 
-// Options of a ws upgrade decision. Subprotocols are offered in order
-// for the upgrade-based subprotocol negotiation (RFC 6455); the
-// session codec itself arrives with the ws milestone.
+// HTTP/1.1 WebSocket policy. Subprotocols use server preference order;
+// configured origins compare whole serialized values. These values are
+// owned by the lazy upgrade task and validated before output commitment.
 struct ws_upgrade_options {
     std::vector<std::string> subprotocols;
+    // Empty allowlist accepts any syntactically valid origin. Matching
+    // uses exact serialized origins, without case/default-port rewriting.
+    std::vector<std::string> allowed_origins;
+    bool allow_absent_origin = true;
+    bool require_subprotocol = false;
+    websocket::options limits;
+};
+
+// Success is bounded 101 admission, not peer acknowledgement. Refusals
+// carry an ordinary HTTP response suggestion and leave the exchange open.
+struct websocket_upgrade_result {
+    http::outcome status;
+    std::optional<websocket::session> session;
+    std::string selected_subprotocol;
+    http::status rejection_status = http::status::from_code(400);
+    http::fields rejection_fields;
 };
 
 namespace detail {
@@ -90,7 +108,7 @@ class exchange_sink {
                             const http::fields& f) = 0;
 
     // Connection ownership transferred to the upgrade session.
-    virtual void on_upgrade(const ws_upgrade_options& options) = 0;
+    virtual websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) = 0;
 
     // Post-commit failure (e.g. a handler threw after responding):
     // reset/close per protocol rules.
@@ -112,7 +130,8 @@ class exchange_sink {
 //   admit_body(policy)       from head              -> admitted
 //   suspend(out)             from head or admitted  (state unchanged)
 //   upgrade(options)         from an HTTP/1.1 head  -> upgraded
-// Every decision returns http::outcome; a typed failure leaves the
+// Upgrade returns task<websocket_upgrade_result>; other decisions return
+// http::outcome. A typed precommit failure leaves the
 // state, the suspension flag, and the engine untouched (a double
 // terminal action therefore reaches the engine exactly once).
 //
@@ -286,22 +305,30 @@ class exchange {
     // Upgrade decision: transfers connection ownership to the upgrade
     // session. The upgrade handshake exists on HTTP/1.1 only; other
     // versions negotiate differently and report not_supported.
-    http::outcome upgrade(const ws_upgrade_options& options) {
-        if (disconnected_) return closed_failure();
+    // Lazy like other tasks: options are owned before first suspension.
+    // Await immediately while the engine-owned exchange is alive.
+    task<websocket_upgrade_result> upgrade(ws_upgrade_options options) {
+        websocket_upgrade_result result;
+        if (disconnected_) {
+            result.status = closed_failure(); co_return result;
+        }
         if (state_ != exchange_state::head) {
-            return http::outcome(
-                http::outcome_code::invalid_state,
-                "exchange: upgrade() is a head-time decision");
+            result.status = {http::outcome_code::invalid_state,
+                "exchange: upgrade() is a head-time decision"};
+            co_return result;
         }
-        if (head_.request_protocol != http::protocol::http_1_1) {
-            return http::outcome(
-                http::outcome_code::not_supported,
-                "exchange: upgrade requires an HTTP/1.1 request head");
+        if (head_.request_protocol != http::protocol::http_1_1 || sink_ == nullptr) {
+            result.status = {http::outcome_code::not_supported,
+                "exchange: upgrade requires native HTTP/1.1"};
+            co_return result;
         }
-        state_ = exchange_state::upgraded;
-        body_.close();
-        if (sink_ != nullptr) sink_->on_upgrade(options);
-        return http::outcome::okay();
+        result = sink_->on_upgrade(options);
+        if (result.status.ok()) {
+            state_ = exchange_state::upgraded;
+            suspended_ = false;
+            body_.close();
+        }
+        co_return result;
     }
 
     // Engine-facing disconnect notification (PRD-V3N-REQ-025). Reasons

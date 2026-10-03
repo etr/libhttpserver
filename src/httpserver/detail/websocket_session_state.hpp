@@ -21,6 +21,7 @@
 
 #ifndef SRC_HTTPSERVER_DETAIL_WEBSOCKET_SESSION_STATE_HPP_
 #define SRC_HTTPSERVER_DETAIL_WEBSOCKET_SESSION_STATE_HPP_
+#include <functional>
 #include <atomic>
 #include <deque>
 #include <mutex>
@@ -41,6 +42,7 @@ struct session_notifications {
     std::shared_ptr<session_wait_node> receive, writable;
     std::unique_ptr<session::close_callback> callback;
     close_info info;
+    std::shared_ptr<const std::function<void()>> progress;
     void deliver() noexcept;
 };
 struct wire_frame {
@@ -66,6 +68,7 @@ struct session_state {
     close_info best_reason() const;
 
     std::mutex mu;
+    std::shared_ptr<const std::function<void()>> progress;
     options limits;
     httpserver::detail::websocket_codec codec;
     std::deque<wire_frame> data;

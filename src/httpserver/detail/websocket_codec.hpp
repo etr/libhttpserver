@@ -51,6 +51,11 @@ class websocket_codec {
     std::optional<websocket_control> take_control();
     std::size_t incoming_bytes() const noexcept { return used_; }
     std::size_t incoming_messages() const noexcept { return messages_.size() + (active_message_ ? 1 : 0); }
+    bool input_ready() const noexcept {
+        if (admitted_ || header_size_ < header_end_ || opcode_ >= 8) return true;
+        return (active_message_ || messages_.size() < limits_.incoming_messages)
+            && length_ <= limits_.incoming_bytes - used_;
+    }
     bool has_message() const noexcept { return !messages_.empty(); }
     void clear();
 

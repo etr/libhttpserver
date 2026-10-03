@@ -26,7 +26,9 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = websocket_codec websocket_utf8 websocket_session websocket_session_race consumer_v3_websocket native_http1_parity basic file_upload http_utils threaded nodelay string_utilities http_endpoint ip_access_control ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants response_body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency hook_bus ws_registry ws_registry_concurrency daemon_lifecycle routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_denied hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set debug_dump_request_body_zero littletest_skip_semantics digest_client_self_test unescaper_func transcript_parser response_frame normalize v2_profile_registry transcript_runner http_semantic_outcome http_semantic_method http_semantic_fields http_semantic_request_head consumer_v3_semantic v3_header_hygiene task_executor task_core task_cancellation task_resume_signal task_race task_stop_inside_handler consumer_v3_concurrency io_operation io_connection_owner fake_io_backend io_backend_contract server_options_validate server_budgets server_routes consumer_v3_server http_status exchange_decisions exchange_routing consumer_v3_exchange body_reader consumer_v3_body_reader response_writer consumer_v3_response_writer http1_parser http1_body_mode http1_body_decoder http1_body_source http1_response_mode http1_response_framer http1_response_outbox io_poll_sys_listener worker_pool connection_engine http1_error_synth drain_scope native_server consumer_v3_native_server native_http1_e2e route_sync consumer_v3_route_sync response_definition consumer_v3_response_definition response_sources consumer_v3_response_sources v3_native_linkage base64_vector sha1_vector md5_vector sha256_vector secure_compare entropy_sys digest_nonce_ledger digest_params digest_response_vector digest_auth_policy basic_auth_policy consumer_v3_auth basic_auth_corpus digest_auth_corpus urlencoded_decoder forms_urlencoded forms_urlencoded_route forms_urlencoded_corpus consumer_v3_forms multipart_decoder forms_multipart forms_multipart_route forms_multipart_files forms_multipart_corpus consumer_v3_multipart server_routes_families server_hooks request_lifecycle consumer_v3_hooks routing_corpus hooks_corpus net_address consumer_v3_net_address peer_policy consumer_v3_peer_policy ip_controls_corpus
+noinst_PROGRAMS = native_websocket_fixture
+
+check_PROGRAMS = task_resume_signal_lifetime http1_websocket_upgrade http1_websocket_handshake websocket_progress websocket_upgrade_decision websocket_codec websocket_utf8 websocket_session websocket_session_race consumer_v3_websocket native_http1_parity basic file_upload http_utils threaded nodelay string_utilities http_endpoint ip_access_control ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants response_body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency hook_bus ws_registry ws_registry_concurrency daemon_lifecycle routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_denied hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set debug_dump_request_body_zero littletest_skip_semantics digest_client_self_test unescaper_func transcript_parser response_frame normalize v2_profile_registry transcript_runner http_semantic_outcome http_semantic_method http_semantic_fields http_semantic_request_head consumer_v3_semantic v3_header_hygiene task_executor task_core task_cancellation task_resume_signal task_race task_stop_inside_handler consumer_v3_concurrency io_operation io_connection_owner fake_io_backend io_backend_contract server_options_validate server_budgets server_routes consumer_v3_server http_status exchange_decisions exchange_routing consumer_v3_exchange body_reader consumer_v3_body_reader response_writer consumer_v3_response_writer http1_parser http1_body_mode http1_body_decoder http1_body_source http1_response_mode http1_response_framer http1_response_outbox io_poll_sys_listener worker_pool connection_engine http1_error_synth drain_scope native_server consumer_v3_native_server native_http1_e2e route_sync consumer_v3_route_sync response_definition consumer_v3_response_definition response_sources consumer_v3_response_sources v3_native_linkage base64_vector sha1_vector md5_vector sha256_vector secure_compare entropy_sys digest_nonce_ledger digest_params digest_response_vector digest_auth_policy basic_auth_policy consumer_v3_auth basic_auth_corpus digest_auth_corpus urlencoded_decoder forms_urlencoded forms_urlencoded_route forms_urlencoded_corpus consumer_v3_forms multipart_decoder forms_multipart forms_multipart_route forms_multipart_files forms_multipart_corpus consumer_v3_multipart server_routes_families server_hooks request_lifecycle consumer_v3_hooks routing_corpus hooks_corpus net_address consumer_v3_net_address peer_policy consumer_v3_peer_policy ip_controls_corpus
 
 # TASK-099 step 1: private operation I/O contract (six owned operation
 # handles, exactly-once terminal claim). The test uses the default LDADD
@@ -890,21 +892,21 @@ http_status_LDADD =
 # TASK-102 step 2: exchange decision state machine (respond / admit /
 # suspend / upgrade, double-terminal rejection, disconnect fan-out).
 exchange_decisions_SOURCES = unit/exchange_decisions_test.cpp
-exchange_decisions_LDADD =
+exchange_decisions_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-102 step 3: registry match + route runner (exception
 # containment, no-terminal-action 500 synthesis).
 exchange_routing_SOURCES = unit/exchange_routing_test.cpp
-exchange_routing_LDADD =
+exchange_routing_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-102 step 4: TLS-on/off header identity for the exchange area.
 # consumer_v3_exchange includes <httpserver/exchange.hpp>,
 # <httpserver/http/status.hpp> and <httpserver/server/routes.hpp>
 # WITHOUT HTTPSERVER_COMPILATION (per-target CPPFLAGS drop it);
-# empty LDADD proves the headers need no library linkage.
+# Native linkage supplies the owned WebSocket session result.
 consumer_v3_exchange_SOURCES = headers/consumer_v3_exchange.cpp
 consumer_v3_exchange_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_exchange_LDADD =
+consumer_v3_exchange_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-103 -- bounded body reader and collect (PRD-V3N-REQ-021/022/025).
 # Like the exchange area: header-only public surface (body_reader.hpp)
@@ -916,7 +918,7 @@ consumer_v3_exchange_LDADD =
 # TASK-103 steps 1-4: one bounded incremental read (credit on
 # consumption), EOF with trailers, collect(max) exactness, cancellation.
 body_reader_SOURCES = unit/body_reader_test.cpp
-body_reader_LDADD =
+body_reader_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-103 step 5: TLS-on/off header identity for the body area.
 # consumer_v3_body_reader includes <httpserver/body_reader.hpp> and
@@ -938,7 +940,7 @@ consumer_v3_body_reader_LDADD =
 # with trailers, typed sticky failures, disconnect cancellation,
 # exactly-once close.
 response_writer_SOURCES = unit/response_writer_test.cpp
-response_writer_LDADD =
+response_writer_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-104 step 5: TLS-on/off header identity for the writer area.
 # consumer_v3_response_writer includes <httpserver/response_writer.hpp>
@@ -1127,7 +1129,7 @@ http1_body_decoder_SOURCES = unit/http1_body_decoder_test.cpp
 http1_body_decoder_LDADD =
 
 http1_body_source_SOURCES = unit/http1_body_source_test.cpp
-http1_body_source_LDADD =
+http1_body_source_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-107 -- HTTP/1 response framing and ordered persistence
 # (PRD-V3N-REQ-004/026/027, DR-V3-006). Like the request-side framing:
@@ -1218,20 +1220,20 @@ v3_native_linkage_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 # the rig reuses the scripted body fakes and the detail::run_route
 # runner.
 route_sync_SOURCES = unit/route_sync_test.cpp
-route_sync_LDADD =
+route_sync_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-112 step 1: immutable reusable response definitions and
 # overlays (PRD-V3N-REQ-026/028/029/030, DR-V3-005). Header-only surface
-# (response_definition.hpp), so the unit suite needs no library linkage.
+# (response_definition.hpp); the rig also constructs native sessions.
 response_definition_SOURCES = unit/response_definition_test.cpp
-response_definition_LDADD =
+response_definition_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-113: file, pipe and borrowed-buffer response ownership
 # (PRD-V3N-REQ-028/029, DR-V3-005). Header-only surface
-# (response_sources.hpp / response_definition.hpp), so the unit suite
-# needs no library linkage.
+# (response_sources.hpp / response_definition.hpp); the rig constructs
+# native sessions as part of the exchange sink.
 response_sources_SOURCES = unit/response_sources_test.cpp
-response_sources_LDADD =
+response_sources_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # TASK-112 step 5: a consumer including
 # <httpserver/response_definition.hpp> WITHOUT HTTPSERVER_COMPILATION
@@ -1535,3 +1537,21 @@ consumer_v3_websocket_SOURCES = headers/consumer_v3_websocket.cpp
 consumer_v3_websocket_CPPFLAGS = -I$(top_srcdir)/src
 consumer_v3_websocket_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 EXTRA_DIST += unit/websocket_test_helpers.hpp
+
+http1_websocket_handshake_SOURCES = unit/http1_websocket_handshake_test.cpp
+http1_websocket_handshake_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+websocket_progress_SOURCES = unit/websocket_progress_test.cpp
+websocket_progress_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+websocket_upgrade_decision_SOURCES = unit/websocket_upgrade_decision_test.cpp
+websocket_upgrade_decision_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+native_websocket_fixture_SOURCES = integ/native_websocket_fixture.cpp
+native_websocket_fixture_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+EXTRA_DIST += integ/native_websocket_client.py
+
+http1_websocket_upgrade_SOURCES = unit/http1_websocket_upgrade_test.cpp
+http1_websocket_upgrade_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+TESTS += integ/native_websocket_e2e.sh
+EXTRA_DIST += integ/native_websocket_e2e.sh
+
+task_resume_signal_lifetime_SOURCES = unit/task_resume_signal_lifetime_test.cpp
+task_resume_signal_lifetime_LDADD =

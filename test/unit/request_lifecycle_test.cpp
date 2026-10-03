@@ -99,9 +99,9 @@ class capturing_sink final : public detail::exchange_sink {
         responded = f;
     }
 
-    void on_upgrade(const httpserver::ws_upgrade_options&) override {
+    httpserver::websocket_upgrade_result on_upgrade(const httpserver::ws_upgrade_options&) override {
         ++upgrade_calls;
-    }
+     httpserver::websocket_upgrade_result result; result.session.emplace(); return result; }
 
     void on_abort() override {
         ++abort_calls;
@@ -663,7 +663,7 @@ class refusing_sink final : public detail::exchange_sink {
         ++respond_calls;
         code = s.code();
     }
-    void on_upgrade(const httpserver::ws_upgrade_options&) override { }
+    httpserver::websocket_upgrade_result on_upgrade(const httpserver::ws_upgrade_options&) override {  httpserver::websocket_upgrade_result result; result.session.emplace(); return result; }
     void on_abort() override { }
 
     int respond_calls = 0;
@@ -755,7 +755,7 @@ class code_sink final : public detail::exchange_sink {
         ++respond_calls;
         code = s.code();
     }
-    void on_upgrade(const httpserver::ws_upgrade_options&) override { }
+    httpserver::websocket_upgrade_result on_upgrade(const httpserver::ws_upgrade_options&) override {  httpserver::websocket_upgrade_result result; result.session.emplace(); return result; }
     void on_abort() override { }
     int respond_calls = 0;
     std::uint16_t code = 0;
@@ -999,7 +999,7 @@ LT_BEGIN_AUTO_TEST(request_lifecycle_suite, upgraded_exchange_settles_ok)
     dispatch_round r;
     LT_CHECK(r.registry.route(
         kGet, "/ws", [](exchange& x) -> task<void> {
-            (void)x.upgrade(httpserver::ws_upgrade_options{});
+            (void)co_await x.upgrade(httpserver::ws_upgrade_options{});
             co_return;
         }).ok());
     record_all_phases(r.bus, r.seen);

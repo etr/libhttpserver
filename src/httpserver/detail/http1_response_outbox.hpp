@@ -105,6 +105,11 @@ class http1_response_sink final : public detail::body_sink {
                         const http1_response_framer::clock_source& clock =
                             {});
 
+    // Trusted WebSocket-only head. Fixed hop-by-hop fields, validated
+    // accept/subprotocol, no generic bypass of framer sanitization.
+    // Precommit refusal leaves this slot usable for ordinary HTTP.
+    http::outcome commit_upgrade(std::string_view accept, std::string_view protocol);
+
     // Appends an interim head ahead of the final head in this slot.
     // Legal before start(): the 100-continue interim precedes the final
     // head by definition, so the framer is created lazily here.
@@ -429,6 +434,40 @@ class http1_response_outbox {
 
 // -- http1_response_sink definitions (they need the complete outbox) --
 
+inline bool valid_upgrade_fields(std::string_view accept, std::string_view protocol) {
+    if (accept.size() != 28 || accept.back() != '=' ||
+            std::string_view("AEIMQUYcgkosw048").find(accept[26]) == std::string_view::npos ||
+            accept.substr(0, 27).find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/") != std::string_view::npos ||
+            (!protocol.empty() && !http::detail::is_token(protocol))) {
+        return false;
+    }
+    return true;
+}
+
+inline http::outcome http1_response_sink::commit_upgrade(
+        std::string_view accept, std::string_view protocol) {
+    if (!valid_upgrade_fields(accept, protocol))
+        return {http::outcome_code::invalid_argument, "invalid trusted upgrade fields"};
+    constexpr std::string_view prefix = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ";
+    constexpr std::string_view protocol_prefix = "Sec-WebSocket-Protocol: ";
+    std::lock_guard<std::mutex> lock(owner_->mu_);
+    if (failed_ || started_) return {http::outcome_code::invalid_state, "upgrade slot unavailable"};
+    const auto available = owner_->budget_.max_queue_bytes - std::min(owner_->queued_bytes_, owner_->budget_.max_queue_bytes);
+    const auto cap = std::min(available, owner_->budget_.max_head_bytes);
+    const auto fixed = prefix.size() + accept.size() + 4;
+    const auto protocol_head = protocol.empty() ? 0 : protocol_prefix.size() + 2;
+    if (fixed + protocol_head > cap || protocol.size() > cap - fixed - protocol_head)
+        return {http::outcome_code::limit_exceeded, "upgrade head exceeds available output capacity"};
+    std::string wire(prefix); wire += accept; wire += "\r\n";
+    if (!protocol.empty()) {
+        wire += protocol_prefix; wire += protocol; wire += "\r\n";
+    }
+    wire += "\r\n";
+    bytes_ = std::move(wire); owner_->queued_bytes_ += bytes_.size();
+    started_ = true; ended_ = true;
+    return http::outcome::okay();
+}
+
 inline http::outcome http1_response_sink::start(
     const http::request_head& request, const http::status& s,
     const http::fields& f,
@@ -447,6 +486,7 @@ inline http::outcome http1_response_sink::start(
     // never uses a status token.
     framer_ = std::make_unique<http1_response_framer>(clock);
     started_ = true;
+    const std::size_t before_head = bytes_.size();
     const http::outcome head = framer_->start_head(bytes_, request, s, f);
     if (!head.ok()) {
         bytes_.clear();
@@ -459,7 +499,7 @@ inline http::outcome http1_response_sink::start(
             "http1_response_sink: serialized response head exceeds the"
             " head budget"));
     }
-    owner_->queued_bytes_ += bytes_.size();
+    owner_->queued_bytes_ += bytes_.size() - before_head;
     return http::outcome::okay();
 }
 

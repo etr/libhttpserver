@@ -22,12 +22,16 @@
 #ifndef SRC_HTTPSERVER_DETAIL_WEBSOCKET_DRIVER_HPP_
 #define SRC_HTTPSERVER_DETAIL_WEBSOCKET_DRIVER_HPP_
 #include <memory>
+#include <functional>
 #include <span>
 #include <httpserver/websocket/session.hpp>
 namespace httpserver::detail {
 // Ordered-stream adapter seam. The driver and application session share
 // protocol state; destroying either owner cancels the session. A single
 // transport driver must serialize copy_output/consume_output pairs.
+struct websocket_progress {
+    bool input_ready = false, output_pending = false, closing = false, terminal = false;
+};
 class websocket_driver {
  public:
     explicit websocket_driver(websocket::options limits = {}, websocket::session::close_callback callback = {});
@@ -42,6 +46,10 @@ class websocket_driver {
     std::size_t copy_output(std::span<std::byte> destination);
     http::outcome consume_output(std::size_t count);
     websocket::queue_usage usage() const;
+    // Observer runs outside the protocol mutex. It must hold only weak
+    // transport ownership; it never occupies the application's close slot.
+    void observe_progress(std::function<void()> observer);
+    websocket_progress snapshot() const;
     void eof();
     void transport_failed(http::outcome reason);
     void cancel(http::outcome reason = {http::outcome_code::cancelled, "driver cancelled"});
