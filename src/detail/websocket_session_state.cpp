@@ -43,8 +43,13 @@ bool session_state::writable_ready() const {
     return closing || done || (outgoing_messages < limits.outgoing_messages && limits.output_bytes - output_bytes >= 2);
 }
 bool session_state::receive_ready() const { return codec.has_message() || done || peer_close; }
+bool session_state::output_pending() const {
+    return active.has_value() || pong.has_value() || close_frame.has_value() || !data.empty();
+}
 close_info session_state::best_reason() const { return peer_close ? peer_info : local_info; }
 session_notifications session_state::notifications() {
+    if (!output_pending()) output_pending_since.reset();
+    else if (!output_pending_since) output_pending_since = std::chrono::steady_clock::now();
     session_notifications out;
     out.progress = progress;
     if (receive_ready()) out.receive = std::exchange(receive_wait, {});

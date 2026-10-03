@@ -81,23 +81,31 @@ websocket_upgrade_result http1_exchange_sink::on_upgrade(const ws_upgrade_option
 }
 void connection_engine::feed_websocket_tail() {
     std::shared_ptr<websocket_driver> driver;
-    std::string bytes;
+    std::span<const std::byte> bytes;
     {
         std::lock_guard lock(mu_);
         driver = websocket_;
-        if (!driver || pending_tail_.empty()) return;
-        bytes.swap(pending_tail_);
+        if (!driver || (pending_tail_.empty() && !websocket_codec_blocked_)) return;
+        // This sole reader owns the buffer until feed returns. Protocol
+        // notifications run outside mu_ and cannot mutate the wire buffer.
+        bytes = {reinterpret_cast<const std::byte*>(pending_tail_.data()) + websocket_tail_offset_,
+            pending_tail_.size() - websocket_tail_offset_};
     }
-    auto fed = driver->feed({reinterpret_cast<const std::byte*>(bytes.data()), bytes.size()});
-    if (fed.consumed != bytes.size()) {
+    auto fed = driver->feed(bytes);
+    {
         std::lock_guard lock(mu_);
-        pending_tail_.insert(0, bytes.data() + fed.consumed, bytes.size() - fed.consumed);
+        websocket_tail_offset_ += fed.consumed;
+        websocket_codec_blocked_ = fed.blocked && fed.status.ok();
+        if (websocket_tail_offset_ == pending_tail_.size()) {
+            pending_tail_.clear();
+            websocket_tail_offset_ = 0;
+        }
     }
 }
 connection_engine::io_posture connection_engine::reader_posture(wake_operation& wake) {
     std::lock_guard lock(mu_);
     if (shutdown_ || close_after_drain_) return io_posture::stop;
-    if (websocket_ && !pending_tail_.empty() && websocket_->snapshot().input_ready) return io_posture::retry;
+    if (websocket_ && (!pending_tail_.empty() || websocket_codec_blocked_) && websocket_->snapshot().input_ready) return io_posture::retry;
     if (reader_may_read_locked()) return io_posture::proceed;
     wake.submit(backend_);
     return io_posture::park;
@@ -105,7 +113,7 @@ connection_engine::io_posture connection_engine::reader_posture(wake_operation& 
 bool connection_engine::submit_read(read_operation& read) {
     std::lock_guard lock(mu_);
     if (shutdown_ || close_after_drain_) return false;
-    if (websocket_ && !pending_tail_.empty()) return false;
+    if (websocket_ && (!pending_tail_.empty() || websocket_codec_blocked_)) return false;
     pending_read_ = read.state();
     read.submit(backend_);
     return true;
@@ -139,6 +147,9 @@ std::shared_ptr<websocket_driver> connection_engine::websocket_output_driver() {
     if (phase_ == stream_phase::upgrade_pending_flush) {
         phase_ = stream_phase::websocket;
         upgrade_anchor_.reset();
+        // Output queued while 101 was flushing gets its write interval now.
+        websocket_write_anchor_.reset();
+        if (websocket_->snapshot().output_pending) websocket_write_anchor_ = std::chrono::steady_clock::now();
     }
     return websocket_;
 }
@@ -193,11 +204,23 @@ void connection_engine::observe_websocket_driver(const std::shared_ptr<websocket
     const std::weak_ptr<connection_engine> weak = shared_from_this();
     driver->observe_progress([weak] { if (auto engine = weak.lock()) engine->websocket_progressed(); });
 }
+void connection_engine::update_websocket_write_anchor_locked(const websocket_progress& progress) {
+    if (!progress.output_pending) {
+        websocket_write_anchor_.reset();
+    } else if (progress.output_pending_since && (!websocket_write_anchor_ ||
+            *websocket_write_anchor_ < *progress.output_pending_since)) {
+        websocket_write_anchor_ = progress.output_pending_since;
+    }
+}
 void connection_engine::websocket_progressed() {
     bool terminal = false;
     {
         std::lock_guard lock(mu_);
-        terminal = websocket_ && websocket_->snapshot().terminal;
+        const auto progress = websocket_ ? websocket_->snapshot() : websocket_progress{};
+        terminal = progress.terminal;
+        if (phase_ == stream_phase::websocket) {
+            update_websocket_write_anchor_locked(progress);
+        }
         if (terminal) close_after_drain_ = true;
         wake_loops();
     }

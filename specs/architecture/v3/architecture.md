@@ -72,12 +72,14 @@ task<result<void>> exchange::respond(const response_definition&,
 result<response_writer> exchange::start_response(status, fields);
 task<result<void>> response_writer::write(bytes);
 task<result<void>> response_writer::finish(fields trailers);
-task<result<websocket_session>> exchange::upgrade(websocket_options);
+task<websocket_upgrade_result> exchange::upgrade(ws_upgrade_options);
+// result owns optional websocket::session and the refusal status/fields.
 resume_signal exchange::make_resume_signal(); // application-event suspension
 stop_token exchange::cancellation() const;
-send_result websocket_session::try_send(message); // accepted / backpressured / closed
-task<result<void>> websocket_session::writable();
-task<result<message>> websocket_session::receive();
+websocket::send_result websocket::session::try_send(websocket::message_kind,
+                                                    std::span<const std::byte>); // accepted / backpressured / closed
+task<http::outcome> websocket::session::writable();
+task<websocket::receive_result> websocket::session::receive();
 void server::request_stop() noexcept; // nonblocking and handler-safe
 result<drain_ticket> server::begin_drain(deadline);
 task<drain_result> drain_ticket::wait(); // rejects a wait from counted handler

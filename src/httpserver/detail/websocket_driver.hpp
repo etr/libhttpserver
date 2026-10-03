@@ -23,6 +23,8 @@
 #define SRC_HTTPSERVER_DETAIL_WEBSOCKET_DRIVER_HPP_
 #include <memory>
 #include <functional>
+#include <chrono>
+#include <optional>
 #include <span>
 #include <httpserver/websocket/session.hpp>
 namespace httpserver::detail {
@@ -31,6 +33,7 @@ namespace httpserver::detail {
 // transport driver must serialize copy_output/consume_output pairs.
 struct websocket_progress {
     bool input_ready = false, output_pending = false, closing = false, terminal = false;
+    std::optional<std::chrono::steady_clock::time_point> output_pending_since;
 };
 class websocket_driver {
  public:
@@ -53,7 +56,9 @@ class websocket_driver {
     void eof();
     void transport_failed(http::outcome reason);
     void cancel(http::outcome reason = {http::outcome_code::cancelled, "driver cancelled"});
+
  private:
+    friend struct connection_engine_test_access;
     std::shared_ptr<websocket::detail::session_state> state_;
     bool session_taken_ = false;
 };

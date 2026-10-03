@@ -83,6 +83,19 @@ LT_BEGIN_AUTO_TEST(handshake_suite, token_lists_ows_and_zero_body)
     r = valid(); r.request_protocol = h::http::protocol::http_1_0;
     LT_CHECK(!h::detail::negotiate_http1_websocket(r, {}).status.ok());
 LT_END_AUTO_TEST(token_lists_ows_and_zero_body)
+LT_BEGIN_AUTO_TEST(handshake_suite, versioned_upgrade_alternatives_preserve_unversioned_websocket_offer)
+    for (auto value : {"other/1, websocket", "WeBsOcKeT, other/v1", "other/1, websocket/13, websocket"}) {
+        auto r = valid(); r.head_fields.replace("Upgrade", value);
+        LT_CHECK(h::detail::negotiate_http1_websocket(r, {}).status.ok());
+    }
+    auto r = valid(); r.head_fields.replace("Upgrade", "other/1");
+    r.head_fields.append("Upgrade", "websocket");
+    LT_CHECK(h::detail::negotiate_http1_websocket(r, {}).status.ok());
+    for (auto value : {"other/, websocket", "/1, websocket", "other/1/2, websocket", "other/bad version, websocket", "other/1, websocket/13", "other/1,,websocket"}) {
+        r = valid(); r.head_fields.replace("Upgrade", value);
+        LT_CHECK(!h::detail::negotiate_http1_websocket(r, {}).status.ok());
+    }
+LT_END_AUTO_TEST(versioned_upgrade_alternatives_preserve_unversioned_websocket_offer)
 LT_BEGIN_AUTO_TEST(handshake_suite, version_refusal_is_owned_426)
     auto r = valid(); r.head_fields.replace("Sec-WebSocket-Version", "12");
     auto plan = h::detail::negotiate_http1_websocket(r, {});

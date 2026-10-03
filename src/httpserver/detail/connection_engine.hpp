@@ -233,6 +233,7 @@ class connection_engine final
     static constexpr std::chrono::milliseconds k_watchdog_tick{1000};
 
  private:
+    friend struct connection_engine_test_access;  // private native regression seam
     friend class http1_exchange_sink;
     friend class wake_body_sink;
 
@@ -293,9 +294,9 @@ class connection_engine final
     // (exactly-once claim resolves the race with a firing deadline).
     void rearm_watchdog() noexcept;
     // Records transport progress (a read or a completed write) and
-    // re-arms: every inventory deadline except suspension anchors at
-    // the last activity instant.
-    void note_transport_activity();
+    // re-arms ordinary HTTP activity deadlines. Established WebSocket
+    // output idle slides only for a successful write.
+    void note_transport_activity(bool written = false);
     // A fired deadline: disconnect the live exchange, mark the close,
     // release the transport, wake the loops.
     void enforce_timeout() noexcept;
@@ -400,6 +401,7 @@ class connection_engine final
                                     std::size_t& count) const;
     void observe_websocket_driver(const std::shared_ptr<websocket_driver>& driver);
     void websocket_progressed();
+    void update_websocket_write_anchor_locked(const websocket_progress& progress);
     void fail_websocket(http::outcome reason);
     void feed_websocket_tail();
     void loop_finished();
@@ -433,6 +435,13 @@ class connection_engine final
     stream_phase phase_ = stream_phase::http;
     std::shared_ptr<websocket_driver> websocket_;
     std::optional<std::chrono::steady_clock::time_point> upgrade_anchor_;
+    // Established WebSocket output idle starts when output becomes pending,
+    // slides only on successful writes, and clears when the queue drains.
+    std::optional<std::chrono::steady_clock::time_point> websocket_write_anchor_;
+    // Only the reader consumes this retained buffer. No suffix copy is
+    // needed while admission releases one message at a time.
+    std::size_t websocket_tail_offset_ = 0;
+    bool websocket_codec_blocked_ = false;
     bool head_routed_ = false;
     std::string pending_tail_;   // bytes no consumer could take yet
     std::string early_bytes_;    // pre-admission parking (bounded)

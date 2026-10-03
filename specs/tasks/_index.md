@@ -267,7 +267,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | [TASK-119](M9-http1-parity-websocket/TASK-119.md) | Port IP controls with peer-address policy | M9 | Not Started | TASK-108, TASK-118 |
 | [TASK-120](M9-http1-parity-websocket/TASK-120.md) | Port SHOUTcast and remaining HTTP/1 parity cases | M9 | Complete | TASK-108, TASK-118 |
 | [TASK-121](M9-http1-parity-websocket/TASK-121.md) | Implement transport-neutral WebSocket frame codec and session | M9 | Complete | TASK-098, TASK-104 |
-| [TASK-122](M9-http1-parity-websocket/TASK-122.md) | Implement WebSocket over HTTP/1.1 upgrade | M9 | Not Started | TASK-105, TASK-108, TASK-121 |
+| [TASK-122](M9-http1-parity-websocket/TASK-122.md) | Implement WebSocket over HTTP/1.1 upgrade | M9 | Complete | TASK-105, TASK-108, TASK-121 |
 | [TASK-123](M9-http1-parity-websocket/TASK-123.md) | Integrate WebSocket close with cancellation and server drain | M9 | Not Started | TASK-110, TASK-121, TASK-122 |
 | [TASK-124](M9-http1-parity-websocket/TASK-124.md) | Freeze portable external-loop readiness contract | M9 | Not Started | TASK-099 |
 | [TASK-125](M9-http1-parity-websocket/TASK-125.md) | Implement external-loop readiness adapter | M9 | Not Started | TASK-100, TASK-124 |

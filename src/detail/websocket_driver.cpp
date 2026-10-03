@@ -102,8 +102,7 @@ void websocket_driver::observe_progress(std::function<void()> observer) {
 websocket_progress websocket_driver::snapshot() const {
     std::lock_guard lock(state_->mu);
     return {!state_->input_stopped() && state_->codec.input_ready(),
-        state_->active.has_value() || state_->pong.has_value() || state_->close_frame.has_value() || !state_->data.empty(),
-        state_->closing, state_->done};
+        state_->output_pending(), state_->closing, state_->done, state_->output_pending_since};
 }
 void websocket_driver::eof() { transport_failed({http::outcome_code::connection_closed, "transport EOF before Close handshake"}); }
 void websocket_driver::transport_failed(http::outcome reason) {

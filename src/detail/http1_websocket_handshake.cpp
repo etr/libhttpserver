@@ -93,6 +93,27 @@ bool tokens(std::span<const std::string> fields, std::vector<std::string_view>& 
     }
     return true;
 }
+// Upgrade is a list of protocol-name[/protocol-version], unlike the
+// bare-token lists used by Connection and Sec-WebSocket-Protocol.
+bool upgrade_protocols(std::span<const std::string> fields, bool& websocket) {
+    std::size_t count = 0;
+    for (const auto& field : fields) {
+        std::string_view rest = field;
+        for (;;) {
+            const auto comma = rest.find(',');
+            const auto entry = trim_ows(rest.substr(0, comma));
+            const auto slash = entry.find('/');
+            if (!http::detail::is_token(entry.substr(0, slash)) ||
+                (slash != std::string_view::npos && !http::detail::is_token(entry.substr(slash + 1))) ||
+                count == k_policy_entries) return false;
+            ++count;
+            if (slash == std::string_view::npos && ascii_iequals(entry, "websocket")) websocket = true;
+            if (comma == std::string_view::npos) break;
+            rest.remove_prefix(comma + 1);
+        }
+    }
+    return true;
+}
 bool contains(const std::vector<std::string_view>& list, std::string_view token) {
     return std::any_of(list.begin(), list.end(), [token](auto value) { return ascii_iequals(value, token); });
 }
@@ -132,8 +153,9 @@ http1_websocket_plan request_identity(const http::request_head& head) {
     return {};
 }
 http1_websocket_plan opening_tokens(const http::fields& fields) {
-    std::vector<std::string_view> upgrades, connections;
-    if (!tokens(fields.all("upgrade"), upgrades, false) || !contains(upgrades, "websocket") ||
+    std::vector<std::string_view> connections;
+    bool websocket = false;
+    if (!upgrade_protocols(fields.all("upgrade"), websocket) || !websocket ||
         !tokens(fields.all("connection"), connections, false) || !contains(connections, "upgrade")) return refuse("invalid upgrade tokens");
     return {};
 }

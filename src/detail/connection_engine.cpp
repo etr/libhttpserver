@@ -441,9 +441,11 @@ task<void> connection_engine::writer_loop(
             self->shutdown();
             co_return;
         }
+        // Publish write progress before consume_output delivers its observer,
+        // so a concurrent watchdog never sees an expired pre-write anchor.
+        self->note_transport_activity(true);
         if (driver) static_cast<void>(driver->consume_output(r.transferred));
         else self->outbox_.consume_front(r.transferred);
-        self->note_transport_activity();
     }
 }
 
@@ -505,9 +507,17 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
         candidates[candidate_count++] =
             last_activity_ + config_.timeouts.body_idle;
     }
-    if (transport_output_pending_locked()) {
-        candidates[candidate_count++] =
-            last_activity_ + config_.timeouts.write_idle;
+    if (phase_ == stream_phase::websocket) {
+        // Read admission identity and pending state atomically. A new interval
+        // survives drain/requeue even when neither observer saw empty output.
+        update_websocket_write_anchor_locked(websocket_->snapshot());
+        if (websocket_write_anchor_) {
+            candidates[candidate_count++] = *websocket_write_anchor_ + config_.timeouts.write_idle;
+        }
+    } else if (transport_output_pending_locked()) {
+        candidates[candidate_count++] = last_activity_ + config_.timeouts.write_idle;
+    } else {
+        websocket_write_anchor_.reset();
     }
     if (const std::optional<std::chrono::steady_clock::time_point>
             suspended_until = suspension_deadline_locked()) {
@@ -550,10 +560,11 @@ void connection_engine::rearm_watchdog() noexcept {
     }
 }
 
-void connection_engine::note_transport_activity() {
+void connection_engine::note_transport_activity(bool written) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         last_activity_ = std::chrono::steady_clock::now();
+        if (written && phase_ == stream_phase::websocket) websocket_write_anchor_ = last_activity_;
     }
     rearm_watchdog();
 }
