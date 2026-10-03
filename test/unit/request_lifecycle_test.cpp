@@ -42,7 +42,9 @@
 #include <httpserver/detail/lifecycle_sink.hpp>
 #include <httpserver/detail/request_lifecycle.hpp>
 #include <httpserver/exchange.hpp>
+#include <httpserver/net/address.hpp>
 #include <httpserver/server/hooks.hpp>
+#include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/route_sync.hpp>
 
 #include "./body_sink_fake.hpp"
@@ -202,12 +204,21 @@ struct dispatch_round {
 
     // Runs one head through the pipeline. LT_CHECK expands
     // harness-local identifiers, so the verdicts live in members the
-    // test bodies assert on.
+    // test bodies assert on. The peer/policy overload drives the
+    // TASK-119 revalidation gate; the default keeps the v2-parity
+    // path (peers == nullptr).
     void dispatch(const http::request_head& head) {
+        dispatch(head, httpserver::net::peer_address{}, nullptr);
+    }
+
+    void dispatch(const http::request_head& head,
+                  const httpserver::net::peer_address& peer,
+                  const srv::peer_policy* peers) {
         detail::lifecycle_sink sink(inner, bus, head);
-        exchange x(head, &sink, 0, nullptr, &responses);
+        exchange x(head, &sink, 0, nullptr, &responses, peer);
         manual_executor ex;
-        spawn(ex, detail::dispatch_request(registry, bus, pages, sink, x),
+        spawn(ex, detail::dispatch_request(registry, bus, pages, sink, x,
+                                           peers),
               [&](task_result<void> r) {
                   if (!r.is_exception()) ++deliveries;
               });
@@ -1024,6 +1035,73 @@ LT_BEGIN_AUTO_TEST(request_lifecycle_suite, disconnected_exchange_tail)
     LT_CHECK(r.seen->order[0].rfind("request_completed succeeded=0", 0) == 0);
     LT_CHECK(r.inner.respond_calls == 0);
 LT_END_AUTO_TEST(disconnected_exchange_tail)
+
+// TASK-119 (plan D1 point 2): the pre-route revalidation. A refused
+// peer settles before any phase: no request_received, no resolve, no
+// handler, no response bytes -- only request_completed once with
+// succeeded=false and the typed peer_refused end.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, refused_peer_settles_before_phases)
+    dispatch_round round;
+    static_cast<void>(round.registry.route(
+        kGet, "/hello", text_handler("OK")));
+    record_all_phases(round.bus, round.seen);
+    srv::peer_policy policy;
+    policy.set_mode(srv::peer_policy_mode::reject_all);
+    httpserver::net::peer_address peer;
+    peer.address = httpserver::net::parse_address("127.0.0.1")
+                       .value_or(httpserver::net::address{});
+    round.dispatch(make_head(kGet, "/hello"), peer, &policy);
+    LT_CHECK(round.delivered_once());
+    LT_CHECK(!round.seen->saw("request_received"));
+    LT_CHECK(!round.seen->saw("route_resolved"));
+    LT_CHECK(!round.seen->saw("before_handler"));
+    LT_CHECK(!round.seen->saw("after_handler"));
+    LT_CHECK(!round.seen->saw("response_sent"));
+    LT_CHECK_EQ(round.seen->count("request_completed succeeded=0 end=10"),
+                std::size_t{1});
+    LT_CHECK_EQ(round.inner.respond_calls, 0);
+    LT_CHECK_EQ(round.inner.admit_calls, 0);
+LT_END_AUTO_TEST(refused_peer_settles_before_phases)
+
+// The admitted twin: an allow-listed peer runs the ordinary pipeline
+// unchanged.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, allowed_peer_runs_pipeline)
+    dispatch_round round;
+    static_cast<void>(round.registry.route(
+        kGet, "/hello", text_handler("OK")));
+    record_all_phases(round.bus, round.seen);
+    srv::peer_policy policy;
+    policy.set_mode(srv::peer_policy_mode::reject_all);
+    LT_CHECK(policy.allow("127.0.0.1").ok());
+    httpserver::net::peer_address peer;
+    peer.address = httpserver::net::parse_address("127.0.0.1")
+                       .value_or(httpserver::net::address{});
+    peer.port = 41000;
+    round.dispatch(make_head(kGet, "/hello"), peer, &policy);
+    LT_CHECK(round.delivered_once());
+    LT_CHECK(round.seen->saw("request_received /hello"));
+    LT_CHECK(round.seen->saw("response_sent 200"));
+    LT_CHECK(round.seen->saw("request_completed succeeded=1"));
+    LT_CHECK_EQ(round.inner.respond_calls, 1);
+    LT_CHECK_EQ(round.inner.code, std::uint16_t{200});
+LT_END_AUTO_TEST(allowed_peer_runs_pipeline)
+
+// The default rig path (peers == nullptr) is unchanged: a peer
+// snapshot rides along but no gate consults it.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, null_policy_skips_the_gate)
+    dispatch_round round;
+    static_cast<void>(round.registry.route(
+        kGet, "/hello", text_handler("OK")));
+    record_all_phases(round.bus, round.seen);
+    httpserver::net::peer_address peer;
+    peer.address = httpserver::net::parse_address("203.0.113.9")
+                       .value_or(httpserver::net::address{});
+    round.dispatch(make_head(kGet, "/hello"), peer, nullptr);
+    LT_CHECK(round.delivered_once());
+    LT_CHECK(round.seen->saw("request_received /hello"));
+    LT_CHECK(round.seen->saw("request_completed succeeded=1"));
+    LT_CHECK_EQ(round.inner.respond_calls, 1);
+LT_END_AUTO_TEST(null_policy_skips_the_gate)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

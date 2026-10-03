@@ -56,7 +56,9 @@
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/http/outcome.hpp>
+#include <httpserver/net/address.hpp>
 #include <httpserver/server/options.hpp>
+#include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/routes.hpp>
 
 namespace httpserver {
@@ -72,6 +74,7 @@ class listener_engine final
                     const server::route_registry& routes,
                     const server::hook_bus& hooks,
                     const server::resource_budget& budget,
+                    const server::peer_policy& peers,
                     drain_scope& scope, connection_engine_config config);
 
     listener_engine(const listener_engine&) = delete;
@@ -106,7 +109,14 @@ class listener_engine final
     static task<void> accept_loop(std::shared_ptr<listener_engine> self);
     // Builds and registers the engine for one accepted connection (the
     // backend already registered its transport under @p connection).
-    void adopt_accepted(std::uint64_t connection);
+    // TASK-119: first the accept-time policy gate -- classify @p peer,
+    // fire accept_decision after the verdict is fixed (observation
+    // only; a throwing hook is contained and cannot change it), then
+    // either release the transport unread (zero application bytes,
+    // the budget-refusal shape) or build the engine carrying the peer
+    // snapshot.
+    void adopt_accepted(std::uint64_t connection,
+                        const net::peer_address& peer);
     // Snapshots the live connection engines into @p out (mu_ must be
     // held) so a stop-side pass can act on them outside the lock.
     void collect_live_locked(
@@ -122,6 +132,7 @@ class listener_engine final
     worker_pool& pool_;
     const server::route_registry& routes_;
     const server::hook_bus& hooks_;
+    const server::peer_policy& peers_;
     io_connection_owner owner_;
     const server::resource_budget& budget_;
     drain_scope& scope_;

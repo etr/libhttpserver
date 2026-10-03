@@ -53,6 +53,7 @@
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
+#include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/routes.hpp>
 
 namespace httpserver {
@@ -186,6 +187,14 @@ class native_server {
     // after listen(); the returned reference is valid for the server's
     // lifetime.
     hook_bus& hooks() const noexcept;
+
+    // TASK-119: the server-wide peer policy (server/peer_policy.hpp
+    // for the pattern vocabulary and truth table). Seeded from
+    // options().peer_policy() at listen(); mutable afterwards from any
+    // thread including inside handlers (every member synchronized,
+    // DR-V3-008). The returned reference is valid for the server's
+    // lifetime.
+    peer_policy& peer_policy() const noexcept;
 
     // The resolved port of listener @p listener_index (0 for an
     // ephemeral-port request reports the bound port; 0 before listen()

@@ -25,11 +25,15 @@
 // port report (0 -> ephemeral, nonzero -> the requested port), the
 // SO_REUSEADDR option, nonblocking accept behavior (the poll backend's
 // adopt contract), and the typed rejection of a non-literal address.
-// Header-only surface: io_poll_sys.hpp compiles straight into this
-// program (AM_CPPFLAGS supplies -DHTTPSERVER_COMPILATION), so the LDADD
-// stays empty.
+// TASK-119 adds the fill_peer battery (the accept-time peer capture)
+// over synthesized transport address storages, cross-checked against
+// net::parse_address so the byte path and the text path of one host
+// can never disagree; that cross-check needs the shared byte decode
+// in v3core, so the suite links libhttpserver.la (the default LDADD).
 
 #include <cstdint>
+#include <cstring>
+#include <optional>
 #include <string>
 
 #include <httpserver/detail/io_poll_sys.hpp>
@@ -39,6 +43,7 @@
 namespace {
 
 namespace pollsys = httpserver::detail::pollsys;
+namespace net = httpserver::net;
 
 // True iff SO_REUSEADDR is enabled on @p handle (both platforms spell
 // the option identically; only the option-value pointer type differs).
@@ -145,6 +150,118 @@ LT_BEGIN_AUTO_TEST(io_poll_sys_listener_suite, name_rejected)
         pollsys::open_listener("localhost.invalid", 0, port);
     LT_CHECK(listener == pollsys::k_invalid_socket);
 LT_END_AUTO_TEST(name_rejected)
+
+// ---- accept-time peer capture (TASK-119: fill_peer) ------------------------
+
+// A synthesized AF_INET storage: family ipv4, the address bytes
+// right-aligned, the port converted to host order -- and the captured
+// address equal to the parsed spelling of the same literal (the
+// drift pin between the byte path and the text path).
+LT_BEGIN_AUTO_TEST(io_poll_sys_listener_suite, fill_peer_af_inet_fill_and_port)
+    sockaddr_in in4{};
+    in4.sin_family = AF_INET;
+    in4.sin_port = htons(41000);
+    LT_CHECK(::inet_pton(AF_INET, "192.0.2.1", &in4.sin_addr) == 1);
+    sockaddr_storage storage{};
+    std::memcpy(&storage, &in4, sizeof in4);
+    net::peer_address peer;
+    pollsys::fill_peer(storage, peer);
+    LT_CHECK(peer.address.family == net::address_family::ipv4);
+    LT_CHECK_EQ(peer.port, std::uint16_t{41000});
+    const std::optional<net::address> parsed =
+        net::parse_address("192.0.2.1");
+    LT_CHECK(parsed.has_value());
+    if (parsed.has_value()) LT_CHECK(peer.address == *parsed);
+    LT_CHECK(peer.address.to_string() == "192.0.2.1");
+LT_END_AUTO_TEST(fill_peer_af_inet_fill_and_port)
+
+// A plain AF_INET6 storage: family ipv6, all sixteen bytes carried,
+// the port converted to host order.
+LT_BEGIN_AUTO_TEST(io_poll_sys_listener_suite, fill_peer_plain_v6)
+    sockaddr_in6 in6{};
+    in6.sin6_family = AF_INET6;
+    in6.sin6_port = htons(61000);
+    LT_CHECK(::inet_pton(AF_INET6, "2001:db8::1", &in6.sin6_addr) == 1);
+    sockaddr_storage storage{};
+    std::memcpy(&storage, &in6, sizeof in6);
+    net::peer_address peer;
+    pollsys::fill_peer(storage, peer);
+    LT_CHECK(peer.address.family == net::address_family::ipv6);
+    LT_CHECK_EQ(peer.port, std::uint16_t{61000});
+    const std::optional<net::address> parsed =
+        net::parse_address("2001:db8::1");
+    LT_CHECK(parsed.has_value());
+    if (parsed.has_value()) LT_CHECK(peer.address == *parsed);
+    LT_CHECK(peer.address.to_string() == "2001:db8::1");
+LT_END_AUTO_TEST(fill_peer_plain_v6)
+
+// A true v4-mapped arrival (::ffff:127.0.0.1 -- exactly what a
+// dual-stack listener hands the capture for every IPv4 client):
+// family ipv4 and the plain parsed literal's value, so a policy
+// spelling "127.0.0.1" matches the dual-stack arrival.
+LT_BEGIN_AUTO_TEST(io_poll_sys_listener_suite, fill_peer_v4_mapped_normalizes)
+    sockaddr_in6 in6{};
+    in6.sin6_family = AF_INET6;
+    in6.sin6_port = htons(80);
+    LT_CHECK(::inet_pton(AF_INET6, "::ffff:127.0.0.1",
+                         &in6.sin6_addr) == 1);
+    sockaddr_storage storage{};
+    std::memcpy(&storage, &in6, sizeof in6);
+    net::peer_address peer;
+    pollsys::fill_peer(storage, peer);
+    LT_CHECK(peer.address.family == net::address_family::ipv4);
+    LT_CHECK_EQ(peer.port, std::uint16_t{80});
+    const std::optional<net::address> parsed =
+        net::parse_address("127.0.0.1");
+    LT_CHECK(parsed.has_value());
+    if (parsed.has_value()) LT_CHECK(peer.address == *parsed);
+    LT_CHECK(peer.address.to_string() == "127.0.0.1");
+LT_END_AUTO_TEST(fill_peer_v4_mapped_normalizes)
+
+// The regression twin: a genuine IPv6 address carrying 0xffff at
+// bytes[10..11] with nonzero high bytes is NOT v4-mapped -- the
+// marker is the full ::ffff:0:0/96 prefix, not just the two 0xff
+// bytes. The compressed spelling must keep ffff in the sixth hextet:
+// 2001:db8::ffff:c000:201 expands to bytes 2001:0db8:0:0:0:ffff:
+// c000:0201, so the capture-side weak-predicate regression rewrites
+// this peer to the IPv4 address 192.0.2.1 (an allow-list spoof) and
+// the correct rule keeps family ipv6 with the address unchanged.
+LT_BEGIN_AUTO_TEST(io_poll_sys_listener_suite, fill_peer_non_mapped_stays_v6)
+    sockaddr_in6 in6{};
+    in6.sin6_family = AF_INET6;
+    in6.sin6_port = htons(443);
+    LT_CHECK(::inet_pton(AF_INET6, "2001:db8::ffff:c000:201",
+                         &in6.sin6_addr) == 1);
+    sockaddr_storage storage{};
+    std::memcpy(&storage, &in6, sizeof in6);
+    net::peer_address peer;
+    pollsys::fill_peer(storage, peer);
+    LT_CHECK(peer.address.family == net::address_family::ipv6);
+    LT_CHECK_EQ(peer.port, std::uint16_t{443});
+    const std::optional<net::address> parsed =
+        net::parse_address("2001:db8::ffff:c000:201");
+    LT_CHECK(parsed.has_value());
+    if (parsed.has_value()) LT_CHECK(peer.address == *parsed);
+    LT_CHECK(peer.address.to_string() == "2001:db8::ffff:c000:201");
+    // The high bytes survive: the capture never collapses a genuine
+    // IPv6 peer onto the v4-mapped tail.
+    LT_CHECK(peer.address.bytes[0] == std::byte{0x20});
+    LT_CHECK(peer.address.bytes[1] == std::byte{0x01});
+LT_END_AUTO_TEST(fill_peer_non_mapped_stays_v6)
+
+// Any other family reports the unspec snapshot: the capture resets a
+// seeded out-param, leaving no address and no port.
+LT_BEGIN_AUTO_TEST(io_poll_sys_listener_suite, fill_peer_other_family_unspec)
+    sockaddr_storage storage{};
+    storage.ss_family = AF_UNSPEC;
+    net::peer_address seeded;
+    seeded.address.family = net::address_family::ipv4;
+    seeded.port = 9999;
+    pollsys::fill_peer(storage, seeded);
+    LT_CHECK(seeded.address.family == net::address_family::unspec);
+    LT_CHECK_EQ(seeded.port, std::uint16_t{0});
+    LT_CHECK(seeded.address.to_string().empty());
+LT_END_AUTO_TEST(fill_peer_other_family_unspec)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

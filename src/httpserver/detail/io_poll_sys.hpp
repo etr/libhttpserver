@@ -74,11 +74,15 @@
 #include <unistd.h>
 #endif
 
+#include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <string>
+
+#include <httpserver/net/address.hpp>
 
 #if defined(_WIN32)
 #include <mutex>
@@ -146,6 +150,16 @@ inline native_socket_t open_stream() {
     return ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 #else
     return ::socket(AF_INET, SOCK_STREAM, 0);
+#endif
+}
+
+// A blocking AF_INET6 stream socket (unconnected) -- the v6 twin of
+// open_stream (TASK-119 e2e: a ::1 dial needs the matching family).
+inline native_socket_t open_stream_v6() {
+#if defined(_WIN32)
+    return ::socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+#else
+    return ::socket(AF_INET6, SOCK_STREAM, 0);
 #endif
 }
 
@@ -354,10 +368,50 @@ inline sys_result write_some(native_socket_t socket, const std::byte* data,
 
 // accept() one connection; the accepted socket comes back nonblocking
 // and prepared. Only would_block is non-terminal for the listener.
+// When @p peer is non-null it receives the accepted transport's peer
+// snapshot (network-order bytes, host-order port; a v4-mapped v6
+// address normalizes to family ipv4; any other family reports
+// unspec). TASK-119: the v2 engine discarded this address at accept;
+// the v3 peer policy consults it.
+
+// The accept-time peer capture (TASK-119): the family dispatch and
+// the host-order port conversion stay here; the address bytes decode
+// through the ONE shared rule -- net::detail::address_from_bytes, the
+// same decode the text parser uses -- so a v4-mapped v6 arrival
+// normalizes to family ipv4 exactly like its parsed spelling, and a
+// genuine IPv6 address that merely carries 0xffff at bytes[10..11]
+// stays ipv6. Any other family reports unspec.
+inline void fill_peer(const sockaddr_storage& storage,
+                      net::peer_address& peer) noexcept {
+    const auto* const in4 =
+        reinterpret_cast<const sockaddr_in*>(&storage);
+    const auto* const in6 =
+        reinterpret_cast<const sockaddr_in6*>(&storage);
+    peer = net::peer_address{};
+    if (storage.ss_family == AF_INET) {
+        static_assert(sizeof(in4->sin_addr.s_addr) == 4);
+        peer.address = net::detail::address_from_bytes(
+            net::address_family::ipv4,
+            reinterpret_cast<const std::byte*>(&in4->sin_addr.s_addr));
+        peer.port = ntohs(in4->sin_port);
+        return;
+    }
+    if (storage.ss_family == AF_INET6) {
+        peer.address = net::detail::address_from_bytes(
+            net::address_family::ipv6,
+            reinterpret_cast<const std::byte*>(&in6->sin6_addr));
+        peer.port = ntohs(in6->sin6_port);
+    }
+}
+
 inline sys_result accept_one(native_socket_t listener,
-                             native_socket_t* out) {
+                             native_socket_t* out,
+                             net::peer_address* peer = nullptr) {
+    sockaddr_storage storage;
 #if defined(_WIN32)
-    const native_socket_t fresh = ::accept(listener, nullptr, nullptr);
+    int length = sizeof(storage);
+    const native_socket_t fresh =
+        ::accept(listener, reinterpret_cast<sockaddr*>(&storage), &length);
     if (fresh == INVALID_SOCKET) {
         switch (::WSAGetLastError()) {
             case WSAEWOULDBLOCK:
@@ -368,7 +422,9 @@ inline sys_result accept_one(native_socket_t listener,
         }
     }
 #else
-    const native_socket_t fresh = ::accept(listener, nullptr, nullptr);
+    socklen_t length = sizeof(storage);
+    const native_socket_t fresh =
+        ::accept(listener, reinterpret_cast<sockaddr*>(&storage), &length);
     if (fresh < 0) {
         switch (errno) {
             case EAGAIN:
@@ -385,6 +441,7 @@ inline sys_result accept_one(native_socket_t listener,
 #endif
     set_nonblocking(fresh, true);
     prepare_stream_socket(fresh);
+    if (peer != nullptr) fill_peer(storage, *peer);
     *out = fresh;
     return sys_result{sys_status::ok, 0};
 }
@@ -557,6 +614,20 @@ inline bool connect_loopback(native_socket_t socket, std::uint16_t port) {
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     if (::inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) != 1) {
+        return false;
+    }
+    return ::connect(socket, reinterpret_cast<sockaddr*>(&address),
+                     sizeof(address)) == 0;
+}
+
+// The IPv6 loopback twin (TASK-119 e2e: ::1-served endpoints). Same
+// contract as connect_loopback.
+inline bool connect_loopback_v6(native_socket_t socket,
+                                std::uint16_t port) {
+    sockaddr_in6 address{};
+    address.sin6_family = AF_INET6;
+    address.sin6_port = htons(port);
+    if (::inet_pton(AF_INET6, "::1", &address.sin6_addr) != 1) {
         return false;
     }
     return ::connect(socket, reinterpret_cast<sockaddr*>(&address),

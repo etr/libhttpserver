@@ -43,6 +43,7 @@
 #include <deque>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -2548,6 +2549,260 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, hooks_request_completed_on_abort)
                  != static_cast<int>(http::outcome_code::ok));
     }
 LT_END_AUTO_TEST(hooks_request_completed_on_abort)
+
+// (28) TASK-119 (D2): accept-time refusal. reject_all closes the
+// kernel-completed connection with zero application bytes -- the same
+// deterministic shape as the connections-budget refusal (the v2 deny
+// wire was timing-dependent and is a named migration exception).
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, reject_all_refuses_with_zero_bytes)
+    srv::server_options options = base_options();
+    options.peer_policy().mode = srv::peer_policy_mode::reject_all;
+    server_fixture s(options);
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    std::deque<observed_response> none;
+    LT_CHECK(client.receive_close(none));
+    LT_CHECK(client.peer_closed());
+    LT_CHECK(none.empty());
+LT_END_AUTO_TEST(reject_all_refuses_with_zero_bytes)
+
+// (29) TASK-119: the pinned ip_controls profile live -- REJECT
+// everything with loopback allow-listed serves the ordinary 200.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, allow_listed_loopback_serves)
+    srv::server_options options = base_options();
+    options.peer_policy().mode = srv::peer_policy_mode::reject_all;
+    options.peer_policy().allow.push_back("127.0.0.1");
+    server_fixture s(options);
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK(seen[0].body == "hello");
+    }
+LT_END_AUTO_TEST(allow_listed_loopback_serves)
+
+// (30) TASK-119 (D1 point 2): a runtime deny takes effect on the NEXT
+// request of an established keep-alive connection -- the in-flight
+// first exchange completed; the second head settles with zero bytes.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, runtime_deny_closes_next_request)
+    server_fixture s(base_options());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> first;
+    LT_CHECK(client.receive(1, first));
+    LT_CHECK_EQ(first.size(), 1u);
+    const http::outcome denied =
+        s.server().peer_policy().deny("127.0.0.1");
+    LT_CHECK(denied.ok());
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> none;
+    LT_CHECK(client.receive_close(none));
+    LT_CHECK(client.peer_closed());
+    LT_CHECK(none.empty());
+LT_END_AUTO_TEST(runtime_deny_closes_next_request)
+
+// (31) TASK-119 (D6): accept_decision observes the refusal after the
+// verdict is fixed: accepted=false, reason=denied, the loopback peer.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, accept_decision_observes_refusal)
+    srv::server_options options = base_options();
+    options.peer_policy().deny.push_back("127.0.0.1");
+    server_fixture s(options);
+    std::mutex gate;
+    int fired = 0;
+    bool accepted_seen = true;
+    int reason = -1;
+    std::string peer_text;
+    (void)s.server().hooks().add<srv::hook_phase::accept_decision>(
+        [&gate, &fired, &accepted_seen, &reason, &peer_text](
+            srv::accept_decision_ctx& c) -> srv::hook_action {
+            std::lock_guard<std::mutex> lock(gate);
+            ++fired;
+            accepted_seen = c.accepted;
+            reason = static_cast<int>(c.reason);
+            peer_text = c.peer.address.to_string();
+            return srv::hook_action::pass();
+        }).detach();
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    std::deque<observed_response> none;
+    LT_CHECK(client.receive_close(none));
+    LT_CHECK(client.peer_closed());
+    LT_CHECK(none.empty());
+    // The hook fires before the transport is released, so the close
+    // the client observed already ordered the observation.
+    std::lock_guard<std::mutex> lock(gate);
+    LT_CHECK_EQ(fired, 1);
+    LT_CHECK(!accepted_seen);
+    LT_CHECK_EQ(reason, static_cast<int>(srv::peer_refusal::denied));
+    LT_CHECK(peer_text == "127.0.0.1");
+LT_END_AUTO_TEST(accept_decision_observes_refusal)
+
+// (32) TASK-119: the IPv6 loopback. ::1 allow-listed serves; reject_all
+// closes with zero bytes. Fails visibly when ::1 is unavailable (the
+// check-skip-rationales discipline: no silent skips).
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, ipv6_loopback_policy)
+    srv::server_options allow_options;
+    srv::listener_options v6;
+    v6.address = "::1";
+    v6.port = 0;
+    allow_options.add_listener(v6);
+    allow_options.concurrency().workers = 2;
+    allow_options.peer_policy().mode = srv::peer_policy_mode::reject_all;
+    allow_options.peer_policy().allow.push_back("::1");
+    server_fixture s(allow_options);
+    raw::connection client{raw::connection::ipv6};
+    LT_CHECK(client.connect_v6(s.port()));
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) LT_CHECK_EQ(seen[0].status, 200);
+
+    srv::server_options reject_options = allow_options;
+    reject_options.peer_policy().allow.clear();
+    server_fixture t(reject_options);
+    raw::connection refused{raw::connection::ipv6};
+    LT_CHECK(refused.connect_v6(t.port()));
+    std::deque<observed_response> none;
+    LT_CHECK(refused.receive_close(none));
+    LT_CHECK(refused.peer_closed());
+    LT_CHECK(none.empty());
+LT_END_AUTO_TEST(ipv6_loopback_policy)
+
+// (33) TASK-119 (D6): the engine-side discard of a respond_with from
+// an accept_decision hook -- the verdict was fixed before the firing,
+// so the listener ignores the returned action. A denying policy plus
+// a responding hook still closes the connection with zero application
+// bytes (no synthesized 403), and the admitted twin serves /hello
+// normally despite the respond.
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, accept_decision_respond_with_ignored)
+    const auto responds =
+        [](srv::accept_decision_ctx&) -> srv::hook_action {
+            srv::hook_response page;
+            page.status = http::status::from_code(403);
+            page.fields.append("Content-Type", "text/plain");
+            const char* body = "no";
+            const std::byte* raw =
+                reinterpret_cast<const std::byte*>(body);
+            page.body.assign(raw, raw + 2);
+            return srv::hook_action::respond_with(std::move(page));
+        };
+
+    srv::server_options denied_options = base_options();
+    denied_options.peer_policy().deny.push_back("127.0.0.1");
+    hooks_server refused(std::move(denied_options));
+    (void)refused.get().hooks().add<srv::hook_phase::accept_decision>(
+        responds).detach();
+    LT_CHECK(refused.start());
+    raw::connection client;
+    LT_CHECK(client.connect(refused.port()));
+    std::deque<observed_response> none;
+    LT_CHECK(client.receive_close(none));
+    LT_CHECK(client.peer_closed());
+    LT_CHECK(none.empty());
+
+    hooks_server admitted(base_options());
+    LT_CHECK(admitted.get().route(
+                   http::method::known(http::method_id::get), "/hello",
+                   stream_body("hello")).ok());
+    (void)admitted.get().hooks().add<srv::hook_phase::accept_decision>(
+        responds).detach();
+    LT_CHECK(admitted.start());
+    raw::connection twin;
+    LT_CHECK(twin.connect(admitted.port()));
+    LT_CHECK(twin.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(twin.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK(seen[0].body == "hello");
+    }
+LT_END_AUTO_TEST(accept_decision_respond_with_ignored)
+
+// (34) TASK-119 (D5): the admitted observation through the real
+// listener -- accept_decision fires accepted=true with the loopback
+// peer and the connection then serves -- and the reject_all twin
+// without an allow entry refuses with the typed not_on_allow_list
+// reason (the deny-free counterpart of case 31).
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, accept_decision_observes_admission)
+    hooks_server s(base_options());
+    LT_CHECK(s.get().route(http::method::known(http::method_id::get),
+                           "/hello", stream_body("hello")).ok());
+    std::mutex gate;
+    int fired = 0;
+    bool accepted_seen = false;
+    int reason = -1;
+    std::string peer_text;
+    (void)s.get().hooks().add<srv::hook_phase::accept_decision>(
+        [&gate, &fired, &accepted_seen, &reason, &peer_text](
+            srv::accept_decision_ctx& c) -> srv::hook_action {
+            std::lock_guard<std::mutex> lock(gate);
+            ++fired;
+            accepted_seen = c.accepted;
+            reason = static_cast<int>(c.reason);
+            peer_text = c.peer.address.to_string();
+            return srv::hook_action::pass();
+        }).detach();
+    LT_CHECK(s.start());
+    raw::connection client;
+    LT_CHECK(client.connect(s.port()));
+    LT_CHECK(client.send("GET /hello HTTP/1.1\r\nHost: h\r\n\r\n"));
+    std::deque<observed_response> seen;
+    LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), 1u);
+    if (seen.size() == 1) {
+        LT_CHECK_EQ(seen[0].status, 200);
+        LT_CHECK(seen[0].body == "hello");
+    }
+    // The hook fires before any engine exists, so the served response
+    // already ordered the observation.
+    {
+        std::lock_guard<std::mutex> lock(gate);
+        LT_CHECK_EQ(fired, 1);
+        LT_CHECK(accepted_seen);
+        LT_CHECK_EQ(reason, static_cast<int>(srv::peer_refusal::none));
+        LT_CHECK(peer_text == "127.0.0.1");
+    }
+
+    srv::server_options reject_options = base_options();
+    reject_options.peer_policy().mode = srv::peer_policy_mode::reject_all;
+    hooks_server t(std::move(reject_options));
+    std::mutex refused_gate;
+    int refused_fired = 0;
+    bool refused_accepted = true;
+    int refused_reason = -1;
+    (void)t.get().hooks().add<srv::hook_phase::accept_decision>(
+        [&refused_gate, &refused_fired, &refused_accepted, &refused_reason](
+            srv::accept_decision_ctx& c) -> srv::hook_action {
+            std::lock_guard<std::mutex> lock(refused_gate);
+            ++refused_fired;
+            refused_accepted = c.accepted;
+            refused_reason = static_cast<int>(c.reason);
+            return srv::hook_action::pass();
+        }).detach();
+    LT_CHECK(t.start());
+    raw::connection refused;
+    LT_CHECK(refused.connect(t.port()));
+    std::deque<observed_response> none;
+    LT_CHECK(refused.receive_close(none));
+    LT_CHECK(refused.peer_closed());
+    LT_CHECK(none.empty());
+    // The hook fires before the refused transport is released, so the
+    // close the client observed already ordered the observation.
+    {
+        std::lock_guard<std::mutex> lock(refused_gate);
+        LT_CHECK_EQ(refused_fired, 1);
+        LT_CHECK(!refused_accepted);
+        LT_CHECK_EQ(refused_reason,
+                    static_cast<int>(srv::peer_refusal::not_on_allow_list));
+    }
+LT_END_AUTO_TEST(accept_decision_observes_admission)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

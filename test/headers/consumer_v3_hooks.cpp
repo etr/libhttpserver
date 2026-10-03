@@ -44,7 +44,9 @@ namespace http = httpserver::http;
 using srv::hook_action;
 using srv::hook_phase;
 
-// The seven request-scoped phases plus the sentinel, in firing order.
+// The eight phases plus the sentinel, in firing order: accept_decision
+// first (connection admission), then the seven request-scoped phases.
+static_assert(hook_phase::accept_decision < hook_phase::request_received);
 static_assert(hook_phase::request_received < hook_phase::route_resolved);
 static_assert(hook_phase::route_resolved < hook_phase::before_handler);
 static_assert(hook_phase::before_handler < hook_phase::handler_exception);

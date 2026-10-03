@@ -24,9 +24,13 @@
 // umbrella <httpserver.hpp>: like the rest of the v3 server area this
 // is an additive surface.
 //
-// Seven request-scoped phases, in firing order, keeping the v2 names
-// where the native engine has the point:
+// The bus phases: accept_decision (connection admission, TASK-119)
+// plus the seven request-scoped phases, in firing order, keeping the
+// v2 names where the native engine has the point:
 //
+//   accept_decision    connection admission: fires once per accepted
+//                      transport on the listener, after the peer
+//                      policy verdict is fixed; observation only.
 //   request_received   head parsed and route_path derived, before any
 //                      lookup; short-circuit capable (the response is
 //                      committed and the handler never runs, the body
@@ -58,11 +62,15 @@
 //
 // Not ported from v2 (migration notes in
 // specs/architecture/v3/v2-parity-inventory.md): connection_opened and
-// connection_closed (accept-time peer policy is a later task),
-// accept_decision, and body_chunk (the v3 body model is pull-based:
-// pre-body control is request_received, per-chunk visibility is the
-// handler's read loop). Per-resource add_hook is not ported either --
-// per-route composition is a wrapping route_handler.
+// connection_closed (accept-time peer policy arrived with TASK-119's
+// accept_decision; the per-connection open/close notifications remain
+// MHD-notify artifacts with no v3 engine point -- accept_decision at
+// admission plus request_completed at settle plus exchange::peer()
+// are the documented v3 observation seats) and body_chunk (the v3
+// body model is pull-based: pre-body control is request_received,
+// per-chunk visibility is the handler's read loop). Per-resource
+// add_hook is not ported either -- per-route composition is a
+// wrapping route_handler.
 //
 // Bus contracts carried over from v2: registration order within a
 // phase; snapshot-copy firing (a hook may add or remove hooks
@@ -108,15 +116,20 @@
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/request_head.hpp>
 #include <httpserver/http/status.hpp>
+#include <httpserver/net/address.hpp>
+#include <httpserver/server/peer_policy.hpp>
 
 namespace httpserver {
 
 namespace server {
 
 
-// The seven request-scoped phases plus the count_ sentinel, which must
-// remain last and is not a valid phase value.
+// The eight phases plus the count_ sentinel, which must remain last
+// and is not a valid phase value. accept_decision (TASK-119) sits
+// first: it fires on the listener's accept task, before any
+// request-scoped phase of any exchange the connection later carries.
 enum class hook_phase : std::uint8_t {
+    accept_decision,
     request_received,
     route_resolved,
     before_handler,
@@ -127,8 +140,9 @@ enum class hook_phase : std::uint8_t {
     count_,  // sentinel; must remain last
 };
 
-static_assert(static_cast<std::size_t>(hook_phase::count_) == std::size_t{7},
-              "seven request-scoped phases");
+static_assert(static_cast<std::size_t>(hook_phase::count_) == std::size_t{8},
+              "eight phases: accept_decision plus the seven"
+              " request-scoped");
 
 // The response a short-circuiting hook supplies: terminal status,
 // response fields, and the complete body bytes. An invalid status
@@ -189,8 +203,23 @@ struct route_descriptor {
     bool is_prefix = false;
 };
 
-// Per-phase contexts. Every context references the semantic request
-// head; no engine or backend types appear (DR-V3-001).
+// Per-phase contexts. Every request-scoped context references the
+// semantic request head; no engine or backend types appear
+// (DR-V3-001).
+//
+// accept_decision (TASK-119, plan D6): observation only, fired by the
+// listener AFTER the policy verdict is fixed (the v2 ordering rule) --
+// a throwing hook is contained and cannot change the decision, and a
+// respond_with is ignored. The peer is the transport snapshot taken
+// at accept; the reason carries the v2 names (peer_refusal). It fires
+// on the accept-loop task, so hooks must be cheap and non-blocking
+// (the v2-equivalent shape: a slow hook delays accepts).
+struct accept_decision_ctx {
+    net::peer_address peer;
+    bool accepted = true;
+    peer_refusal reason = peer_refusal::none;
+};
+
 struct request_received_ctx {
     const http::request_head& request;
 };
@@ -251,6 +280,9 @@ hook_action hook_bus_fire(const std::shared_ptr<hook_bus_impl>& owner,
 // The phase -> context mapping (compile-time, so add() and fire()
 // cannot disagree about a phase's context type).
 template <hook_phase P> struct phase_ctx;
+template <> struct phase_ctx<hook_phase::accept_decision> {
+    using type = accept_decision_ctx;
+};
 template <> struct phase_ctx<hook_phase::request_received> {
     using type = request_received_ctx;
 };

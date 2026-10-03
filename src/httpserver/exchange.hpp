@@ -35,6 +35,7 @@
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/request_head.hpp>
 #include <httpserver/http/status.hpp>
+#include <httpserver/net/address.hpp>
 #include <httpserver/response_writer.hpp>
 #include <httpserver/server/routes.hpp>
 
@@ -133,14 +134,19 @@ class exchange {
     // for engine bookkeeping; `body_source` is the engine's delivery
     // seam for the admitted body (null until an engine provides one);
     // `response_sink` is the engine's delivery seam for the streaming
-    // response body (null until an engine provides one).
+    // response body (null until an engine provides one); `peer` is
+    // the transport peer snapshot stamped at accept (TASK-119) --
+    // immutable for the exchange's lifetime, unspec for a rigged
+    // exchange.
     exchange(const http::request_head& head, detail::exchange_sink* sink,
              std::uint64_t connection_id = 0,
              detail::body_source* body_source = nullptr,
-             detail::body_sink* response_sink = nullptr) noexcept
+             detail::body_sink* response_sink = nullptr,
+             net::peer_address peer = net::peer_address{}) noexcept
         : head_(head), sink_(sink), connection_id_(connection_id),
           body_source_(body_source), body_(stop_.get_token()),
-          response_sink_(response_sink), writer_(stop_.get_token()) { }
+          response_sink_(response_sink), writer_(stop_.get_token()),
+          peer_(peer) { }
 
     exchange(exchange&& other) noexcept = default;
     exchange& operator=(exchange&& other) noexcept = default;
@@ -170,6 +176,13 @@ class exchange {
     }
 
     std::uint64_t connection_id() const noexcept { return connection_id_; }
+
+    // TASK-119 (plan D3): the transport peer snapshot taken at accept
+    // and carried immutably -- the address and port the peer policy
+    // consulted and the value a handler observes. There is no setter:
+    // a reconnect is a new connection with a new snapshot. Unspec for
+    // a rigged exchange.
+    const net::peer_address& peer() const noexcept { return peer_; }
 
     // The admitted request body. Operations are legal only after a
     // successful admit_body() and fail typed otherwise.
@@ -356,6 +369,7 @@ class exchange {
     response_writer writer_;
     std::vector<server::route_captures> path_args_;
     std::vector<resume_signal> resume_signals_;
+    net::peer_address peer_;
 };
 
 }  // namespace httpserver

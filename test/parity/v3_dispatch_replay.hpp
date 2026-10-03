@@ -47,7 +47,9 @@
 #include <httpserver/detail/request_lifecycle.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/http/fields.hpp>
+#include <httpserver/net/address.hpp>
 #include <httpserver/server/hooks.hpp>
+#include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/routes.hpp>
 #include <httpserver/server/route_sync.hpp>
 
@@ -60,6 +62,7 @@ namespace v3_replay {
 
 namespace srv = httpserver::server;
 namespace http = httpserver::http;
+namespace net = httpserver::net;
 using httpserver::exchange;
 using httpserver::manual_executor;
 using httpserver::spawn;
@@ -275,23 +278,30 @@ inline httpserver::detail::error_page_factories custom_hook_pages() {
 }
 
 // Dispatches one request through the real pipeline and frames the
-// committed response; delivered=false on a dispatcher failure.
+// committed response; delivered=false on a dispatcher failure. The
+// trailing pair (TASK-119) stamps a peer snapshot onto the exchange
+// and hands the pipeline the policy to revalidate it against; the
+// defaults keep the policy-less rig behavior of the other corpora.
 inline replay_result dispatch_once(const srv::route_registry& registry,
                                    const srv::hook_bus& bus,
                                    const httpserver::detail::
                                        error_page_factories& pages,
                                    const replay_request& request,
-                                   bool* delivered) {
+                                   bool* delivered,
+                                   const net::peer_address& peer =
+                                       net::peer_address{},
+                                   const srv::peer_policy* peers =
+                                       nullptr) {
     replay_result out;
     framing_sink sink(request.head);
     framing_body_sink body(sink);
     httpserver::detail::lifecycle_sink interceptor(sink, bus, request.head);
-    exchange x(request.head, &interceptor, 0, nullptr, &body);
+    exchange x(request.head, &interceptor, 0, nullptr, &body, peer);
     manual_executor ex;
     bool ok = false;
     spawn(ex,
           httpserver::detail::dispatch_request(
-              registry, bus, pages, interceptor, x),
+              registry, bus, pages, interceptor, x, peers),
           [&ok](task_result<void> r) { ok = !r.is_exception(); });
     while (ex.run_pending() > 0) {
     }

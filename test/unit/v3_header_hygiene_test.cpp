@@ -123,6 +123,14 @@ const std::vector<const char*>& header_files() {
         // scan with the same rules (no config gates, no backend/OS
         // tokens; the bus storage stays in detail/).
         "/server/hooks.hpp",
+        // TASK-119: the net address vocabulary joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; parsing and text conversion stay in detail/).
+        "/net/address.hpp",
+        // TASK-119: the peer policy vocabulary joins the sentinel
+        // scan with the same rules (no config gates, no backend/OS
+        // tokens; the store stays in detail/).
+        "/server/peer_policy.hpp",
     };
     return files;
 }

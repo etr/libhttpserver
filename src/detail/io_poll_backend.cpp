@@ -499,10 +499,13 @@ step_outcome io_poll_backend::accept_step(
     pollsys::native_socket_t socket,
     const std::shared_ptr<op_state>& state) {
     pollsys::native_socket_t fresh = pollsys::k_invalid_socket;
-    const pollsys::sys_result r = pollsys::accept_one(socket, &fresh);
+    net::peer_address peer;
+    const pollsys::sys_result r =
+        pollsys::accept_one(socket, &fresh, &peer);
     if (r.status == pollsys::sys_status::ok) {
         finish_now(state, io_result{http::outcome_code::ok, 0,
-                                    register_accepted_socket(fresh)});
+                                    register_accepted_socket(fresh),
+                                    peer});
         return step_outcome::completed;
     }
     if (r.status == pollsys::sys_status::would_block) {

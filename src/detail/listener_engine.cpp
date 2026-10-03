@@ -39,12 +39,14 @@ listener_engine::listener_engine(io_poll_backend& backend, worker_pool& pool,
                                  const server::route_registry& routes,
                                  const server::hook_bus& hooks,
                                  const server::resource_budget& budget,
+                                 const server::peer_policy& peers,
                                  drain_scope& scope,
                                  connection_engine_config config)
     : backend_(backend),
       pool_(pool),
       routes_(routes),
       hooks_(hooks),
+      peers_(peers),
       owner_(pool),
       budget_(budget),
       scope_(scope),
@@ -138,11 +140,27 @@ task<void> listener_engine::accept_loop(
         op.submit(self->backend_);
         const io_result r = co_await std::move(op);
         if (r.code != http::outcome_code::ok) co_return;
-        self->adopt_accepted(r.accepted_id);
+        self->adopt_accepted(r.accepted_id, r.peer);
     }
 }
 
-void listener_engine::adopt_accepted(std::uint64_t connection) {
+void listener_engine::adopt_accepted(std::uint64_t connection,
+                                     const net::peer_address& peer) {
+    // The policy gate runs before any engine exists (TASK-119 plan
+    // D1): classify() is one atomic load when the policy is unarmed.
+    // The verdict is fixed here, THEN the observation fires -- a
+    // throwing or responding hook cannot change the outcome.
+    const server::peer_verdict verdict = peers_.classify(peer);
+    server::accept_decision_ctx seen{peer, verdict.accepted,
+                                     verdict.reason};
+    (void)hooks_.fire<server::hook_phase::accept_decision>(seen);
+    if (!verdict.accepted) {
+        // Zero application bytes: the transport is released unread
+        // (the budget-refusal shape; the refusal wire behavior is a
+        // pinned migration exception).
+        backend_.release_connection(connection);
+        return;
+    }
     std::shared_ptr<connection_engine> engine;
     {
         std::lock_guard<std::mutex> lock(mu_);
@@ -153,7 +171,8 @@ void listener_engine::adopt_accepted(std::uint64_t connection) {
         }
         engine = std::make_shared<connection_engine>(
             backend_, pool_, routes_, hooks_, budget_, scope_, config_,
-            connection, [this, connection] { erase(connection); });
+            connection, [this, connection] { erase(connection); }, peer,
+            &peers_);
         connections_.emplace(connection, engine);
     }
     // Outside the lock: a budget-refusing engine reports its stop from

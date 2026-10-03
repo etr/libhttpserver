@@ -46,7 +46,9 @@ connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool
                                      drain_scope& scope,
                                      connection_engine_config config,
                                      std::uint64_t id,
-                                     stopped_callback on_stopped)
+                                     stopped_callback on_stopped,
+                                     net::peer_address peer,
+                                     const server::peer_policy* peers)
     : backend_(backend),
       pool_(pool),
       routes_(routes),
@@ -57,6 +59,8 @@ connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool
       config_(std::move(config)),
       id_(id),
       on_stopped_(std::move(on_stopped)),
+      peer_(peer),
+      peers_(peers),
       parser_(config_.head),
       outbox_(config_.outbox) {
     if (config_.pages == nullptr) {
