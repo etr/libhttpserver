@@ -24,10 +24,17 @@
 // transcript expectations are deterministic; volatile material (Digest
 // nonces) is masked in the corpus, never randomized here.
 
-#include "v2_fixture.hpp"
+#include "parity/v2_fixture.hpp"
 
+#include <unistd.h>
+
+#include <algorithm>
+#include <cstring>
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "./httpserver.hpp"
 
@@ -215,6 +222,30 @@ std::unique_ptr<webserver> build_file_resp() {
     ws->on_get("/missing", [](const http_request&) {
         return http_response::file(PARITY_DATA_ROOT "/no_such_file_096");
     });
+    ws->on_get("/pipe", [](const http_request&) {
+        int endpoints[2];
+        if (::pipe(endpoints) != 0) throw std::runtime_error("parity pipe");
+        const auto written = ::write(endpoints[1], "abcXYZ", 6);
+        ::close(endpoints[1]);
+        if (written != 6) {
+            ::close(endpoints[0]);
+            throw std::runtime_error("write pipe");
+        }
+        return http_response::pipe(endpoints[0]);
+    });
+    ws->on_get("/iovec", [](const http_request&) {
+        const httpserver::iovec_entry parts[] = {{"abc", 3}, {"XYZ", 3}};
+        return http_response::iovec(parts);
+    });
+    ws->on_get("/deferred", [](const http_request&) {
+        return http_response::deferred([](std::uint64_t pos, char* dest,
+                                         std::size_t cap) -> ssize_t {
+            if (pos >= 6) return -1;
+            const auto count = std::min(cap, std::size_t(6 - pos));
+            std::memcpy(dest, "abcXYZ" + pos, count);
+            return static_cast<ssize_t>(count);
+        });
+    });
     register_smoke(*ws);
     return ws;
 }
@@ -308,32 +339,36 @@ bool v2_fixture::profile_available(const std::string& name) const {
 uint16_t v2_fixture::start(const std::string& name) {
     stop();
     std::unique_ptr<webserver> server;
-    if (name == "routing_basic") server = build_routing_basic();
-    else if (name == "routing_hooks") server = build_routing_hooks();
-    else if (name == "auth_basic") server = build_auth_basic();
-    else if (name == "auth_digest") {
+    if (name == "routing_basic") {
+        server = build_routing_basic();
+    } else if (name == "routing_hooks") {
+        server = build_routing_hooks();
+    } else if (name == "auth_basic") {
+        server = build_auth_basic();
+    } else if (name == "auth_digest") {
         if (!webserver::features().digest_auth) {
             throw std::runtime_error("auth_digest unavailable: HAVE_DAUTH off");
         }
         server = build_auth_digest();
-    }
-    else if (name == "forms") server = build_forms();
-    else if (name == "file_resp") server = build_file_resp();
-    else if (name == "ip_controls") server = build_ip_controls();
-    else if (name == "shoutcast") server = build_shoutcast();
-    else if (name == "websocket") {
+    } else if (name == "forms") {
+        server = build_forms();
+    } else if (name == "file_resp") {
+        server = build_file_resp();
+    } else if (name == "ip_controls") {
+        server = build_ip_controls();
+    } else if (name == "shoutcast") {
+        server = build_shoutcast();
+    } else if (name == "websocket") {
         if (!webserver::features().websocket) {
             throw std::runtime_error("websocket unavailable: HAVE_WEBSOCKET off");
         }
         server = build_websocket();
-    }
-    else if (name == "tls") {
+    } else if (name == "tls") {
         if (!webserver::features().tls) {
             throw std::runtime_error("tls unavailable: HAVE_GNUTLS off");
         }
         server = build_tls();
-    }
-    else {
+    } else {
         throw std::runtime_error("unknown profile: " + name);
     }
     // Non-blocking start: throws on daemon failure; returns false by

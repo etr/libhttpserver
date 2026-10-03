@@ -91,10 +91,12 @@ http::request_head get_10() {
 std::string emit_head(const http::request_head& req, std::uint16_t code,
                       const http::fields& fields,
                       const http1_response_framer::clock_source& clock = {},
-                      std::string_view status_token = {}) {
-    http1_response_framer framer(clock, status_token);
+                      bool icy = false) {
+    http1_response_framer framer(clock);
+    const auto status = icy ? http::status::from_code(code).with_shoutcast()
+                            : http::status::from_code(code);
     std::string out;
-    if (!framer.start_head(out, req, http::status::from_code(code), fields)
+    if (!framer.start_head(out, req, status, fields)
              .ok()) {
         return {};
     }
@@ -512,13 +514,24 @@ LT_BEGIN_AUTO_TEST(engine_fields_suite, icy_status_token_replaces_version)
     f.append("Content-Type", "text/plain");
     f.append("Content-Length", "2");
     const std::string out = emit_head(get_11(), 200, f, fixed_clock(),
-                                      "ICY");
+                                      true);
     LT_CHECK(out == "ICY 200 OK\r\n"
                     "Content-Type: text/plain\r\n"
                     "Date: Sun, 06 Nov 1994 08:49:37 GMT\r\n"
                     "Content-Length: 2\r\n"
                     "\r\n");
 LT_END_AUTO_TEST(icy_status_token_replaces_version)
+
+LT_BEGIN_AUTO_TEST(engine_fields_suite, icy_final_does_not_change_interim_http)
+    http1_response_framer framer;
+    std::string wire;
+    LT_CHECK(framer.interim_head(wire, 100).ok());
+    http::fields fields;
+    fields.append("Content-Length", "0");
+    LT_CHECK(framer.start_head(wire, get_11(),
+        http::status::from_code(200).with_shoutcast(), fields).ok());
+    LT_CHECK(wire.starts_with("HTTP/1.1 100 Continue\r\n\r\nICY 200 OK\r\n"));
+LT_END_AUTO_TEST(icy_final_does_not_change_interim_http)
 
 LT_BEGIN_AUTO_TEST(engine_fields_suite, fields_never_mutated_by_emission)
     // The strip rules apply to the emitted sequence only: the
@@ -857,7 +870,7 @@ struct replay_input {
     std::uint16_t status = 200;
     http::fields fields;
     std::string body;
-    std::string status_token;  // empty: mirrored request version
+    bool icy = false;  // fixed response metadata
     bool head_only = false;    // parity parser HEAD hint
     bool upgraded = false;     // engine handed the connection to ws
 };
@@ -900,10 +913,12 @@ std::string replay_case(const char* file, const char* case_name,
         return "case not found: " + std::string(case_name);
     }
 
-    http1_response_framer framer({}, in.status_token);
+    http1_response_framer framer;
+    const auto status = in.icy ? http::status::from_code(in.status).with_shoutcast()
+                               : http::status::from_code(in.status);
     std::string wire;
     const http::outcome head = framer.start_head(
-        wire, in.request, http::status::from_code(in.status), in.fields);
+        wire, in.request, status, in.fields);
     if (!head.ok()) return "start_head: " + head.message();
     if (!in.body.empty()) {
         const http::outcome pushed =
@@ -1126,7 +1141,7 @@ LT_BEGIN_AUTO_TEST(corpus_suite, shoutcast_icy_status_line)
     in.fields = make_fields({{"Content-Type", "text/plain"},
                              {"Content-Length", "2"}});
     in.body = "OK";
-    in.status_token = "ICY";
+    in.icy = true;
     const std::string diff = replay_case("shoutcast.tseq", "icy_status_line", in);
     expect_replay(diff, "icy_status_line");
     LT_CHECK(diff.empty());

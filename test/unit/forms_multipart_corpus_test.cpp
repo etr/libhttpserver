@@ -147,7 +147,7 @@ std::string replay_case(const char* case_name) {
     out.append("Content-Type", "text/plain");
     out.append("Content-Length", std::to_string(body.size()));
 
-    http1_response_framer framer({}, {});
+    http1_response_framer framer;
     std::string wire;
     const http::outcome head_out = framer.start_head(
         wire, request.head, http::status::from_code(200), out);

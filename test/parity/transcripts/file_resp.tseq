@@ -36,3 +36,36 @@ expect header Content-Length: 21
 expect body "Internal Server Error"
 expect framing content-length
 expect connection keep-alive
+
+case pipe_body
+send GET /pipe HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Transfer-Encoding: chunked
+expect body "abcXYZ"
+expect framing chunked
+expect header ~Content-Type
+expect connection keep-alive
+
+case iovec_body
+send GET /iovec HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Content-Length: 6
+expect body "abcXYZ"
+expect framing content-length
+expect header ~Content-Type
+expect connection keep-alive
+
+case deferred_body
+send GET /deferred HTTP/1.1\r\n
+send Host: 127.0.0.1\r\n
+send \r\n
+expect status 200
+expect header Transfer-Encoding: chunked
+expect body "abcXYZ"
+expect framing chunked
+expect header ~Content-Type
+expect connection keep-alive

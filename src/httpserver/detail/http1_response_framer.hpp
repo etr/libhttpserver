@@ -140,17 +140,14 @@ class http1_response_framer {
         std::function<std::chrono::system_clock::time_point()> now;
     };
 
-    // @p status_token replaces the HTTP-version token of the status
-    // line (the SHOUTcast "ICY" wire form is the one corpus pin).
-    explicit http1_response_framer(clock_source clock = {},
-                                   std::string_view status_token = {})
-        : clock_(std::move(clock)), status_token_(status_token) { }
+    explicit http1_response_framer(clock_source clock = {})
+        : clock_(std::move(clock)) { }
 
     http1_response_framer(const http1_response_framer&) = delete;
     http1_response_framer& operator=(const http1_response_framer&) = delete;
 
     // Serializes the response head into @p out: status line (version
-    // mirrors the request protocol unless a status token was given),
+    // mirrors the request protocol unless status carries SHOUTcast metadata),
     // then the handler fields in entries() order, then the engine
     // fields. A typed failure (rejected mode, or a handler field that
     // is not wire-safe) appends nothing and leaves the framer failed —
@@ -183,18 +180,14 @@ class http1_response_framer {
     // Interim response head ("HTTP/1.1 100 Continue CRLF CRLF" et
     // cetera), appended ahead of the final head in the same buffer.
     // Informational responses travel this path only; the version token
-    // is HTTP/1.1 (or the configured status token).
+    // is always HTTP/1.1, independent of final-response metadata.
     http::outcome interim_head(std::string& out, std::uint16_t code) {
         if (code < 100 || code > 199) {
             return http::outcome(
                 http::outcome_code::invalid_argument,
                 "http1_response_framer: interim status must be 1xx");
         }
-        if (!status_token_.empty()) {
-            out.append(status_token_);
-        } else {
-            out.append("HTTP/1.1");
-        }
+        out.append("HTTP/1.1");
         out.push_back(' ');
         append_decimal(out, code);
         out.push_back(' ');
@@ -417,8 +410,8 @@ class http1_response_framer {
     void append_status_line(std::string& out,
                             const http::request_head& request,
                             const http::status& s) const {
-        if (!status_token_.empty()) {
-            out.append(status_token_);
+        if (s.is_shoutcast()) {
+            out.append("ICY");
         } else {
             out.append(http::to_string(request.request_protocol));
         }
@@ -506,7 +499,6 @@ class http1_response_framer {
     }
 
     clock_source clock_;
-    std::string status_token_;
     http1_response_mode mode_;
     http::outcome failure_;
     std::uint64_t body_written_ = 0;  // length framing: raw bytes so far
