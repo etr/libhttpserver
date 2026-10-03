@@ -153,6 +153,16 @@ inline native_socket_t open_stream() {
 #endif
 }
 
+// A blocking AF_INET6 stream socket (unconnected) -- the v6 twin of
+// open_stream (TASK-119 e2e: a ::1 dial needs the matching family).
+inline native_socket_t open_stream_v6() {
+#if defined(_WIN32)
+    return ::socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+#else
+    return ::socket(AF_INET6, SOCK_STREAM, 0);
+#endif
+}
+
 // listen() backlog of every adopted server listener (the make_listener
 // convention).
 constexpr int k_listen_backlog = 16;
@@ -363,6 +373,14 @@ inline sys_result write_some(native_socket_t socket, const std::byte* data,
 // address normalizes to family ipv4; any other family reports
 // unspec). TASK-119: the v2 engine discarded this address at accept;
 // the v3 peer policy consults it.
+
+// The accept-time peer capture (TASK-119): the family dispatch and
+// the host-order port conversion stay here; the address bytes decode
+// through the ONE shared rule -- net::detail::address_from_bytes, the
+// same decode the text parser uses -- so a v4-mapped v6 arrival
+// normalizes to family ipv4 exactly like its parsed spelling, and a
+// genuine IPv6 address that merely carries 0xffff at bytes[10..11]
+// stays ipv6. Any other family reports unspec.
 inline void fill_peer(const sockaddr_storage& storage,
                       net::peer_address& peer) noexcept {
     const auto* const in4 =
@@ -371,27 +389,17 @@ inline void fill_peer(const sockaddr_storage& storage,
         reinterpret_cast<const sockaddr_in6*>(&storage);
     peer = net::peer_address{};
     if (storage.ss_family == AF_INET) {
-        peer.address.family = net::address_family::ipv4;
         static_assert(sizeof(in4->sin_addr.s_addr) == 4);
-        std::memcpy(peer.address.bytes.data() + 12, &in4->sin_addr.s_addr,
-                    4);
+        peer.address = net::detail::address_from_bytes(
+            net::address_family::ipv4,
+            reinterpret_cast<const std::byte*>(&in4->sin_addr.s_addr));
         peer.port = ntohs(in4->sin_port);
         return;
     }
     if (storage.ss_family == AF_INET6) {
-        std::memcpy(peer.address.bytes.data(), &in6->sin6_addr, 16);
-        if (peer.address.bytes[10] == std::byte{0xff}
-                && peer.address.bytes[11] == std::byte{0xff}) {
-            // v4-mapped: equal to the plain IPv4 literal.
-            const std::array<std::byte, 4> tail = {
-                peer.address.bytes[12], peer.address.bytes[13],
-                peer.address.bytes[14], peer.address.bytes[15]};
-            peer.address.bytes.fill(std::byte{0});
-            std::memcpy(peer.address.bytes.data() + 12, tail.data(), 4);
-            peer.address.family = net::address_family::ipv4;
-        } else {
-            peer.address.family = net::address_family::ipv6;
-        }
+        peer.address = net::detail::address_from_bytes(
+            net::address_family::ipv6,
+            reinterpret_cast<const std::byte*>(&in6->sin6_addr));
         peer.port = ntohs(in6->sin6_port);
     }
 }

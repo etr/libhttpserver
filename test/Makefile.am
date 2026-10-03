@@ -1155,10 +1155,12 @@ http1_response_outbox_LDADD = $(LDADD)
 
 # TASK-108 step 1: loopback/any-address listener bind helper
 # (pollsys::open_listener): v4/ANY/v6 literals, resolved port report,
-# SO_REUSEADDR, nonblocking accept, name rejection. Header-only surface
-# (io_poll_sys.hpp), so the LDADD stays empty.
+# SO_REUSEADDR, nonblocking accept, name rejection. TASK-119 adds the
+# fill_peer battery (accept-time peer capture) cross-checked against
+# net::parse_address over the shared byte decode in v3core
+# (detail/net_address.cpp), so the suite uses the default LDADD and
+# links libhttpserver.la.
 io_poll_sys_listener_SOURCES = unit/io_poll_sys_listener_test.cpp
-io_poll_sys_listener_LDADD =
 
 # TASK-108 step 2: the native server's thread-pool executor. Links
 # libhttpserver.la (the TASK-099 convention): the program exercises the

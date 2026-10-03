@@ -135,6 +135,24 @@ std::optional<address> parse_address(std::string_view text);
 // beyond the family's bit count. Performs no I/O.
 std::optional<address_pattern> parse_pattern(std::string_view text);
 
+namespace detail {
+
+// TASK-119: the one byte-level decode of an address value. The
+// library's text parser (parse_address above) and the engine's
+// accept-time transport capture both build their values through it,
+// so the v4-mapped normalization rule (::ffff:0:0/96: bytes 0..9
+// zero AND bytes 10..11 0xff) exists in exactly one place and the
+// parsed spelling and the captured peer of one host can never
+// disagree -- a genuine IPv6 address that merely carries 0xffff at
+// bytes 10..11 stays family ipv6. ipv4 reads the leading 4 raw
+// bytes (right-aligned into the 16-byte form); ipv6 reads 16; unspec
+// yields the empty address. TU-defined in the library's detail/
+// (the internal-bridge precedent of server/hooks.hpp and
+// server/peer_policy.hpp; not part of the consumer surface).
+address address_from_bytes(address_family family, const std::byte* raw);
+
+}  // namespace detail
+
 }  // namespace net
 
 }  // namespace httpserver

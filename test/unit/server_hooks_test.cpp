@@ -475,8 +475,9 @@ LT_END_AUTO_TEST(admission_observes_verdict_and_peer)
 // unchanged from the other phases: a respond_with short-circuits the
 // remaining hooks of the phase and comes back as the action (the
 // LISTENER discards it -- the verdict was fixed before firing; that
-// engine-side ignore is pinned by the e2e and corpus suites), and a
-// throwing hook is contained as pass() with the chain continuing.
+// engine-side ignore is pinned by the native_http1_e2e suite's
+// accept_decision_respond_with_ignored case), and a throwing hook is
+// contained as pass() with the chain continuing.
 LT_BEGIN_AUTO_TEST(server_hooks_suite, admission_ignores_and_contains)
     srv::hook_bus bus;
     const visit_log visits = std::make_shared<std::vector<std::string>>();

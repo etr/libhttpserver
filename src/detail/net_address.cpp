@@ -56,7 +56,7 @@ namespace {
 constexpr std::size_t k_max_literal = 45;
 
 // The v4-mapped marker: bytes[0..9] zero and bytes[10..11] 0xff
-// ("::ffff:0:0/96"). A mapped literal normalizes to family ipv4.
+// ("::ffff:0:0/96"). A mapped byte string normalizes to family ipv4.
 bool mapped_tail(const std::array<std::byte, 16>& bytes) noexcept {
     for (std::size_t i = 0; i < 10; ++i) {
         if (bytes[i] != std::byte{0}) return false;
@@ -64,27 +64,44 @@ bool mapped_tail(const std::array<std::byte, 16>& bytes) noexcept {
     return bytes[10] == std::byte{0xff} && bytes[11] == std::byte{0xff};
 }
 
-address from_v4_bytes(const unsigned char* raw) {
+}  // namespace
+
+namespace detail {
+
+// The ONE byte-level decode of the address vocabulary (TASK-119):
+// parse_address (the text path) and the engine's accept-time
+// transport capture (io_poll_sys.hpp fill_peer, the byte path) both
+// build their values here, so the v4-mapped rule above exists in
+// exactly one place and one host's parsed spelling and captured peer
+// can never disagree. ipv4 reads the leading 4 bytes right-aligned;
+// ipv6 reads 16 and normalizes only a fully mapped byte string to
+// family ipv4 (a genuine IPv6 address that merely carries 0xffff at
+// bytes[10..11] stays ipv6); unspec yields the empty address.
+address address_from_bytes(address_family family, const std::byte* raw) {
     address out;
-    out.family = address_family::ipv4;
-    std::memcpy(out.bytes.data() + 12, raw, 4);
+    if (family == address_family::ipv4) {
+        out.family = address_family::ipv4;
+        std::memcpy(out.bytes.data() + 12, raw, 4);
+        return out;
+    }
+    if (family == address_family::ipv6) {
+        std::memcpy(out.bytes.data(), raw, 16);
+        if (mapped_tail(out.bytes)) {
+            // Equal to the plain IPv4 literal: the marker bytes zero
+            // out so both spellings produce the same value.
+            out.bytes.fill(std::byte{0});
+            std::memcpy(out.bytes.data() + 12, raw + 12, 4);
+            out.family = address_family::ipv4;
+            return out;
+        }
+        out.family = address_family::ipv6;
+    }
     return out;
 }
 
-address from_v6_bytes(const unsigned char* raw) {
-    address out;
-    std::memcpy(out.bytes.data(), raw, 16);
-    if (mapped_tail(out.bytes)) {
-        // Equal to the plain IPv4 literal: the marker bytes zero out
-        // so both spellings produce the same value.
-        out.bytes.fill(std::byte{0});
-        std::memcpy(out.bytes.data() + 12, raw + 12, 4);
-        out.family = address_family::ipv4;
-        return out;
-    }
-    out.family = address_family::ipv6;
-    return out;
-}
+}  // namespace detail
+
+namespace {
 
 // NUL-terminates @p text into @p buf (sized for the longest literal);
 // false when the text cannot fit, so the platform parser never reads
@@ -206,13 +223,17 @@ std::optional<address> parse_address(std::string_view text) {
     if (text.find(':') == std::string_view::npos) {
         unsigned char raw[4];
         if (::inet_pton(AF_INET, buf, raw) == 1) {
-            return from_v4_bytes(raw);
+            return detail::address_from_bytes(
+                address_family::ipv4,
+                reinterpret_cast<const std::byte*>(raw));
         }
         return std::nullopt;
     }
     unsigned char raw[16];
     if (::inet_pton(AF_INET6, buf, raw) == 1) {
-        return from_v6_bytes(raw);
+        return detail::address_from_bytes(
+            address_family::ipv6,
+            reinterpret_cast<const std::byte*>(raw));
     }
     return std::nullopt;
 }
