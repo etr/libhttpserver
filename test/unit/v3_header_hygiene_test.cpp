@@ -53,6 +53,9 @@ constexpr const char* kHeaderDir = V3_SEMANTIC_HEADER_DIR;
 
 const std::vector<const char*>& header_files() {
     static const std::vector<const char*> files = {
+        "/websocket/message.hpp",
+        "/websocket/options.hpp",
+        "/websocket/session.hpp",
         "/http.hpp",
         "/http/fields.hpp",
         "/http/method.hpp",
@@ -218,7 +221,16 @@ LT_BEGIN_AUTO_TEST(v3_header_hygiene_suite, no_backend_or_socket_tokens)
               std::string("epoll"), std::string("kqueue"),
               std::string("wsapoll"), std::string("wsae"),
               std::string("iocp")}) {
-            if (content.find(token) != std::string::npos) {
+            // The native protocol namespace is allowed. Remove that exact
+            // spelling before the broad legacy substring scan so it does
+            // not hide actual socket or sockaddr vocabulary alongside it.
+            std::string scanned = content;
+            if (token == "socket") {
+                std::size_t pos;
+                while ((pos = scanned.find("websocket")) != std::string::npos)
+                    scanned.erase(pos, 9);
+            }
+            if (scanned.find(token) != std::string::npos) {
                 violations.push_back(path + ": contains banned token '"
                                      + token + "'");
             }

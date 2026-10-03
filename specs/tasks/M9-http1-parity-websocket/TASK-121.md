@@ -9,9 +9,9 @@
 Provide transport-neutral WebSocket frame codec and session for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Implement RFC 6455 framing, masking and fragmentation state.
-- [ ] Track incremental UTF-8, ping/pong, close and message limits.
-- [ ] Expose try_send results for accepted, backpressured and closed sends, plus exactly-once close notification.
+- [x] Implement RFC 6455 framing, masking and fragmentation state.
+- [x] Track incremental UTF-8, ping/pong, close and message limits.
+- [x] Expose try_send results for accepted, backpressured and closed sends, plus exactly-once close notification.
 
 **Dependencies:**
 - Blocked by: TASK-098, TASK-104
@@ -25,4 +25,6 @@ Provide transport-neutral WebSocket frame codec and session for libhttpserver v3
 **Related Requirements:** PRD-V3N-REQ-012, PRD-V3N-REQ-013
 **Related Decisions:** DR-V3-001, DR-V3-003
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation Evidence:** [Codec/session design and verification receipts](../../architecture/v3/TASK-121-design-evidence.md). Final serial full suite passed 210/210; focused suite 11/11; ASan, UBSan and ThreadSanitizer passed. Existing repository-wide complexity/duplication failures are recorded separately for coordinator adjudication.
