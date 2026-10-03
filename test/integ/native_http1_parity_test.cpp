@@ -20,6 +20,7 @@
 */
 
 // TASK-120: committed v2 expectations replayed through native sockets.
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -226,6 +227,52 @@ std::string replay(const parity::tcase& test, raw_http::connection& client) {
     }
     return {};
 }
+
+parity::tcase required_case(const parity::transcript& corpus,
+                           const std::string& name) {
+    const auto found = std::find_if(corpus.cases.begin(), corpus.cases.end(),
+        [&name](const auto& test) { return test.name == name; });
+    if (found == corpus.cases.end()) {
+        throw std::runtime_error("missing required parity case: " + name);
+    }
+    return *found;
+}
+
+std::string head_wire_until_close(std::uint16_t port) {
+    namespace pollsys = raw_http::pollsys;
+    struct socket_owner {
+        pollsys::native_socket_t socket = pollsys::open_stream();
+        ~socket_owner() { pollsys::close_socket(socket); }
+    } peer;
+    if (!pollsys::connect_loopback(peer.socket, port)) {
+        throw std::runtime_error("raw HEAD connect failed");
+    }
+    const std::string request =
+        "HEAD /definition HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    const auto sent = pollsys::write_some(peer.socket,
+        reinterpret_cast<const std::byte*>(request.data()), request.size());
+    if (sent.status != pollsys::sys_status::ok || sent.transferred != request.size()) {
+        throw std::runtime_error("raw HEAD send failed");
+    }
+    if (!pollsys::set_nonblocking(peer.socket, true)) {
+        throw std::runtime_error("raw HEAD nonblocking setup failed");
+    }
+    const auto deadline = std::chrono::steady_clock::now() + raw_http::kExchangeBudget;
+    std::string wire;
+    std::byte buffer[8192];
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto got = pollsys::read_some(peer.socket, buffer, sizeof buffer);
+        if (got.status == pollsys::sys_status::closed_reset) return wire;
+        if (got.status == pollsys::sys_status::ok && got.transferred > 0) {
+            wire.append(reinterpret_cast<const char*>(buffer), got.transferred);
+        } else if (got.status != pollsys::sys_status::would_block) {
+            throw std::runtime_error("raw HEAD read failed");
+        } else {
+            std::this_thread::sleep_for(std::chrono::microseconds(200));
+        }
+    }
+    throw std::runtime_error("raw HEAD close deadline; bytes=" + wire);
+}
 }  // namespace
 
 LT_BEGIN_SUITE(native_http1_parity_suite)
@@ -287,17 +334,27 @@ LT_BEGIN_AUTO_TEST(native_http1_parity_suite, icy_http10_and_head_keep_framing)
     LT_CHECK(client.send("GET /definition HTTP/1.0\r\nConnection: keep-alive\r\n\r\n"));
     std::deque<parity::observed_response> seen;
     LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), std::size_t{1});
     LT_CHECK_EQ(seen.front().raw_status_line, std::string("ICY 200 OK"));
     LT_CHECK_EQ(seen.front().body, std::string("OK"));
     seen.clear();
     client.set_head_only(true);
     LT_CHECK(client.send("HEAD /definition HTTP/1.1\r\nHost: localhost\r\n\r\n"));
     LT_CHECK(client.receive(1, seen));
+    LT_CHECK_EQ(seen.size(), std::size_t{1});
     LT_CHECK_EQ(seen.front().raw_status_line, std::string("ICY 200 OK"));
     LT_CHECK(seen.front().body.empty());
     const auto head = parity::normalize(seen.front());
     LT_CHECK(parity::find_header(head, "Content-Length") != nullptr);
     LT_CHECK_EQ(parity::find_header(head, "Content-Length")->value, std::string("2"));
+
+    // Read through the requested close: headers-only parsing would discard
+    // evidence of a payload arriving with the headers or in a later read.
+    const auto wire = head_wire_until_close(server.port());
+    LT_CHECK(wire.starts_with("ICY 200 OK\r\n"));
+    const auto header_end = wire.find("\r\n\r\n");
+    LT_ASSERT(header_end != std::string::npos);
+    LT_CHECK_EQ(header_end + 4, wire.size());
 LT_END_AUTO_TEST(icy_http10_and_head_keep_framing)
 
 LT_BEGIN_AUTO_TEST(native_http1_parity_suite, leased_borrowed_body_matches_v2_iovec_pin)
@@ -306,13 +363,11 @@ LT_BEGIN_AUTO_TEST(native_http1_parity_suite, leased_borrowed_body_matches_v2_io
     LT_CHECK(client.connect(server.port()));
     const auto corpus = parity::parse_transcript_file(
         std::string(PARITY_TRANSCRIPT_DIR) + "/file_resp.tseq");
-    for (auto test : corpus.cases) {
-        if (test.name != "iovec_body") continue;
-        test.sends.front().bytes = "GET /borrowed HTTP/1.1\r\n";
-        const auto failure = replay(test, client);
-        if (!failure.empty()) std::cerr << failure << "\n";
-        LT_CHECK(failure.empty());
-    }
+    auto test = required_case(corpus, "iovec_body");
+    test.sends.at(0).bytes = "GET /borrowed HTTP/1.1\r\n";
+    const auto failure = replay(test, client);
+    if (!failure.empty()) std::cerr << failure << "\n";
+    LT_CHECK(failure.empty());
 LT_END_AUTO_TEST(leased_borrowed_body_matches_v2_iovec_pin)
 
 LT_BEGIN_AUTO_TEST(native_http1_parity_suite, after_handler_can_select_fixed_icy_metadata)
@@ -321,8 +376,8 @@ LT_BEGIN_AUTO_TEST(native_http1_parity_suite, after_handler_can_select_fixed_icy
     LT_CHECK(client.connect(server.port()));
     const auto corpus = parity::parse_transcript_file(
         std::string(PARITY_TRANSCRIPT_DIR) + "/shoutcast.tseq");
-    auto test = corpus.cases.front();
-    test.sends.front().bytes = "GET /hooked HTTP/1.1\r\n";
+    auto test = required_case(corpus, "icy_status_line");
+    test.sends.at(0).bytes = "GET /hooked HTTP/1.1\r\n";
     const auto failure = replay(test, client);
     if (!failure.empty()) std::cerr << failure << "\n";
     LT_CHECK(failure.empty());
