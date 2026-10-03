@@ -9,9 +9,9 @@
 Provide IP controls with peer-address policy for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Apply IP policy at accept and validated address change.
-- [ ] Define peer-address snapshot semantics for exchanges.
-- [ ] Test blocked, allowed and changing peer cases.
+- [x] Apply IP policy at accept and validated address change.
+- [x] Define peer-address snapshot semantics for exchanges.
+- [x] Test blocked, allowed and changing peer cases.
 
 **Dependencies:**
 - Blocked by: TASK-108, TASK-118
@@ -24,4 +24,4 @@ Provide IP controls with peer-address policy for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-014, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
