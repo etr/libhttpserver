@@ -23,6 +23,7 @@
 #define SRC_HTTPSERVER_SERVER_ROUTES_HPP_
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <string>
 #include <string_view>
@@ -142,18 +143,61 @@ inline std::vector<std::string_view> split_path_segments(
     return segments;
 }
 
-// Compares one pattern segment run against the path: a literal
-// pattern segment compares equal, a single {name} segment captures any
-// non-empty segment. Captures fill in pattern order, each name viewing
-// the pattern text; a failed match leaves them unused.
-inline bool match_segment_run(
-    const std::vector<std::string_view>& pattern_segments,
+// One admission-time pattern segment: byte offsets into the stored
+// pattern text rather than views, so the stored form stays valid
+// across entry moves (vector reallocation) for the registry's whole
+// lifetime.
+struct pattern_segment {
+    std::uint32_t offset;
+    std::uint32_t length;
+};
+
+// Splits a canonical pattern into offset/length segments ONCE, at
+// admission (registration time). Patterns are immutable once
+// registered and registration closes at listen(), so resolve/match
+// consume this stored form and never re-split a pattern per request.
+inline std::vector<pattern_segment> index_path_segments(
+    std::string_view path) {
+    std::vector<pattern_segment> segments;
+    if (path.size() < 2) return segments;  // "" and "/"
+    std::size_t pos = 1;  // skip the leading slash
+    while (pos < path.size()) {
+        const std::size_t slash = path.find('/', pos);
+        const std::size_t length =
+            slash == std::string_view::npos ? path.size() - pos
+                                            : slash - pos;
+        segments.push_back(pattern_segment{
+            static_cast<std::uint32_t>(pos),
+            static_cast<std::uint32_t>(length)});
+        if (slash == std::string_view::npos) break;
+        pos = slash + 1;
+    }
+    return segments;
+}
+
+// Matches the stored (admission-time) pattern segments against the
+// request's already-split path: a literal segment compares equal, a
+// single {name} segment captures any non-empty segment (the capture
+// name views the pattern text). The prefix family matches a leading
+// run of the path segments (equal length included; "/" therefore
+// matches every path); the full family requires equal counts.
+// Allocation-free beyond the captures the accepted run fills.
+inline bool match_stored_segments(
+    std::string_view pattern_text,
+    const std::vector<pattern_segment>& pattern_segments, bool prefix,
     const std::vector<std::string_view>& path_segments,
     std::vector<route_captures>& captures) {
+    const std::size_t count = pattern_segments.size();
+    if (prefix ? count > path_segments.size()
+               : count != path_segments.size()) {
+        return false;
+    }
     captures.clear();
-    for (std::size_t i = 0; i < pattern_segments.size(); ++i) {
-        const std::string_view& pattern = pattern_segments[i];
-        const std::string_view& segment = path_segments[i];
+    for (std::size_t i = 0; i < count; ++i) {
+        const pattern_segment& stored = pattern_segments[i];
+        const std::string_view pattern =
+            pattern_text.substr(stored.offset, stored.length);
+        const std::string_view segment = path_segments[i];
         if (pattern.front() == '{') {
             if (segment.empty()) return false;
             captures.push_back(route_captures{
@@ -163,32 +207,6 @@ inline bool match_segment_run(
         if (pattern != segment) return false;
     }
     return true;
-}
-
-// Segment-wise full pattern match over an already-split path: the
-// segment counts must agree, then the whole run matches.
-inline bool match_path_segments(
-    std::string_view pattern_text,
-    const std::vector<std::string_view>& path_segments,
-    std::vector<route_captures>& captures) {
-    const std::vector<std::string_view> pattern_segments =
-        split_path_segments(pattern_text);
-    if (pattern_segments.size() != path_segments.size()) return false;
-    return match_segment_run(pattern_segments, path_segments, captures);
-}
-
-// Prefix-family match (TASK-118, plan D1): the pattern segments match
-// a leading run of the path segments, equal length included. The root
-// pattern "/" has no segments and therefore matches every path (the
-// documented catch-all).
-inline bool match_prefix_segments(
-    std::string_view pattern_text,
-    const std::vector<std::string_view>& path_segments,
-    std::vector<route_captures>& captures) {
-    const std::vector<std::string_view> pattern_segments =
-        split_path_segments(pattern_text);
-    if (pattern_segments.size() > path_segments.size()) return false;
-    return match_segment_run(pattern_segments, path_segments, captures);
 }
 
 }  // namespace detail
@@ -399,8 +417,9 @@ class route_registry {
         for (const entry& known : entries_) {
             if (known.prefix_ || !accepts(known, m)) continue;
             std::vector<route_captures> captures;
-            if (!detail::match_path_segments(known.pattern_.text(),
-                                             path_segments, captures)) {
+            if (!detail::match_stored_segments(known.pattern_.text(),
+                                               known.segments_, false,
+                                               path_segments, captures)) {
                 continue;
             }
             found.handler = &known.handler_;
@@ -425,6 +444,14 @@ class route_registry {
     // singles' tokens); a plain miss reports neither. The v2 regex
     // family and {name|regex} per-segment constraints are not ported
     // (migration note in the v2-parity inventory).
+    //
+    // Observability rule of the full tier: it stops at its first hit
+    // (the base match() semantics) unless @p methods_observable is
+    // true -- pass true exactly when the merged methods can be
+    // observed (route_resolved/before_handler hooks consult
+    // route_descriptor.methods); then the tier keeps merging every
+    // matching entry's methods past the hit. A method miss carries the
+    // full merge either way (the Allow set is always observable).
     struct resolve_result {
         enum class resolve_kind : std::uint8_t { miss, method_miss, hit };
 
@@ -438,12 +465,14 @@ class route_registry {
     };
 
     resolve_result resolve(const http::method& m,
-                           std::string_view route_path) const {
+                           std::string_view route_path,
+                           bool methods_observable = false) const {
         const std::vector<std::string_view> path_segments =
             detail::split_path_segments(route_path);
-        resolve_result full = resolve_tier(m, path_segments, false);
+        resolve_result full = resolve_tier(m, path_segments, false,
+                                           methods_observable);
         if (full.kind != resolve_result::resolve_kind::miss) return full;
-        return resolve_tier(m, path_segments, true);
+        return resolve_tier(m, path_segments, true, methods_observable);
     }
 
     std::size_t size() const noexcept { return entries_.size(); }
@@ -458,6 +487,10 @@ class route_registry {
         http::method_set methods_;              // known-slot methods
         http::method single_;                   // extension registration
         route_pattern pattern_;
+        // The admission-time split of pattern_ (offsets into its
+        // text): resolve/match consume this stored form, so no request
+        // re-splits an immutable pattern.
+        std::vector<detail::pattern_segment> segments_;
         route_handler handler_;
         reservation seat_;
         bool prefix_ = false;
@@ -505,9 +538,14 @@ class route_registry {
             !result.ok()) {
             return result;
         }
+        // Computed before the push: a braced-init-list evaluates
+        // left-to-right, so the split must not read the pattern after
+        // the move into the entry.
+        std::vector<detail::pattern_segment> segments =
+            detail::index_path_segments(canonical);
         entries_.push_back(entry{set, single, std::move(parsed),
-                                 std::move(handler), std::move(seat),
-                                 prefix});
+                                 std::move(segments), std::move(handler),
+                                 std::move(seat), prefix});
         return http::outcome::okay();
     }
 
@@ -533,11 +571,16 @@ class route_registry {
 
     // One tier of the resolve decision. Merges every matching entry's
     // methods (the Allow inputs); the first accepting full match wins,
-    // the deepest accepting prefix match wins.
+    // the deepest accepting prefix match wins. The full tier stops at
+    // its first hit unless the merged methods are observable
+    // (@p methods_observable: route_resolved/before_handler hooks
+    // consult route_descriptor.methods -- the dispatcher passes that
+    // predicate); the prefix tier always scans fully, because a deeper
+    // pattern may still outrank the current best.
     resolve_result resolve_tier(
             const http::method& m,
-            const std::vector<std::string_view>& path_segments,
-            bool prefix) const {
+            const std::vector<std::string_view>& path_segments, bool prefix,
+            bool methods_observable) const {
         resolve_result out;
         const entry* best = nullptr;
         std::vector<route_captures> best_captures;
@@ -553,6 +596,10 @@ class route_registry {
             }
             best = &known;
             best_captures = std::move(captures);
+            // The full tier's winner is always its FIRST hit: once the
+            // merged methods cannot be observed, the scan stops (the
+            // pre-task match() semantics; the merge feeds nothing).
+            if (!prefix && !methods_observable) break;
         }
         if (best == nullptr) return miss_or_method_miss(out);
         out.kind = resolve_result::resolve_kind::hit;
@@ -563,16 +610,15 @@ class route_registry {
         return out;
     }
 
-    // Path-shape match of one entry within its tier.
+    // Path-shape match of one entry within its tier, over the stored
+    // admission-time segments.
     static bool match_tier_entry(
             const entry& known,
             const std::vector<std::string_view>& path_segments, bool prefix,
             std::vector<route_captures>& captures) {
-        const std::string& text = known.pattern_.text();
-        return prefix ? detail::match_prefix_segments(text, path_segments,
-                                                      captures)
-                      : detail::match_path_segments(text, path_segments,
-                                                    captures);
+        return detail::match_stored_segments(known.pattern_.text(),
+                                             known.segments_, prefix,
+                                             path_segments, captures);
     }
 
     // Folds one matching entry's methods into the tier's Allow inputs.

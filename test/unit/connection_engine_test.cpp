@@ -41,11 +41,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/concurrency/task.hpp>
@@ -58,6 +60,7 @@
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/routes.hpp>
 #include <parity/response_frame.hpp>
@@ -1246,6 +1249,58 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, request_close_on_idle_is_prompt)
     LT_CHECK(elapsed < std::chrono::milliseconds(5000));
     LT_CHECK(reaches_eof(s.pair.peer()));
 LT_END_AUTO_TEST(request_close_on_idle_is_prompt)
+
+// TASK-118: an after_handler hook mutates a response field to carry
+// a CTL byte, so the framer REFUSES the committed head. The refusal
+// is observable per the hook contract: no response byte reaches the
+// peer, the connection closes, response_sent does not fire as a
+// success observation, and request_completed reports succeeded=false
+// with the typed refusal reason (invalid_argument).
+LT_BEGIN_AUTO_TEST(connection_engine_suite, refused_head_closes_and_fails)
+    scenario s;
+    (void)s.hooks.add<srv::hook_phase::after_handler>(
+        [](srv::after_handler_ctx& ctx) -> srv::hook_action {
+            ctx.fields.append("X-Bad", "bad\x01value");
+            return srv::hook_action::pass();
+        }).detach();
+    std::mutex trail_mu;
+    int sent_visits = 0;
+    int completed_visits = 0;
+    bool completed_succeeded = true;
+    int completed_end = 0;
+    (void)s.hooks.add<srv::hook_phase::response_sent>(
+        [&trail_mu, &sent_visits](srv::response_sent_ctx&) -> srv::hook_action {
+            std::lock_guard<std::mutex> lock(trail_mu);
+            ++sent_visits;
+            return srv::hook_action::pass();
+        }).detach();
+    (void)s.hooks.add<srv::hook_phase::request_completed>(
+        [&trail_mu, &completed_visits, &completed_succeeded,
+         &completed_end](srv::request_completed_ctx& c) -> srv::hook_action {
+            std::lock_guard<std::mutex> lock(trail_mu);
+            ++completed_visits;
+            completed_succeeded = c.succeeded;
+            completed_end = static_cast<int>(c.end.code());
+            return srv::hook_action::pass();
+        }).detach();
+    LT_CHECK(s.start_engine());
+    const std::string request = "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+
+    // Nothing is ever queued: the peer reads to the engine's close and
+    // the wire parser saw zero completed responses (the framer's
+    // rejection rules themselves are untouched).
+    read_to_close(s, s.pair.peer());
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+
+    std::lock_guard<std::mutex> lock(trail_mu);
+    LT_CHECK(s.completed.empty());  // no response byte reached the peer
+    LT_CHECK_EQ(sent_visits, 0);   // response_sent not fired-as-success
+    LT_CHECK_EQ(completed_visits, 1);
+    LT_CHECK(!completed_succeeded);
+    LT_CHECK_EQ(completed_end,
+                static_cast<int>(http::outcome_code::invalid_argument));
+LT_END_AUTO_TEST(refused_head_closes_and_fails)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -28,7 +28,10 @@
 // per-segment {name|regex} constraints are migration-noted away (see
 // specs/architecture/v3/v2-parity-inventory.md).
 
+#include <atomic>
 #include <cstddef>
+#include <cstdlib>
+#include <new>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -405,6 +408,115 @@ LT_BEGIN_AUTO_TEST(server_routes_families_suite, extension_single_registration)
     LT_CHECK(miss.extension_names.size() == std::size_t{1});
     LT_CHECK(miss.extension_names.front() == "PURGE");
 LT_END_AUTO_TEST(extension_single_registration)
+
+// -- allocation posture --------------------------------------------------
+//
+// The frozen assumption this suite pins (plan: the registry never
+// re-canonicalizes immutable patterns per request): a miss over a
+// populated registry allocates nothing beyond the request-path split,
+// and a hit's allocations are bounded. The probe counts every plain
+// global new; the measured window is the resolve() call alone, so the
+// harness cannot pollute the count.
+
+namespace alloc_probe {
+inline std::atomic<int> allocations{0};
+}
+
+void* operator new(std::size_t n) {
+    alloc_probe::allocations.fetch_add(1, std::memory_order_relaxed);
+    void* p = std::malloc(n);
+    if (p == nullptr) throw std::bad_alloc();
+    return p;
+}
+
+void* operator new[](std::size_t n) { return operator new(n); }
+
+void operator delete(void* p) noexcept { std::free(p); }
+
+void operator delete[](void* p) noexcept { std::free(p); }
+
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+
+void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+
+namespace {
+
+int allocations_now() {
+    return alloc_probe::allocations.load(std::memory_order_relaxed);
+}
+
+}  // namespace
+
+// A miss over a populated registry: the only allocation is the
+// request-path split itself (one segment -> exactly one growth step,
+// implementation-independent); no per-entry probe allocates.
+LT_BEGIN_AUTO_TEST(server_routes_families_suite, miss_path_allocation_free)
+    srv::route_registry registry;
+    LT_CHECK(creates(16, registry));
+    for (int i = 0; i < 8; ++i) {
+        LT_CHECK(route_ok(registry, kGet, "/r" + std::to_string(i)));
+    }
+    const int before = allocations_now();
+    const srv::route_registry::resolve_result miss =
+        registry.resolve(kGet, "/missing");
+    const int delta = allocations_now() - before;
+    LT_CHECK(miss.kind == resolve_kind::miss);
+    LT_CHECK_EQ(delta, 1);
+LT_END_AUTO_TEST(miss_path_allocation_free)
+
+// A hit with unobservable merged methods (the default): the full tier
+// stops at its first hit, so a later same-shape extension single is
+// never probed and never merges its token. The two allocations are
+// the request-path split and the resolve_result's pattern-text copy
+// (a 31-byte pattern, past the small-string optimization, so the copy
+// is visible in the count).
+LT_BEGIN_AUTO_TEST(server_routes_families_suite, hit_path_allocations_bounded)
+    srv::route_registry registry;
+    LT_CHECK(creates(16, registry));
+    const std::string long_pattern =
+        "/" + std::string(30, 'x');
+    LT_CHECK(route_ok(registry, kGet, long_pattern));
+    const http::method purge = http::method::extension("PURGE");
+    LT_CHECK(route_ok(registry, purge, long_pattern));
+    const int before = allocations_now();
+    const srv::route_registry::resolve_result hit =
+        registry.resolve(kGet, long_pattern);
+    const int delta = allocations_now() - before;
+    LT_CHECK(hit.kind == resolve_kind::hit);
+    LT_CHECK_EQ(delta, 2);
+LT_END_AUTO_TEST(hit_path_allocations_bounded)
+
+// The observability rule of the full-tier scan: without descriptor
+// observers the tier stops at its first hit (the base match()
+// semantics, and out.methods carries only what was merged up to and
+// including the hit); with observers (route_resolved/before_handler
+// hooks consult route_descriptor.methods) the scan continues so the
+// merged methods stay complete.
+LT_BEGIN_AUTO_TEST(server_routes_families_suite,
+                   resolve_observability_controls_method_merge)
+    srv::route_registry registry;
+    LT_CHECK(creates(16, registry));
+    LT_CHECK(route_ok(registry, kGet, "/a"));
+    LT_CHECK(route_set_ok(registry, set_of(kPost), "/a"));
+
+    const srv::route_registry::resolve_result first_hit =
+        registry.resolve(kGet, "/a");
+    LT_CHECK(first_hit.kind == resolve_kind::hit);
+    LT_CHECK(first_hit.methods.contains(kGet));
+    LT_CHECK(!first_hit.methods.contains(kPost));
+
+    const srv::route_registry::resolve_result merged =
+        registry.resolve(kGet, "/a", true);
+    LT_CHECK(merged.kind == resolve_kind::hit);
+    LT_CHECK(merged.methods.contains(kGet));
+    LT_CHECK(merged.methods.contains(kPost));
+
+    // A method miss keeps the full merge either way (the Allow set).
+    const srv::route_registry::resolve_result miss =
+        registry.resolve(kPut, "/a");
+    LT_CHECK(miss.kind == resolve_kind::method_miss);
+    LT_CHECK(rendered(miss) == "GET, POST");
+LT_END_AUTO_TEST(resolve_observability_controls_method_merge)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

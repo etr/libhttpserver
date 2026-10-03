@@ -83,7 +83,8 @@ class hook_bus_impl {
         return any_[phase].load(std::memory_order_acquire);
     }
 
-    hook_action fire(std::uint8_t phase, void* ctx) {
+    hook_action fire(std::uint8_t phase, void* ctx,
+                     std::exception_ptr* contained) {
         std::vector<std::shared_ptr<erased>> snapshot;
         {
             std::shared_lock<std::shared_mutex> lock(mu_);
@@ -100,8 +101,13 @@ class hook_bus_impl {
                 outcome = (*call)(ctx);
             } catch (...) {
                 // A throwing hook is treated as pass() and the chain
-                // continues (the v2 rule; the logging surface for the
-                // swallowed diagnostic is a deferred milestone item).
+                // continues (the v2 rule). The first contained throw
+                // is handed to the caller for the D4 surfacing at the
+                // dispatcher; the logging surface for the swallowed
+                // diagnostic is a deferred milestone item.
+                if (contained != nullptr && *contained == nullptr) {
+                    *contained = std::current_exception();
+                }
                 continue;
             }
             if (!outcome.is_pass()) return outcome;
@@ -136,8 +142,9 @@ bool hook_bus_any(const std::shared_ptr<hook_bus_impl>& owner,
 }
 
 hook_action hook_bus_fire(const std::shared_ptr<hook_bus_impl>& owner,
-                          std::uint8_t phase, void* ctx) {
-    return owner->fire(phase, ctx);
+                          std::uint8_t phase, void* ctx,
+                          std::exception_ptr* contained) {
+    return owner->fire(phase, ctx, contained);
 }
 
 }  // namespace detail

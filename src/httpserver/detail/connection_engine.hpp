@@ -245,6 +245,12 @@ class connection_engine final
     static task<void> writer_loop(std::shared_ptr<connection_engine> self);
     static task<void> watchdog_loop(std::shared_ptr<connection_engine> self);
 
+    // True when the writer has nothing left to wait for: the outbox is
+    // empty, or its front slot FAILED (a refused or abandoned head can
+    // never queue more bytes, so its end marker will never arrive --
+    // TASK-118: the refusal close must complete).
+    bool outbox_drained() const;
+
     // The watchdog's next move: exit (the connection is closing), defer
     // (an exchange is routed and no inventory deadline applies), or arm
     // a timer at the deadline.
@@ -416,9 +422,15 @@ class connection_engine final
 class http1_exchange_sink final : public exchange_sink {
  public:
     // @p head must outlive this sink (serve_one frames own it first).
+    // @p refused_flag, when not null, receives the acceptance verdict
+    // of on_respond: the engine sets it when the framer refuses the
+    // committed head, so the owning frame's lifecycle interceptor can
+    // observe the refusal (response_sent suppression, request_
+    // completed failure verdict).
     http1_exchange_sink(std::shared_ptr<connection_engine> engine,
                         http1_response_outbox& outbox,
-                        const http::request_head& head);
+                        const http::request_head& head,
+                        bool* refused_flag = nullptr);
 
     // Late binding: the outbox slot opens only after the exchange
     // exists (its disconnect token parks outbox waits); decisions fire
@@ -446,6 +458,7 @@ class http1_exchange_sink final : public exchange_sink {
     http1_response_outbox& outbox_;
     const http::request_head& head_;
     http1_response_sink* slot_ = nullptr;
+    bool* refused_flag_ = nullptr;
     http1_keepalive keepalive_ = http1_keepalive::close;
     bool responded_ = false;
     bool upgraded_ = false;

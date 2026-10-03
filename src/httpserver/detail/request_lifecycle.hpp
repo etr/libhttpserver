@@ -61,9 +61,14 @@ struct error_page_factories {
 // resolved (hit and miss alike) -> the miss/method-miss/hit branch
 // (404/405 pages with Allow, before_handler consultation, the handler
 // with its captures stamped as path args, handler_exception rescue) ->
-// request_completed exactly once with the settle verdict. after_
-// handler and response_sent fire through @p sink at response-head
-// commit (see lifecycle_sink.hpp). A handler exception never crosses
+// request_completed exactly once with the settle verdict. A contained
+// hook exception of a pre-commit phase is surfaced through the
+// handler_exception chain (the D4 rule; hooks.hpp documents it). The
+// custom error-page factories get handler containment: a throwing or
+// empty factory and an invalid-status result each degrade to the v2
+// default page. after_handler and response_sent fire through @p sink
+// at response-head commit (see lifecycle_sink.hpp); a head the engine
+// refused fails request_completed. A handler exception never crosses
 // the boundary.
 task<void> dispatch_request(const server::route_registry& routes,
                             const server::hook_bus& bus,

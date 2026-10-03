@@ -252,6 +252,18 @@ class http1_response_outbox {
         return front.ended_ && front.offset_ == front.bytes_.size();
     }
 
+    // True when the front slot FAILED (a refused head, an abandoned
+    // connection): nothing more will ever be queued to it, so a
+    // waiting writer is terminal -- its already-buffered bytes still
+    // flush in order first (copy_front serves them as usual), but the
+    // drain must not wait for an end marker that can no longer arrive
+    // (TASK-118: the engine-refused head must close the connection).
+    bool front_failed() const {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (slots_.empty()) return false;
+        return slots_.front()->failed_;
+    }
+
     bool empty() const {
         std::lock_guard<std::mutex> lock(mu_);
         return slots_.empty();

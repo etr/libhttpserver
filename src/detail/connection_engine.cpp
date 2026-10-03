@@ -426,6 +426,10 @@ task<void> connection_engine::reader_loop(
 
 // -- writer side ------------------------------------------------------------
 
+bool connection_engine::outbox_drained() const {
+    return outbox_.empty() || outbox_.front_failed();
+}
+
 task<void> connection_engine::writer_loop(
     std::shared_ptr<connection_engine> self) {
     // The engine drives the socket writes itself (copy_front /
@@ -438,7 +442,7 @@ task<void> connection_engine::writer_loop(
             wake_operation op(self->owner_, self->id_);
             {
                 std::lock_guard<std::mutex> lock(self->mu_);
-                const bool drained = self->outbox_.empty();
+                const bool drained = self->outbox_drained();
                 const bool done = self->route_done_ || self->shutdown_;
                 // Exits only once the route loop is finished AND the
                 // outbox is drained, so a close-after-response never

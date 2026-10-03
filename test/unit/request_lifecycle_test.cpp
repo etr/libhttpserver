@@ -27,9 +27,12 @@
 // response-head commit. Driven over the real registry + bus + runner
 // with a manual executor, exactly like the route_sync rig.
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
+#include <new>
 #include <string>
 #include <thread>
 #include <utility>
@@ -396,6 +399,38 @@ LT_BEGIN_AUTO_TEST(request_lifecycle_suite, head_on_get_head_set)
     LT_CHECK_EQ(r.inner.code, std::uint16_t{200});
 LT_END_AUTO_TEST(head_on_get_head_set)
 
+// (7-adjacent) Descriptor observability: with a descriptor-consulting
+// hook registered (before_handler), the resolve tier keeps merging
+// every matching entry's methods past its first hit, so the hook sees
+// the full tier's methods for the path -- the observability rule the
+// dispatcher passes to resolve().
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, descriptor_methods_merge_with_hooks)
+    dispatch_round r;
+    std::string seen_methods;
+    LT_CHECK(r.registry.route(kGet, "/a", text_handler("OK")).ok());
+    http::method_set post;
+    post.set(http::method_id::post);
+    LT_CHECK(r.registry.route(post, "/a", text_handler("OK")).ok());
+    (void)r.bus.add<srv::hook_phase::before_handler>(
+        [&seen_methods](srv::before_handler_ctx& c) -> srv::hook_action {
+            for (std::size_t id = 0;
+                 id < static_cast<std::size_t>(http::method_id::extension);
+                 ++id) {
+                const http::method slot =
+                    http::method::known(static_cast<http::method_id>(id));
+                if (!c.route.methods.contains(slot)) continue;
+                if (!seen_methods.empty()) seen_methods.append(", ");
+                seen_methods.append(slot.name());
+            }
+            return srv::hook_action::pass();
+        }).detach();
+
+    r.dispatch(make_head(kGet, "/a"));
+
+    LT_CHECK_EQ(r.inner.code, std::uint16_t{200});
+    LT_CHECK(seen_methods == "GET, POST");
+LT_END_AUTO_TEST(descriptor_methods_merge_with_hooks)
+
 // (8) request_received short-circuit: the response is committed, the
 // handler never runs, the body is never admitted, after_handler does
 // NOT fire, and request_completed still reports success.
@@ -601,6 +636,370 @@ LT_BEGIN_AUTO_TEST(request_lifecycle_suite, zero_hook_path_identical)
     LT_CHECK(r.inner.responded.entries().size()
              == bare.responded.entries().size());
 LT_END_AUTO_TEST(zero_hook_path_identical)
+
+// (14) Engine-refused head: when the engine sink refuses the
+// committed head (the framer rejects it), response_sent does NOT fire
+// as a success observation and request_completed reports
+// succeeded=false with the typed refusal reason (hooks.hpp: the phase
+// fires "after the engine accepted the committed head").
+class refusing_sink final : public detail::exchange_sink {
+ public:
+    explicit refusing_sink(const bool& refuse) : refuse_(refuse) { }
+
+    void on_admit(const httpserver::body_policy&) override { }
+    void on_respond(const http::status& s, const http::fields&) override {
+        if (refuse_) return;  // the framer's rejection stand-in
+        ++respond_calls;
+        code = s.code();
+    }
+    void on_upgrade(const httpserver::ws_upgrade_options&) override { }
+    void on_abort() override { }
+
+    int respond_calls = 0;
+    std::uint16_t code = 0;
+
+ private:
+    const bool& refuse_;
+};
+
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, refused_head_not_reported_sent)
+    dispatch_round r;
+    LT_CHECK(r.registry.route(kGet, "/hello", text_handler("OK")).ok());
+    record_all_phases(r.bus, r.seen);
+    bool refuse = true;
+    refusing_sink inner(refuse);
+    const http::request_head head = make_head(kGet, "/hello");
+    detail::lifecycle_sink sink(inner, r.bus, head, &refuse);
+    exchange x(head, &sink, 0, nullptr, &r.responses);
+    manual_executor ex;
+    spawn(ex, detail::dispatch_request(r.registry, r.bus, r.pages, sink, x),
+          [](task_result<void>) { });
+    while (ex.run_pending() > 0) {
+    }
+
+    LT_CHECK_EQ(inner.respond_calls, 0);          // nothing queued
+    LT_CHECK(r.seen->saw("after_handler 200"));    // mutation attempted
+    LT_CHECK(!r.seen->saw("response_sent"));       // not fired-as-success
+    LT_CHECK(r.seen->order.back()
+             == "request_completed succeeded=0 end=1");  // invalid_argument
+
+    // The healthy twin: an accepted head fires response_sent and
+    // reports success (the paired assertion stays unchanged).
+    bool accept = false;
+    refusing_sink twin_inner(accept);
+    const http::request_head twin_head = make_head(kGet, "/hello");
+    detail::lifecycle_sink twin_sink(twin_inner, r.bus, twin_head, &accept);
+    exchange twin(twin_head, &twin_sink, 0, nullptr, &r.responses);
+    manual_executor twin_ex;
+    spawn(twin_ex,
+          detail::dispatch_request(r.registry, r.bus, r.pages, twin_sink,
+                                   twin),
+          [](task_result<void>) { });
+    while (twin_ex.run_pending() > 0) {
+    }
+    LT_CHECK_EQ(twin_inner.respond_calls, 1);
+    LT_CHECK(r.seen->saw("response_sent 200"));
+    LT_CHECK(r.seen->order.back().rfind("request_completed succeeded=1", 0)
+             == 0);
+LT_END_AUTO_TEST(refused_head_not_reported_sent)
+
+// -- interceptor allocation posture ---------------------------------------
+//
+// The zero-cost-when-unused contract of the interceptor (plan D4/D5):
+// a commit with no after_handler hooks (and a pre_handler
+// short-circuit commit) must perform no allocation attributable to the
+// interceptor -- no status/fields copies. The probe counts every
+// plain global new; the measured window is one on_respond call over a
+// multi-entry fields object (a copy would allocate repeatedly).
+
+namespace alloc_probe {
+inline std::atomic<int> allocations{0};
+}
+
+void* operator new(std::size_t n) {
+    alloc_probe::allocations.fetch_add(1, std::memory_order_relaxed);
+    void* p = std::malloc(n);
+    if (p == nullptr) throw std::bad_alloc();
+    return p;
+}
+
+void* operator new[](std::size_t n) { return operator new(n); }
+
+void operator delete(void* p) noexcept { std::free(p); }
+
+void operator delete[](void* p) noexcept { std::free(p); }
+
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+
+void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+
+namespace {
+
+// The engine-seam stand-in for the probe: records the code only, so
+// the sink itself cannot pollute the count.
+class code_sink final : public detail::exchange_sink {
+ public:
+    void on_admit(const httpserver::body_policy&) override { }
+    void on_respond(const http::status& s, const http::fields&) override {
+        ++respond_calls;
+        code = s.code();
+    }
+    void on_upgrade(const httpserver::ws_upgrade_options&) override { }
+    void on_abort() override { }
+    int respond_calls = 0;
+    std::uint16_t code = 0;
+};
+
+int allocations_now() {
+    return alloc_probe::allocations.load(std::memory_order_relaxed);
+}
+
+}  // namespace
+
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite,
+                   zero_hook_commit_allocates_nothing)
+    srv::hook_bus bus;  // no hooks: the zero-cost lane
+    code_sink inner;
+    const http::request_head head = make_head(kGet, "/hello");
+    detail::lifecycle_sink sink(inner, bus, head);
+    http::fields loaded;
+    loaded.append("Content-Type", "text/plain");
+    loaded.append("X-One", "one");
+    loaded.append("X-Two", "two");
+    const http::status ok = http::status::from_code(200);
+
+    sink.begin(detail::lifecycle_sink::provenance::handler);
+    int before = allocations_now();
+    sink.on_respond(ok, loaded);
+    int handler_delta = allocations_now() - before;
+    LT_CHECK_EQ(inner.respond_calls, 1);
+    LT_CHECK_EQ(handler_delta, 0);
+
+    code_sink pre_inner;
+    detail::lifecycle_sink pre_sink(pre_inner, bus, head);
+    pre_sink.begin(detail::lifecycle_sink::provenance::pre_handler);
+    before = allocations_now();
+    pre_sink.on_respond(ok, loaded);
+    int pre_delta = allocations_now() - before;
+    LT_CHECK_EQ(pre_inner.respond_calls, 1);
+    LT_CHECK_EQ(pre_delta, 0);
+LT_END_AUTO_TEST(zero_hook_commit_allocates_nothing)
+
+// (4b) The factories are user code in the request path and get the
+// same containment as handlers: a throwing factory degrades to the
+// v2 default page, the response still commits, and request_completed
+// still fires exactly once (nothing escapes the dispatcher).
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, throwing_factory_degrades_to_404)
+    dispatch_round r;
+    r.pages.not_found =
+        std::make_shared<const srv::server_options::response_factory>(
+            [](const http::request_head&) -> srv::hook_response {
+                throw std::runtime_error("factory blew up");
+            });
+    LT_CHECK(r.registry.route(kGet, "/hello", text_handler("OK")).ok());
+    record_all_phases(r.bus, r.seen);
+
+    r.dispatch(make_head(kGet, "/nope"));
+
+    LT_CHECK(r.delivered_once());  // no exception escaped the dispatch
+    LT_CHECK_EQ(r.inner.respond_calls, 1);
+    LT_CHECK_EQ(r.inner.code, std::uint16_t{404});
+    LT_CHECK(field_of(r.inner.responded, "Content-Type") == "text/plain");
+    LT_CHECK(field_of(r.inner.responded, "Content-Length") == "9");
+    LT_CHECK(r.seen->order.back().rfind("request_completed succeeded=1", 0)
+             == 0);
+LT_END_AUTO_TEST(throwing_factory_degrades_to_404)
+
+// (6b) Same containment on the 405 factory; Allow still rides the
+// default page.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, throwing_factory_degrades_to_405)
+    dispatch_round r;
+    r.pages.method_not_allowed =
+        std::make_shared<const srv::server_options::response_factory>(
+            [](const http::request_head&) -> srv::hook_response {
+                throw std::runtime_error("factory blew up");
+            });
+    LT_CHECK(r.registry.route(kGet, "/get_only", text_handler("x")).ok());
+
+    r.dispatch(make_head(kPost, "/get_only"));
+
+    LT_CHECK(r.delivered_once());
+    LT_CHECK_EQ(r.inner.respond_calls, 1);
+    LT_CHECK_EQ(r.inner.code, std::uint16_t{405});
+    LT_CHECK(field_of(r.inner.responded, "Allow") == "GET");
+    LT_CHECK(field_of(r.inner.responded, "Content-Length") == "18");
+LT_END_AUTO_TEST(throwing_factory_degrades_to_405)
+
+// (4c) A factory result with an invalid status is unusable as a
+// response: the default page serves (mirroring the invalid hook
+// response rule).
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, invalid_status_factory_defaults)
+    dispatch_round r;
+    r.pages.not_found =
+        std::make_shared<const srv::server_options::response_factory>(
+            [](const http::request_head&) -> srv::hook_response {
+                srv::hook_response page;  // default status: invalid
+                page.fields.append("Content-Type", "text/plain");
+                return page;
+            });
+    LT_CHECK(r.registry.route(kGet, "/hello", text_handler("OK")).ok());
+
+    r.dispatch(make_head(kGet, "/nope"));
+
+    LT_CHECK(r.delivered_once());
+    LT_CHECK_EQ(r.inner.respond_calls, 1);
+    LT_CHECK_EQ(r.inner.code, std::uint16_t{404});
+    LT_CHECK(field_of(r.inner.responded, "Content-Length") == "9");
+LT_END_AUTO_TEST(invalid_status_factory_defaults)
+
+// (4d) An empty (default-constructed) factory callable is a
+// misconfiguration, not a crash: the default page serves.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, empty_factory_defaults)
+    dispatch_round r;
+    r.pages.not_found =
+        std::make_shared<const srv::server_options::response_factory>(
+            srv::server_options::response_factory{});
+    LT_CHECK(r.registry.route(kGet, "/hello", text_handler("OK")).ok());
+
+    r.dispatch(make_head(kGet, "/nope"));
+
+    LT_CHECK(r.delivered_once());
+    LT_CHECK_EQ(r.inner.respond_calls, 1);
+    LT_CHECK_EQ(r.inner.code, std::uint16_t{404});
+    LT_CHECK(field_of(r.inner.responded, "Content-Length") == "9");
+LT_END_AUTO_TEST(empty_factory_defaults)
+
+// (11e) The D4 firing rule: a throwing before_handler is contained,
+// treated as pass(), the chain continues -- and the contained
+// exception is surfaced through the handler_exception chain at the
+// dispatcher, BEFORE the handler runs; the handler still runs (the
+// surfacing is diagnostic unless the chain supplies a response), and
+// handler_exception fires exactly once.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite,
+                   throwing_before_hook_surfaces_to_handler_exception)
+    dispatch_round r;
+    int handler_runs = 0;
+    LT_CHECK(r.registry.route(
+        kGet, "/ok", [&handler_runs](exchange& x) -> task<void> {
+            ++handler_runs;
+            co_await srv::detail::commit_sync_value(
+                x, srv::sync_response{http::status::from_code(200),
+                                      http::fields(), {}});
+        }).ok());
+    (void)r.bus.add<srv::hook_phase::before_handler>(
+        [](srv::before_handler_ctx&) -> srv::hook_action {
+            throw std::runtime_error("hook blew up");
+        }).detach();
+    record_all_phases(r.bus, r.seen);
+
+    r.dispatch(make_head(kGet, "/ok"));
+
+    LT_CHECK_EQ(handler_runs, 1);
+    LT_CHECK_EQ(r.inner.code, std::uint16_t{200});
+    std::size_t exception_visits = 0;
+    bool first_visit_carried_error = false;
+    std::size_t after_visit = r.seen->order.size();
+    for (std::size_t i = 0; i < r.seen->order.size(); ++i) {
+        if (r.seen->order[i].rfind("handler_exception", 0) == 0) {
+            if (exception_visits == 0) {
+                first_visit_carried_error =
+                    r.seen->order[i] == "handler_exception error=1";
+            }
+            ++exception_visits;
+        } else if (r.seen->order[i].rfind("after_handler", 0) == 0
+                   && after_visit == r.seen->order.size()) {
+            after_visit = i;
+        }
+    }
+    LT_CHECK(first_visit_carried_error);  // the hook's exception recorded
+    LT_CHECK_EQ(exception_visits, std::size_t{1});
+    // The surfacing precedes the handler's commit observation.
+    LT_CHECK(after_visit < r.seen->order.size());
+    LT_CHECK(after_visit > 0
+             && r.seen->order[after_visit - 1].rfind("handler_exception", 0)
+                    == 0);
+    LT_CHECK(r.seen->order.back().rfind("request_completed succeeded=1", 0)
+             == 0);
+LT_END_AUTO_TEST(throwing_before_hook_surfaces_to_handler_exception)
+
+// (11f) The surfaced consultation honors respond_with like the
+// handler-throw path: a handler_exception hook may supply the
+// exchange's answer, and the handler never runs.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, surfaced_hook_error_supplies)
+    dispatch_round r;
+    int handler_runs = 0;
+    LT_CHECK(r.registry.route(
+        kGet, "/ok", [&handler_runs](exchange&) -> task<void> {
+            ++handler_runs;
+            co_return;
+        }).ok());
+    (void)r.bus.add<srv::hook_phase::before_handler>(
+        [](srv::before_handler_ctx&) -> srv::hook_action {
+            throw std::runtime_error("hook blew up");
+        }).detach();
+    (void)r.bus.add<srv::hook_phase::handler_exception>(
+        [](srv::handler_exception_ctx&) -> srv::hook_action {
+            return srv::hook_action::respond_with(hook_page(503, "caught"));
+        }).detach();
+    record_all_phases(r.bus, r.seen);
+
+    r.dispatch(make_head(kGet, "/ok"));
+
+    LT_CHECK_EQ(handler_runs, 0);
+    LT_CHECK_EQ(r.inner.code, std::uint16_t{503});
+    LT_CHECK(field_of(r.inner.responded, "Content-Length") == "6");
+    LT_CHECK(r.seen->order.back().rfind("request_completed succeeded=1", 0)
+             == 0);
+LT_END_AUTO_TEST(surfaced_hook_error_supplies)
+
+// (11g) At most once per request: a before_handler throw surfaces and
+// consults the chain; a LATER handler throw must not consult again --
+// the bare 500 lands and handler_exception fired exactly once.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, surfaced_error_fires_chain_once)
+    dispatch_round r;
+    LT_CHECK(r.registry.route(
+        kGet, "/boom", [](exchange&) -> task<void> {
+            throw std::runtime_error("handler blew up too");
+        }).ok());
+    (void)r.bus.add<srv::hook_phase::before_handler>(
+        [](srv::before_handler_ctx&) -> srv::hook_action {
+            throw std::runtime_error("hook blew up");
+        }).detach();
+    record_all_phases(r.bus, r.seen);
+
+    r.dispatch(make_head(kGet, "/boom"));
+
+    std::size_t exception_visits = 0;
+    for (const std::string& visit : r.seen->order) {
+        if (visit.rfind("handler_exception", 0) == 0) ++exception_visits;
+    }
+    LT_CHECK_EQ(exception_visits, std::size_t{1});
+    LT_CHECK_EQ(r.inner.respond_calls, 1);
+    LT_CHECK_EQ(r.inner.code, std::uint16_t{500});
+    LT_CHECK(r.seen->order.back().rfind("request_completed succeeded=1", 0)
+             == 0);
+LT_END_AUTO_TEST(surfaced_error_fires_chain_once)
+
+// (15) An upgraded exchange settles successfully: the upgrade decision
+// is a terminal settle that reached the engine (the v2 success
+// mapping: "a complete response (or upgrade)"), so request_completed
+// reports succeeded=true -- an upgrade is not a refused head.
+LT_BEGIN_AUTO_TEST(request_lifecycle_suite, upgraded_exchange_settles_ok)
+    dispatch_round r;
+    LT_CHECK(r.registry.route(
+        kGet, "/ws", [](exchange& x) -> task<void> {
+            (void)x.upgrade(httpserver::ws_upgrade_options{});
+            co_return;
+        }).ok());
+    record_all_phases(r.bus, r.seen);
+
+    r.dispatch(make_head(kGet, "/ws"));
+
+    LT_CHECK_EQ(r.inner.upgrade_calls, 1);
+    LT_CHECK_EQ(r.inner.respond_calls, 0);  // no head on the upgrade path
+    LT_CHECK(r.seen->order.back().rfind("request_completed succeeded=1", 0)
+             == 0);
+LT_END_AUTO_TEST(upgraded_exchange_settles_ok)
 
 // (12-adjacent) A pre-disconnected exchange: only request_completed
 // fires, with succeeded=false and the typed end reason.

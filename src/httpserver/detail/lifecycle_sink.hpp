@@ -28,9 +28,13 @@
 // routes this coincides with v2's post-handler point; for streaming
 // commits it fires at head-commit time, mid-handler -- the documented
 // timing delta), then fires response_sent AFTER the engine accepted
-// the head. after_handler does not fire on the pre-handler
-// short-circuits (the pinned v2 suppression). NOT part of the
-// installed surface.
+// the head -- a head the engine REFUSED (the framer rejected a field,
+// say) never fires response_sent and is recorded as refused so the
+// request_completed tail reports the failure verdict. The status/
+// fields copies after_handler mutates exist only when the phase can
+// run (zero-cost-when-unused). after_handler does not fire on the
+// pre-handler short-circuits (the pinned v2 suppression). NOT part of
+// the installed surface.
 
 #if !defined(HTTPSERVER_COMPILATION)
 #error "httpserver/detail/lifecycle_sink.hpp is internal; only include it when compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
@@ -61,16 +65,27 @@ class lifecycle_sink final : public exchange_sink {
     };
 
     // @p head must outlive this sink (the engine frame owns it first).
+    // @p engine_refusal, when not null, observes the owning engine
+    // sink's acceptance verdict: the engine sets it when it refuses
+    // the committed head (e.g. the framer rejects a field), and this
+    // sink then records the refusal (see forward). Null (test rigs
+    // whose stand-in sink never refuses) counts as always-accepted.
     lifecycle_sink(exchange_sink& inner, const server::hook_bus& bus,
-                   const http::request_head& head) noexcept
-        : inner_(inner), bus_(bus), head_(head) { }
+                   const http::request_head& head,
+                   const bool* engine_refusal = nullptr) noexcept
+        : inner_(inner), bus_(bus), head_(head),
+          engine_refusal_(engine_refusal) { }
 
     // Tags the next commit's provenance; the dispatcher sets it before
     // every commit path.
     void begin(provenance next) noexcept { next_ = next; }
 
-    // True once a head was accepted by the engine sink.
+    // True once a head was accepted by the engine sink (a refused
+    // head never marks it).
     bool responded() const noexcept { return responded_; }
+
+    // True once the engine sink refused a committed head.
+    bool refused() const noexcept { return refused_; }
 
     std::uint16_t committed_status() const noexcept { return status_; }
 
@@ -82,15 +97,19 @@ class lifecycle_sink final : public exchange_sink {
     }
 
     void on_respond(const http::status& s, const http::fields& f) override {
-        http::status final_status = s;
-        http::fields final_fields = f;
-        if (next_ != provenance::pre_handler) {
+        // Zero-cost-when-unused: the mutable copies exist exactly when
+        // after_handler can run (the provenance allows it AND hooks
+        // are registered); every other commit forwards the originals
+        // untouched -- no status/fields copy on the hot path.
+        if (next_ != provenance::pre_handler
+                && bus_.any_hooks(server::hook_phase::after_handler)) {
+            http::status final_status = s;
+            http::fields final_fields = f;
             fire_after(final_status, final_fields);
+            forward(final_status, final_fields);
+        } else {
+            forward(s, f);
         }
-        inner_.on_respond(final_status, final_fields);
-        responded_ = true;
-        status_ = final_status.code();
-        fire_sent();
     }
 
     void on_upgrade(const ws_upgrade_options& options) override {
@@ -106,10 +125,29 @@ class lifecycle_sink final : public exchange_sink {
     }
 
  private:
+    // The commit tail shared by both branches: forwards the head and,
+    // only when the engine accepted it (a refused head -- the framer
+    // rejected a field, say -- set the engine's refusal flag), records
+    // the response and fires response_sent ("after the engine
+    // accepted the committed head"). A refusal suppresses
+    // response_sent and is recorded so the request_completed tail can
+    // report the failure verdict.
+    void forward(const http::status& s, const http::fields& f) {
+        inner_.on_respond(s, f);
+        if (engine_refusal_ != nullptr && *engine_refusal_) {
+            refused_ = true;
+            return;
+        }
+        responded_ = true;
+        status_ = s.code();
+        fire_sent();
+    }
+
     // The mutating phase over copies of the about-to-be-committed
-    // head; the mutated values are what get forwarded.
+    // head; the mutated values are what get forwarded. Called only
+    // from on_respond's gated branch (the copies exist exactly when
+    // the hooks do).
     void fire_after(http::status& s, http::fields& f) const {
-        if (!bus_.any_hooks(server::hook_phase::after_handler)) return;
         server::after_handler_ctx ctx{head_, s, std::move(f)};
         // The action is ignored by contract: after_handler mutates,
         // full replacement is not offered (the v2 delta).
@@ -127,8 +165,10 @@ class lifecycle_sink final : public exchange_sink {
     exchange_sink& inner_;
     const server::hook_bus& bus_;
     const http::request_head& head_;
+    const bool* engine_refusal_ = nullptr;
     provenance next_ = provenance::handler;
     bool responded_ = false;
+    bool refused_ = false;
     bool aborted_ = false;
     std::uint16_t status_ = 0;
 };

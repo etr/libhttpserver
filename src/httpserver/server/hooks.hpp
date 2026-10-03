@@ -46,7 +46,11 @@
 //                      offered (documented v2 delta: v2 could swap the
 //                      whole response object).
 //   response_sent      after the engine accepted the committed head;
-//                      observation only.
+//                      observation only. A head the engine refused
+//                      (invalid field bytes, refused framing) never
+//                      fires response_sent; request_completed then
+//                      reports succeeded=false with the typed refusal
+//                      reason and the connection closes.
 //   request_completed  exactly once when the exchange settles, on
 //                      success, short-circuit, synthesis, exception,
 //                      and disconnect alike (succeeded=false plus the
@@ -65,11 +69,24 @@
 // mid-fire without disturbing the running pass); the first
 // respond_with short-circuits the remaining hooks of the phase; a
 // zero-cost-when-unused gate per phase; add/remove are runtime-safe
-// before and after listen(). A hook that throws is contained inside
-// fire(), treated as pass(), and the chain continues (the v2 rule;
-// the logging surface for the swallowed diagnostic is a deferred
-// milestone item). handler_exception fires for HANDLER throws, at
-// the dispatcher.
+// before and after listen().
+//
+// Throwing-hook rule (D4): a hook that throws is contained inside
+// fire(), treated as pass(), and the phase's chain continues. When
+// the dispatcher owns a pre-commit phase (request_received,
+// route_resolved, before_handler) and the phase itself did not answer
+// the request, the contained exception is surfaced through the
+// handler_exception chain at the dispatcher once the phase completes:
+// a hook may supply the exchange's response there (the chain then
+// answers and the handler never runs), otherwise the pipeline
+// continues as though the hook had passed. handler_exception fires at
+// most once per request: a handler throw after a surfacing
+// synthesizes the bare 500 without re-consulting the chain. Contained
+// throws of the commit-path phases (after_handler, response_sent) and
+// of request_completed itself are not surfaced -- the committed head
+// cannot legally be replaced; the logging surface for a swallowed
+// diagnostic is a deferred milestone item. handler_exception fires
+// for HANDLER throws, at the dispatcher.
 
 #ifndef SRC_HTTPSERVER_SERVER_HOOKS_HPP_
 #define SRC_HTTPSERVER_SERVER_HOOKS_HPP_
@@ -228,7 +245,8 @@ void hook_bus_remove(const std::shared_ptr<hook_bus_impl>& owner,
 bool hook_bus_any(const std::shared_ptr<hook_bus_impl>& owner,
                   std::uint8_t phase) noexcept;
 hook_action hook_bus_fire(const std::shared_ptr<hook_bus_impl>& owner,
-                          std::uint8_t phase, void* ctx);
+                          std::uint8_t phase, void* ctx,
+                          std::exception_ptr* contained);
 
 // The phase -> context mapping (compile-time, so add() and fire()
 // cannot disagree about a phase's context type).
@@ -357,8 +375,19 @@ class hook_bus {
     // contained and treated as pass() (the v2 rule).
     template <hook_phase P>
     hook_action fire(typename detail::phase_ctx_t<P>& ctx) const {
+        std::exception_ptr ignored;
+        return fire<P>(ctx, ignored);
+    }
+
+    // The D4-recording form of the seam: @p contained receives the
+    // FIRST exception a hook of the phase threw (cleared first), so
+    // the dispatcher can surface it through the handler_exception
+    // chain; a clean fire leaves it null.
+    template <hook_phase P>
+    hook_action fire(typename detail::phase_ctx_t<P>& ctx,
+                     std::exception_ptr& contained) const {
         return detail::hook_bus_fire(impl_, static_cast<std::uint8_t>(P),
-                                     &ctx);
+                                     &ctx, &contained);
     }
 
  private:
