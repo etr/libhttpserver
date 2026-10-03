@@ -35,6 +35,8 @@
 #include <string>
 #include <utility>
 
+#include <httpserver/websocket/session.hpp>
+#include <httpserver/detail/websocket_driver.hpp>
 #include "./digest_client.hpp"
 #include <httpserver/auth/basic_auth.hpp>
 #include <httpserver/auth/digest_auth.hpp>
@@ -58,6 +60,12 @@ using httpserver::exchange;
 using httpserver::task;
 
 int audit_link_surface() {
+    httpserver::detail::websocket_driver driver;
+    auto ws = driver.take_session();
+    if (!ws.try_send(httpserver::websocket::message_kind::text, {}).status.ok()) return 1;
+    std::byte output[2];
+    if (driver.copy_output(output) != 2 || !driver.consume_output(2).ok()) return 1;
+    driver.eof();
     srv::server_options options;
     srv::listener_options listener;
     listener.address = "127.0.0.1";
