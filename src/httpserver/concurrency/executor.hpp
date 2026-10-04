@@ -23,6 +23,7 @@
 #define SRC_HTTPSERVER_CONCURRENCY_EXECUTOR_HPP_
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <deque>
 #include <memory>

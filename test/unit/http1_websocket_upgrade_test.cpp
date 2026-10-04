@@ -20,7 +20,6 @@
 */
 
 #include <sys/socket.h>
-#include <httpserver/concurrency/resume_signal.hpp>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -29,6 +28,7 @@
 #include <chrono>
 #include <thread>
 #include <utility>
+#include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/websocket_session_state.hpp>

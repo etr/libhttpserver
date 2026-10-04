@@ -32,3 +32,12 @@ HTTP exchange suspension flag race observed by current TSan after the private
 protocol-transfer timer guard. Prior 218/218 runtime and static/Doxygen passes
 predate that guard. Action items remain unchecked pending final validation;
 see [implementation evidence](../../architecture/v3/TASK-123-design-evidence.md).
+
+**Local resume (2026-10-04):** The suspension observation race and a second
+disconnect-state publication race have deterministic RED/GREEN regressions and
+final fresh ASan/UBSan/TSan proof across 13 native suites plus actual drain clients.
+Public default move semantics are preserved. The standalone executor include
+defect has a direct standard include and registered consumer. Implementation is
+ready for independent full validation; status and action items remain unchanged
+until the caller completes that phase. Historical 218/218 results are not final
+acceptance for this repair.

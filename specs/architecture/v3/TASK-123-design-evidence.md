@@ -6,7 +6,7 @@ Accepted plan SHA-256: `6c93e0e9923e7486c9ed1bf6ce651535c2b79bd598a1a3de3a9f51b4
 Task-owned receipts are in `_task123-receipts/`; fresh instrumented outputs
 are in `_task123-asan/` and `_task123-tsan/`. These generated artifacts
 are excluded from the implementation commit. Caller validation, task completion,
-local integration into `v3`, and cloud handoff are separate responsibilities.
+and local integration into `v3` are separate responsibilities.
 
 ## Frozen lifecycle policy
 
@@ -214,9 +214,102 @@ The nine-consumer TSan PASS manifest from before the guard is likewise not a
 final-source pass; `inputs-final-timerfix.json` and the failed final logs record
 the current native archive and preserved 24-object reuse proof.
 
-No broader atomic flag/header repair, further builds, runtime gates or lint
-runs are performed after this blocker. The executor was instructed to commit
+At that checkpoint boundary, no broader atomic flag/header repair, further
+builds, runtime gates or lint runs were performed. The executor was instructed to commit
 this reversible checkpoint for cloud continuation, without merging or marking
 the task Complete. Source and generated evidence are retained; no binaries,
 keys or capabilities are committed. The caller owns the next repair scope,
 final-source checks, validation and any eventual integration into `v3`.
+
+## Local resume: HTTP suspension and disconnect publication repair
+
+The user resumed local implementation from checkpoint `b6d5fdef`; cloud startup
+was abandoned. The invocation journal is
+`.debug/suspension-repair-20261004T031218Z/journal.md`. The earlier failures and
+pre-guard passes above remain historical evidence, with their original receipts.
+
+The initial source matched the checkpoint sanitizer input manifest before an
+actual fresh reproduction: `resume-tsan-existing-red.log` reports SIGABRT on
+`exchange::respond` writing `suspended_` while the HTTP watchdog reads it.
+The engine mutex protects current exchange ownership and deadline anchors,
+but handler decisions do not hold it. `resume-decision-red.log` independently
+reproduces the flag race through public decisions and concurrent observation.
+
+Three designs were compared: `atomic_ref` over the existing boolean requires
+alignment and access auditing; an engine snapshot requires new notifications
+across suspend/decision seams; a private atomic value wrapper centralizes the
+existing flag accesses while preserving default public moves. The wrapper is
+chosen. Its loads/stores use the default sequentially consistent ordering and
+copy the observed value, with independent storage in each moved exchange.
+The public move declarations remain defaulted. Genuine move construction,
+assignment, moved-from flag values and independent subsequent changes are tested.
+This change synchronizes suspension observation without promising general
+concurrent exchange decisions. The private protocol-transfer timer guard stays.
+
+Expanded actual HTTP TSan coverage then found a second inherited defect:
+`before-publication-resume-connection_engine.log` aborts in case 14,
+`suspension_head_disconnect_cancels`. `resume-engine-red-symbols.log` resolves
+the read to `run_handler` in `request_lifecycle.cpp` and the write to the final
+cancelled-state assignment in `exchange::disconnect`. The method is byte-identical
+to frozen base `e1fb7cb` before repair (`resume-publication-base-equivalence.json`).
+Body/writer reason setters only assign values; stop and resume cancellation are
+the first wake edges. A posted handler can execute before `request_stop` returns.
+The cancelled state was written after those wakes, leaving it unordered against
+the resumed handler. The minimal repair publishes state and typed reasons before
+fan-out. Terminal response/upgrade states remain intact. A state atomic would
+leave the incorrect post-wake observation possible; broader engine deferral adds
+unneeded seams. The documented inline executor deterministically exercises both
+wake channels: `resume-publication-red.log` is **26 tests / 146 checks, two
+cancelled-state failures**; `resume-publication-green.log` is **26/146 PASS**.
+
+Final fresh ASan/UBSan and supported macOS arm64 TSan each rebuild all **25 native
+translation units**, all **13 selected unit consumers** and the actual fixture
+in existing owned directories. No old archive/object/binary is accepted after
+the final header repair. Builds use one compiler at a time at nice 15; runtimes
+run serially at standard priority. Every compile checks at least 2 GiB free disk.
+Manual native flags are C++20, pthread, project includes, debug/frame-pointer and
+the selected sanitizer; no external backend/include/library flags are present.
+
+`resume-asan-final-replay.log` and `resume-tsan-final-replay.log` pass all 13
+consumers: exchange decisions **26/146**, routing **15/117**, full original HTTP
+engine **36/207**, native server **14/58**, upgrade **17/117**, drain **3/29**,
+drain race **3/22**, scope **11/54**, progress **4/43**, session race **9/2068**
+(ASan) and **9/2038** (TSan), inherited resume lifetime **1/8**, resume signal
+**11/134**, and task race **4/2002**. Across the 154 test cases, ASan executes
+5005 checks and TSan 4975; all succeed with zero skipped checks. The actual formerly failing engine
+case 14 and genuine HTTP suspension/trickle/header/body timeout cases pass.
+
+`resume-asan-final-client.log` and `resume-tsan-final-client.log` pass local
+timeout isolation with two WebSockets and HTTP, retained handler drain,
+raw clean/late/drop-ticket drain and independent server Close. Each fixture
+exits zero with empty stderr. `resume-asan-final-independent-client.log` also
+passes the full real-wire/backpressure/ordered 64 MiB corpus using actual
+**websockets 15.0.1**. UBSan and TSan halt on errors; symbolization is disabled.
+`resume-inputs.json` / `resume-PASS.json` in each sanitizer directory and
+`resume-final-source-artifact-verification.json` bind exact source, compiler,
+flags, archive, executable and client recipe hashes. Earlier manifests/logs
+remain under `before-publication-` prefixes rather than being relabeled.
+
+The executor directly uses `std::condition_variable`; its owning standard
+include was missing. Added `<condition_variable>` and a first-include standalone
+consumer registered in the standard test suite. Both available macOS libc++
+compilers accepted the pre-fix header through transitive includes, so those
+probes are **not RED**. The existing Linux tooling container has no C++ compiler;
+no exact cloud compiler command was retained and no Linux compiler result is
+invented. The final standalone consumer compiles and runs without forced
+`-include` or external dependency flags (`resume-final-executor-header*.log`).
+
+All **26 changed C++ paths** pass current cpplint; file-size and diff whitespace
+checks pass. A checkpoint test's misplaced resume-signal include caused eight
+lint errors and was moved after standard headers before final sanitizer builds.
+Current tools rerun the exact hash-verified frozen base and current source:
+the same four complexity offenders and two complete duplication blocks remain,
+with no new offender (`resume-final-static-base-comparison.json`). These whole
+source gates still return failure for the inherited findings, not a blanket PASS.
+
+The normal selected suite passed **19/19** before final publication/format edits;
+the final normal public-decision regression passes **26/146**. Final full normal
+suite, check-local/Doxygen, independent validation and Complete bookkeeping are
+the caller's next gates. **TASK-123 remains In Progress.** No historical 218/218
+result is used as final-source acceptance. The repair is ready for review and
+independent validation; no merge or push is performed by the implementation agent.
