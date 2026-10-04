@@ -54,7 +54,7 @@ websocket_upgrade_result http1_exchange_sink::on_upgrade(const ws_upgrade_option
     std::shared_ptr<op_state> pending_read;
     {
         std::lock_guard lock(engine_->mu_);
-        if (engine_->shutdown_ || engine_->eof_ || engine_->phase_ != connection_engine::stream_phase::http) {
+        if (engine_->shutdown_ || engine_->quiescing_ || engine_->eof_ || engine_->phase_ != connection_engine::stream_phase::http) {
             out.status = {http::outcome_code::connection_closed, "upgrade connection unavailable"};
             return out;
         }
@@ -194,11 +194,17 @@ bool connection_engine::arm_watchdog(timer_operation& timer, const watchdog_plan
     timer.submit(backend_);
     return true;
 }
-void connection_engine::add_upgrade_deadline_locked(
+void connection_engine::add_protocol_deadlines_locked(
         std::span<std::chrono::steady_clock::time_point> candidates, std::size_t& count) const {
     if (phase_ == stream_phase::upgrade_pending_flush && upgrade_anchor_) {
         candidates[count++] = *upgrade_anchor_ + config_.timeouts.handshake;
     }
+    if (websocket_) {
+        const auto progress = websocket_->snapshot();
+        if (!progress.terminal && progress.closing_since)
+            candidates[count++] = *progress.closing_since + config_.timeouts.ws_close;
+    }
+    if (server_drain_deadline_) candidates[count++] = *server_drain_deadline_;
 }
 void connection_engine::observe_websocket_driver(const std::shared_ptr<websocket_driver>& driver) {
     const std::weak_ptr<connection_engine> weak = shared_from_this();

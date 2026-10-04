@@ -167,14 +167,15 @@ class native_server {
     void stop();
 
     // Drain initiation (PRD-V3N-REQ-032): stop accepting new work,
-    // apply the HTTP/1 close behavior to active and pipelined work,
+    // finish HTTP/1 responses and start WebSocket Close (1001, server drain),
     // and fill @p out with a ticket whose wait() is bounded by
     // @p budget. Nonblocking and handler-safe like request_stop(); it
     // never waits. budget <= 0 is invalid_argument; before listen(),
     // after a stop, or on a second drain it is invalid_state. One
     // drain per server object. is_running() keeps its meaning (a
     // drain is a run-down, not a stop); request_stop()/stop() during
-    // the drain drive the ticket to completed.
+    // the drain drive the ticket to completed when before expiry.
+    // An expiry remains deadline_expired even after cancellation unwinds.
     http::outcome begin_drain(std::chrono::milliseconds budget,
                               drain_ticket& out);
 

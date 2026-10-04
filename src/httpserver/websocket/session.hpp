@@ -60,6 +60,8 @@ class session {
     // try_send: this neither acknowledges delivery nor promises arbitrary
     // message admission. Closing wakes the wait with connection_closed.
     task<http::outcome> writable();
+    // Retain the handle through on_close; Close waits for a peer reply
+    // within the server ws_close budget, also bounded by any server drain.
     http::outcome close(std::uint16_t code = 1000, std::string_view reason = {});
 
     // Register once, before terminal closure. Constructor callbacks occupy

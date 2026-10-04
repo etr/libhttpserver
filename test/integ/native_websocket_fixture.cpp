@@ -37,6 +37,7 @@ namespace {
 std::mutex log_mu;
 std::atomic<int> accepted{0}, closed{0};
 h::resume_signal send_gate;
+h::server::native_server* fixture_server = nullptr;
 void event(const std::string& text) { std::lock_guard lock(log_mu); std::cout << text << std::endl; }
 h::task<void> route(h::exchange& x) {
     h::ws_upgrade_options options;
@@ -60,6 +61,14 @@ h::task<void> route(h::exchange& x) {
     auto session = std::move(*result.session);
     h::resume_signal close_gate;
     session.on_close([close_gate](auto info) mutable { ++closed; close_gate.signal(); event("CLOSE " + std::to_string(info.clean) + " " + std::to_string(static_cast<int>(info.status.code()))); });
+    if (x.head().route_path == "/drain-handler") {
+        h::server::drain_ticket ticket;
+        auto begun = fixture_server->begin_drain(std::chrono::milliseconds(500), ticket);
+        h::server::drain_result report;
+        if (!begun.ok() || ticket.wait(report).code() != h::http::outcome_code::would_deadlock) throw std::runtime_error("handler drain contract");
+        event("DRAIN HANDLER would_deadlock");
+    }
+    if (x.head().route_path == "/app-close") session.close(1000, "local");
     if (x.head().route_path == "/return") co_return;
     if (x.head().route_path == "/throw") throw std::runtime_error("upgraded handler failure");
     if (x.head().route_path == "/idle") {
@@ -112,15 +121,50 @@ int main() {
     h::server::listener_options listener; listener.address = "127.0.0.1";
     options.add_listener(listener); options.concurrency().workers = 2;
     options.timeouts().header = std::chrono::milliseconds(100);
+    options.timeouts().ws_close = std::chrono::seconds(2);
     if (!options.validate().ok()) return 2;
     h::server::native_server server(std::move(options));
     h::http::method_set get; get.set(h::http::method_id::get);
+    fixture_server = &server;
+    server.route(h::http::method::known(h::http::method_id::get), "/health", [](h::exchange& x) -> h::task<void> {
+        h::http::fields fields; fields.append("Content-Length", "4"); fields.append("Connection", "close");
+        x.start_response(h::http::status::from_code(200), fields);
+        const std::string body = "okay";
+        co_await x.writer().write({reinterpret_cast<const std::byte*>(body.data()), body.size()});
+        co_await x.writer().finish();
+    });
+    server.route(h::http::method::known(h::http::method_id::get), "/slow", [](h::exchange& x) -> h::task<void> {
+        h::http::fields fields; fields.append("Content-Length", "7"); fields.append("Connection", "close");
+        x.start_response(h::http::status::from_code(200), fields);
+        const std::string first = "old", last = "body";
+        co_await x.writer().write({reinterpret_cast<const std::byte*>(first.data()), first.size()});
+        h::resume_signal delay;
+        co_await delay.wait_for(std::chrono::milliseconds(100));
+        co_await x.writer().write({reinterpret_cast<const std::byte*>(last.data()), last.size()});
+        co_await x.writer().finish();
+    });
     server.route_prefix(get, "/", route);
     if (!server.listen().ok()) return 2;
     event("READY " + std::to_string(server.get_bound_port(0)));
+    h::server::drain_ticket ticket;
     std::string command;
     while (std::getline(std::cin, command)) {
         if (command == "STOP") break;
+        if (command == "DRAIN" || command == "DRAIN-DROP" || command == "DRAIN-LATE") {
+            auto begun = server.begin_drain(std::chrono::milliseconds(250), ticket);
+            if (!begun.ok()) return 3;
+            event("DRAIN START");
+            if (command == "DRAIN-DROP") {
+                ticket = h::server::drain_ticket{};
+                continue;
+            }
+            if (command == "DRAIN-LATE") std::this_thread::sleep_for(std::chrono::milliseconds(400));
+            h::server::drain_result result;
+            if (!ticket.wait(result).ok()) return 3;
+            event(std::string("DRAIN RESULT ") +
+                  (result.status == h::server::drain_status::completed ? "completed" : "expired") +
+                  " " + std::to_string(result.remaining));
+        }
         if (command == "SEND") send_gate.signal();
         if (command == "STATS") event("STATS " + std::to_string(accepted.load()) + " " + std::to_string(closed.load()));
     }

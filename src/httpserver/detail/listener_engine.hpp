@@ -98,12 +98,12 @@ class listener_engine final
     // exchange finishes and flushes before its close. Non-blocking,
     // handler-safe; a later request_stop() still hard-stops whatever
     // is live (the harder call wins at each engine).
-    void quiesce() noexcept;
+    void quiesce(std::chrono::steady_clock::time_point server_deadline) noexcept;
 
     // Stop initiation: release the listener transport, shut every live
     // connection engine down. Non-blocking, idempotent, handler-safe;
     // it hard-stops even after a quiesce().
-    void request_stop() noexcept;
+    void request_stop(http::outcome_code reason = http::outcome_code::connection_closed) noexcept;
 
  private:
     static task<void> accept_loop(std::shared_ptr<listener_engine> self);

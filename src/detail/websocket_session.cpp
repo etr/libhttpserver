@@ -28,9 +28,6 @@
 namespace httpserver::websocket {
 namespace {
 http::outcome closed() { return {http::outcome_code::connection_closed, "session closed"}; }
-std::span<const std::byte> reason_bytes(std::string_view reason) {
-    return {reinterpret_cast<const std::byte*>(reason.data()), reason.size()};
-}
 http::outcome validate_message(message_kind kind, std::span<const std::byte> payload, std::size_t cap) {
     if (kind != message_kind::text && kind != message_kind::binary)
         return {http::outcome_code::invalid_argument, "invalid message kind"};
@@ -76,19 +73,7 @@ send_result session::try_send(message_kind kind, std::span<const std::byte> payl
 task<receive_result> session::receive() { return detail::receive_session(state_); }
 task<http::outcome> session::writable() { return detail::writable_session(state_); }
 http::outcome session::close(std::uint16_t code, std::string_view reason) {
-    if (!httpserver::detail::websocket_close_code(code) || reason.size() > 123 || !httpserver::detail::websocket_utf8::valid(reason_bytes(reason)))
-        return {http::outcome_code::invalid_argument, "invalid local Close payload"};
-    if (!state_) return closed();
-    detail::session_notifications notify;
-    {
-        std::lock_guard lock(state_->mu);
-        if (state_->closing) return {http::outcome_code::invalid_state, "Close already started"};
-        std::vector<std::byte> payload{std::byte(code >> 8), std::byte(code)};
-        auto bytes = reason_bytes(reason); payload.insert(payload.end(), bytes.begin(), bytes.end());
-        state_->local_info.code = code; state_->local_info.reason = reason;
-        state_->begin_close(payload); notify = state_->notifications();
-    }
-    notify.deliver(); return http::outcome::okay();
+    return detail::close_session(state_, code, reason);
 }
 http::outcome session::on_close(close_callback callback) {
     if (!callback) return {http::outcome_code::invalid_argument, "empty close callback"};

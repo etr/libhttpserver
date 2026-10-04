@@ -24,4 +24,11 @@ Provide WebSocket close with cancellation and server drain for libhttpserver v3.
 **Related Requirements:** PRD-V3N-REQ-013, PRD-V3N-REQ-031, PRD-V3N-REQ-032, PRD-V3N-REQ-033
 **Related Decisions:** DR-V3-008
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Checkpoint (2026-10-03):** Drain/Close/cancellation implementation and tests
+are preserved on `task/TASK-123`. Final validation is blocked by an inherited
+HTTP exchange suspension flag race observed by current TSan after the private
+protocol-transfer timer guard. Prior 218/218 runtime and static/Doxygen passes
+predate that guard. Action items remain unchecked pending final validation;
+see [implementation evidence](../../architecture/v3/TASK-123-design-evidence.md).

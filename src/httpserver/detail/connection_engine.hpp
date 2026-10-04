@@ -192,7 +192,7 @@ class connection_engine final
     // Server-stop path (request_stop): disconnects the live exchange,
     // abandons the outbox, releases the connection. Idempotent,
     // non-blocking, handler-safe (DR-V3-008).
-    void shutdown() noexcept;
+    void shutdown(http::outcome_code reason = http::outcome_code::connection_closed) noexcept;
 
     // Drain path (begin_drain, TASK-110): finish the in-flight
     // exchange -- the response commits and the writer flushes the
@@ -200,7 +200,8 @@ class connection_engine final
     // heads are dropped; an idle connection closes at once. Idempotent,
     // non-blocking, handler-safe; a shutdown() before or after wins
     // (the harder state closes regardless).
-    void quiesce() noexcept;
+    void quiesce(std::chrono::steady_clock::time_point server_deadline =
+        std::chrono::steady_clock::time_point::max()) noexcept;
 
     // Marks the connection close-once-drained (the error, abort, and
     // upgrade paths): the writer still flushes the outbox before the
@@ -299,7 +300,7 @@ class connection_engine final
     void note_transport_activity(bool written = false);
     // A fired deadline: disconnect the live exchange, mark the close,
     // release the transport, wake the loops.
-    void enforce_timeout() noexcept;
+    void enforce_timeout(std::chrono::steady_clock::time_point deadline) noexcept;
     static task<void> route_loop(std::shared_ptr<connection_engine> self);
     static task<bool> serve_one(std::shared_ptr<connection_engine> self);
     // Parks the route side while a rejection drain runs down its
@@ -397,7 +398,7 @@ class connection_engine final
     bool transport_output_pending_locked() const;
     bool watchdog_terminal_locked() const;
     bool arm_watchdog(timer_operation& timer, const watchdog_plan& plan);
-    void add_upgrade_deadline_locked(std::span<std::chrono::steady_clock::time_point> candidates,
+    void add_protocol_deadlines_locked(std::span<std::chrono::steady_clock::time_point> candidates,
                                     std::size_t& count) const;
     void observe_websocket_driver(const std::shared_ptr<websocket_driver>& driver);
     void websocket_progressed();
@@ -434,7 +435,7 @@ class connection_engine final
     enum class stream_phase : std::uint8_t { http, upgrade_pending_flush, websocket, terminal };
     stream_phase phase_ = stream_phase::http;
     std::shared_ptr<websocket_driver> websocket_;
-    std::optional<std::chrono::steady_clock::time_point> upgrade_anchor_;
+    std::optional<std::chrono::steady_clock::time_point> upgrade_anchor_, server_drain_deadline_;
     // Established WebSocket output idle starts when output becomes pending,
     // slides only on successful writes, and clears when the queue drains.
     std::optional<std::chrono::steady_clock::time_point> websocket_write_anchor_;
