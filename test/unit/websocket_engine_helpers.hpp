@@ -40,6 +40,11 @@
 // Internal seam keeps scheduling and copy-work assertions out of the public API.
 namespace httpserver::detail {
 struct connection_engine_test_access {
+    static bool head_consumed_before_end(connection_engine& engine) {
+        std::lock_guard lock(engine.mu_);
+        return !engine.outbox_.empty() && engine.outbox_.queued_bytes() == 0
+            && !engine.outbox_.front_complete();
+    }
     static bool receive_parked(connection_engine& engine) {
         std::lock_guard lock(engine.mu_);
         auto driver = engine.websocket_;

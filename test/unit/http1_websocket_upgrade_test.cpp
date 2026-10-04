@@ -366,17 +366,27 @@ LT_BEGIN_AUTO_TEST(upgrade_transport_suite, close_during_stalled_101_expires_wit
     LT_CHECK_EQ(closes.load(), 1); LT_CHECK_EQ(reason, "WebSocket Close timeout");
 LT_END_AUTO_TEST(close_during_stalled_101_expires_without_promotion_reset)
 LT_BEGIN_AUTO_TEST(upgrade_transport_suite, quiesce_before_upgrade_commit_refuses_new_websocket_work)
-    std::atomic<bool> entered{false}, refused{false}; h::resume_signal gate; rig r;
+    std::atomic<bool> entered{false}, refused{false}, head_committed{false};
+    h::resume_signal gate, finish_gate; rig r;
     r.routes.route(h::http::method::known(h::http::method_id::get), "/", [&](h::exchange& x) -> h::task<void> {
         entered = true; co_await gate.wait_for(2s);
         auto result = co_await x.upgrade({});
         refused = result.status.code() == h::http::outcome_code::connection_closed && !result.session;
         h::http::fields fields; fields.append("Content-Length", "0");
         x.respond(h::http::status::from_code(400), fields);
+        head_committed = true;
+        co_await finish_gate.wait_for(2s);
     });
     LT_CHECK(r.start()); auto head = opening(); io_loopback::write_all(r.pair.peer(), head.data(), head.size());
     LT_CHECK(until([&] { return entered.load(); }));
     r.engine->quiesce(std::chrono::steady_clock::now() + 1s); gate.signal();
+    // Force the writer to consume the head before the zero-byte end arrives.
+    // The post-respond witness excludes an empty, still-uncommitted slot.
+    LT_CHECK(until([&] {
+        return head_committed.load()
+            && h::detail::connection_engine_test_access::head_consumed_before_end(*r.engine);
+    }));
+    finish_gate.signal();
     LT_CHECK(until([&] { return r.stopped.load(); })); LT_CHECK(refused.load());
     std::string wire; char bytes[256];
     LT_CHECK(until([&] {

@@ -30,10 +30,19 @@
 // deadline_conversion_suite (step 2) pins the monotonic deadline ->
 // poll-timeout conversion as a pure unit suite.
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <string_view>
+#include <thread>
+#include <utility>
+#include <vector>
 
+#include "./httpserver/detail/drain_scope.hpp"
 #include "./httpserver/detail/fake_io_backend.hpp"
 #include "./httpserver/detail/io_poll_backend.hpp"
 #include "./io_backend_contract.hpp"
@@ -118,6 +127,144 @@ struct poll_fixture final : io_contract::backend_fixture {
     hd::io_poll_backend instance;
     io_loopback::pair pair_;
 };
+
+// Test-only member pointers control the otherwise uninjectable interval
+// between a real socket step returning would-block and registry rearm.
+// Explicit instantiation grants access without changing headers, class
+// definitions, compiler flags or the linked production implementation.
+template<typename Tag, typename Tag::type Pointer>
+struct poll_member {
+    friend typename Tag::type member(Tag) { return Pointer; }
+};
+
+template<typename Pointer, int Index = 0>
+struct poll_tag {
+    using type = Pointer;
+    friend type member(poll_tag);
+};
+
+using poll_stop = poll_tag<std::atomic_bool hd::io_poll_backend::*>;
+using poll_thread = poll_tag<std::thread hd::io_poll_backend::*>;
+using poll_wake = poll_tag<hd::pollsys::wake_source hd::io_poll_backend::*>;
+using poll_mutex = poll_tag<std::mutex hd::io_poll_backend::*>;
+using op_batch = std::vector<std::shared_ptr<hd::op_state>>;
+using poll_detach = poll_tag<void (hd::io_poll_backend::*)(
+    std::uint64_t, bool, op_batch&)>;
+using poll_rearm = poll_tag<void (hd::io_poll_backend::*)(
+    const op_batch&, std::size_t)>;
+using poll_read = poll_tag<hd::step_outcome (hd::io_poll_backend::*)(
+    hd::pollsys::native_socket_t, const std::shared_ptr<hd::op_state>&)>;
+using poll_accept = poll_tag<poll_read::type, 1>;
+using poll_project = poll_tag<std::optional<std::chrono::steady_clock::time_point> (hd::io_poll_backend::*)(
+        std::vector<hd::pollsys::poll_slot>&, std::vector<std::uint64_t>&)>;
+
+template struct poll_member<poll_stop, &hd::io_poll_backend::stop_>;
+template struct poll_member<poll_thread, &hd::io_poll_backend::thread_>;
+template struct poll_member<poll_wake, &hd::io_poll_backend::wake_>;
+template struct poll_member<poll_mutex, &hd::io_poll_backend::mu_>;
+template struct poll_member<poll_detach, &hd::io_poll_backend::take_direction_locked>;
+template struct poll_member<poll_rearm, &hd::io_poll_backend::rearm_after_would_block>;
+template struct poll_member<poll_read, &hd::io_poll_backend::read_step>;
+template struct poll_member<poll_accept, &hd::io_poll_backend::accept_step>;
+template struct poll_member<poll_project, &hd::io_poll_backend::build_projection>;
+
+struct controlled_poll_fixture {
+    controlled_poll_fixture() {
+        // Stop scheduling only: leave the real backend and sockets open.
+        (instance.*member(poll_stop{})).store(true, std::memory_order_release);
+        (instance.*member(poll_wake{})).signal();
+        (instance.*member(poll_thread{})).join();
+    }
+
+    op_batch detach(std::uint64_t id) {
+        op_batch batch;
+        std::lock_guard<std::mutex> lock(instance.*member(poll_mutex{}));
+        (instance.*member(poll_detach{}))(id, true, batch);
+        return batch;
+    }
+
+    void prune() {
+        std::vector<hd::pollsys::poll_slot> fds;
+        std::vector<std::uint64_t> ids;
+        (instance.*member(poll_project{}))(fds, ids);
+    }
+
+    io_contract::contract_rig rig;
+    hd::drain_scope scope;
+    hd::io_poll_backend instance;
+};
+
+template<typename Op>
+task<void> counted_probe(Op op, io_contract::probe* observed,
+                         hd::drain_scope* scope) {
+    hd::drain_scope::unit counted(*scope);
+    observed->observed = co_await std::move(op);
+    ++observed->delivered;
+}
+
+template<typename Op>
+void release_detached_would_block(littletest::test_runner* __lt_tr__,
+                                  const char* __lt_name__,
+                                  controlled_poll_fixture& fx, Op op,
+                                  bool prune) {
+    io_contract::probe observed;
+    op.submit(fx.instance);
+    spawn(fx.rig.ex, counted_probe(std::move(op), &observed, &fx.scope),
+          [](task_result<void>) { });
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(fx.scope.active(), std::size_t{1});
+    auto batch = fx.detach(1);
+    LT_CHECK_EQ(batch.size(), std::size_t{1});
+    LT_CHECK_EQ(fx.instance.pending_count(), std::size_t{0});
+    const auto step = batch.front()->kind() == hd::io_op_kind::accept
+        ? member(poll_accept{}) : member(poll_read{});
+    LT_CHECK((fx.instance.*step)(fx.instance.native_handle(1), batch.front())
+              == hd::step_outcome::pending_again);
+    LT_CHECK_EQ(observed.delivered.load(), 0);
+
+    // This is the deterministic gate: the operation has actually reached
+    // would-block and is absent from the pending registry during release.
+    fx.instance.release_connection(1);
+    if (prune) fx.prune();
+    (fx.instance.*member(poll_rearm{}))(batch, 0);
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(observed.delivered.load(), 1);
+    LT_CHECK(observed.observed.code == hh::outcome_code::connection_closed);
+    LT_CHECK_EQ(fx.instance.pending_count(), std::size_t{0});
+    LT_CHECK_EQ(fx.scope.active(), std::size_t{0});
+
+    // Duplicate stale dispatch must not deliver twice. Cleanup happens
+    // only after the release-only success conditions have been checked;
+    // it also safely unwinds the deliberately failing pre-fix case.
+    (fx.instance.*member(poll_rearm{}))(batch, 0);
+    fx.instance.close();
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(observed.delivered.load(), 1);
+    LT_CHECK_EQ(fx.scope.active(), std::size_t{0});
+}
+
+void released_read_case(littletest::test_runner* __lt_tr__,
+                        const char* __lt_name__, bool prune) {
+    controlled_poll_fixture fx;
+    auto pair = io_loopback::pair::make();
+    LT_ASSERT(pair.ok());
+    fx.instance.adopt_connection(1, pair.detach_local());
+    hd::read_operation op(fx.rig.owner, 1, fx.rig.buffer);
+    release_detached_would_block(__lt_tr__, __lt_name__, fx, std::move(op),
+                                 prune);
+}
+
+void released_accept_case(littletest::test_runner* __lt_tr__,
+                          const char* __lt_name__, bool prune) {
+    controlled_poll_fixture fx;
+    auto listener = io_loopback::listener::open();
+    LT_ASSERT(listener.ok());
+    fx.instance.adopt_listener(1, listener.socket());
+    listener.detach();
+    hd::accept_operation op(fx.rig.owner, 1);
+    release_detached_would_block(__lt_tr__, __lt_name__, fx, std::move(op),
+                                 prune);
+}
 
 }  // namespace
 
@@ -266,6 +413,160 @@ LT_BEGIN_AUTO_TEST(poll_contract_suite,
     io_contract::submit_after_close_connection_closed(__lt_tr__,
                                                       __lt_name__, fx);
 LT_END_AUTO_TEST(poll_submit_after_close_connection_closed)
+
+// A dead record is pruned independently of owner delivery. Later
+// registrations must still fail instead of reviving a released id.
+LT_BEGIN_AUTO_TEST(poll_contract_suite,
+                   poll_released_and_absent_ids_reject_future_submits)
+    poll_fixture fx;
+    fx.instance.release_connection(1);
+    const auto initial = fx.instance.poll_iterations();
+    const auto deadline = std::chrono::steady_clock::now()
+        + io_contract::kWaitBudget;
+    while (fx.instance.poll_iterations() < initial + 2
+            && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(1ms);
+    }
+    LT_CHECK(fx.instance.poll_iterations() >= initial + 2);
+
+    hd::wake_operation released_wake(fx.rig.owner, 1);
+    hd::timer_operation released_timer(fx.rig.owner, 1,
+                                       deadline + io_contract::kWaitBudget);
+    hd::wake_operation absent_wake(fx.rig.owner, 99);
+    hd::timer_operation absent_timer(fx.rig.owner, 99,
+                                     deadline + io_contract::kWaitBudget);
+    released_wake.submit(fx.instance);
+    released_timer.submit(fx.instance);
+    absent_wake.submit(fx.instance);
+    absent_timer.submit(fx.instance);
+    io_contract::probe observations[4];
+    std::vector<task<void>> tasks;
+    io_contract::launch_probe(fx.rig, std::move(released_wake),
+                              &observations[0], tasks);
+    io_contract::launch_probe(fx.rig, std::move(released_timer),
+                              &observations[1], tasks);
+    io_contract::launch_probe(fx.rig, std::move(absent_wake),
+                              &observations[2], tasks);
+    io_contract::launch_probe(fx.rig, std::move(absent_timer),
+                              &observations[3], tasks);
+    fx.rig.ex.run_pending();
+    for (const auto& observed : observations) {
+        LT_CHECK_EQ(observed.delivered.load(), 1);
+        LT_CHECK(observed.observed.code == hh::outcome_code::connection_closed);
+    }
+    LT_CHECK_EQ(fx.instance.pending_count(), std::size_t{0});
+    // Close also gives a failing implementation a safe, exact-once unwind.
+    fx.instance.close();
+    fx.rig.ex.run_pending();
+    for (const auto& observed : observations) {
+        LT_CHECK_EQ(observed.delivered.load(), 1);
+        LT_CHECK(observed.observed.code == hh::outcome_code::connection_closed);
+    }
+LT_END_AUTO_TEST(poll_released_and_absent_ids_reject_future_submits)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite,
+                   poll_release_preserves_global_live_and_readopted_ops)
+    poll_fixture fx;
+    auto other = io_loopback::pair::make();
+    LT_CHECK(other.ok());
+    if (!other.ok()) return;
+    fx.instance.adopt_connection(2, other.detach_local());
+    hd::wake_operation live(fx.rig.owner, 2);
+    hd::wake_operation global(fx.rig.owner, 0);
+    hd::timer_operation global_timer(fx.rig.owner, 0,
+                                     std::chrono::steady_clock::now());
+    live.submit(fx.instance);
+    global.submit(fx.instance);
+    global_timer.submit(fx.instance);
+    fx.instance.release_connection(1);
+
+    auto replacement = io_loopback::pair::make();
+    LT_CHECK(replacement.ok());
+    if (!replacement.ok()) {
+        fx.instance.close();
+        fx.rig.ex.run_pending();
+        return;
+    }
+    fx.instance.adopt_connection(1, replacement.detach_local());
+    hd::wake_operation readopted(fx.rig.owner, 1);
+    readopted.submit(fx.instance);
+    io_contract::probe observations[4];
+    std::vector<task<void>> tasks;
+    io_contract::launch_probe(fx.rig, std::move(live), &observations[0], tasks);
+    io_contract::launch_probe(fx.rig, std::move(global), &observations[1], tasks);
+    io_contract::launch_probe(fx.rig, std::move(global_timer),
+                              &observations[2], tasks);
+    io_contract::launch_probe(fx.rig, std::move(readopted),
+                              &observations[3], tasks);
+    fx.instance.wake();
+    for (auto& observed : observations) {
+        LT_CHECK(io_contract::wait_terminal(fx.rig, observed));
+        LT_CHECK_EQ(observed.delivered.load(), 1);
+        LT_CHECK(observed.observed.code == hh::outcome_code::ok);
+    }
+    fx.instance.close();
+    fx.rig.ex.run_pending();
+    for (const auto& observed : observations) {
+        LT_CHECK_EQ(observed.delivered.load(), 1);
+    }
+LT_END_AUTO_TEST(poll_release_preserves_global_live_and_readopted_ops)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite,
+                   poll_concurrent_release_submit_delivers_closed_once)
+    poll_fixture fx;
+    for (int iteration = 0; iteration < 16; ++iteration) {
+        if (iteration != 0) {
+            auto replacement = io_loopback::pair::make();
+            LT_CHECK(replacement.ok());
+            if (!replacement.ok()) return;
+            fx.instance.adopt_connection(1, replacement.detach_local());
+        }
+        hd::wake_operation op(fx.rig.owner, 1);
+        std::atomic<int> arrived{0};
+        io_contract::gate barrier(&arrived);
+        std::thread submitter([&] {
+            barrier.arrive();
+            barrier.wait(2);
+            op.submit(fx.instance);
+        });
+        std::thread releaser([&] {
+            barrier.arrive();
+            barrier.wait(2);
+            fx.instance.release_connection(1);
+        });
+        submitter.join();
+        releaser.join();
+        io_contract::probe observed;
+        std::vector<task<void>> tasks;
+        io_contract::launch_probe(fx.rig, std::move(op), &observed, tasks);
+        fx.rig.ex.run_pending();
+        LT_CHECK_EQ(observed.delivered.load(), 1);
+        LT_CHECK(observed.observed.code == hh::outcome_code::connection_closed);
+        // Ensure an implementation that missed the release can unwind.
+        fx.instance.release_connection(1);
+        fx.rig.ex.run_pending();
+        LT_CHECK_EQ(observed.delivered.load(), 1);
+        LT_CHECK_EQ(fx.instance.pending_count(), std::size_t{0});
+    }
+LT_END_AUTO_TEST(poll_concurrent_release_submit_delivers_closed_once)
+
+// Native would-block boundary regressions: dead and pruned registrations
+// must complete detached work without backend close or a second release.
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_detached_read_release_before_rearm)
+    released_read_case(__lt_tr__, __lt_name__, false);
+LT_END_AUTO_TEST(poll_detached_read_release_before_rearm)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_detached_read_prune_before_rearm)
+    released_read_case(__lt_tr__, __lt_name__, true);
+LT_END_AUTO_TEST(poll_detached_read_prune_before_rearm)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_detached_accept_release_before_rearm)
+    released_accept_case(__lt_tr__, __lt_name__, false);
+LT_END_AUTO_TEST(poll_detached_accept_release_before_rearm)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_detached_accept_prune_before_rearm)
+    released_accept_case(__lt_tr__, __lt_name__, true);
+LT_END_AUTO_TEST(poll_detached_accept_prune_before_rearm)
 
 LT_BEGIN_AUTO_TEST(poll_contract_suite,
                    poll_late_request_cancel_reports_invalid_state)

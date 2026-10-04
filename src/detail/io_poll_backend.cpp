@@ -100,7 +100,12 @@ void io_poll_backend::submit(op_state& op) {
         }
         if (op.kind() != io_op_kind::cancel) {
             const auto cit = connections_.find(op.connection());
-            if (cit != connections_.end() && cit->second.dead) {
+            // Nonzero ids require a live registration, including after a
+            // released record was pruned. Zero remains the backend-wide
+            // timer/wake lane and does not require a socket registration.
+            const bool unavailable = cit == connections_.end()
+                ? op.connection() != 0 : cit->second.dead;
+            if (unavailable) {
                 finish_now(state,
                            io_result{http::outcome_code::connection_closed});
                 return;
@@ -229,7 +234,12 @@ void io_poll_backend::rearm_after_would_block(
     {
         std::lock_guard<std::mutex> lock(mu_);
         for (std::size_t i = from; i < batch.size(); ++i) {
-            if (closed_) {
+            const auto cit = connections_.find(batch[i]->connection());
+            // Release may sweep while this operation is detached. Apply
+            // the same live-registration rule as submit before rearming.
+            const bool unavailable = cit == connections_.end()
+                ? batch[i]->connection() != 0 : cit->second.dead;
+            if (closed_ || unavailable) {
                 raced_closed.push_back(batch[i]);
                 continue;
             }

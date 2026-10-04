@@ -26,6 +26,17 @@
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/http1_websocket_handshake.hpp>
 namespace httpserver::detail {
+namespace {
+bool retire_completed_front(http1_response_outbox& outbox) {
+    // A zero-byte end can arrive after the final write consumed the head.
+    if (!outbox.front_complete() || outbox.front_failed()) return false;
+    outbox.consume_front(0);
+    return true;
+}
+bool websocket_terminal(const std::shared_ptr<websocket_driver>& driver) {
+    return driver && driver->snapshot().terminal;
+}
+}  // namespace
 websocket_upgrade_result http1_exchange_sink::on_upgrade(const ws_upgrade_options& options) {
     websocket_upgrade_result out;
     auto plan = negotiate_http1_websocket(head_, options,
@@ -163,7 +174,9 @@ std::size_t connection_engine::copy_transport_output(
 connection_engine::io_posture connection_engine::writer_posture(
         const std::shared_ptr<websocket_driver>& driver, wake_operation& wake) {
     std::lock_guard lock(mu_);
-    const bool ws_done = driver && driver->snapshot().terminal;
+    // Retire that slot, then recheck output and any eligible protocol transfer.
+    if (retire_completed_front(outbox_)) return io_posture::retry;
+    const bool ws_done = websocket_terminal(driver);
     const bool ordinary_done = !websocket_ && route_done_;
     if (outbox_drained() && (shutdown_ || ws_done || ordinary_done)) {
         phase_ = stream_phase::terminal;
