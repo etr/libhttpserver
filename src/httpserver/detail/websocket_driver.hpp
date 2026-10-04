@@ -33,7 +33,7 @@ namespace httpserver::detail {
 // transport driver must serialize copy_output/consume_output pairs.
 struct websocket_progress {
     bool input_ready = false, output_pending = false, closing = false, terminal = false;
-    std::optional<std::chrono::steady_clock::time_point> output_pending_since;
+    std::optional<std::chrono::steady_clock::time_point> output_pending_since, closing_since;
 };
 class websocket_driver {
  public:
@@ -53,6 +53,7 @@ class websocket_driver {
     // transport ownership; it never occupies the application's close slot.
     void observe_progress(std::function<void()> observer);
     websocket_progress snapshot() const;
+    http::outcome begin_close(std::uint16_t code, std::string_view reason);
     void eof();
     void transport_failed(http::outcome reason);
     void cancel(http::outcome reason = {http::outcome_code::cancelled, "driver cancelled"});

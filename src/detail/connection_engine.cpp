@@ -105,13 +105,14 @@ void connection_engine::start() {
           [self](task_result<void>) { self->loop_finished(); });
 }
 
-void connection_engine::shutdown() noexcept {
+void connection_engine::shutdown(http::outcome_code reason) noexcept {
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (shutdown_) return;
         shutdown_ = true;
     }
-    fail_websocket({http::outcome_code::connection_closed, "WebSocket server stop"});
+    fail_websocket({reason, reason == http::outcome_code::timeout
+        ? "WebSocket drain deadline" : "WebSocket server stop"});
     disconnect_current(http::outcome_code::connection_closed,
                        "http1 connection engine: server stop");
     outbox_.abandon();
@@ -119,20 +120,19 @@ void connection_engine::shutdown() noexcept {
     wake_loops();
 }
 
-void connection_engine::quiesce() noexcept {
+void connection_engine::quiesce(std::chrono::steady_clock::time_point server_deadline) noexcept {
+    std::shared_ptr<websocket_driver> driver;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        // A shutdown (before or after) is the harder state: it already
-        // owns the close; a second quiesce changes nothing.
         if (shutdown_ || quiescing_) return;
         quiescing_ = true;
-        // Idle: mark the close now (the parked route loop's head wait
-        // bails and the writer flushes-and-releases). With a live
-        // exchange the settle step closes instead, so the in-flight
-        // response is never disturbed.
-        if (current_ == nullptr) close_after_drain_ = true;
+        if (server_deadline != std::chrono::steady_clock::time_point::max()) server_drain_deadline_ = server_deadline;
+        driver = websocket_;
+        if (!driver && current_ == nullptr) close_after_drain_ = true;
     }
+    if (driver) static_cast<void>(driver->begin_close(1001, "server drain"));
     wake_loops();
+    rearm_watchdog();
 }
 
 bool connection_engine::running() const noexcept {
@@ -466,7 +466,7 @@ bool connection_engine::body_decode_pending_locked() const {
 // unwinding, so no second enforcement window opens.
 std::optional<std::chrono::steady_clock::time_point>
 connection_engine::suspension_deadline_locked() {
-    if (current_ == nullptr || !current_->suspended()
+    if (phase_ != stream_phase::http || current_ == nullptr || !current_->suspended()
             || current_->disconnected()) {
         suspension_anchor_.reset();
         return std::nullopt;
@@ -501,7 +501,7 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
     // routed and no candidate applies, the plan defers -- the drain
     // ticket's deadline (or a stop) bounds that window instead
     // (TASK-110).
-    std::chrono::steady_clock::time_point candidates[5];
+    std::chrono::steady_clock::time_point candidates[7];
     std::size_t candidate_count = 0;
     if (body_decode_pending_locked()) {
         candidates[candidate_count++] =
@@ -527,7 +527,7 @@ connection_engine::watchdog_plan connection_engine::plan_watchdog_locked() {
             drain_until = drain_deadline_locked()) {
         candidates[candidate_count++] = *drain_until;
     }
-    add_upgrade_deadline_locked(candidates, candidate_count);
+    add_protocol_deadlines_locked(candidates, candidate_count);
     if (candidate_count == 0) {
         if (head_routed_) {
             plan.defer = true;
@@ -569,13 +569,25 @@ void connection_engine::note_transport_activity(bool written) {
     rearm_watchdog();
 }
 
-void connection_engine::enforce_timeout() noexcept {
+void connection_engine::enforce_timeout(std::chrono::steady_clock::time_point deadline) noexcept {
+    bool global_expiry = false, close_expiry = false;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        global_expiry = server_drain_deadline_ && *server_drain_deadline_ <= deadline;
+        if (websocket_) {
+            auto progress = websocket_->snapshot();
+            close_expiry = !progress.terminal && progress.closing_since &&
+                *progress.closing_since + config_.timeouts.ws_close <= deadline;
+        }
+    }
+    if (global_expiry && scope_.expire_if_due(std::chrono::steady_clock::now())) return;
     // A fired deadline means the peer or the exchange will not
     // progress. Disconnect the live exchange (its parked handler
     // unwinds through run_route), mark the close, and release the
     // transport so every parked loop terminal-completes. No response
     // is synthesized: a timed-out peer is not reading one.
-    fail_websocket({http::outcome_code::timeout, "WebSocket watchdog timeout"});
+    fail_websocket({http::outcome_code::timeout, close_expiry
+        ? "WebSocket Close timeout" : "WebSocket watchdog timeout"});
     disconnect_current(http::outcome_code::timeout,
                        "http1 connection engine: watchdog timeout");
     {
@@ -613,7 +625,7 @@ task<void> connection_engine::watchdog_loop(
         // Fired: enforce only when the deadline still governs the
         // current state (activity moved it -- re-arm).
         if (!self->watchdog_due(deadline)) continue;
-        self->enforce_timeout();
+        self->enforce_timeout(deadline);
         co_return;
     }
 }

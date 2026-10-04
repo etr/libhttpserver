@@ -31,6 +31,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -229,17 +230,18 @@ class native_server::impl {
         // counted work is live, which keeps impl alive.
         std::vector<std::shared_ptr<engine::listener_engine>> listeners =
             listeners_;
-        scope_->arm(std::chrono::steady_clock::now() + budget,
+        const auto deadline = std::chrono::steady_clock::now() + budget;
+        scope_->arm(deadline,
                     [this] { return pool_.is_current(); },
                     [listeners] {
                         for (const std::shared_ptr<engine::listener_engine>&
                                  listener : listeners) {
-                            listener->request_stop();
+                            listener->request_stop(http::outcome_code::timeout);
                         }
                     });
         for (const std::shared_ptr<engine::listener_engine>& listener :
              listeners_) {
-            listener->quiesce();
+            listener->quiesce(deadline);
         }
         static_cast<void>(backend_.wake());
         return http::outcome::okay();

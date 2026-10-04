@@ -28,101 +28,15 @@
 #include <chrono>
 #include <thread>
 #include <utility>
+#include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/websocket_session_state.hpp>
 #include "./io_loopback.hpp"
 #include "./websocket_test_helpers.hpp"
 #include "./littletest.hpp"
-// Internal seam keeps scheduling and copy-work assertions out of the public API.
-namespace httpserver::detail {
-struct connection_engine_test_access {
-    static bool receive_parked(connection_engine& engine) {
-        std::lock_guard lock(engine.mu_);
-        auto driver = engine.websocket_;
-        if (!driver) return false;
-        std::lock_guard session_lock(driver->state_->mu);
-        return driver->state_->callback_registered && driver->state_->receive_wait != nullptr;
-    }
-    static bool blocked_empty_input(connection_engine& engine) {
-        std::lock_guard lock(engine.mu_);
-        return engine.websocket_ && !engine.websocket_->snapshot().input_ready && engine.pending_tail_.empty();
-    }
-    static void install(connection_engine& engine, const std::shared_ptr<websocket_driver>& driver, std::string bytes = {}) {
-        engine.websocket_ = driver;
-        engine.phase_ = connection_engine::stream_phase::websocket;
-        engine.head_routed_ = true;
-        engine.pending_tail_ = std::move(bytes);
-        engine.last_activity_ = std::chrono::steady_clock::now() - std::chrono::seconds(10);
-        engine.observe_websocket_driver(driver);
-    }
-    static void feed(connection_engine& engine) { engine.feed_websocket_tail(); }
-    static std::pair<const char*, std::size_t> retained(connection_engine& engine) {
-        return {engine.pending_tail_.data(), engine.pending_tail_.size()};
-    }
-    static std::optional<std::chrono::steady_clock::time_point> deadline(connection_engine& engine) {
-        std::lock_guard lock(engine.mu_);
-        auto plan = engine.plan_watchdog_locked();
-        return plan.defer || plan.exit ? std::nullopt : std::optional(plan.deadline);
-    }
-    static void progress(connection_engine& engine, bool written) { engine.note_transport_activity(written); }
-    static void notify(connection_engine& engine) { engine.websocket_progressed(); }
-    static void age_activity(connection_engine& engine) {
-        std::lock_guard lock(engine.mu_);
-        engine.last_activity_ = std::chrono::steady_clock::now() - std::chrono::seconds(10);
-    }
-};
-}  // namespace httpserver::detail
-namespace h = httpserver;
-namespace {
-namespace sys = h::detail::pollsys;
-using namespace std::chrono_literals;  // NOLINT(build/namespaces)
-template<class Predicate> bool until(Predicate pred, std::chrono::milliseconds budget = 2s) {
-    auto end = std::chrono::steady_clock::now() + budget;
-    while (!pred()) {
-        if (std::chrono::steady_clock::now() >= end) return false;
-        std::this_thread::yield();
-    }
-    return true;
-}
-struct rig {
-    h::server::resource_budget root = h::server::resource_budget::root({});
-    h::server::route_registry routes;
-    h::server::hook_bus hooks;
-    h::detail::drain_scope scope;
-    h::detail::worker_pool pool{2};
-    h::detail::io_poll_backend backend;
-    io_loopback::pair pair = io_loopback::pair::make();
-    h::detail::connection_engine_config config;
-    std::atomic<bool> stopped{false}, accepted{false};
-    bool started = false;
-    std::shared_ptr<h::detail::connection_engine> engine;
-    rig() { h::server::route_registry::create(root, routes); }
-    void create_engine() {
-        engine = std::make_shared<h::detail::connection_engine>(backend, pool, routes, hooks, root, scope, config, 1, [this] { stopped = true; });
-    }
-    bool start() {
-        if (!pair.ok()) return false;
-        sys::set_nonblocking(pair.peer(), true);
-        backend.adopt_connection(1, pair.detach_local());
-        create_engine();
-        engine->start(); started = true; return true;
-    }
-    ~rig() {
-        if (engine) {
-            engine->shutdown();
-            if (started) {
-                until([&] { return stopped.load(); });
-            }
-        }
-    }
-};
-std::string opening(const std::string& protocol = {}) {
-    std::string text = "GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n";
-    if (!protocol.empty()) text += "Sec-WebSocket-Protocol: " + protocol + "\r\n";
-    return text + "\r\n";
-}
-}  // namespace
+#include "./websocket_engine_helpers.hpp"
+using namespace ws_engine_test;  // NOLINT(build/namespaces)
 LT_BEGIN_SUITE(upgrade_transport_suite)
     void set_up() { }
     void tear_down() { }
@@ -394,6 +308,103 @@ LT_BEGIN_AUTO_TEST(upgrade_transport_suite, stalled_output_after_quiet_idle_gets
     LT_CHECK(until([&] { return r.stopped.load(); }, 1s));
     LT_CHECK(std::chrono::steady_clock::now() - queued >= 100ms); LT_CHECK(timed_out.load());
 LT_END_AUTO_TEST(stalled_output_after_quiet_idle_gets_full_write_interval)
+LT_BEGIN_AUTO_TEST(upgrade_transport_suite, quiesce_initiates_close_without_aborting_upgraded_transport)
+    rig r; r.create_engine();
+    auto driver = std::make_shared<h::detail::websocket_driver>(); auto session = driver->take_session();
+    h::detail::connection_engine_test_access::install(*r.engine, driver);
+    r.engine->quiesce();
+    LT_CHECK(driver->snapshot().closing); LT_CHECK(driver->snapshot().output_pending);
+    LT_CHECK(!driver->snapshot().terminal);
+LT_END_AUTO_TEST(quiesce_initiates_close_without_aborting_upgraded_transport)
+LT_BEGIN_AUTO_TEST(upgrade_transport_suite, close_deadline_survives_quiet_output_and_delayed_observer)
+    rig r; r.config.timeouts.ws_close = 30ms; r.config.timeouts.write_idle = 10s; r.create_engine();
+    auto driver = std::make_shared<h::detail::websocket_driver>(); auto session = driver->take_session();
+    h::detail::connection_engine_test_access::install(*r.engine, driver);
+    driver->observe_progress({});
+    LT_CHECK(session.close().ok()); auto anchor = driver->snapshot().closing_since;
+    LT_CHECK(anchor.has_value());
+    auto due = h::detail::connection_engine_test_access::deadline(*r.engine);
+    LT_CHECK(due == *anchor + 30ms);
+    std::byte output[32]; auto count = driver->copy_output(output); driver->consume_output(count);
+    h::detail::connection_engine_test_access::progress(*r.engine, true);
+    LT_CHECK(h::detail::connection_engine_test_access::deadline(*r.engine) == due);
+    LT_CHECK(!driver->snapshot().output_pending);
+    LT_CHECK(driver->snapshot().closing_since == anchor);
+LT_END_AUTO_TEST(close_deadline_survives_quiet_output_and_delayed_observer)
+LT_BEGIN_AUTO_TEST(upgrade_transport_suite, prior_app_close_anchor_survives_drain_and_stale_timer_is_rejected)
+    rig r; r.config.timeouts.ws_close = 30ms; r.config.timeouts.write_idle = 10s; r.create_engine();
+    auto driver = std::make_shared<h::detail::websocket_driver>(); auto session = driver->take_session();
+    h::detail::connection_engine_test_access::install(*r.engine, driver);
+    session.close(1000, "original");
+    const auto anchor = driver->snapshot().closing_since;
+    r.engine->quiesce(std::chrono::steady_clock::now() + 2s);
+    LT_CHECK(driver->snapshot().closing_since == anchor);
+    LT_CHECK(h::detail::connection_engine_test_access::deadline(*r.engine) == *anchor + 30ms);
+    LT_CHECK(!h::detail::connection_engine_test_access::due(*r.engine, *anchor + 29ms));
+    LT_CHECK(until([&] { return h::detail::connection_engine_test_access::due(*r.engine, *anchor + 30ms); }));
+LT_END_AUTO_TEST(prior_app_close_anchor_survives_drain_and_stale_timer_is_rejected)
+LT_BEGIN_AUTO_TEST(upgrade_transport_suite, close_during_stalled_101_expires_without_promotion_reset)
+    std::atomic<int> closes{0}; std::string reason; rig r; std::string protocol(32768, 'p');
+    int small = 1024;
+    LT_CHECK(::setsockopt(r.pair.local(), SOL_SOCKET, SO_SNDBUF, &small, sizeof small) == 0);
+    r.config.timeouts.ws_close = 30ms; r.config.timeouts.handshake = 2s; r.config.timeouts.write_idle = 10s;
+    r.routes.route(h::http::method::known(h::http::method_id::get), "/", [&](h::exchange& x) -> h::task<void> {
+        h::ws_upgrade_options options; options.subprotocols = {protocol};
+        auto result = co_await x.upgrade(options);
+        if (!result.session) co_return;
+        result.session->on_close([&](auto info) { reason = info.status.message(); ++closes; });
+        r.accepted = true; co_await result.session->receive();
+    });
+    LT_CHECK(r.start()); auto head = opening(protocol); io_loopback::write_all(r.pair.peer(), head.data(), head.size());
+    LT_CHECK(until([&] { return h::detail::connection_engine_test_access::receive_parked(*r.engine); }));
+    LT_CHECK(h::detail::connection_engine_test_access::upgrade_pending(*r.engine));
+    r.engine->quiesce(std::chrono::steady_clock::now() + 1s);
+    const auto anchor = h::detail::connection_engine_test_access::snapshot(*r.engine).closing_since;
+    LT_CHECK(anchor.has_value());
+    LT_CHECK(h::detail::connection_engine_test_access::deadline(*r.engine) == *anchor + 30ms);
+    LT_CHECK(until([&] { return r.stopped.load(); }));
+    LT_CHECK_EQ(closes.load(), 1); LT_CHECK_EQ(reason, "WebSocket Close timeout");
+LT_END_AUTO_TEST(close_during_stalled_101_expires_without_promotion_reset)
+LT_BEGIN_AUTO_TEST(upgrade_transport_suite, quiesce_before_upgrade_commit_refuses_new_websocket_work)
+    std::atomic<bool> entered{false}, refused{false}, head_committed{false};
+    h::resume_signal gate, finish_gate; rig r;
+    r.routes.route(h::http::method::known(h::http::method_id::get), "/", [&](h::exchange& x) -> h::task<void> {
+        entered = true; co_await gate.wait_for(2s);
+        auto result = co_await x.upgrade({});
+        refused = result.status.code() == h::http::outcome_code::connection_closed && !result.session;
+        h::http::fields fields; fields.append("Content-Length", "0");
+        x.respond(h::http::status::from_code(400), fields);
+        head_committed = true;
+        co_await finish_gate.wait_for(2s);
+    });
+    LT_CHECK(r.start()); auto head = opening(); io_loopback::write_all(r.pair.peer(), head.data(), head.size());
+    LT_CHECK(until([&] { return entered.load(); }));
+    r.engine->quiesce(std::chrono::steady_clock::now() + 1s); gate.signal();
+    // Force the writer to consume the head before the zero-byte end arrives.
+    // The post-respond witness excludes an empty, still-uncommitted slot.
+    LT_CHECK(until([&] {
+        return head_committed.load()
+            && h::detail::connection_engine_test_access::head_consumed_before_end(*r.engine);
+    }));
+    finish_gate.signal();
+    LT_CHECK(until([&] { return r.stopped.load(); })); LT_CHECK(refused.load());
+    std::string wire; char bytes[256];
+    LT_CHECK(until([&] {
+        auto read = sys::read_some(r.pair.peer(), reinterpret_cast<std::byte*>(bytes), sizeof bytes);
+        if (read.transferred) wire.append(bytes, read.transferred);
+        return read.status == sys::sys_status::closed_reset;
+    }));
+    LT_CHECK(wire.find("HTTP/1.1 400") == 0); LT_CHECK(wire.find("101 Switching") == std::string::npos);
+LT_END_AUTO_TEST(quiesce_before_upgrade_commit_refuses_new_websocket_work)
+LT_BEGIN_AUTO_TEST(upgrade_transport_suite, transfer_removes_http_suspension_before_exchange_cleanup)
+    h::http::request_head head; h::exchange current(head, nullptr); h::resume_signal resume; rig r;
+    r.create_engine();
+    LT_CHECK(current.suspend(resume).ok());
+    LT_CHECK(h::detail::connection_engine_test_access::suspension_deadline(*r.engine, current).has_value());
+    // The sink commits stream ownership before exchange::upgrade clears its flag.
+    LT_CHECK(!h::detail::connection_engine_test_access::suspension_deadline(*r.engine, current, true, true));
+    LT_CHECK(!h::detail::connection_engine_test_access::suspension_deadline(*r.engine, current, true));
+LT_END_AUTO_TEST(transfer_removes_http_suspension_before_exchange_cleanup)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

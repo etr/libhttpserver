@@ -21,6 +21,8 @@
 
 #include <httpserver/detail/websocket_session_state.hpp>
 #include <string>
+#include <memory>
+#include <vector>
 #include <deque>
 #include <utility>
 namespace httpserver::websocket::detail {
@@ -46,7 +48,7 @@ bool session_state::receive_ready() const { return codec.has_message() || done |
 bool session_state::output_pending() const {
     return active.has_value() || pong.has_value() || close_frame.has_value() || !data.empty();
 }
-close_info session_state::best_reason() const { return peer_close ? peer_info : local_info; }
+
 session_notifications session_state::notifications() {
     if (!output_pending()) output_pending_since.reset();
     else if (!output_pending_since) output_pending_since = std::chrono::steady_clock::now();
@@ -55,14 +57,17 @@ session_notifications session_state::notifications() {
     if (receive_ready()) out.receive = std::exchange(receive_wait, {});
     if (writable_ready()) out.writable = std::exchange(writable_wait, {});
     if (done && on_close) {
-        out.callback = std::move(on_close); out.info = final_info;
+        out.callback = std::move(on_close);
+        out.info.code = final_info.code; out.info.clean = final_info.clean;
+        out.info.reason = std::move(final_info.reason);
+        out.info.status = final_info.status;
     }
     return out;
 }
 void session_state::terminal(http::outcome reason, bool clean) {
     if (done) return;
     done = true; closing = true;
-    final_info = best_reason(); final_info.status = std::move(reason); final_info.clean = clean;
+    final_info = std::move(peer_close ? peer_info : local_info); final_info.status = std::move(reason); final_info.clean = clean;
     codec.clear(); std::deque<wire_frame>().swap(data);
     active.reset(); pong.reset(); close_frame.reset();
     output_bytes = 0; outgoing_messages = 0; offered = 0;
@@ -71,13 +76,45 @@ void session_state::handshake_complete() {
     if (peer_close && close_sent) terminal(http::outcome::okay(), true);
 }
 void session_state::begin_close(std::span<const std::byte> payload) {
-    closing = true;
+    wire_frame close(8, payload);
+    close_frame = std::move(close);
+    closing = true; closing_since = std::chrono::steady_clock::now();
     // Already offered output stays pinned; discard only unoffered frames.
     for (const auto& frame : data) {
         output_bytes -= frame.bytes.size(); --outgoing_messages;
     }
     std::deque<wire_frame>().swap(data); pong.reset();
-    close_frame.emplace(8, payload);
+}
+http::outcome session_state::initiate_close(std::uint16_t code, std::string_view reason) {
+    if (closing) return {http::outcome_code::invalid_state, "Close already started"};
+    std::vector<std::byte> payload{std::byte(code >> 8), std::byte(code)};
+    auto bytes = reinterpret_cast<const std::byte*>(reason.data());
+    payload.insert(payload.end(), bytes, bytes + reason.size());
+    local_info.reason = reason; local_info.code = code;
+    begin_close(payload);
+    return http::outcome::okay();
+}
+http::outcome close_session(const std::shared_ptr<session_state>& state,
+                            std::uint16_t code, std::string_view reason) {
+    const std::span bytes(reinterpret_cast<const std::byte*>(reason.data()), reason.size());
+    if (!httpserver::detail::websocket_close_code(code) || reason.size() > 123 || !httpserver::detail::websocket_utf8::valid(bytes))
+        return {http::outcome_code::invalid_argument, "invalid local Close payload"};
+    if (!state) return {http::outcome_code::connection_closed, "session closed"};
+    session_notifications notify;
+    http::outcome result;
+    {
+        std::lock_guard lock(state->mu);
+        try {
+            result = state->initiate_close(code, reason);
+        } catch (...) {
+            // A bounded Close allocation must not escape a lifecycle caller.
+            result = {http::outcome_code::limit_exceeded, "Close failed"};
+            state->terminal({http::outcome_code::limit_exceeded, "Close failed"});
+        }
+        notify = state->notifications();
+    }
+    notify.deliver();
+    return result;
 }
 void session_state::control(httpserver::detail::websocket_control frame) {
     if (frame.opcode == 9) {

@@ -266,12 +266,113 @@ def backpressure(port, events):
     print('Abort while writable blocked PASS', flush=True)
 
 
+def isolation_case(port):
+    one, two, failing = Peer(port), Peer(port), Peer(port)
+    try:
+        for peer, path in [(one, '/echo'), (two, '/echo'), (failing, '/app-close')]:
+            peer.socket.sendall(request(path))
+            assert peer.head().startswith(b'HTTP/1.1 101 ')
+        assert failing.receive() == (8, b'\x03\xe8local')
+        assert failing.socket.recv(1) == b''
+        for peer, payload in [(one, b'first alive'), (two, b'second alive')]:
+            peer.socket.sendall(frame(1, payload))
+            assert peer.receive() == (1, payload)
+        http = Peer(port)
+        try:
+            http.socket.sendall(b'GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n')
+            assert http.head().startswith(b'HTTP/1.1 200 ')
+            assert http.exact(4) == b'okay'
+        finally:
+            http.close()
+        print('Local Close timeout preserves two WebSockets and HTTP PASS', flush=True)
+    finally:
+        one.close()
+        two.close()
+        failing.close()
+
+
+def handler_drain_case(binary):
+    process, events, port = start(binary)
+    peer = Peer(port)
+    try:
+        peer.socket.sendall(request('/drain-handler'))
+        assert peer.head().startswith(b'HTTP/1.1 101 ')
+        assert wait_event(events, 'DRAIN HANDLER') == 'DRAIN HANDLER would_deadlock'
+        assert peer.receive() == (8, b'\x03\xe9server drain')
+        peer.socket.sendall(frame(8, b'\x03\xe9server drain'))
+        wait_event(events, 'CLOSE 1 ')
+        assert peer.socket.recv(1) == b''
+        print('Handler-safe drain/would_deadlock/clean Close PASS', flush=True)
+    finally:
+        peer.close()
+        stop(process)
+
+
+def drain_case(binary, mode='DRAIN', independent=False):
+    process, events, port = start(binary)
+    peer = None
+    http = None
+    try:
+        if independent:
+            from websockets.sync.client import connect
+            peer = connect(f'ws://127.0.0.1:{port}/echo', open_timeout=5,
+                           close_timeout=5, proxy=None)
+        else:
+            peer = Peer(port)
+            peer.socket.sendall(request())
+            assert peer.head().startswith(b'HTTP/1.1 101 ')
+        wait_event(events, 'ACCEPT')
+        http = Peer(port)
+        http.socket.sendall(b'GET /slow HTTP/1.1\r\nHost: localhost\r\n\r\n')
+        assert http.head().startswith(b'HTTP/1.1 200 ')
+        assert http.exact(3) == b'old'
+        started = time.monotonic()
+        process.stdin.write(mode + '\n')
+        process.stdin.flush()
+        wait_event(events, 'DRAIN START', deadline=2)
+        if independent:
+            from websockets.exceptions import ConnectionClosedOK
+            try:
+                peer.recv(timeout=5)
+                raise AssertionError('expected server Close')
+            except ConnectionClosedOK:
+                assert peer.close_code == 1001 and peer.close_reason == 'server drain'
+        else:
+            assert peer.receive() == (8, b'\x03\xe9server drain')
+            if mode == 'DRAIN':
+                peer.socket.sendall(frame(8, b'\x03\xe9server drain'))
+            else:
+                peer.socket.settimeout(0.05)
+                try:
+                    assert peer.socket.recv(1) != b'', 'cancelled before deadline'
+                except socket.timeout:
+                    pass
+                peer.socket.settimeout(5)
+                assert peer.socket.recv(1) == b'', 'transport stayed live after deadline'
+                assert 0.10 <= time.monotonic() - started < 3
+        assert http.exact(4) == b'body', 'drain truncated in-flight HTTP'
+        if mode != 'DRAIN-DROP':
+            status = wait_event(events, 'DRAIN RESULT ')
+            assert status.split()[2] == ('completed' if mode == 'DRAIN' else 'expired'), status
+        print('Drain ' + mode + (' external' if independent else ' raw') + ' PASS', flush=True)
+    finally:
+        if http is not None:
+            http.close()
+        if peer is not None:
+            peer.close()
+        stop(process)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('fixture')
     parser.add_argument('--independent', action='store_true')
     parser.add_argument('--smoke', action='store_true')
+    parser.add_argument('--drain-only', action='store_true')
     args = parser.parse_args()
+    if args.drain_only:
+        drain_case(args.fixture)
+        return
     process, events, port = start(args.fixture)
     try:
         if args.independent:
@@ -281,8 +382,15 @@ def main():
         if not args.smoke:
             raw_cases(port, events, process)
             backpressure(port, events)
+            isolation_case(port)
     finally:
         stop(process)
+    handler_drain_case(args.fixture)
+    drain_case(args.fixture)
+    drain_case(args.fixture, 'DRAIN-LATE')
+    drain_case(args.fixture, 'DRAIN-DROP')
+    if args.independent:
+        drain_case(args.fixture, independent=True)
 
 
 if __name__ == '__main__':

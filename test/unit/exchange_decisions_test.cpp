@@ -37,6 +37,8 @@
 // The suite runs against detail::recording_sink, a call-counting fake
 // of the engine seam, so no transport exists yet.
 
+#include <atomic>
+#include <iostream>
 #include <utility>
 #include <chrono>
 #include <string>
@@ -447,6 +449,33 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_disconnect_fans_out_stop)
     LT_CHECK(x.cancellation().stop_requested());
 LT_END_AUTO_TEST(exchange_disconnect_fans_out_stop)
 
+LT_BEGIN_AUTO_TEST(exchange_decisions_suite, disconnect_publishes_state_before_cancellation_wake)
+    for (int channel = 0; channel < 2; ++channel) {
+        // The documented inline executor makes both wake paths observable
+        // during disconnect(), without a scheduler-dependent race window.
+        int deliveries = 0;
+        exchange_state observed_state = exchange_state::head;
+        http::outcome observed_reason;
+        wait_note note = wait_note::none;
+        resume_signal stored;
+        detail::recording_sink sink;
+        exchange x(make_head(), &sink);
+        httpserver::inline_executor ex;
+        spawn(ex, channel == 0 ? await_stop_token(x) : observe_wait(x, &stored, &note),
+              [&](task_result<void>) {
+                  observed_state = x.state();
+                  observed_reason = x.disconnect_reason();
+                  ++deliveries;
+              });
+        LT_CHECK_EQ(deliveries, 0);
+        LT_CHECK(x.disconnect(http::outcome_code::timeout, "finished").ok());
+        LT_CHECK_EQ(deliveries, 1);
+        LT_CHECK(observed_state == exchange_state::cancelled);
+        LT_CHECK(observed_reason.code() == http::outcome_code::timeout);
+        LT_CHECK(observed_reason.message() == "finished");
+    }
+LT_END_AUTO_TEST(disconnect_publishes_state_before_cancellation_wake)
+
 LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_disconnect_is_idempotent)
     detail::recording_sink sink;
     exchange x(make_head(), &sink);
@@ -509,6 +538,54 @@ LT_BEGIN_AUTO_TEST(exchange_decisions_suite, exchange_disconnect_needs_reason)
     LT_CHECK(!x.disconnected());
     LT_CHECK(x.respond(http::status::from_code(200), http::fields()).ok());
 LT_END_AUTO_TEST(exchange_disconnect_needs_reason)
+
+LT_BEGIN_AUTO_TEST(exchange_decisions_suite, suspension_observation_is_safe_during_handler_decisions)
+    for (int decision = 0; decision < 4; ++decision) {
+        detail::recording_sink sink;
+        exchange x(make_head(), &sink);
+        resume_signal signal;
+        const exchange& observed = x;
+        std::atomic<bool> go{false};
+        int suspended_samples = 0;
+        std::thread watchdog([&] {
+            while (!go.load()) std::this_thread::yield();
+            for (int i = 0; i < 10000; ++i) {
+                if (observed.suspended()) ++suspended_samples;
+            }
+        });
+        go = true;
+        http::outcome result = x.suspend(signal);
+        if (decision == 0) result = x.respond(http::status::from_code(200), {});
+        if (decision == 1) result = x.start_response(http::status::from_code(200), {});
+        if (decision == 2) {
+            for (int i = 0; i < 64; ++i) result = x.suspend(signal);
+        }
+        if (decision == 3) result = decide_upgrade(x, {});
+        watchdog.join();
+        LT_CHECK(result.ok());
+        LT_CHECK_EQ(x.suspended(), decision == 2);
+        std::cout << "decision=" << decision << " suspended observations=" << suspended_samples << '\n';
+    }
+LT_END_AUTO_TEST(suspension_observation_is_safe_during_handler_decisions)
+
+LT_BEGIN_AUTO_TEST(exchange_decisions_suite, suspension_value_survives_default_move_and_assignment)
+    detail::recording_sink sink;
+    exchange original(make_head(), &sink);
+    resume_signal signal;
+    LT_CHECK(original.suspend(signal).ok());
+    exchange moved(std::move(original));
+    LT_CHECK(moved.suspended());
+    LT_CHECK(original.suspended());
+    exchange assigned(make_head(), nullptr);
+    assigned = std::move(moved);
+    LT_CHECK(assigned.suspended());
+    LT_CHECK(moved.suspended());
+    LT_CHECK(assigned.respond(http::status::from_code(200), {}).ok());
+    LT_CHECK(!assigned.suspended());
+    LT_CHECK(moved.suspended());
+    LT_CHECK(original.suspended());
+    LT_CHECK_EQ(sink.respond_calls, 1);
+LT_END_AUTO_TEST(suspension_value_survives_default_move_and_assignment)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

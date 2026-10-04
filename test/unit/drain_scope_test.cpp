@@ -199,6 +199,49 @@ LT_BEGIN_AUTO_TEST(drain_scope_suite,
     LT_CHECK_EQ(out.remaining, std::size_t{0});
 LT_END_AUTO_TEST(late_wait_after_units_gone_from_counted_thread_completes)
 
+LT_BEGIN_AUTO_TEST(drain_scope_suite, last_leave_after_deadline_retains_expiry_and_pre_cancel_count)
+    drain_scope scope;
+    int cancels = 0;
+    scope.enter();
+    scope.arm(clock::now() - std::chrono::milliseconds(1), {}, [&] { ++cancels; });
+    scope.leave();
+    srv::drain_result result;
+    LT_CHECK(scope.wait(result).ok());
+    LT_CHECK(result.status == srv::drain_status::deadline_expired);
+    LT_CHECK_EQ(result.remaining, std::size_t{1});
+    LT_CHECK_EQ(cancels, 1);
+LT_END_AUTO_TEST(last_leave_after_deadline_retains_expiry_and_pre_cancel_count)
+LT_BEGIN_AUTO_TEST(drain_scope_suite, cancel_hook_leaving_units_cannot_erase_expiry)
+    drain_scope scope;
+    int cancels = 0;
+    scope.enter(); scope.enter();
+    scope.arm(clock::now(), {}, [&] { ++cancels; scope.leave(); scope.leave(); });
+    srv::drain_result first, late;
+    LT_CHECK(scope.wait(first).ok()); LT_CHECK(scope.wait(late).ok());
+    LT_CHECK(first.status == srv::drain_status::deadline_expired);
+    LT_CHECK(late.status == srv::drain_status::deadline_expired);
+    LT_CHECK_EQ(first.remaining, std::size_t{2});
+    LT_CHECK_EQ(late.remaining, std::size_t{2}); LT_CHECK_EQ(cancels, 1);
+LT_END_AUTO_TEST(cancel_hook_leaving_units_cannot_erase_expiry)
+LT_BEGIN_AUTO_TEST(drain_scope_suite, external_expiry_claim_is_shared_with_concurrent_waiters)
+    drain_scope scope; std::atomic<int> cancels{0}; scope.enter();
+    const auto deadline = clock::now() + kBudget;
+    scope.arm(deadline, {}, [&] { ++cancels; scope.leave(); });
+    LT_CHECK(!scope.expire_if_due(deadline - std::chrono::nanoseconds(1)));
+    LT_CHECK(scope.expire_if_due(deadline));
+    srv::drain_result one, two;
+    std::thread waiter([&] { scope.wait(one); }); scope.wait(two); waiter.join();
+    LT_CHECK(one.status == srv::drain_status::deadline_expired);
+    LT_CHECK(two.status == srv::drain_status::deadline_expired);
+    LT_CHECK_EQ(one.remaining, std::size_t{1}); LT_CHECK_EQ(two.remaining, std::size_t{1});
+    LT_CHECK_EQ(cancels.load(), 1);
+LT_END_AUTO_TEST(external_expiry_claim_is_shared_with_concurrent_waiters)
+LT_BEGIN_AUTO_TEST(drain_scope_suite, last_leave_before_deadline_remains_completed_after_external_expiry)
+    drain_scope scope; int cancels = 0; scope.enter(); const auto deadline = clock::now() + kBudget;
+    scope.arm(deadline, {}, [&] { ++cancels; }); scope.leave();
+    LT_CHECK(!scope.expire_if_due(deadline)); srv::drain_result result; LT_CHECK(scope.wait(result).ok());
+    LT_CHECK(result.status == srv::drain_status::completed); LT_CHECK_EQ(cancels, 0);
+LT_END_AUTO_TEST(last_leave_before_deadline_remains_completed_after_external_expiry)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

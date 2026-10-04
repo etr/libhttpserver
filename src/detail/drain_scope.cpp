@@ -30,19 +30,28 @@ namespace httpserver {
 
 namespace detail {
 
+namespace {
+void cancel_safely(concurrency::unique_function<void()> cancel) noexcept {
+    try {
+        if (cancel) cancel();
+    } catch (...) { }
+}
+}  // namespace
+
 void drain_scope::enter() noexcept {
     std::lock_guard<std::mutex> lock(mu_);
     ++active_;
 }
 
 void drain_scope::leave() noexcept {
-    bool zero = false;
+    concurrency::unique_function<void()> cancel;
     {
         std::lock_guard<std::mutex> lock(mu_);
+        cancel = claim_expiry_locked(std::chrono::steady_clock::now());
         if (active_ > 0) --active_;
-        zero = active_ == 0;
     }
-    if (zero) cv_.notify_all();
+    cv_.notify_all();
+    cancel_safely(std::move(cancel));
 }
 
 std::size_t drain_scope::active() const noexcept {
@@ -66,42 +75,50 @@ bool drain_scope::armed() const noexcept {
     return armed_;
 }
 
+concurrency::unique_function<void()> drain_scope::claim_expiry_locked(
+        std::chrono::steady_clock::time_point now) noexcept {
+    if (!armed_ || cancelled_ || active_ == 0 || now < deadline_) return {};
+    cancelled_ = true;
+    expired_remaining_ = active_;
+    return std::move(cancel_remaining_);
+}
+
+bool drain_scope::expire_if_due(std::chrono::steady_clock::time_point now) noexcept {
+    concurrency::unique_function<void()> cancel;
+    bool expired;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        cancel = claim_expiry_locked(now);
+        expired = cancelled_;
+    }
+    cv_.notify_all();
+    cancel_safely(std::move(cancel));
+    return expired;
+}
+
 http::outcome drain_scope::wait(server::drain_result& out) {
     std::unique_lock<std::mutex> lock(mu_);
     if (!armed_) {
-        return http::outcome(http::outcome_code::invalid_state,
-                             "drain_scope: no drain armed");
+        return {http::outcome_code::invalid_state, "drain_scope: no drain armed"};
     }
-    if (active_ == 0) {
-        out.status = server::drain_status::completed;
-        out.remaining = 0;
-        return http::outcome::okay();
+    if (active_ > 0 && on_counted_thread_ && on_counted_thread_()) {
+        return {http::outcome_code::would_deadlock,
+                "drain_scope: wait from work counted by this drain"};
     }
-    if (on_counted_thread_ && on_counted_thread_()) {
-        return http::outcome(
-            http::outcome_code::would_deadlock,
-            "drain_scope: wait from work counted by this drain");
-    }
-    for (;;) {
-        cv_.wait_until(lock, deadline_);
-        if (active_ == 0) {
-            out.status = server::drain_status::completed;
-            out.remaining = 0;
-            return http::outcome::okay();
+    while (active_ > 0 && !cancelled_) {
+        auto cancel = claim_expiry_locked(std::chrono::steady_clock::now());
+        if (cancelled_) {
+            lock.unlock();
+            cv_.notify_all();
+            cancel_safely(std::move(cancel));
+            lock.lock();
+            break;
         }
-        if (std::chrono::steady_clock::now() >= deadline_) break;
+        cv_.wait_until(lock, deadline_);
     }
-    // Expired. Snapshot the pre-cancel count (PRD-V3N-REQ-032), claim
-    // the one cancel slot under the lock, then run the hook unlocked:
-    // it hard-stops engines and may take their mutexes, and a unit
-    // leaving concurrently must be able to take this one.
-    const std::size_t remaining = active_;
-    const bool first_expiry = !cancelled_;
-    cancelled_ = true;
-    lock.unlock();
-    if (first_expiry && cancel_remaining_) cancel_remaining_();
-    out.status = server::drain_status::deadline_expired;
-    out.remaining = remaining;
+    out.status = cancelled_ ? server::drain_status::deadline_expired
+                            : server::drain_status::completed;
+    out.remaining = cancelled_ ? expired_remaining_ : 0;
     return http::outcome::okay();
 }
 

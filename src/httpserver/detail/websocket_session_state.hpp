@@ -67,7 +67,7 @@ struct session_state {
     void control(httpserver::detail::websocket_control frame);
     bool select_output();
     void handshake_complete();
-    close_info best_reason() const;
+    http::outcome initiate_close(std::uint16_t code, std::string_view reason);
 
     std::mutex mu;
     std::shared_ptr<const std::function<void()>> progress;
@@ -78,7 +78,7 @@ struct session_state {
     std::size_t output_bytes = 0, outgoing_messages = 0, offered = 0;
     // Admission time belongs to the actual pending interval, independent
     // of delayed or coalesced transport observer delivery.
-    std::optional<std::chrono::steady_clock::time_point> output_pending_since;
+    std::optional<std::chrono::steady_clock::time_point> output_pending_since, closing_since;
     bool closing = false, done = false, peer_close = false, close_sent = false;
     bool receive_pending = false, writable_pending = false;
     std::shared_ptr<session_wait_node> receive_wait, writable_wait;
@@ -112,6 +112,8 @@ class session_wait {
     std::shared_ptr<session_wait_node> node_;
     httpserver::detail::task_frame_base* frame_ = nullptr;
 };
+http::outcome close_session(const std::shared_ptr<session_state>& state,
+                            std::uint16_t code, std::string_view reason);
 task<receive_result> receive_session(std::shared_ptr<session_state> state);
 task<http::outcome> writable_session(std::shared_ptr<session_state> state);
 }  // namespace httpserver::websocket::detail

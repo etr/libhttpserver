@@ -22,6 +22,7 @@
 #ifndef SRC_HTTPSERVER_EXCHANGE_HPP_
 #define SRC_HTTPSERVER_EXCHANGE_HPP_
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -333,10 +334,10 @@ class exchange {
 
     // Engine-facing disconnect notification (PRD-V3N-REQ-025). Reasons
     // mirror http::outcome_code; `ok` is not one. Idempotent: later
-    // calls are no-ops. Fans out to the stop token (handler-safe per
-    // DR-V3-008: request_stop returns before any waiter runs) and to
-    // every recorded resume signal, then moves a non-terminal state to
-    // cancelled. Terminal states stay terminal.
+    // calls are no-ops. Publishes the cancelled state and reason before
+    // waking stop-token and resume-signal waiters. Stop initiation is
+    // handler-safe per DR-V3-008; a posted waiter may run concurrently
+    // before request_stop returns. Terminal states stay terminal.
     http::outcome disconnect(http::outcome_code reason, std::string detail) {
         if (reason == http::outcome_code::ok) {
             return http::outcome(
@@ -346,13 +347,13 @@ class exchange {
         if (disconnected_) return http::outcome::okay();
         disconnected_ = true;
         disconnect_reason_ = http::outcome(reason, std::move(detail));
+        if (!terminal()) state_ = exchange_state::cancelled;
         body_.note_disconnect(disconnect_reason_);
         writer_.note_disconnect(disconnect_reason_);
         stop_.request_stop();
         for (resume_signal& sig : resume_signals_) {
             sig.cancel();
         }
-        if (!terminal()) state_ = exchange_state::cancelled;
         return http::outcome::okay();
     }
 
@@ -371,6 +372,27 @@ class exchange {
     }
 
  private:
+    // Watchdog reads race with handler decisions; copies retain value semantics
+    // so the exchange's public move operations can remain defaulted.
+    class suspension_flag {
+     public:
+        suspension_flag() noexcept = default;
+        suspension_flag(const suspension_flag& other) noexcept
+            : value_(other.value_.load()) { }
+        suspension_flag& operator=(const suspension_flag& other) noexcept {
+            value_.store(other.value_.load());
+            return *this;
+        }
+        suspension_flag& operator=(bool value) noexcept {
+            value_.store(value);
+            return *this;
+        }
+        operator bool() const noexcept { return value_.load(); }  // NOLINT(runtime/explicit)
+
+     private:
+        std::atomic<bool> value_{false};
+    };
+
     // Decisions after a disconnect fail closed, carrying the stored
     // detail so the diagnostic names the original reason.
     http::outcome closed_failure() const {
@@ -382,7 +404,7 @@ class exchange {
     detail::exchange_sink* sink_;
     std::uint64_t connection_id_ = 0;
     exchange_state state_ = exchange_state::head;
-    bool suspended_ = false;
+    suspension_flag suspended_;
     bool disconnected_ = false;
     http::outcome disconnect_reason_;
     stop_source stop_;

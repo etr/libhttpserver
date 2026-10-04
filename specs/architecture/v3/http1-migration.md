@@ -138,5 +138,28 @@ and retain the session while awaiting that signal with its own deadline.
 Returning immediately after `close()` can cancel unsent output. The
 transport's private progress observer is independent of this callback.
 Abrupt server stop safely cancels pending receive/writable work.
-WebSocket server drain Close/deadline orchestration belongs to TASK-123;
-this task supplies no claim of graceful WebSocket drain.
+`begin_drain(budget, ticket)` stops admission and starts WebSocket Close
+with code 1001 and reason `server drain`. Keep the session through its
+`on_close` notification, including when `receive()` reports peer Close.
+Drain initiation is nonblocking inside a handler; waiting there returns
+`would_deadlock`. An external ticket wait reports completion after all
+engine and handler units leave. A ticket may outlive its server.
+
+The first successful application, peer or drain Close fixes an immutable
+steady-clock anchor. The effective deadline is the earlier of that anchor
+plus `timeouts.ws_close` and the server's absolute drain deadline. Writes,
+traffic, notifications and 101 promotion do not extend it. Full prior
+HTTP responses and the entire 101 precede Close output; a stalled stream
+may exhaust the Close budget before those bytes flush. A dropped ticket
+still leaves the engine watchdog enforcing the deadline.
+
+A local Close timeout reports `timeout` / `WebSocket Close timeout` and
+cancels only that connection. Global drain expiry records the pre-cancel
+count once and reports `timeout` / `WebSocket drain deadline` to remaining
+WebSocket sessions; delayed ticket waits retain `deadline_expired`.
+Explicit stop reports `connection_closed` / `WebSocket server stop`.
+The first terminal outcome and the best peer/local Close metadata win.
+Close initiation wakes `writable()` with `connection_closed`; `receive()`
+continues through the handshake and wakes with the terminal result.
+Abrupt cancellation wakes both parked operations. Callbacks run outside
+protocol/engine locks and are delivered once.

@@ -62,12 +62,9 @@ namespace detail {
 // The cancel hook is the deadline-expiry hard stop of whatever is
 // still counted, fired at most once across concurrent waiters.
 //
-// Ordering contract: both hooks may capture raw server state because
-// they are reachable only while active_ > 0, and active_ > 0 implies
-// an engine has not finalized, which implies the owning impl is still
-// alive -- raw captures cannot dangle. wait()'s active_ == 0
-// short-circuit runs before any hook touch, so a late wait on a
-// still-armed scope reports completion instead.
+// Expiry and the last unit leaving arbitrate under the same mutex.
+// Its pre-cancel report stays available after all units leave. Hooks run
+// outside mu_ and are never touched by a late wait on an idle scope.
 class drain_scope final {
  public:
     // Counts one unit up.
@@ -104,6 +101,9 @@ class drain_scope final {
 
     bool armed() const noexcept;
 
+    // Claims expiry before cancellation; also used by owner watchdogs.
+    bool expire_if_due(std::chrono::steady_clock::time_point now) noexcept;
+
     // Blocking wait bounded by the armed deadline. ok with completed
     // when every unit left; ok with deadline_expired and the pre-cancel
     // remaining count when the deadline passed (the cancel hook fires
@@ -114,10 +114,13 @@ class drain_scope final {
     http::outcome wait(server::drain_result& out);
 
  private:
+    concurrency::unique_function<void()> claim_expiry_locked(
+        std::chrono::steady_clock::time_point now) noexcept;
     mutable std::mutex mu_;
     std::condition_variable cv_;
     std::size_t active_ = 0;   // guarded by mu_
     bool armed_ = false;       // guarded by mu_
+    std::size_t expired_remaining_ = 0;
     bool cancelled_ = false;   // guarded by mu_
     std::chrono::steady_clock::time_point deadline_{};   // guarded by mu_
     concurrency::unique_function<bool()> on_counted_thread_;   // mu_

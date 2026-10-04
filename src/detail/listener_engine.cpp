@@ -97,7 +97,7 @@ void listener_engine::collect_live_locked(
 // engine its graceful close. The listener release follows the same
 // first-caller rule as request_stop(); the engine-side quiesce guard
 // sorts out whatever a racing request_stop() already did.
-void listener_engine::quiesce() noexcept {
+void listener_engine::quiesce(std::chrono::steady_clock::time_point server_deadline) noexcept {
     bool release = false;
     std::vector<std::shared_ptr<connection_engine>> live;
     {
@@ -111,11 +111,11 @@ void listener_engine::quiesce() noexcept {
     // own transport in adopt_accepted), then every live engine.
     if (release) backend_.release_connection(id_);
     for (const std::shared_ptr<connection_engine>& engine : live) {
-        engine->quiesce();
+        engine->quiesce(server_deadline);
     }
 }
 
-void listener_engine::request_stop() noexcept {
+void listener_engine::request_stop(http::outcome_code reason) noexcept {
     bool release = false;
     std::vector<std::shared_ptr<connection_engine>> live;
     {
@@ -129,7 +129,7 @@ void listener_engine::request_stop() noexcept {
     // drain's deadline expiry hard-stops even already-quiesced engines.
     if (release) backend_.release_connection(id_);
     for (const std::shared_ptr<connection_engine>& engine : live) {
-        engine->shutdown();
+        engine->shutdown(reason);
     }
 }
 
