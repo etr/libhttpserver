@@ -61,6 +61,7 @@ src/httpserver/server/options.hpp
 src/httpserver/server/routes.hpp
 src/httpserver/server/configuration.hpp
 src/httpserver/server/server.hpp
+src/httpserver/server/readiness.hpp
 src/httpserver/exchange.hpp
 src/httpserver/body_reader.hpp
 src/httpserver/response_writer.hpp
