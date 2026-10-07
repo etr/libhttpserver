@@ -645,3 +645,5 @@ check-v3-tls-build:
 EXTRA_DIST += docs/task-130-tls-io-evidence.md
 
 EXTRA_DIST += docs/task-131-tls-credentials-evidence.md
+
+EXTRA_DIST += docs/external-psk-lookup-contract.md docs/task-134-psk-contract-evidence.md

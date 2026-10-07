@@ -1784,7 +1784,7 @@ websocket_upgrade_decision_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 websocket_utf8_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 if NATIVE_V3_TLS
-check_PROGRAMS += tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation tls_selection tls_mtls
+check_PROGRAMS += tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation tls_selection tls_mtls tls_psk_contract
 tls_io_SOURCES = unit/tls_io_test.cpp
 tls_io_race_SOURCES = unit/tls_io_race_test.cpp
 tls_io_loopback_SOURCES = unit/tls_io_loopback_test.cpp
@@ -1801,6 +1801,10 @@ tls_credentials_SOURCES = unit/tls_credentials_test.cpp
 tls_credentials_CPPFLAGS = $(tls_io_CPPFLAGS)
 tls_credentials_LDADD = $(tls_io_LDADD)
 tls_credentials_LDFLAGS = $(tls_io_LDFLAGS)
+tls_psk_contract_SOURCES = unit/tls_psk_contract_test.cpp
+tls_psk_contract_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+tls_psk_contract_LDADD = $(tls_io_LDADD)
+tls_psk_contract_LDFLAGS = $(tls_io_LDFLAGS)
 tls_mtls_SOURCES = unit/tls_mtls_test.cpp
 tls_mtls_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 tls_mtls_LDADD = $(tls_io_LDADD)
