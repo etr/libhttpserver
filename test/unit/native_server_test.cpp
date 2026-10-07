@@ -385,6 +385,40 @@ LT_BEGIN_AUTO_TEST(native_server_suite, unavailable_wake_fails_listen_before_bin
 LT_END_AUTO_TEST(unavailable_wake_fails_listen_before_bind)
 #endif
 
+LT_BEGIN_AUTO_TEST(native_server_suite, provider_selection_allows_plaintext_http1)
+    auto options = loopback_options();
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::certificates;
+    LT_CHECK(options.validate().ok());
+    srv::native_server server(options);
+    LT_CHECK(server.listen().ok());
+    LT_CHECK(server.get_bound_port(0) != 0);
+    server.stop();
+LT_END_AUTO_TEST(provider_selection_allows_plaintext_http1)
+
+// Semantic configuration remains valid even before transports are implemented.
+LT_BEGIN_AUTO_TEST(native_server_suite, unsupported_transports_rejected_before_any_bind)
+    for (const auto version : {http::protocol::http_1_1,
+                              http::protocol::http_2,
+                              http::protocol::http_3}) {
+        srv::server_options options;
+        options.add_listener({"127.0.0.1", 0, false});
+        options.add_listener({"127.0.0.1", 0, true});
+        options.tls().provider = srv::tls_provider::system_default;
+        options.tls().profile = srv::tls_profile::certificates;
+        options.protocols().enable(version);
+        LT_CHECK(options.validate().ok());
+        srv::native_server server(options);
+        const auto result = server.listen();
+        LT_CHECK(result.code() == http::outcome_code::not_supported);
+        LT_CHECK(!result.message().empty());
+        LT_CHECK(!server.is_running());
+        LT_CHECK_EQ(server.get_bound_port(0), 0);
+        LT_CHECK_EQ(server.get_bound_port(1), 0);
+        server.stop();
+    }
+LT_END_AUTO_TEST(unsupported_transports_rejected_before_any_bind)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

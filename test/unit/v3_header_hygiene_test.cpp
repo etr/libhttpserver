@@ -57,6 +57,7 @@ const std::vector<const char*>& header_files() {
         "/websocket/options.hpp",
         "/websocket/session.hpp",
         "/http.hpp",
+        "/features.hpp",
         "/http/fields.hpp",
         "/http/method.hpp",
         "/http/outcome.hpp",

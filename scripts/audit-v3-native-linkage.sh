@@ -12,17 +12,18 @@
 #       microhttpd / gnutls / openssl / wslay. The v3 native engine is
 #       engine-only vocabulary; any backend include here is a leak.
 #
+#       The designated private provider unit is a separate scoped target.
 #   A2. Binary probe: the built v3_native_linkage program (which links
-#       libhttpserver_v3core.la and nothing else) must not resolve any
-#       third-party runtime library. Inspected with otool -L on Darwin
-#       and ldd elsewhere; when neither tool exists the script prints
-#       SKIP for this probe (the A1 scan and the program's own link
-#       still ran; CI lanes that must enforce A2 provide the tool).
+#       libhttpserver_v3core.la and nothing else) permits libssl/libcrypto
+#       only in the enabled native lane. Other providers are rejected. Inspected with otool -L on Darwin
+#       and ldd elsewhere. Missing artifacts or inspectors fail closed.
+#       The native archive is checked independently for static leakage.
 #
 # Inputs (via env, all optional):
 #   BUILD_DIR — build directory holding test/v3_native_linkage;
 #               defaults to $REPO_ROOT/build.
-#   SRC_DIR   — source root; defaults to the script's ../..
+#   SRC_DIR   — source root; defaults to the script's parent.
+#   V3_TLS_MODE — yes/no; default no. The Make target supplies its configured mode.
 #
 # Exits 0 (PASS), 1 (FAIL), or 2 (usage error).
 # This script is a static check: it starts no servers and opens no ports.
@@ -44,6 +45,7 @@ fail() {
 BANNED_RE='microhttpd|gnutls|openssl|wslay'
 
 V3_PUBLIC_HEADERS="
+src/httpserver/features.hpp
 src/httpserver/http.hpp
 src/httpserver/http/outcome.hpp
 src/httpserver/http/protocol.hpp
@@ -78,6 +80,7 @@ src/httpserver/websocket/session.hpp
 "
 
 V3CORE_SOURCES="
+src/detail/features.cpp
 src/detail/io_operation.cpp
 src/detail/io_connection_owner.cpp
 src/detail/fake_io_backend.cpp
@@ -113,6 +116,7 @@ src/detail/websocket_session.cpp
 # are part of the native TLS-off surface and stay under the same ban.
 # TASK-115 adds the Digest nonce/ledger/parser/response chain.
 V3_DETAIL_HEADERS="
+src/httpserver/detail/tls_build_probe.hpp
 src/httpserver/detail/io_socket_backend.hpp
 src/httpserver/detail/io_epoll_backend.hpp
 src/httpserver/detail/io_kqueue_backend.hpp
@@ -165,66 +169,60 @@ echo "audit-v3-native-linkage: A1 PASS — no backend/TLS references in the v3 p
 # ---------------------------------------------------------------------------
 # A2: the linked audit binary resolves no third-party runtime library.
 # ---------------------------------------------------------------------------
+MODE="${V3_TLS_MODE:-no}"
+case "$MODE" in yes|no) ;; *) fail "invalid native TLS mode: $MODE" ;; esac
+# Libtool programs can be shell wrappers. Inspect their real executable.
 BIN="$BUILD_DIR/test/v3_native_linkage"
-if [[ ! -x "$BIN" ]]; then
-    echo "audit-v3-native-linkage: A2 SKIP — $BIN not built (build check_PROGRAMS first)"
-    exit 0
+if [[ -x "$BUILD_DIR/test/.libs/v3_native_linkage" ]]; then
+    BIN="$BUILD_DIR/test/.libs/v3_native_linkage"
+fi
+[[ -x "$BIN" ]] || fail "native audit executable missing: $BIN"
+ARCHIVE="$BUILD_DIR/src/.libs/libhttpserver_v3core.a"
+[[ -f "$ARCHIVE" ]] || fail "native archive missing: $ARCHIVE"
+command -v nm >/dev/null 2>&1 || fail "nm is required"
+
+if command -v otool >/dev/null 2>&1; then
+    deps="$(otool -L "$BIN")" || fail "otool failed"
+    libraries="$(printf '%s\n' "$deps" | tail -n +2 | awk '{print $1}')"
+elif command -v ldd >/dev/null 2>&1; then
+    deps="$(ldd "$BIN" 2>&1)" || fail "ldd failed"
+    libraries="$(printf '%s\n' "$deps" | awk '{print $1}')"
+elif command -v objdump >/dev/null 2>&1; then
+    deps="$(objdump -p "$BIN")" || fail "objdump failed"
+    libraries="$(printf '%s\n' "$deps" | awk '/DLL Name:/ {print $3}')"
+else
+    fail "a platform dependency inspector is required"
 fi
 
-inspect() {
-    if command -v otool >/dev/null 2>&1; then
-        otool -L "$BIN"
-    elif command -v ldd >/dev/null 2>&1; then
-        ldd "$BIN"
-    else
-        return 255
-    fi
-}
+[[ -n "$libraries" ]] || fail "dependency inspector returned no libraries"
 
-deps="$(inspect 2>/dev/null)"
-status=$?
-if [[ $status -eq 255 ]]; then
-    echo "audit-v3-native-linkage: A2 SKIP — neither otool nor ldd available"
-    exit 0
-fi
-
-# A listed-but-unresolved library is dead weight (e.g. a -l flag the
-# configuring environment put into global LDFLAGS), not a dependency of
-# the v3 surface: symbol resolution is the ground truth, so such a load
-# command is reported but does not fail the audit. A genuinely resolved
-# third-party library fails.
-symbol_probe_prefix() {
-    case "$1" in
-        *microhttpd*) echo 'MHD_' ;;
-        *gnutls*)     echo 'gnutls_' ;;
-        *ssl*|*crypto*) echo 'SSL_|OPENSSL_|EVP_' ;;
-        *nettle*)     echo 'nettle_' ;;
-        *hogweed*)    echo 'hogweed_' ;;
-        *wslay*)      echo 'wslay_' ;;
-        *)            echo '' ;;
+while IFS= read -r library; do
+    [[ -z "$library" ]] && continue
+    name="$(basename "$library" | tr '[:upper:]' '[:lower:]')"
+    case "$name" in
+        libssl.*|libcrypto.*|libssl-*|libcrypto-*)
+            [[ "$MODE" == yes ]] || fail "TLS-off load dependency: $library" ;;
+        libmicrohttpd*|libgnutls*|libnettle*|libhogweed*|libwslay*|libcurl*|libmbedtls*|libwolfssl*)
+            fail "unexpected third-party load dependency: $library" ;;
+        *)
+            case "$name" in
+                linux-vdso.*|ld-linux*|ld-musl*|libc.so*|libm.so*|libstdc++.*|libstdc++-*|libgcc_s.*|libgcc_s-*|libwinpthread-*|libpthread.*|libthr.*|libexecinfo.*|libatomic.*|libdl.*|librt.*|libresolv.*|libc++.*|libc++abi.*|libsystem.*|kernel32.dll|ws2_32.dll|msvcrt.dll|ucrtbase.dll|api-ms-win-*.dll|advapi32.dll|bcrypt.dll|ntdll.dll) ;;
+                *) fail "unexpected third-party load dependency: $library" ;;
+            esac ;;
     esac
-}
+done <<< "$libraries"
 
-fail_a2=0
-while IFS= read -r listed; do
-    [[ -z "$listed" ]] && continue
-    prefix="$(symbol_probe_prefix "$listed")"
-    resolved=1
-    if [[ -n "$prefix" ]] && command -v nm >/dev/null 2>&1; then
-        if ! nm -u "$BIN" 2>/dev/null | grep -Eq "^_?($prefix)"; then
-            resolved=0
-        fi
+# Inspect every archive member, including objects not pulled into this consumer.
+# Normalize nm output: Mach-O prefixes C symbols with _, GNU nm prints 'U name'.
+for artifact in "$BIN" "$ARCHIVE"; do
+    symbols="$(nm -u "$artifact" 2>/dev/null)" || fail "nm failed: $artifact"
+    names="$(printf '%s\n' "$symbols" | awk '{print $NF}' | sed 's/^_//')"
+    if printf '%s\n' "$names" | grep -Eq '^(MHD_|gnutls_|nettle_|hogweed_|wslay_|curl_|wolfSSL_|mbedtls_)'; then
+        fail "non-native provider symbols in $artifact"
     fi
-    if [[ $resolved -eq 1 ]]; then
-        echo "audit-v3-native-linkage: A2 FAIL — third-party runtime linkage: $listed" >&2
-        fail_a2=1
-    else
-        echo "audit-v3-native-linkage: note — $listed listed (environment LDFLAGS) but resolves no symbols"
+    if [[ "$MODE" == no ]] && printf '%s\n' "$names" | grep -Eq '^(SSL_|TLS_|DTLS_|OPENSSL_|OpenSSL_|CRYPTO_|EVP_|BIO_|ERR_|OSSL_|X509_|RAND_|BN_|PEM_|ASN1_)'; then
+        fail "TLS-off provider symbols in $artifact"
     fi
-done < <(printf '%s\n' "$deps" | grep -Ei 'libmicrohttpd|libgnutls|libssl|libcrypto|libnettle|libhogweed|libwslay' || true)
-
-if [[ $fail_a2 -ne 0 ]]; then
-    fail "the native TLS-off binary resolves third-party runtime libraries"
-fi
-echo "audit-v3-native-linkage: A2 PASS — $BIN resolves only platform and C++ runtime symbols"
+done
+echo "audit-v3-native-linkage: A2 PASS — native TLS=$MODE dependencies and archive symbols"
 echo "audit-v3-native-linkage: PASS"

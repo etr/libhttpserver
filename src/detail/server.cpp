@@ -124,6 +124,19 @@ class native_server::impl {
         if (const auto valid = options_.validate(); !valid.ok()) {
             return valid;
         }
+        // Build-time provider availability does not imply an implemented
+        // transport. Refuse the whole configuration before binding any endpoint.
+        if (options_.protocols().contains(http::protocol::http_2)
+            || options_.protocols().contains(http::protocol::http_3)) {
+            return {http::outcome_code::not_supported,
+                    "native_server: requested TLS/protocol transport is unavailable"};
+        }
+        for (std::size_t i = 0; i < options_.listener_count(); ++i) {
+            if (options_.listener(i).tls) {
+                return {http::outcome_code::not_supported,
+                        "native_server: requested TLS transport is unavailable"};
+            }
+        }
         if (!registry_state_.ok()) return registry_state_;
         return backend_->ready();
     }

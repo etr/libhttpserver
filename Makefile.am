@@ -406,9 +406,9 @@ check-local: check-headers check-examples lint-warning-suppressions lint-server-
 # scripts/audit-v3-native-linkage.sh over it: a banned include in the
 # v3 surface or a third-party runtime library in the binary fails check.
 check-v3-native-linkage:
-	@echo "=== check-v3-native-linkage: native TLS-off surface audit ==="
+	@echo "=== check-v3-native-linkage: native provider surface audit ==="
 	@$(MAKE) $(AM_MAKEFLAGS) -C "$(top_builddir)/test" v3_native_linkage >/dev/null
-	@BUILD_DIR="$(abs_top_builddir)" SRC_DIR="$(top_srcdir)" $(top_srcdir)/scripts/audit-v3-native-linkage.sh
+	@BUILD_DIR="$(abs_top_builddir)" SRC_DIR="$(top_srcdir)" V3_TLS_MODE="$(enable_v3_tls)" $(top_srcdir)/scripts/audit-v3-native-linkage.sh
 
 # TASK-040: enforce static invariants on the two flagship examples
 # (hello_world.cpp <= 10 LOC, lambda-only; shared_state.cpp class+mutex).
@@ -595,7 +595,7 @@ lint-workflow-pinning:
 	@$(top_srcdir)/scripts/test_check_workflow_pinning.sh
 	@$(top_srcdir)/scripts/check-workflow-pinning.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-fence-balance lint-msan-lane lint-valgrind-lane lint-codeql-workflow lint-workflow-pinning
+.PHONY: check-v3-tls-build check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-fence-balance lint-msan-lane lint-valgrind-lane lint-codeql-workflow lint-workflow-pinning
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and
@@ -636,3 +636,8 @@ dist-hook:
 
 EXTRA_DIST += scripts/run-v3-http1-websocket-gates.sh scripts/run-v3-protocol-fuzz.sh
 EXTRA_DIST += scripts/run-v3-protocol-sanitizers.py
+
+EXTRA_DIST += scripts/check-v3-tls-build.py scripts/test-v3-native-linkage.py docs/native-tls-build.md
+check-v3-tls-build:
+	@python3 $(top_srcdir)/scripts/check-v3-tls-build.py
+	@python3 $(top_srcdir)/scripts/test-v3-native-linkage.py

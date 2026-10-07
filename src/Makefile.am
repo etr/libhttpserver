@@ -32,7 +32,7 @@ lib_LTLIBRARIES = libhttpserver.la
 # script proves the native TLS-off surface needs no microhttpd, gnutls,
 # openssl, or wslay.
 noinst_LTLIBRARIES = libhttpserver_v3core.la
-libhttpserver_v3core_la_SOURCES = detail/io_operation.cpp detail/io_connection_owner.cpp detail/fake_io_backend.cpp detail/io_poll_backend.cpp detail/io_epoll_backend.cpp detail/io_kqueue_backend.cpp detail/io_managed_backend.cpp detail/io_managed_socket_backend.cpp detail/io_external_adapter.cpp detail/io_wake_source.cpp detail/worker_pool.cpp detail/connection_engine.cpp detail/connection_engine_request.cpp detail/listener_engine.cpp detail/drain_scope.cpp detail/server.cpp detail/auth_basic.cpp detail/auth_digest.cpp detail/forms_urlencoded.cpp detail/forms_multipart.cpp detail/forms_multipart_files.cpp detail/server_hooks.cpp detail/request_lifecycle.cpp detail/net_address.cpp detail/peer_policy.cpp detail/websocket_codec.cpp detail/websocket_driver.cpp detail/websocket_session_state.cpp detail/websocket_session.cpp detail/http1_websocket_handshake.cpp detail/connection_engine_websocket.cpp
+libhttpserver_v3core_la_SOURCES = detail/features.cpp detail/io_operation.cpp detail/io_connection_owner.cpp detail/fake_io_backend.cpp detail/io_poll_backend.cpp detail/io_epoll_backend.cpp detail/io_kqueue_backend.cpp detail/io_managed_backend.cpp detail/io_managed_socket_backend.cpp detail/io_external_adapter.cpp detail/io_wake_source.cpp detail/worker_pool.cpp detail/connection_engine.cpp detail/connection_engine_request.cpp detail/listener_engine.cpp detail/drain_scope.cpp detail/server.cpp detail/auth_basic.cpp detail/auth_digest.cpp detail/forms_urlencoded.cpp detail/forms_multipart.cpp detail/forms_multipart_files.cpp detail/server_hooks.cpp detail/request_lifecycle.cpp detail/net_address.cpp detail/peer_policy.cpp detail/websocket_codec.cpp detail/websocket_driver.cpp detail/websocket_session_state.cpp detail/websocket_session.cpp detail/http1_websocket_handshake.cpp detail/connection_engine_websocket.cpp
 
 libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_request_auth.cpp http_response.cpp http_response_factories.cpp http_resource.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp hook_handle.cpp peer_address.cpp resource_hook_table.cpp cookie.cpp detail/http_endpoint.cpp detail/response_body.cpp detail/ip_representation.cpp detail/ip_access_control.cpp detail/ws_registry.cpp detail/hook_bus.cpp detail/route_table.cpp detail/daemon_lifecycle.cpp detail/dispatch_util.cpp detail/error_pages.cpp detail/hook_dispatcher.cpp detail/http_request_impl.cpp detail/http_request_impl_args.cpp detail/http_request_impl_tls.cpp detail/request_dispatcher.cpp detail/request_pipeline.cpp detail/response_materializer.cpp detail/upload_pipeline.cpp detail/websocket_upgrader.cpp detail/webserver_impl.cpp detail/webserver_callbacks.cpp detail/webserver_body_pipeline.cpp
 # noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
@@ -67,7 +67,7 @@ libhttpserver_la_CFLAGS = $(AM_CFLAGS)
 libhttpserver_la_CXXFLAGS = $(AM_CXXFLAGS)
 # -version-number is scoped to the shared library link step only (not global
 # LDFLAGS, which would affect executables and test runners unnecessarily).
-libhttpserver_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined -version-number @LHT_LDF_VERSION@
+libhttpserver_la_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS) -no-undefined -version-number @LHT_LDF_VERSION@
 
 install-data-hook:
 	@# Install an `<httpserverpp>` alias next to `<httpserver.hpp>`. On POSIX
@@ -85,3 +85,16 @@ uninstall-hook:
 	(cd $(DESTDIR)$(includedir) && rm -f httpserverpp)
 
 noinst_HEADERS += httpserver/detail/http1_host.hpp
+
+# Backend discovery flags belong only to this private provider translation unit.
+libhttpserver_v3core_la_LIBADD =
+if NATIVE_V3_TLS
+noinst_LTLIBRARIES += libhttpserver_v3tls.la
+libhttpserver_v3tls_la_SOURCES = detail/tls_provider.cpp
+libhttpserver_v3tls_la_CPPFLAGS = $(V3_TLS_CFLAGS) $(AM_CPPFLAGS) $(CPPFLAGS)
+libhttpserver_v3tls_la_LDFLAGS = $(V3_TLS_LDFLAGS)
+libhttpserver_v3tls_la_LIBADD = $(V3_TLS_LIBS)
+libhttpserver_v3core_la_LIBADD += libhttpserver_v3tls.la
+endif
+noinst_HEADERS += httpserver/detail/tls_build_probe.hpp
+nobase_include_HEADERS += httpserver/features.hpp
