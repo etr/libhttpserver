@@ -100,3 +100,6 @@ noinst_HEADERS += httpserver/detail/tls_build_probe.hpp
 nobase_include_HEADERS += httpserver/features.hpp
 
 noinst_HEADERS += httpserver/detail/tls_io_backend.hpp httpserver/detail/tls_session.hpp httpserver/detail/tls_credentials.hpp httpserver/detail/tls_psk.hpp httpserver/detail/tls_psk_runtime.hpp httpserver/detail/tls_psk_attempt.hpp
+
+# TASK-137: HPACK primitives are private, header-only native helpers.
+noinst_HEADERS += httpserver/detail/hpack_primitives.hpp httpserver/detail/hpack_static_table.hpp httpserver/detail/hpack_huffman_table.hpp

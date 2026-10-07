@@ -1851,3 +1851,12 @@ EXTRA_DIST += cert.pem key.pem
 EXTRA_DIST += data/tls_credentials/a.pem data/tls_credentials/a-key.pem data/tls_credentials/b.pem data/tls_credentials/b-key.pem data/tls_credentials/root.pem data/tls_credentials/intermediate.pem
 
 EXTRA_DIST += data/tls_credentials/client-expired-key.pem data/tls_credentials/client-expired.pem data/tls_credentials/client-intermediate.pem data/tls_credentials/client-no-cn-key.pem data/tls_credentials/client-no-cn.pem data/tls_credentials/client-other-key.pem data/tls_credentials/client-other-root.pem data/tls_credentials/client-other.pem data/tls_credentials/client-root.pem data/tls_credentials/client-valid-key.pem data/tls_credentials/client-valid.pem data/tls_credentials/client-wrong-purpose-key.pem data/tls_credentials/client-wrong-purpose.pem
+
+check_PROGRAMS += hpack_primitives hpack_static_table hpack_corpus
+hpack_primitives_SOURCES = unit/hpack_primitives_test.cpp
+hpack_primitives_LDADD =
+hpack_static_table_SOURCES = unit/hpack_static_table_test.cpp
+hpack_static_table_LDADD =
+hpack_corpus_SOURCES = unit/hpack_corpus_test.cpp fuzz/hpack_fuzz.cpp
+hpack_corpus_LDADD =
+EXTRA_DIST += data/hpack/rfc7541.hpp fuzz/hpack_fuzz.hpp fuzz/README-hpack.md
