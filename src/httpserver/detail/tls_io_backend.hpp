@@ -9,6 +9,7 @@
 #endif
 #ifndef SRC_HTTPSERVER_DETAIL_TLS_IO_BACKEND_HPP_
 #define SRC_HTTPSERVER_DETAIL_TLS_IO_BACKEND_HPP_
+#include <array>
 #include <chrono>
 #include <memory>
 #include <string_view>
@@ -23,6 +24,8 @@ class tls_context {
 
  private:
     friend class tls_session;
+    void configure_server();
+    std::array<unsigned char, 32> session_namespace_{};
     std::shared_ptr<void> native_;
 };
 class tls_handshake_operation final : public op_handle {

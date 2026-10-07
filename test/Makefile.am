@@ -1784,7 +1784,7 @@ websocket_upgrade_decision_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 websocket_utf8_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 if NATIVE_V3_TLS
-check_PROGRAMS += tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation
+check_PROGRAMS += tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation tls_selection
 tls_io_SOURCES = unit/tls_io_test.cpp
 tls_io_race_SOURCES = unit/tls_io_race_test.cpp
 tls_io_loopback_SOURCES = unit/tls_io_loopback_test.cpp
@@ -1801,6 +1801,11 @@ tls_credentials_SOURCES = unit/tls_credentials_test.cpp
 tls_credentials_CPPFLAGS = $(tls_io_CPPFLAGS)
 tls_credentials_LDADD = $(tls_io_LDADD)
 tls_credentials_LDFLAGS = $(tls_io_LDFLAGS)
+tls_selection_SOURCES = unit/tls_selection_test.cpp
+tls_selection_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+tls_selection_LDADD = $(tls_io_LDADD)
+tls_selection_LDFLAGS = $(tls_io_LDFLAGS)
+
 tls_credentials_rotation_SOURCES = unit/tls_credentials_rotation_test.cpp
 tls_credentials_rotation_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 tls_credentials_rotation_LDADD = $(tls_io_LDADD)

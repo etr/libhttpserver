@@ -100,21 +100,6 @@ void valid_label(std::string_view label) {
         require(letter_or_digit(c) || c == '-');
     }
 }
-std::string canonical_host(std::string host) {
-    for (char& c : host) {
-        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + ('a' - 'A'));
-    }
-    if (!host.empty() && host.back() == '.') host.pop_back();
-    require(!host.empty() && host.size() <= 253);
-    std::string_view remaining(host);
-    while (true) {
-        const auto end = remaining.find('.');
-        valid_label(remaining.substr(0, end));
-        if (end == std::string_view::npos) break;
-        remaining.remove_prefix(end + 1);
-    }
-    return host;
-}
 std::vector<unsigned char> encode_alpn(const std::vector<std::string>& protocols) {
     std::vector<unsigned char> wire;
     std::unordered_set<std::string> unique;
@@ -132,6 +117,21 @@ void valid_profile(const tls_host_credentials& host) {
     if (host.profile == server::tls_profile::mutual_tls) require(!host.trust_roots_pem.empty());
 }
 }  // namespace
+std::string canonical_tls_host(std::string host) {
+    for (char& c : host) {
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + ('a' - 'A'));
+    }
+    if (!host.empty() && host.back() == '.') host.pop_back();
+    require(!host.empty() && host.size() <= 253);
+    std::string_view remaining(host);
+    while (true) {
+        const auto end = remaining.find('.');
+        valid_label(remaining.substr(0, end));
+        if (end == std::string_view::npos) break;
+        remaining.remove_prefix(end + 1);
+    }
+    return host;
+}
 std::shared_ptr<tls_context> tls_context::client() {
     error_scope errors;
     auto context = std::make_shared<tls_context>();
@@ -154,6 +154,7 @@ std::shared_ptr<tls_context> tls_context::server_pem(std::string_view chain, std
     require(SSL_CTX_use_PrivateKey(ctx, parsed_key.get()) == 1);
     require(SSL_CTX_check_private_key(ctx) == 1);
     install_roots(ctx, roots);
+    context->configure_server();
     return context;
 }
 tls_credentials_selection tls_credentials_snapshot::select(std::size_t host) const {
@@ -167,7 +168,7 @@ http::outcome tls_credentials_registry::replace(const tls_credentials_config& co
         std::unordered_set<std::string> names;
         for (const auto& host : config.hosts) {
             valid_profile(host);
-            auto name = canonical_host(host.host);
+            auto name = canonical_tls_host(host.host);
             require(names.insert(name).second);
             auto wire = encode_alpn(host.alpn);
             candidate->contexts_.push_back(tls_context::server_pem(host.certificate_chain_pem, host.private_key_pem, host.trust_roots_pem));

@@ -35,6 +35,7 @@ class tls_session final {
     bool output_pending() const;
 
  private:
+    friend class tls_context;
     struct impl;
     std::unique_ptr<impl> impl_;
 };

@@ -9,9 +9,9 @@
 Provide early SNI, default-host and ALPN selection for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Select host profile during ClientHello and acknowledge accepted SNI.
-- [ ] Choose h2 or HTTP/1 ALPN from the selected profile.
-- [ ] Test missing/unknown SNI, resumption and registry replacement.
+- [x] Select host profile during ClientHello and acknowledge accepted SNI.
+- [x] Choose h2 or HTTP/1 ALPN from the selected profile.
+- [x] Test missing/unknown SNI, resumption and registry replacement.
 
 **Dependencies:**
 - Blocked by: TASK-130, TASK-131
@@ -24,4 +24,6 @@ Provide early SNI, default-host and ALPN selection for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-005, PRD-V3N-REQ-034, PRD-V3N-REQ-035
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** Not Started
+**Implementation evidence:** [Local TLS selection, resumption and rotation receipts](../../../docs/task-132-tls-selection-evidence.md).
+
+**Status:** In Progress

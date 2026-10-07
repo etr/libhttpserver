@@ -17,6 +17,8 @@
 #include <httpserver/detail/tls_io_backend.hpp>
 #include <httpserver/server/options.hpp>
 namespace httpserver::detail {
+// Shared canonical DNS validation for configuration and current ClientHello.
+std::string canonical_tls_host(std::string host);
 struct tls_host_credentials {
     std::string host;
     std::string certificate_chain_pem;
