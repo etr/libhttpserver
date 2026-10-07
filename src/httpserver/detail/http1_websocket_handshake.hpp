@@ -25,14 +25,9 @@
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP1_WEBSOCKET_HANDSHAKE_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP1_WEBSOCKET_HANDSHAKE_HPP_
 #include <string>
-#include <httpserver/exchange.hpp>
+#include <httpserver/detail/websocket_handshake.hpp>
 namespace httpserver::detail {
-struct http1_websocket_plan {
-    http::outcome status;
-    std::string accept, selected_subprotocol;
-    http::status rejection_status = http::status::from_code(400);
-    http::fields rejection_fields;
-};
+using http1_websocket_plan = websocket_handshake_plan;
 http1_websocket_plan negotiate_http1_websocket(const http::request_head& head,
     const ws_upgrade_options& options, std::size_t max_bytes = 65536,
     std::size_t max_fields = 128);

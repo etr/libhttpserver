@@ -119,3 +119,6 @@ noinst_HEADERS += httpserver/detail/http2_flow_control.hpp httpserver/detail/htt
 libhttpserver_v3core_la_SOURCES += detail/http2_body_stream.cpp
 noinst_HEADERS += httpserver/detail/http2_request_state.hpp
 libhttpserver_v3core_la_SOURCES += detail/http2_response_stream.cpp detail/http2_stream_flow.cpp
+
+noinst_HEADERS += httpserver/detail/websocket_handshake.hpp httpserver/detail/http2_websocket_handshake.hpp
+libhttpserver_v3core_la_SOURCES += detail/websocket_handshake.cpp detail/http2_websocket_handshake.cpp detail/http2_websocket_stream.cpp

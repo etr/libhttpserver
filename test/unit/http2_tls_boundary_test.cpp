@@ -11,6 +11,7 @@
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/exchange.hpp>
 #include "./http2_request_fixture.hpp"
+#include "./http2_websocket_fixture.hpp"
 #include "./http2_fixture.hpp"
 #include "./tls_acme_peer.hpp"
 #include "./tls_acme_adapter.hpp"
@@ -229,6 +230,58 @@ LT_BEGIN_AUTO_TEST(http2_tls_boundary_suite, segmented_tls_body_waits_for_stream
     LT_CHECK_EQ(std::string(frames[0].payload.begin(), frames[0].payload.end()), "abc");
     LT_CHECK_EQ(frames[1].type, 0u); LT_CHECK_EQ(frames[1].flags, 1u); LT_CHECK(frames[1].payload.empty());
 LT_END_AUTO_TEST(segmented_tls_body_waits_for_stream_credit_then_sends_exact_response)
+LT_BEGIN_AUTO_TEST(http2_tls_boundary_suite, tls_extended_connect_exchanges_websocket_data_with_a_sibling)
+    hd::tls_credentials_registry registry; LT_ASSERT(registry.replace(tls_test::credentials()).ok());
+    acme_test::adapter_connection peer(registry.acquire()->select_default(), false); LT_ASSERT(peer.connect());
+    LT_ASSERT(peer.tls->negotiated_protocol() == hd::tls_negotiated_protocol::h2);
+    h2ws::fixture f;
+    auto input = [&](const std::vector<std::uint8_t>& wire) {
+        std::size_t written = 0;
+        if (SSL_write_ex(peer.peer.get(), wire.data(), wire.size(), &written) != 1 || written != wire.size()) return false;
+        for (std::size_t total = 0; total < wire.size();) {
+            std::array<std::byte, 7> bytes{}; hd::read_operation read(peer.owner, 1, bytes);
+            read.submit(*peer.tls); peer.drive();
+            if (!read.state()->applied()) return false;
+            const auto n = read.state()->stored_result().transferred;
+            if (!n || !h2test::feed(*f.engine, {reinterpret_cast<const std::uint8_t*>(bytes.data()), n})) return false;
+            total += n;
+        }
+        f.executor.run_pending(); return true;
+    };
+    auto transmit = [&]() {
+        auto wire = f.output();
+        for (std::size_t at = 0; at < wire.size();) {
+            const auto n = std::min<std::size_t>(11, wire.size() - at);
+            hd::write_operation write(peer.owner, 1, {reinterpret_cast<const std::byte*>(wire.data() + at), n});
+            write.submit(*peer.tls); peer.drive();
+            if (!write.state()->applied() || write.state()->stored_result().transferred != n) return std::vector<std::uint8_t>{};
+            at += n;
+        }
+        std::vector<std::uint8_t> received;
+        for (unsigned round = 0; round < 1000 && received.size() < wire.size(); ++round) {
+            std::array<std::uint8_t, 17> bytes{}; std::size_t n = 0;
+            SSL_read_ex(peer.peer.get(), bytes.data(), bytes.size(), &n);
+            received.insert(received.end(), bytes.begin(), bytes.begin() + n); peer.drive();
+        }
+        if (received != wire) return std::vector<std::uint8_t>{};
+        return received;
+    };
+    auto advertised = transmit(); LT_ASSERT_EQ(h2test::count_type(advertised, 4), 1u);
+    bool capability = false;
+    for (std::size_t at = 9; at + 6 <= advertised.size(); at += 6) {
+        if (advertised[at + 1] == 8) capability = advertised[at + 5] == 1;
+    }
+    LT_CHECK(capability);
+    auto wire = h2test::preface(); h2test::append(wire, h2test::frame(4, 1));
+    h2test::append(wire, h2test::frame(1, 4, 1, h2test::encode(f.encoder, h2ws::connect())));
+    LT_ASSERT(input(wire)); LT_ASSERT_EQ(f.sessions.size(), 1u);
+    auto received = transmit();
+    wire = h2test::frame(0, 0, 1, h2ws::masked(9, "tls"));
+    h2test::append(wire, h2test::frame(1, 5, 3, h2test::encode(f.encoder, h2test::get())));
+    LT_ASSERT(input(wire)); h2test::append(received, transmit()); auto replies = h2test::responses(received, true); LT_ASSERT_EQ(replies.size(), 2u);
+    LT_CHECK_EQ(replies[0].fields[0].value, "200"); LT_CHECK_EQ(replies[1].fields[0].value, "204");
+    LT_CHECK(h2ws::data(received, 1) == std::vector<std::uint8_t>({138, 3, 't', 'l', 's'}));
+LT_END_AUTO_TEST(tls_extended_connect_exchanges_websocket_data_with_a_sibling)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

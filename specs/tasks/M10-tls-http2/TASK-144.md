@@ -9,9 +9,9 @@
 Provide WebSocket over HTTP/2 Extended CONNECT for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Advertise and require SETTINGS_ENABLE_CONNECT_PROTOCOL.
-- [ ] Validate Extended CONNECT without HTTP/1 Upgrade fields.
-- [ ] Map one HTTP/2 stream to the shared WebSocket codec.
+- [x] Advertise and require SETTINGS_ENABLE_CONNECT_PROTOCOL.
+- [x] Validate Extended CONNECT without HTTP/1 Upgrade fields.
+- [x] Map one HTTP/2 stream to the shared WebSocket codec.
 
 **Dependencies:**
 - Blocked by: TASK-121, TASK-140, TASK-141, TASK-143
@@ -24,4 +24,4 @@ Provide WebSocket over HTTP/2 Extended CONNECT for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-011, PRD-V3N-REQ-012, PRD-V3N-REQ-013, PRD-V3N-REQ-033
 **Related Decisions:** DR-V3-001, DR-V3-003
 
-**Status:** Not Started
+**Status:** Complete

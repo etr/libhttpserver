@@ -37,7 +37,7 @@ struct http2_frame_header {
     std::uint32_t stream_id = 0;
 };
 struct http2_settings {
-    std::uint32_t header_table_size = 4096, enable_push = 1;
+    std::uint32_t header_table_size = 4096, enable_push = 1, enable_connect_protocol = 0;
     std::optional<std::uint32_t> max_concurrent_streams;
     std::uint32_t initial_window_size = 65535, max_frame_size = 16384;
     std::optional<std::uint32_t> max_header_list_size;
@@ -86,6 +86,7 @@ class http2_frame_parser {
     std::array<std::uint8_t, 9> header_bytes_{};
     std::array<std::uint8_t, 8> scratch_{};
     std::size_t magic_used_ = 0, header_used_ = 0, payload_used_ = 0;
+    std::uint64_t frame_sequence_ = 0;
     std::uint32_t window_peak_ = 65535;
     std::uint32_t maximum_ = 16384, continuation_ = 0;
     http2_frame_header frame_;

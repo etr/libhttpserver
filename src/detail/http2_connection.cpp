@@ -25,7 +25,10 @@ bool valid_limits(http2_limits l) {
         l.pending_settings > 0 && l.pending_settings <= 16 && l.frames_per_turn > 0 && l.frames_per_turn <= 64 && l.settings_timeout > l.settings_timeout.zero() && valid_rates(l);
 }
 bool valid_settings(const http2_settings& s) {
-    return s.enable_push == 1 && s.initial_window_size <= 0x7fffffff && s.max_frame_size >= 16384 && s.max_frame_size <= 0xffffff;
+    return s.enable_push == 1 && s.enable_connect_protocol <= 1 && s.initial_window_size <= 0x7fffffff && s.max_frame_size >= 16384 && s.max_frame_size <= 0xffffff;
+}
+bool valid_update(const http2_settings& settings, const http2_settings& advertised) {
+    return valid_settings(settings) && (!advertised.enable_connect_protocol || settings.enable_connect_protocol);
 }
 void put32(std::uint8_t* p, std::uint32_t n) {
     for (unsigned i = 0; i < 4; ++i) p[i] = static_cast<std::uint8_t>(n >> ((3 - i) * 8));
@@ -80,7 +83,7 @@ http::outcome_code http2_connection::queue_settings(http2_settings settings) {
     if (failure_) return failure_->outcome;
     if (!settings.max_concurrent_streams) settings.max_concurrent_streams = advertised_.max_concurrent_streams;
     if (!settings.max_header_list_size) settings.max_header_list_size = advertised_.max_header_list_size;
-    if (!valid_settings(settings)) return http::outcome_code::invalid_argument;
+    if (!valid_update(settings, advertised_)) return http::outcome_code::invalid_argument;
     if (pending_count_ + queued_settings_ >= limits_.pending_settings) return http::outcome_code::limit_exceeded;
     slot value;
     value.bytes[3] = 4;
@@ -94,6 +97,7 @@ http::outcome_code http2_connection::queue_settings(http2_settings settings) {
     add(4, settings.initial_window_size);
     add(5, settings.max_frame_size);
     if (settings.max_header_list_size) add(6, *settings.max_header_list_size);
+    if (settings.enable_connect_protocol) add(8, settings.enable_connect_protocol);
     value.bytes[2] = static_cast<std::uint8_t>(value.size - 9);
     value.settings = settings;
     if (!enqueue(std::move(value))) return http::outcome_code::limit_exceeded;
@@ -278,10 +282,16 @@ bool http2_connection::charge_frame(const http2_feed_result& result, time_point 
     if (control_rate_.take(now, limits_.control_events_per_interval, limits_.control_interval)) return true;
     fail(overload()); return false;
 }
+http2_feed_result http2_connection::parse(std::span<const std::uint8_t> bytes) {
+    const auto sequence = parser_.frame_sequence_;
+    auto result = parser_.feed(bytes);
+    if (sequence != parser_.frame_sequence_) connect_at_frame_start_ = local_.enable_connect_protocol == 1;
+    return result;
+}
 http2_feed_result http2_connection::feed(std::span<const std::uint8_t> bytes, time_point now) {
     if (auto e = check_timeout(now)) return {http2_progress::failed, 0, e};
     if (processed_ >= limits_.frames_per_turn) return {http2_progress::yield, 0, {}};
-    auto result = parser_.feed(bytes);
+    auto result = parse(bytes);
     if (!charge_frame(result, now)) return {http2_progress::failed, result.consumed, failure_};
     if (result.error) {
         fail(*result.error); return result;

@@ -23,6 +23,7 @@
 #include <httpserver/detail/http2_request_head.hpp>
 #include <httpserver/detail/http2_body_stream.hpp>
 #include <httpserver/detail/exchange_runner.hpp>
+#include <httpserver/detail/websocket_driver.hpp>
 namespace httpserver::detail {
 namespace http2_request_helpers {
 // Bound simultaneous decoded fields, semantic fields and raw/derived targets.
@@ -120,11 +121,17 @@ class route_task {
 };
 }  // namespace http2_request_helpers
 using namespace http2_request_helpers;  // NOLINT(build/namespaces)
-struct http2_request_engine::state {
+struct http2_request_engine::state : std::enable_shared_from_this<state> {
     struct stream final : exchange_sink, body_sink {
         state& owner;
         std::uint32_t id;
         http::request_head head;
+        http2_connect_metadata connect;
+        std::shared_ptr<websocket_driver> websocket;
+        server::reservation websocket_input_charge, websocket_output_charge, websocket_message_charge;
+        bool websocket_input_blocked = false, websocket_pumping = false, receive_eof_delivered = false;
+        std::optional<http2_connection::time_point> websocket_write_anchor;
+        std::uint64_t padding_credit = 0;
         server::reservation count_charge, bytes_charge, fields_charge, trailer_charge, trailer_fields_charge, metadata_charge;
         std::optional<drain_scope::unit> drain_unit;
         http2_body_stream body;
@@ -140,9 +147,8 @@ struct http2_request_engine::state {
         }
         void on_respond(const http::status& status, const http::fields& fields) override { owner.respond(id, status.code(), fields, false); }
         void on_start_response(const http::status& status, const http::fields& fields) override { owner.respond(id, status.code(), fields, true); }
-        websocket_upgrade_result on_upgrade(const ws_upgrade_options&) override {
-            websocket_upgrade_result result; result.status = {http::outcome_code::invalid_state, "HTTP/2 upgrade unsupported"}; return result;
-        }
+        websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override { return owner.upgrade(*this, options); }
+        bool http_trailers_allowed(bool ended) const { return !websocket && ended && !body.receive_ended() && !reset_pending; }
         void on_abort() override { owner.reset(id, http2_error_code::internal_error); }
         body_push_result push(std::span<const std::byte> bytes) override {
             auto result = body.push(bytes);
@@ -192,13 +198,18 @@ struct http2_request_engine::state {
     http2_window send_window, receive_window;
     std::uint64_t consumed = 0, connection_credit_queued = 0;
     std::uint32_t peer_initial = 65535, local_initial = 65535, selected = 0, active_stream = 0;
-    std::size_t active_body = 0;
+    std::size_t active_body = 0, websocket_pumps = 0;
+    std::shared_ptr<websocket_driver> active_websocket;
     bool active_end = false;
-    bool end_stream = false, control_exposed = false, closed_headers = false;
+    bool connect_eligible = false, end_stream = false, control_exposed = false, closed_headers = false;
     std::optional<http2_error_code> rejected;
     state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l)
         : budget(b), routes(r), owner(e), handlers(std::make_shared<route_executor>(e)), limits(l), connection(b, l.connection, receive_settings(), true) { scope->enter(); }
-    ~state() { handlers->disable(); streams.clear(); leave_connection(); }
+    ~state() {
+        handlers->disable();
+        for (auto& [id, value] : streams) cancel_websocket(*value, {http::outcome_code::connection_closed, "HTTP/2 engine destroyed"});
+        streams.clear(); leave_connection();
+    }
     void leave_connection() {
         if (connection_counted) {
             connection_counted = false; scope->leave();
@@ -210,12 +221,14 @@ struct http2_request_engine::state {
         return streams.empty() && pending.empty() && active.empty() && connection.output_idle();
     }
     void retire_cancelled() {
-        if (phase == drain_phase::cancelled && !handlers->running()) {
+        if (phase == drain_phase::cancelled && !handlers->running() && !websocket_pumps) {
             streams.clear(); leave_connection();
         }
     }
-    static http2_settings receive_settings() { http2_settings settings; settings.initial_window_size = 0; return settings; }
+    static http2_settings receive_settings() { http2_settings settings; settings.initial_window_size = 0; settings.enable_connect_protocol = 1; return settings; }
     void discard(stream& value) {
+        value.reset_pending = true;
+        cancel_websocket(value, {http::outcome_code::cancelled, "HTTP/2 stream reset"});
         connection.discard_stream_credit(value.id);
         value.credit_queued = 0;
         consumed += value.body.unread() + value.body.consumed; value.body.consumed = 0;
@@ -225,13 +238,13 @@ struct http2_request_engine::state {
         value.reset_pending = true;
     }
     bool incomplete(const stream& value) const {
-        return value.handler.done() && value.response_started && !value.body.finished() && !value.send_ended && !value.reset_pending;
+        return !value.websocket && value.handler.done() && value.response_started && !value.body.finished() && !value.send_ended && !value.reset_pending;
     }
     bool retired(const stream& value) const {
         return value.reset_pending || (value.handler.done() && value.send_ended && value.body.receive_ended());
     }
     void reap() {
-        if (handlers->running()) return;
+        if (handlers->running() || websocket_pumps) return;
         if (phase == drain_phase::cancelled) {
             retire_cancelled(); return;
         }
@@ -252,6 +265,20 @@ struct http2_request_engine::state {
             }
         }
     }
+    websocket_upgrade_result upgrade(stream& value, const ws_upgrade_options& options);
+    bool admit_websocket_response(response& reply, std::optional<std::size_t> expanded, const http::fields& fields);
+    void feed_websocket_ring(stream& value, websocket_driver& driver);
+    void finish_websocket_input(stream& value, websocket_driver& driver);
+    void check_websocket_timeout(stream& value, http2_connection::time_point now);
+    void retire_websocket_output(std::size_t previous);
+    void retire_active_output();
+    void receive_data(stream& value, std::span<const std::uint8_t> payload, bool ended);
+    bool reserve_websocket(stream& value, websocket::options& options);
+    void observe_websocket(stream& value);
+    void pump_websocket_input(stream& value);
+    bool frame_websocket_data(stream& value);
+    void cancel_websocket(stream& value, http::outcome reason);
+    void check_websocket_timeouts(http2_connection::time_point now);
     void sync_settings();
     void publish_credit();
     void publish_stream_credit(stream& value);
@@ -276,6 +303,9 @@ struct http2_request_engine::state {
     void fail(http2_error error) {
         handlers->disable();
         connection.terminate(error);
+        ++websocket_pumps;
+        for (auto& [id, value] : streams) cancel_websocket(*value, {error.outcome, "HTTP/2 connection terminated"});
+        --websocket_pumps;
         clear_block(); pending.clear();
         // A sink may fail while its handler is executing. Destruction must
         // wait for the next owner pump, after that resume has returned.
@@ -314,6 +344,7 @@ struct http2_request_engine::state {
         const auto h = connection.header();
         auto fragment = connection.payload();
         if (h.type == 1) {
+            connect_eligible = connection.connect_protocol_at_frame_start();
             assembling = h.stream_id; end_stream = (h.flags & 1) != 0;
             if (!(assembling & 1)) return connection_error(http2_error_code::protocol_error);
             closed_headers = assembling <= last_stream && !streams.contains(assembling);
@@ -361,7 +392,8 @@ struct http2_request_engine::state {
             trailers(id, ended, decoded.fields); return {};
         }
         http::request_head head;
-        if (!http2_convert_request(decoded.fields, head)) {
+        http2_connect_metadata connect;
+        if (!http2_convert_request(decoded.fields, head, connect)) {
             reset(id, http2_error_code::protocol_error); return {};
         }
         std::optional<std::uint64_t> length;
@@ -369,13 +401,20 @@ struct http2_request_engine::state {
         if (ended && length.value_or(0)) {
             reset(id, http2_error_code::protocol_error); return {};
         }
-        if (head.request_method.id() == http::method_id::connect) {
-            reset(id, http2_error_code::refused_stream); return {};
-        }
+        if (!connect_allowed(id, head, connect)) return {};
         temporary_bytes.release(); temporary_fields.release();
-        return admit(id, std::move(head), decoded.fields, ended);
+        return admit(id, std::move(head), decoded.fields, ended, std::move(connect));
     }
-    std::optional<http2_error> admit(std::uint32_t id, http::request_head head, const std::vector<hpack_field>& fields, bool ended) {
+    bool connect_allowed(std::uint32_t id, const http::request_head& head, const http2_connect_metadata& connect) {
+        if (connect.protocol && !connect_eligible) {
+            reset(id, http2_error_code::protocol_error); return false;
+        }
+        if (head.request_method.id() == http::method_id::connect && connect.protocol != "websocket") {
+            reset(id, http2_error_code::refused_stream); return false;
+        }
+        return true;
+    }
+    std::optional<http2_error> admit(std::uint32_t id, http::request_head head, const std::vector<hpack_field>& fields, bool ended, http2_connect_metadata connect) {
         reap();
         server::reservation count_charge;
         if (streams.size() >= limits.max_streams || !reserve(server::resource::streams, 1, count_charge)) {
@@ -388,6 +427,7 @@ struct http2_request_engine::state {
             reset(id, http2_error_code::refused_stream); return {};
         }
         auto value = std::make_unique<stream>(*this, id, std::move(head));
+        value->connect = std::move(connect);
         value->metadata_charge = std::move(metadata);
         value->count_charge = std::move(count_charge);
         if (!reserve(server::resource::header_bytes, retained * head_copy_allowance, value->bytes_charge) ||
@@ -398,7 +438,7 @@ struct http2_request_engine::state {
         http2_content_length(value->head.head_fields, length);
         value->body.send_window.available = peer_initial;
         value->body.receive_window.available = local_initial;
-        if (!value->body.prepare_receive(65535, ended, length)) {
+        if (!value->body.prepare_receive(65535, ended, value->connect.protocol ? std::nullopt : length)) {
             reset(id, http2_error_code::refused_stream); return {};
         }
         auto* accepted = value.get();
@@ -417,20 +457,16 @@ struct http2_request_engine::state {
     std::optional<http2_error> process_frame() {
         auto h = connection.header();
         if (h.type == 1 || h.type == 9) return assemble();
-        if (h.type == 3) {
-            if (!(h.stream_id & 1) || h.stream_id > last_stream) return connection_error(http2_error_code::protocol_error);
-            std::erase_if(pending, [h](const response& r) { return r.stream == h.stream_id; });
-            if (auto found = streams.find(h.stream_id); found != streams.end()) {
-                discard(*found->second);
-                streams.erase(found);
-            }
-        } else if (h.type == 0) {
+        if (h.type == 3) return peer_reset(h.stream_id);
+        if (h.type == 0) {
             return data_frame();
         } else if (h.type == 8) {
             return update_window();
         }
         return {};
     }
+    std::optional<http2_error> peer_reset(std::uint32_t id);
+    bool has_borrowed_output() const { return !active.empty() || control_exposed; }
     bool encode_next();
 };
 }  // namespace httpserver::detail

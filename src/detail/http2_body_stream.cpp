@@ -44,6 +44,17 @@ bool http2_body_stream::end_receive(http::fields trailers) {
     if (receive_ended_ || (receive_length_ && *receive_length_ != received_total_)) return false;
     received_trailers_ = std::move(trailers); receive_ended_ = true; wake_reader(); return true;
 }
+std::span<const std::byte> http2_body_stream::receive_prefix() const {
+    if (!received_.size) return {};
+    return std::span(received_.bytes).subspan(received_.head, std::min(received_.size, received_.bytes.size() - received_.head));
+}
+void http2_body_stream::consume_received(std::size_t n) {
+    // Reentrant cancellation can discard the borrowed prefix during feed.
+    n = std::min(n, received_.size);
+    if (n) {
+        received_.consume(n); consumed += n;
+    }
+}
 body_pull_result http2_body_stream::pull(std::span<std::byte> into) {
     if (failed()) return {body_pull::failed, 0};
     const auto n = std::min(into.size(), received_.size);
