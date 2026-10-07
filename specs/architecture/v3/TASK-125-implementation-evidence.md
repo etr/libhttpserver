@@ -180,3 +180,68 @@ user's AGENTS policy, those checks belong to CI and the v3 PR and do not block
 local completion. POSIX dup2, descriptor-zero, and descriptor-exhaustion probes
 are explicitly POSIX coverage. Groundwork validation, runner-owned commit,
 merge into v3, and worktree cleanup remain the caller's next phases.
+
+
+## Validation repair iteration 1
+
+The executor receipts above describe the original implementation. The current
+repair adds transactional socket-direction and shared due-timer collection:
+all potentially throwing vector growth finishes before registry erasure. Both
+readable and writable collections finish before either is detached in an
+external event. Managed dispatch uses the same collection helper, and timer
+expiry preserves `(deadline, sequence)` ordering and owner enqueue outside the
+registry mutex.
+
+Eight bounded regressions now cover allocation failure in read/write/accept
+collection, failure while collecting the second direction, due-timer allocation
+failure, generation exhaustion after maximum-generation snapshot omission,
+and real successful native accept followed by listener retirement or backend
+close before registration. The accepted-socket cases split the existing native
+accept/registration boundary using private member access, retain the listener
+lease, and exercise actual teardown and production registration/completion
+helpers; they add no scheduling hooks.
+
+Iteration receipts are in the runner-owned validation findings directory under
+`repair-iter1-*` names. `socket-probe-red.log` and `timer-probe-red.log` reproduce
+the original one-of-two operation loss. `suite-red-authorized.log` records the
+five allocation regressions failing before repair. `guards-mutation-red.log`
+records new exhaustion and both accepted-socket tests failing when the existing
+guards are temporarily removed; the original guards were restored exactly.
+`socket-probe-green.log` and `timer-probe-green.log` both report two pending
+operations before close, two completions by close, and both states terminal.
+
+Focused final receipts, all with zero failures/skips:
+
+- `suite-green.log`: external adapter, 27 tests / 491 checks.
+- `managed-contract-green.log`: shared managed I/O contract, 41 / 734.
+- `fake-timer-green.log`: fake backend/timer coverage, 14 / 2523.
+- `native-server-green.log`: native server lifecycle, 17 / 76.
+
+The focused runtimes used authorized local loopback access. An initial restricted
+sandbox adapter run failed listener creation and is not passing verification.
+Changed-file cpplint, `git diff --check`, and source file-size checks pass;
+existing macOS linker warnings remain. The repair performed no staging,
+commit, merge, or finalization. Final broad gates and acceptance remain
+coordinator-owned; nonlocal platform checks remain assigned to CI and the v3 PR.
+
+## Validation repair iteration 2
+
+The first repair's two detachment loops raised `dispatch_event` to CCN 11.
+A shared private `detach_batch_locked` now performs registry erasure for both
+external dispatch and managed direction dispatch. Both external direction
+collections still finish before either detachment call, and detachment remains
+under the registry mutex. Dispatch, completion, and timer behavior are unchanged.
+
+The unchanged complexity threshold now measures `dispatch_event` at CCN 9,
+`detach_batch_locked` at CCN 2, `take_direction_locked` at CCN 1, and
+`collect_direction_locked` at CCN 7. The full complexity command still exits 1
+only for the three inherited offenders named above; it is not claimed passed.
+Changed-file cpplint, source file-size, and `git diff --check` pass.
+
+Focused regressions pass with zero failures/skips: external adapter 27 tests /
+491 checks, managed I/O contract 41 / 734, and fake backend/timer 14 / 2523.
+The native core and these three test executables were rebuilt before running.
+Receipts are in the runner-owned validation findings directory under
+`repair-iter2-*` names. This is a private refactor verified by the existing
+allocation-failure and I/O regression coverage; no new tests or public contracts
+were added. Final broad gates remain coordinator-owned.

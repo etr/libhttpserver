@@ -191,8 +191,12 @@ void io_poll_backend::dispatch_event(const server::readiness_event& event) {
         if (closed_) return;
         std::tie(id, lease) = find_registration_locked(event);
         if (!lease) return;
-        if (event.readable) take_direction_locked(id, true, reads);
-        if (event.writable) take_direction_locked(id, false, writes);
+        // Prepare both directions before detaching either one. A failure in
+        // writable collection must also leave the readable batch recoverable.
+        if (event.readable) collect_direction_locked(id, true, reads);
+        if (event.writable) collect_direction_locked(id, false, writes);
+        detach_batch_locked(reads);
+        detach_batch_locked(writes);
     }
     // Drain readable data before honoring a simultaneous close indication.
     dispatch_batch(id, reads, lease);

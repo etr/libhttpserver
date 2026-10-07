@@ -24,6 +24,8 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
+#include <cstdlib>
+#include <new>
 #include <mutex>
 #include <memory>
 #include <limits>
@@ -36,6 +38,27 @@
 #include <httpserver/server/readiness.hpp>
 #include "./io_backend_contract.hpp"
 #include "./littletest.hpp"
+
+// Fault injection is confined to this test executable and the dispatching
+// thread. Restore allocation before asserting or shutting down the backend.
+namespace {
+thread_local int allocations_until_failure = -1;
+struct allocation_failure {
+    explicit allocation_failure(int allocation) { allocations_until_failure = allocation; }
+    ~allocation_failure() { allocations_until_failure = -1; }
+};
+}  // namespace
+
+void* operator new(std::size_t size) {
+    if (allocations_until_failure > 0 && --allocations_until_failure == 0) {
+        allocations_until_failure = -1;
+        throw std::bad_alloc();
+    }
+    if (void* memory = std::malloc(size == 0 ? 1 : size)) return memory;
+    throw std::bad_alloc();
+}
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 
 namespace srv = httpserver::server;
 namespace {
@@ -95,6 +118,13 @@ struct connections_tag {
 };
 template struct private_auto_member<connections_tag, &hd::io_poll_backend::connections_>;
 
+using register_accept_tag = tag<std::uint64_t (hd::io_poll_backend::*)(
+    pollsys::native_socket_t, const std::shared_ptr<hd::op_state>&)>;
+using finish_tag = tag<void (hd::io_poll_backend::*)(
+    const batch_type&, std::size_t, hd::io_result)>;
+template struct private_member<register_accept_tag, &hd::io_poll_backend::register_accepted_socket>;
+template struct private_member<finish_tag, &hd::io_poll_backend::finish_batch_from>;
+
 using detach_tag = tag<void (hd::io_poll_backend::*)(std::uint64_t, bool, batch_type&)>;
 using rearm_tag = tag<void (hd::io_poll_backend::*)(const batch_type&, std::size_t)>;
 using read_tag = tag<hd::step_outcome (hd::io_poll_backend::*)(
@@ -152,6 +182,112 @@ void detached_reopen(littletest::test_runner* __lt_tr__, const char* __lt_name__
     LT_CHECK(observed.observed.code == hh::outcome_code::connection_closed);
     LT_CHECK_EQ(fx.backend.pending_count(), std::size_t{0});
 }
+
+void failed_direction_collection(littletest::test_runner* __lt_tr__,
+                                 const char* __lt_name__, hd::io_op_kind kind) {
+    fixture fx;
+    auto pair = io_loopback::pair::make();
+    io_loopback::listener listener;
+    LT_ASSERT(pair.ok());
+    if (kind == hd::io_op_kind::accept) {
+        listener = io_loopback::listener::open();
+        LT_ASSERT(listener.ok());
+        fx.backend.adopt_listener(1, listener.socket());
+        listener.detach();
+    } else {
+        fx.backend.adopt_connection(1, pair.detach_local());
+    }
+    io_contract::probe first, second;
+    std::byte other_buffer[1]{};
+    if (kind == hd::io_op_kind::read) {
+        fx.submit(hd::read_operation(fx.rig.owner, 1, fx.rig.buffer), first);
+        fx.submit(hd::read_operation(fx.rig.owner, 1, other_buffer), second);
+    } else if (kind == hd::io_op_kind::write) {
+        fx.submit(hd::write_operation(fx.rig.owner, 1, fx.rig.buffer), first);
+        fx.submit(hd::write_operation(fx.rig.owner, 1, other_buffer), second);
+    } else {
+        fx.submit(hd::accept_operation(fx.rig.owner, 1), first);
+        fx.submit(hd::accept_operation(fx.rig.owner, 1), second);
+    }
+    const auto event = event_for(fx.backend.interests().sockets.front(),
+        kind != hd::io_op_kind::write, kind == hd::io_op_kind::write);
+    bool failed = false;
+    {
+        allocation_failure fail_second_allocation(2);
+        try {
+            fx.dispatch(event);
+        }
+        catch (const std::bad_alloc&) { failed = true; }
+    }
+    LT_CHECK(failed);
+    const auto closed = fx.backend.close();
+    LT_CHECK_EQ(closed, std::size_t{2});
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(first.delivered.load(), 1);
+    LT_CHECK_EQ(second.delivered.load(), 1);
+    LT_CHECK(first.observed.code == hh::outcome_code::connection_closed);
+    LT_CHECK(second.observed.code == hh::outcome_code::connection_closed);
+    LT_CHECK_EQ(fx.backend.close(), std::size_t{0});
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(first.delivered.load(), 1);
+    LT_CHECK_EQ(second.delivered.load(), 1);
+}
+
+void accepted_after_teardown(littletest::test_runner* __lt_tr__,
+                             const char* __lt_name__, bool shutdown) {
+    fixture fx;
+    auto listener = io_loopback::listener::open();
+    LT_ASSERT(listener.ok());
+    fx.backend.adopt_listener(1, listener.socket());
+    listener.detach();
+    io_contract::probe observed;
+    fx.submit(hd::accept_operation(fx.rig.owner, 1), observed);
+    batch_type batch;
+    // Retain the detached operation's listener lease just as dispatch_batch
+    // does; native acceptance succeeds before teardown wins registration.
+    auto lease = (fx.backend.*member(connections_tag{})).at(1).lifetime;
+    {
+        std::lock_guard lock(fx.backend.*member(mutex_tag{}));
+        (fx.backend.*member(detach_tag{}))(1, true, batch);
+    }
+    LT_ASSERT(batch.size() == 1);
+    auto client = io_loopback::connect_to(listener.port());
+    LT_ASSERT(client != pollsys::k_invalid_socket);
+    pollsys::poll_slot ready{lease->socket, pollsys::k_readable, 0};
+    LT_ASSERT(pollsys::poll_call(&ready, 1, 5000) == 1);
+    pollsys::native_socket_t fresh = pollsys::k_invalid_socket;
+    httpserver::net::peer_address peer;
+    LT_ASSERT(pollsys::accept_one(lease->socket, &fresh, &peer).status
+              == pollsys::sys_status::ok);
+    if (shutdown) fx.backend.close();
+    else fx.backend.release_connection(1);
+    const auto id = (fx.backend.*member(register_accept_tag{}))(fresh, batch.front());
+    // Continue the same result selection used by accept_step, using the
+    // production terminal-claim helper on the detached operation.
+    (fx.backend.*member(finish_tag{}))(batch, 0, id == 0
+        ? hd::io_result{hh::outcome_code::connection_closed}
+        : hd::io_result{hh::outcome_code::ok, 0, id, peer});
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(id, std::uint64_t{0});
+#if !defined(_WIN32)
+    LT_CHECK(::fcntl(fresh, F_GETFD) == -1 && errno == EBADF);
+#else
+    int error = 0, length = sizeof(error);
+    LT_CHECK(::getsockopt(fresh, SOL_SOCKET, SO_ERROR,
+                         reinterpret_cast<char*>(&error), &length) != 0);
+#endif
+    LT_CHECK_EQ((fx.backend.*member(connections_tag{})).size(), std::size_t{1});
+    LT_CHECK(fx.backend.interests().sockets.empty());
+    LT_CHECK_EQ(observed.delivered.load(), 1);
+    LT_CHECK(observed.observed.code == hh::outcome_code::connection_closed);
+    LT_CHECK_EQ(observed.observed.accepted_id, std::uint64_t{0});
+    fx.backend.close();
+    (fx.backend.*member(finish_tag{}))(batch, 0, hd::io_result{hh::outcome_code::connection_closed});
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(observed.delivered.load(), 1);
+    pollsys::close_socket(client);
+}
+
 }  // namespace
 
 LT_BEGIN_SUITE(external_adapter_suite)
@@ -681,6 +817,116 @@ LT_BEGIN_AUTO_TEST(external_adapter_suite, complete_snapshots_prune_retired_conn
         LT_CHECK_EQ((fx.backend.*member(connections_tag{})).size(), std::size_t{0});
     }
 LT_END_AUTO_TEST(complete_snapshots_prune_retired_connection_records)
+
+LT_BEGIN_AUTO_TEST(external_adapter_suite, allocation_failure_read_batch_remains_owned_until_close)
+    failed_direction_collection(__lt_tr__, __lt_name__, hd::io_op_kind::read);
+LT_END_AUTO_TEST(allocation_failure_read_batch_remains_owned_until_close)
+
+LT_BEGIN_AUTO_TEST(external_adapter_suite, allocation_failure_write_batch_remains_owned_until_close)
+    failed_direction_collection(__lt_tr__, __lt_name__, hd::io_op_kind::write);
+LT_END_AUTO_TEST(allocation_failure_write_batch_remains_owned_until_close)
+
+LT_BEGIN_AUTO_TEST(external_adapter_suite, allocation_failure_accept_batch_remains_owned_until_close)
+    failed_direction_collection(__lt_tr__, __lt_name__, hd::io_op_kind::accept);
+LT_END_AUTO_TEST(allocation_failure_accept_batch_remains_owned_until_close)
+
+LT_BEGIN_AUTO_TEST(external_adapter_suite, allocation_failure_second_direction_keeps_first_direction_owned)
+    fixture fx;
+    auto pair = io_loopback::pair::make();
+    LT_ASSERT(pair.ok());
+    fx.backend.adopt_connection(1, pair.detach_local());
+    io_contract::probe read, write;
+    fx.submit(hd::read_operation(fx.rig.owner, 1, fx.rig.buffer), read);
+    fx.submit(hd::write_operation(fx.rig.owner, 1, fx.rig.buffer), write);
+    const auto event = event_for(fx.backend.interests().sockets.front(), true, true);
+    bool failed = false;
+    {
+        allocation_failure fail_second_allocation(2);
+        try {
+            fx.dispatch(event);
+        }
+        catch (const std::bad_alloc&) { failed = true; }
+    }
+    LT_CHECK(failed);
+    const auto closed = fx.backend.close();
+    LT_CHECK_EQ(closed, std::size_t{2});
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(read.delivered.load(), 1);
+    LT_CHECK_EQ(write.delivered.load(), 1);
+    LT_CHECK(read.observed.code == hh::outcome_code::connection_closed);
+    LT_CHECK(write.observed.code == hh::outcome_code::connection_closed);
+    fx.backend.close(); fx.rig.ex.run_pending();
+    LT_CHECK_EQ(read.delivered.load(), 1);
+    LT_CHECK_EQ(write.delivered.load(), 1);
+LT_END_AUTO_TEST(allocation_failure_second_direction_keeps_first_direction_owned)
+
+LT_BEGIN_AUTO_TEST(external_adapter_suite, allocation_failure_due_timers_remain_owned_until_close)
+    fixture fx;
+    io_contract::probe first, second;
+    const auto deadline = clock_type::now();
+    fx.submit(hd::timer_operation(fx.rig.owner, 0, deadline), first);
+    fx.submit(hd::timer_operation(fx.rig.owner, 0, deadline), second);
+    bool failed = false;
+    {
+        allocation_failure fail_second_allocation(2);
+        try {
+            fx.backend.dispatch({}, deadline);
+        }
+        catch (const std::bad_alloc&) { failed = true; }
+    }
+    LT_CHECK(failed);
+    const auto closed = fx.backend.close();
+    LT_CHECK_EQ(closed, std::size_t{2});
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(first.delivered.load(), 1);
+    LT_CHECK_EQ(second.delivered.load(), 1);
+    LT_CHECK(first.observed.code == hh::outcome_code::connection_closed);
+    LT_CHECK(second.observed.code == hh::outcome_code::connection_closed);
+    fx.backend.close(); fx.rig.ex.run_pending();
+    LT_CHECK_EQ(first.delivered.load(), 1);
+    LT_CHECK_EQ(second.delivered.load(), 1);
+LT_END_AUTO_TEST(allocation_failure_due_timers_remain_owned_until_close)
+
+LT_BEGIN_AUTO_TEST(external_adapter_suite, exhausted_generation_fails_snapshot_and_shutdown_completes_once)
+    fixture fx;
+    auto pair = io_loopback::pair::make();
+    LT_ASSERT(pair.ok());
+    fx.backend.adopt_connection(1, pair.detach_local());
+    auto lifetime = (fx.backend.*member(connections_tag{})).at(1).lifetime;
+    lifetime->generation = std::numeric_limits<std::uint64_t>::max();
+    io_contract::probe read, parked;
+    auto state = fx.submit(hd::read_operation(fx.rig.owner, 1, fx.rig.buffer), read);
+    fx.submit(hd::timer_operation(fx.rig.owner, 0, clock_type::now() + 1s), parked);
+    const auto published = fx.backend.interests();
+    LT_ASSERT(published.sockets.size() == 1);
+    LT_CHECK_EQ(published.sockets.front().generation, std::numeric_limits<std::uint64_t>::max());
+    fx.backend.request_cancel(*state);
+    fx.rig.ex.run_pending();
+    bool exhausted = false;
+    try {
+        fx.backend.interests();
+    }
+    catch (const std::overflow_error&) { exhausted = true; }
+    LT_CHECK(exhausted);
+    LT_CHECK_EQ(lifetime->generation, std::numeric_limits<std::uint64_t>::max());
+    LT_CHECK(lifetime->retired.load());
+    const auto closed = fx.backend.close();
+    LT_CHECK_EQ(closed, std::size_t{1});
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(read.delivered.load(), 1);
+    LT_CHECK_EQ(parked.delivered.load(), 1);
+    LT_CHECK(parked.observed.code == hh::outcome_code::connection_closed);
+    fx.backend.close(); fx.rig.ex.run_pending();
+    LT_CHECK_EQ(parked.delivered.load(), 1);
+LT_END_AUTO_TEST(exhausted_generation_fails_snapshot_and_shutdown_completes_once)
+
+LT_BEGIN_AUTO_TEST(external_adapter_suite, successful_accept_after_listener_retirement_closes_fresh_handle)
+    accepted_after_teardown(__lt_tr__, __lt_name__, false);
+LT_END_AUTO_TEST(successful_accept_after_listener_retirement_closes_fresh_handle)
+
+LT_BEGIN_AUTO_TEST(external_adapter_suite, successful_accept_after_backend_close_closes_fresh_handle)
+    accepted_after_teardown(__lt_tr__, __lt_name__, true);
+LT_END_AUTO_TEST(successful_accept_after_backend_close_closes_fresh_handle)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

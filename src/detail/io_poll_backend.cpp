@@ -524,25 +524,31 @@ void io_poll_backend::run_loop() {
     }
 }
 
+void io_poll_backend::collect_direction_locked(
+    std::uint64_t id, bool reads_and_accepts,
+    std::vector<std::shared_ptr<op_state>>& batch) const {
+    const io_op_kind wanted =
+        reads_and_accepts ? io_op_kind::read : io_op_kind::write;
+    for (const auto& entry : pending_) {
+        const auto& op = entry.second;
+        const io_op_kind kind = op->kind();
+        if (op->connection() == id
+            && (kind == wanted || (reads_and_accepts && kind == io_op_kind::accept))) {
+            batch.push_back(op);
+        }
+    }
+}
+
+void io_poll_backend::detach_batch_locked(
+    const std::vector<std::shared_ptr<op_state>>& batch) {
+    for (const auto& op : batch) pending_.erase(op.get());
+}
+
 void io_poll_backend::take_direction_locked(
     std::uint64_t id, bool reads_and_accepts,
     std::vector<std::shared_ptr<op_state>>& batch) {
-    for (auto it = pending_.begin(); it != pending_.end();) {
-        const std::shared_ptr<op_state>& op = it->second;
-        const io_op_kind kind = op->kind();
-        const io_op_kind wanted =
-            reads_and_accepts ? io_op_kind::read : io_op_kind::write;
-        const bool matches = op->connection() == id
-                             && (kind == wanted
-                                 || (reads_and_accepts
-                                     && kind == io_op_kind::accept));
-        if (matches) {
-            batch.push_back(op);
-            it = pending_.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    collect_direction_locked(id, reads_and_accepts, batch);
+    detach_batch_locked(batch);
 }
 
 void io_poll_backend::finish_batch_from(

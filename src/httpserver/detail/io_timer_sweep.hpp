@@ -61,19 +61,18 @@ inline std::size_t sweep_due_timers(
         due;
     {
         std::lock_guard<std::mutex> lock(mu);
-        for (auto it = pending.begin(); it != pending.end();) {
-            const op_state& entry = *it->second;
+        for (const auto& record : pending) {
+            const op_state& entry = *record.second;
             if (entry.kind() == io_op_kind::timer
-                && std::get<timer_payload>(entry.payload()).deadline
-                       <= now) {
+                && std::get<timer_payload>(entry.payload()).deadline <= now) {
                 due.emplace_back(
                     std::get<timer_payload>(entry.payload()).deadline,
-                    it->second);
-                it = pending.erase(it);
-                continue;
+                    record.second);
             }
-            ++it;
         }
+        // Vector growth is complete. Until then every timer remains pending,
+        // so a collection exception can be recovered by owner shutdown.
+        for (const auto& entry : due) pending.erase(entry.second.get());
     }
     std::sort(due.begin(), due.end(),
               [](const auto& lhs, const auto& rhs) {

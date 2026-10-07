@@ -235,6 +235,13 @@ class io_poll_backend final : public io_backend, public server::readiness_driver
                            const std::shared_ptr<op_state>& state);
     step_outcome write_step(pollsys::native_socket_t socket,
                             const std::shared_ptr<op_state>& state);
+    // Collect without detaching so allocation failure leaves pending ownership.
+    // Caller holds mu_; collection may throw.
+    void collect_direction_locked(std::uint64_t id, bool reads_and_accepts,
+                                  std::vector<std::shared_ptr<op_state>>& batch) const;
+    // Erasure cannot allocate. Caller holds mu_ and finishes every related
+    // collection before detaching any batch.
+    void detach_batch_locked(const std::vector<std::shared_ptr<op_state>>& batch);
     // Takes every pending op of @p id in the requested direction out of
     // the registry. Caller holds mu_.
     void take_direction_locked(std::uint64_t id, bool reads_and_accepts,
