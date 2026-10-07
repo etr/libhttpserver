@@ -24,7 +24,7 @@ Provide external-loop readiness adapter for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-015
 **Related Decisions:** DR-V3-004
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [Local adapter, HTTP/1 host, and verification receipts](../../architecture/v3/TASK-125-implementation-evidence.md).
 
