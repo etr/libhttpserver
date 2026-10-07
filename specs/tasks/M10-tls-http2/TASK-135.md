@@ -24,7 +24,7 @@ Provide TLS 1.2 and 1.3 external-PSK profiles for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-034
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:**
 - [Local PSK evidence](../../../docs/task-135-psk-evidence.md): TLS 1.2/1.3 authentication and failures, secure storage, bounded runtime, SNI/rotation/mixed profiles, 0-RTT rejection and lifecycle races.
