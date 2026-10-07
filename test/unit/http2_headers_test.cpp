@@ -39,7 +39,8 @@ LT_BEGIN_AUTO_TEST(http2_headers_suite, padded_priority_continuations_at_every_i
             ++calls;
             LT_CHECK_EQ(x.head().raw_target, "/items/../hello?x=1");
             LT_CHECK(x.head().request_protocol == http::protocol::http_2);
-            LT_CHECK_EQ(x.head().head_fields.size(), 2u);
+            LT_CHECK_EQ(x.head().head_fields.size(), 3u);
+            LT_CHECK_EQ(x.head().head_fields.entries().back().name, "host");
             LT_CHECK_EQ(x.head().head_fields.all("x-repeat")[0], "first");
             LT_CHECK_EQ(x.head().head_fields.all("x-repeat")[1], "second");
             x.respond(http::status::from_code(204), {}); co_return;
@@ -92,7 +93,8 @@ LT_BEGIN_AUTO_TEST(http2_headers_suite, semantic_errors_reset_only_the_stream_an
         LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
         LT_CHECK(!engine.failure()); LT_CHECK_EQ(calls, 1u);
         auto output = h2test::output(engine);
-        LT_CHECK_EQ(h2test::count_type(output, 3), 1u);
+        auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
+        LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 1u);
         auto responses = h2test::responses(output);
         LT_ASSERT_EQ(responses.size(), 1u); LT_CHECK_EQ(responses[0].stream, 3u);
     }
@@ -133,7 +135,8 @@ LT_BEGIN_AUTO_TEST(http2_headers_suite, priority_stream_error_still_decodes_the_
         h2test::append(wire, h2test::frame(1, 5, 3, h2test::encode(encoder, fields)));
         LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
         LT_CHECK_EQ(calls, 1u); LT_CHECK(!engine.failure());
-        auto output = h2test::output(engine); LT_CHECK_EQ(h2test::count_type(output, 3), 1u);
+        auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
+        LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 1u);
         auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 1u); LT_CHECK_EQ(replies[0].stream, 3u);
     }
 LT_END_AUTO_TEST(priority_stream_error_still_decodes_the_complete_block_in_wire_order)
@@ -154,6 +157,25 @@ LT_BEGIN_AUTO_TEST(http2_headers_suite, valid_uri_schemes_and_empty_body_fields_
         LT_CHECK_EQ(h2test::responses(h2test::output(engine)).size(), 1u);
     }
 LT_END_AUTO_TEST(valid_uri_schemes_and_empty_body_fields_reach_the_route)
+LT_BEGIN_AUTO_TEST(http2_headers_suite, response_oracle_rejects_truncated_and_unfinished_blocks)
+    auto valid = h2test::frame(1, 5, 1, {0x89});
+    LT_ASSERT_EQ(h2test::responses(valid).size(), 1u);
+    std::vector<std::vector<std::uint8_t>> malformed;
+    auto wire = valid; wire.push_back(0xff); malformed.push_back(wire);
+    wire = valid; h2test::append(wire, h2test::frame(1, 1, 3, {0x89})); malformed.push_back(wire);
+    wire = h2test::frame(1, 1, 1, {0x89}); h2test::append(wire, h2test::frame(1, 5, 3, {0x89})); malformed.push_back(wire);
+    malformed.push_back(h2test::frame(9, 4, 0, {0x89}));
+    malformed.push_back(h2test::frame(9, 4, 1, {0x89}));
+    for (const auto& bad : malformed) {
+        bool rejected = false;
+        try {
+            h2test::responses(bad);
+        } catch (const std::runtime_error&) {
+            rejected = true;
+        }
+        LT_CHECK(rejected);
+    }
+LT_END_AUTO_TEST(response_oracle_rejects_truncated_and_unfinished_blocks)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

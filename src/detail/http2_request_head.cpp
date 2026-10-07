@@ -53,6 +53,13 @@ bool authority_matches(const pseudo_fields& pseudo, const http::request_head& he
         return http::detail::ascii_upper(a) == http::detail::ascii_upper(b);
     });
 }
+bool set_authority(const pseudo_fields& pseudo, http::request_head& head) {
+    if (!authority_matches(pseudo, head)) return false;
+    // Existing shared routes inspect Host. Preserve received ordinary-field
+    // order, appending effective :authority only when no Host was supplied.
+    if (pseudo.values[3] && !head.head_fields.first("host")) head.head_fields.append("host", *pseudo.values[3]);
+    return true;
+}
 bool set_connect_target(const pseudo_fields& pseudo, http::request_head& head) {
     if (pseudo.values[1] || pseudo.values[2] || !pseudo.values[3]) return false;
     head.raw_target = *pseudo.values[3];
@@ -107,6 +114,6 @@ bool http2_convert_request(std::span<const hpack_field> fields, http::request_he
         }
     }
     head.request_protocol = http::protocol::http_2;
-    return set_target(pseudo, head) && authority_matches(pseudo, head);
+    return set_target(pseudo, head) && set_authority(pseudo, head);
 }
 }  // namespace httpserver::detail

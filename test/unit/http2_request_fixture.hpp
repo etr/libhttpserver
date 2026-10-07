@@ -57,15 +57,18 @@ inline std::vector<response> responses(const std::vector<std::uint8_t>& wire) {
     std::vector<response> out;
     std::vector<std::uint8_t> block;
     std::uint32_t stream = 0;
-    for (std::size_t at = 0; at + 9 <= wire.size();) {
+    for (std::size_t at = 0; at < wire.size();) {
+        if (wire.size() - at < 9) throw std::runtime_error("truncated output frame header");
         auto n = (wire[at] << 16) | (wire[at + 1] << 8) | wire[at + 2];
         if (at + 9 + n > wire.size()) throw std::runtime_error("truncated output frame");
         if (wire[at + 3] == 1 || wire[at + 3] == 9) {
             auto id = (wire[at + 5] << 24) | (wire[at + 6] << 16) | (wire[at + 7] << 8) | wire[at + 8];
             if (wire[at + 3] == 1) {
+                if (stream) throw std::runtime_error("nested output HEADERS");
+                if (!id) throw std::runtime_error("zero output stream");
                 stream = id;
                 if (!(wire[at + 4] & 1)) throw std::runtime_error("missing END_STREAM");
-            } else if (stream != static_cast<std::uint32_t>(id)) {
+            } else if (!stream || stream != static_cast<std::uint32_t>(id)) {
                 throw std::runtime_error("interleaved output block");
             }
             block.insert(block.end(), wire.begin() + at + 9, wire.begin() + at + 9 + n);
@@ -77,6 +80,27 @@ inline std::vector<response> responses(const std::vector<std::uint8_t>& wire) {
             }
         } else if (stream) {
             throw std::runtime_error("control inside output block");
+        }
+        at += 9 + n;
+    }
+    if (stream) throw std::runtime_error("unfinished output block");
+    return out;
+}
+struct stream_reset {
+    std::uint32_t stream, code;
+};
+inline std::uint32_t read_u32(const std::uint8_t* p) {
+    return (std::uint32_t{p[0]} << 24) | (std::uint32_t{p[1]} << 16) | (std::uint32_t{p[2]} << 8) | p[3];
+}
+inline std::vector<stream_reset> resets(const std::vector<std::uint8_t>& wire) {
+    std::vector<stream_reset> out;
+    for (std::size_t at = 0; at < wire.size();) {
+        if (wire.size() - at < 9) throw std::runtime_error("truncated reset frame header");
+        const auto n = (wire[at] << 16) | (wire[at + 1] << 8) | wire[at + 2];
+        if (static_cast<std::size_t>(n) > wire.size() - at - 9) throw std::runtime_error("truncated reset payload");
+        if (wire[at + 3] == 3) {
+            if (n != 4) throw std::runtime_error("invalid reset payload size");
+            out.push_back({read_u32(wire.data() + at + 5), read_u32(wire.data() + at + 9)});
         }
         at += 9 + n;
     }

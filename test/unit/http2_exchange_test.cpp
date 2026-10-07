@@ -27,10 +27,11 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, concurrent_gets_share_http1_routing_wit
     httpserver::resume_signal parked;
     std::vector<std::string> seen;
     LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
-        seen.push_back(std::string(x.head().request_method.name()) + x.head().route_path);
+        const auto host = x.head().head_fields.first("host").value_or("<absent>");
+        seen.push_back(std::string(x.head().request_method.name()) + x.head().route_path + "@" + std::string(host));
         if (x.head().head_fields.first("x-park")) co_await parked.wait();
         http::fields f; f.append("X-Reply", "same");
-        x.respond(http::status::from_code(204), f); co_return;
+        x.respond(http::status::from_code(host == "example.test" ? 204 : 421), f); co_return;
     }).ok());
     httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor);
     hd::hpack_encoder encoder(budget); auto first = h2test::get(); first.push_back({"x-park", "yes"});
@@ -40,12 +41,12 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, concurrent_gets_share_http1_routing_wit
     LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
     auto replies = h2test::responses(h2test::output(engine));
     LT_ASSERT_EQ(replies.size(), 1u); LT_CHECK_EQ(replies[0].stream, 3u);
-    LT_CHECK_EQ(replies[0].fields[1].name, "x-reply");
+    LT_CHECK_EQ(replies[0].fields[1].name, "x-reply"); LT_CHECK_EQ(replies[0].fields[0].value, "204");
     parked.signal(); executor.run_pending();
     auto last = h2test::responses(h2test::output(engine));
     // Each independent capture uses a fresh peer decoder, so the repeated
     // response field uses without-indexing in the engine's response policy.
-    LT_ASSERT_EQ(last.size(), 1u); LT_CHECK_EQ(last[0].stream, 1u);
+    LT_ASSERT_EQ(last.size(), 1u); LT_CHECK_EQ(last[0].stream, 1u); LT_CHECK_EQ(last[0].fields[0].value, "204");
     hd::recording_sink sink;
     hd::http1_head_parser parser(hd::http1_head_budget{});
     parser.feed("GET /items/../hello?x=1 HTTP/1.1\r\nHost: example.test\r\n\r\n");
@@ -70,9 +71,14 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, route_boundary_synthesizes_errors_and_r
     h2test::append(wire, h2test::frame(1, 4, 1, h2test::encode(encoder, h2test::get())));
     h2test::append(wire, h2test::frame(1, 5, 3, h2test::encode(encoder, h2test::get("/missing"))));
     h2test::append(wire, h2test::frame(1, 5, 5, h2test::encode(encoder, h2test::get())));
+    std::vector<hd::hpack_field> connect{{":method", "CONNECT"}, {":authority", "example.test:443"}};
+    h2test::append(wire, h2test::frame(1, 5, 7, h2test::encode(encoder, connect)));
     LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending(); LT_CHECK_EQ(calls, 1u);
-    auto output = h2test::output(engine); LT_CHECK_EQ(h2test::count_type(output, 3), 1u);
+    auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 2u);
+    LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 7u);
+    LT_CHECK_EQ(resets[1].stream, 7u); LT_CHECK_EQ(resets[1].code, 7u);
     auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 2u);
+    LT_CHECK_EQ(replies[0].stream, 3u); LT_CHECK_EQ(replies[1].stream, 5u);
     LT_CHECK_EQ(replies[0].fields[0].value, "404"); LT_CHECK_EQ(replies[1].fields[0].value, "500");
 LT_END_AUTO_TEST(route_boundary_synthesizes_errors_and_rejects_body_requests)
 LT_BEGIN_AUTO_TEST(http2_exchange_suite, bounded_stream_admission_preserves_dynamic_table_and_releases_on_destruction)
@@ -93,7 +99,9 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, bounded_stream_admission_preserves_dyna
         fields = h2test::get(); fields.push_back({"x-inserted", "refused-block"});
         h2test::append(wire, h2test::frame(1, 5, 3, h2test::encode(encoder, fields)));
         LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending(); LT_CHECK_EQ(calls, 1u);
-        LT_CHECK_EQ(h2test::count_type(h2test::output(engine), 3), 1u);
+        auto refused = h2test::output(engine); auto resets = h2test::resets(refused);
+        LT_ASSERT_EQ(resets.size(), 1u); LT_CHECK_EQ(resets[0].stream, 3u); LT_CHECK_EQ(resets[0].code, 7u);
+        LT_CHECK_EQ(h2test::responses(refused).size(), 0u);
         parked.signal(); executor.run_pending(); h2test::output(engine);
         LT_CHECK_EQ(budget.in_use(hs::resource::streams), 0u);
         LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 5, h2test::encode(encoder, fields))));
@@ -159,7 +167,8 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, peer_header_limit_refuses_one_response_
     h2test::append(wire, h2test::frame(1, 5, 3, h2test::encode(encoder, h2test::get())));
     LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
     auto output = h2test::output(engine);
-    LT_CHECK(!engine.failure()); LT_CHECK_EQ(h2test::count_type(output, 3), 1u);
+    LT_CHECK(!engine.failure()); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
+    LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 2u);
     auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 1u); LT_CHECK_EQ(replies[0].stream, 3u);
 LT_END_AUTO_TEST(peer_header_limit_refuses_one_response_without_poisoning_encoder)
 LT_BEGIN_AUTO_TEST(http2_exchange_suite, response_queue_refusal_during_handler_is_safe)
@@ -214,7 +223,8 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, streaming_response_attempt_resets_inste
     h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())));
     LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
     auto output = h2test::output(engine); LT_CHECK_EQ(failures, 1u);
-    LT_CHECK_EQ(h2test::count_type(output, 3), 1u); LT_CHECK_EQ(h2test::responses(output).size(), 0u);
+    auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
+    LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 2u); LT_CHECK_EQ(h2test::responses(output).size(), 0u);
 LT_END_AUTO_TEST(streaming_response_attempt_resets_instead_of_emitting_an_empty_success)
 LT_BEGIN_AUTO_TEST(http2_exchange_suite, bodyless_response_length_must_match_zero_bytes)
     auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
@@ -229,7 +239,8 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, bodyless_response_length_must_match_zer
     h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, invalid)));
     h2test::append(wire, h2test::frame(1, 5, 3, h2test::encode(encoder, h2test::get())));
     LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
-    auto output = h2test::output(engine); LT_CHECK_EQ(h2test::count_type(output, 3), 1u);
+    auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
+    LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 2u);
     auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 1u); LT_CHECK_EQ(replies[0].stream, 3u);
 LT_END_AUTO_TEST(bodyless_response_length_must_match_zero_bytes)
 LT_BEGIN_AUTO_TEST(http2_exchange_suite, goaway_reports_the_last_dispatched_stream_and_cancels_parked_handlers)
@@ -263,6 +274,11 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, hierarchical_admission_refusal_rolls_ba
             h2test::feed(engine, wire); executor.run_pending(); LT_CHECK_EQ(calls, 0u);
             auto output = h2test::output(engine);
             LT_CHECK_EQ(h2test::count_type(output, kind == hs::resource::streams ? 3 : 7), 1u);
+            if (kind == hs::resource::streams) {
+                auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
+                LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 7u);
+                LT_CHECK_EQ(h2test::responses(output).size(), 0u);
+            }
         }
         for (auto resource : {hs::resource::streams, hs::resource::header_fields, hs::resource::header_bytes, hs::resource::body_buffer_bytes, hs::resource::response_queue_bytes}) {
             LT_CHECK_EQ(root.in_use(resource), 0u); LT_CHECK_EQ(budget.in_use(resource), 0u);
@@ -287,11 +303,91 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, head_and_304_lengths_are_metadata_but_c
     fields = h2test::get(); fields.push_back({"x-304", "yes"});
     h2test::append(wire, h2test::frame(1, 5, 5, h2test::encode(encoder, fields)));
     LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
-    auto output = h2test::output(engine); LT_CHECK_EQ(h2test::count_type(output, 3), 1u);
+    auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
+    LT_CHECK_EQ(resets[0].stream, 3u); LT_CHECK_EQ(resets[0].code, 2u);
     auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 2u);
     LT_CHECK_EQ(replies[0].stream, 1u); LT_CHECK_EQ(replies[0].fields[0].value, "200");
     LT_CHECK_EQ(replies[1].stream, 5u); LT_CHECK_EQ(replies[1].fields[0].value, "304");
 LT_END_AUTO_TEST(head_and_304_lengths_are_metadata_but_conflicting_lengths_reset)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, withheld_output_has_a_deterministic_pending_work_bound)
+    for (std::size_t bound : {4u, 16u, 64u}) {
+        auto budget = h2test::budget(); hs::route_registry routes;
+        LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+        httpserver::manual_executor executor; hd::http2_request_limits limits; limits.max_streams = bound;
+        {
+            hd::http2_request_engine engine(budget, routes, executor, limits);
+            LT_ASSERT(h2test::feed(engine, h2test::preface()));
+            for (std::size_t i = 0; i < bound; ++i) {
+                LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 2 * i + 1, {0x82})));
+                LT_CHECK(!engine.failure());
+            }
+            h2test::feed(engine, h2test::frame(1, 5, 2 * bound + 1, {0x82}));
+            LT_ASSERT(engine.failure());
+            LT_CHECK(engine.failure()->wire_code == hd::http2_error_code::enhance_your_calm);
+            auto output = h2test::output(engine);
+            LT_CHECK_EQ(h2test::count_type(output, 7), 1u);
+            LT_CHECK_EQ(h2test::count_type(output, 3), 0u);
+        }
+        for (auto kind : {hs::resource::response_queue_bytes, hs::resource::streams, hs::resource::header_bytes,
+                          hs::resource::header_fields, hs::resource::body_buffer_bytes}) {
+            LT_CHECK_EQ(budget.in_use(kind), 0u);
+        }
+    }
+LT_END_AUTO_TEST(withheld_output_has_a_deterministic_pending_work_bound)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, large_response_is_refused_before_unadmitted_encoding_allocations)
+    hs::budget_limits capacities; capacities.set(hs::resource::response_queue_bytes, 150000);
+    auto root = h2test::budget(); hs::resource_budget budget; LT_ASSERT(root.child(capacities, budget).ok());
+    hs::route_registry routes; LT_ASSERT(hs::route_registry::create(root, routes).ok());
+    LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [](exchange& x) -> task<void> {
+        http::fields fields; fields.append("x-large", std::string(60000, 'z'));
+        x.respond(http::status::from_code(200), fields); co_return;
+    }).ok());
+    httpserver::manual_executor executor;
+    {
+        hd::http2_request_engine engine(budget, routes, executor);
+        hd::hpack_encoder encoder(root); auto wire = h2test::preface();
+        h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())));
+        LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
+        LT_ASSERT(engine.failure());
+        LT_CHECK(engine.failure()->wire_code == hd::http2_error_code::enhance_your_calm);
+        LT_CHECK_EQ(h2test::responses(h2test::output(engine)).size(), 0u);
+    }
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(large_response_is_refused_before_unadmitted_encoding_allocations)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, peer_reset_cancels_parked_or_queued_response_without_harming_sibling)
+    for (bool queue_response : {false, true}) {
+        auto budget = h2test::budget(); hs::route_registry routes;
+        LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+        httpserver::resume_signal parked; unsigned resumed = 0;
+        LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
+            if (x.head().head_fields.first("x-park")) {
+                co_await parked.wait(); ++resumed;
+            }
+            x.respond(http::status::from_code(204), {}); co_return;
+        }).ok());
+        httpserver::manual_executor executor; hd::http2_request_limits limits; limits.max_streams = 1;
+        hd::http2_request_engine engine(budget, routes, executor, limits);
+        hd::hpack_encoder encoder(budget); auto fields = h2test::get();
+        if (!queue_response) fields.push_back({"x-park", "yes"});
+        auto wire = h2test::preface();
+        h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, fields)));
+        LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
+        auto charged = budget.in_use(hs::resource::response_queue_bytes);
+        LT_ASSERT(h2test::feed(engine, h2test::frame(3, 0, 1, {0, 0, 0, 8})));
+        LT_CHECK_EQ(budget.in_use(hs::resource::streams), 0u);
+        LT_CHECK_EQ(budget.in_use(hs::resource::header_bytes), 0u);
+        LT_CHECK_EQ(budget.in_use(hs::resource::header_fields), 0u);
+        if (queue_response) LT_CHECK(budget.in_use(hs::resource::response_queue_bytes) < charged);
+        parked.signal(); executor.run_pending(); LT_CHECK_EQ(resumed, 0u);
+        LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 3, h2test::encode(encoder, h2test::get()))));
+        executor.run_pending();
+        auto output = h2test::output(engine); LT_CHECK_EQ(h2test::resets(output).size(), 0u);
+        auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 1u);
+        LT_CHECK_EQ(replies[0].stream, 3u); LT_CHECK_EQ(replies[0].fields[0].value, "204");
+        LT_CHECK(!engine.failure());
+    }
+LT_END_AUTO_TEST(peer_reset_cancels_parked_or_queued_response_without_harming_sibling)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

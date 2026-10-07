@@ -15,6 +15,7 @@
 namespace httpserver::detail {
 struct http2_request_limits {
     hpack_section_limits headers{65536, 65536, 256};
+    // Bounds live streams and pending output items, including reset-only items.
     std::size_t max_streams = 128;
 };
 // Internal headers-only composition seam. The supplied executor must serialize

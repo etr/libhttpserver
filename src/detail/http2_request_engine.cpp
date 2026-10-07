@@ -101,7 +101,7 @@ struct http2_request_engine::state {
         std::vector<hpack_field> fields;
         std::optional<http2_error_code> reset;
         server::reservation charge;
-        std::size_t wire_limit = 0;
+        std::size_t wire_limit = 0, framed_limit = 13;
     };
     server::resource_budget budget;
     const server::route_registry& routes;
@@ -146,15 +146,23 @@ struct http2_request_engine::state {
     bool reserve(server::resource kind, std::size_t n, server::reservation& charge) {
         return n == 0 || budget.reserve(kind, n, charge).ok();
     }
+    bool queue_room() {
+        // Reset-only entries do not occupy live streams. Bound pending work as
+        // well as bytes, so cancellation scans never grow with attacker input.
+        if (pending.size() < limits.max_streams) return true;
+        fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded));
+        return false;
+    }
     void reset(std::uint32_t id, http2_error_code code) {
         if (connection.failure()) return;
-        response value; value.stream = id; value.reset = code;
-        if (!reserve(server::resource::response_queue_bytes, 13, value.charge)) {
-            fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded)); return;
-        }
         // Drop only semantic, not yet encoded responses. Encoder state changes
         // in output() when this queue reaches the wire owner.
         std::erase_if(pending, [id](const response& r) { return r.stream == id; });
+        if (!queue_room()) return;
+        response value; value.stream = id; value.reset = code;
+        if (!reserve(server::resource::response_queue_bytes, 13 + sizeof(response) + 64, value.charge)) {
+            fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded)); return;
+        }
         pending.push_back(std::move(value));
     }
     std::optional<std::size_t> response_size(std::uint16_t status, const http::fields& fields) const {
@@ -168,6 +176,7 @@ struct http2_request_engine::state {
         return expanded;
     }
     bool response_fields(response& value, std::uint16_t status, const http::fields& fields) {
+        value.fields.reserve(fields.size() + 1);
         value.fields.push_back({":status", std::to_string(status), hpack_indexing::without_indexing});
         for (auto field : fields.entries()) {
             std::string name(field.name);
@@ -189,12 +198,21 @@ struct http2_request_engine::state {
         if (!expanded) {
             reset(id, http2_error_code::internal_error); return;
         }
+        if (!queue_room()) return;
         response value; value.stream = id;
         // Plain literals use fewer octets than their HPACK expanded charge.
         // Include pending table updates and frame headers before encoding.
         value.wire_limit = *expanded + 32;
-        auto frames = value.wire_limit / 16384 + 1;
-        if (!reserve(server::resource::response_queue_bytes, *expanded + value.wire_limit + frames * 9, value.charge)) {
+        const auto frames = value.wire_limit / 16384 + 1;
+        value.framed_limit = value.wire_limit + frames * 9;
+        // Semantic strings/vector remain live during HPACK. Include the encoded
+        // string's old/new growth allocations (3x), a primitive literal (1x),
+        // and spare capacity/alignment (1x), separately from framed wire storage.
+        // Field storage is pre-sized below; response literals never insert into
+        // the HPACK dynamic table. Keep the aggregate charge until output frees.
+        const auto semantic = *expanded + (fields.size() + 1) * (sizeof(hpack_field) + 64);
+        const auto peak = semantic + 5 * value.wire_limit + value.framed_limit + sizeof(response) + 256;
+        if (!reserve(server::resource::response_queue_bytes, peak, value.charge)) {
             fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded)); return;
         }
         if (!response_fields(value, status, fields)) {
@@ -289,8 +307,8 @@ struct http2_request_engine::state {
         auto value = std::move(pending.front()); pending.pop_front();
         active.clear(); active_used = 0;
         active_charge = std::move(value.charge);
-        active.reserve(active_charge.units());
         if (value.reset) {
+            active.reserve(value.framed_limit);
             auto n = static_cast<std::uint32_t>(*value.reset);
             std::array<std::uint8_t, 4> code{static_cast<std::uint8_t>(n >> 24), static_cast<std::uint8_t>(n >> 16), static_cast<std::uint8_t>(n >> 8), static_cast<std::uint8_t>(n)};
             append_frame(active, 3, 0, value.stream, code); return true;
@@ -301,12 +319,16 @@ struct http2_request_engine::state {
         std::size_t size = 0;
         for (const auto& field : value.fields) size += field.name.size() + field.value.size() + 32;
         if (size > expanded) {
+            std::vector<hpack_field>().swap(value.fields);
             active_charge.release();
             reset(value.stream, http2_error_code::internal_error);
             return false;
         }
+        active.reserve(value.framed_limit);
         auto encoded = connection.compression().encoder().encode_section(value.fields, {value.wire_limit, expanded, limits.headers.max_fields});
         if (!encoded.status.ok()) {
+            std::vector<hpack_field>().swap(value.fields);
+            std::vector<std::uint8_t>().swap(active);
             active_charge.release();
             fail(connection_error(http2_error_code::internal_error)); return false;
         }

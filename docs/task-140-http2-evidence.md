@@ -156,3 +156,63 @@ CI/v3 PR-owned under AGENTS.md and do not block the local task gate. Public
 listener wiring, independent external HTTP/2 client conformance and the full
 repository test-suite gate are not claimed by these focused implementation
 receipts; broader validation remains runner-owned.
+
+## Validation repair receipts (iteration 1)
+
+The authorized repair envelope covered six findings from performance,
+test-quality and specification alignment review. No staging, commit, merge,
+listener wiring or successor-task implementation was performed.
+
+Effective `:authority` now appears as a synthetic `host` occurrence when the
+received ordinary fields contain no Host. Received ordinary-field order is
+preserved, and an explicit Host still must agree with authority. The shared
+route parity regression chooses its status using Host, so equivalent HTTP/1
+and authority-only HTTP/2 requests both expose `example.test` and return 204.
+
+`max_streams` now also bounds pending semantic/reset items. A new pending item
+at the limit terminates with ENHANCE_YOUR_CALM and clears pending ownership.
+Per-stream cancellation retains its bounded scan; HPACK encoding still happens
+only in wire order and active borrowed output remains immutable. Deterministic
+regressions exercise limits 4, 16 and 64 with output withheld and verify resource
+cleanup. The optimized bounded probe feeds 5,000/10,000/20,000 malformed heads;
+each stops at the default 128-item limit with only the 4,096-byte connection
+control reserve remaining. Its original-engine run took 17.561/46.585/152.277 ms,
+while the repaired run took 0.992/0.851/0.756 ms. Timing is descriptive; the
+configured item limit, terminal code and cleanup assertions are the gate.
+
+Response reservations now include retained semantic strings/vector storage,
+HPACK encoded-string growth and primitive intermediates, and framed output.
+The field vector is pre-sized, while active output reserves only its framed-wire
+bound. The aggregate peak reservation lasts until output storage is freed;
+refused/failed encodings free semantic and output storage before releasing it.
+A 60,000-byte field is refused under a 150,000-byte child response budget before
+unadmitted copying/encoding. The allocation probe uses a 500,000-byte child
+budget and measures actual live allocations using macOS `malloc_size`:
+
+- Original engine: reservation 124,326 bytes, retained semantic allocations
+  69,792 bytes, encoding peak additional 262,144 bytes; probe exits 3.
+- Repaired engine: equal parent/child reservation 425,475 bytes, retained
+  semantic allocations 69,792 bytes, encoding peak additional 196,608 bytes.
+  Combined peak 266,400 bytes fits admission; wire output is 60,050 bytes.
+  The probe exits 0 and verifies only the connection control reserve remains
+  after output advancement. Allocator rounding is included in these figures.
+
+Reset regressions decode exact stream destinations and four-byte error codes
+for semantic/priority errors, stream/body/CONNECT refusal, unsupported response
+bodies and invalid response lengths. Valid siblings still respond. The reported
+`reset(3, internal_error)` mutation produces 46 failed checks in the strengthened
+header suite. Peer RST regressions cancel a parked handler before a late resume,
+release stream/head reservations, remove a queued response and preserve a
+sibling's completion. The wire oracle now rejects trailing fragments, unfinished
+blocks, nested HEADERS and orphan CONTINUATION, with explicit negative cases.
+
+Groundwork TDD RED receipts: `/private/tmp/task140-fixer-headers-red.log` (four
+oracle failures), `task140-fixer-exchange-red.log` (authority, pending-bound and
+peak-budget failures), and `task140-fixer-allocation-red-exact.log` (allocation
+assertion exit 3). The repaired focused TLS-off suites pass 22 tests / 2,587
+checks; TLS-on adds the real TLS boundary suite for 25 tests / 2,772 checks.
+Focused ASan/UBSan passes the same 22 engine tests / 2,587 checks without a
+diagnostic. Sanitizer artifacts are `/private/tmp/task140-fixer-sanitizers/`.
+Changed-source cpplint, Lizard CCN 10, file-size checks and `git diff --check`
+pass. Final full repository gates remain coordinator-owned; nonlocal platform
+checks remain CI/v3 PR-owned.

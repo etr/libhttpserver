@@ -12,6 +12,8 @@
 #include <httpserver/detail/hpack_field_section.hpp>
 #include <httpserver/http/request_head.hpp>
 namespace httpserver::detail {
+// Effective :authority is exposed as Host when absent among ordinary fields.
+// Received ordinary fields retain their order; a supplied Host must agree.
 bool http2_convert_request(std::span<const hpack_field> fields, http::request_head& head);
 bool http2_regular_field(std::string_view name, std::string_view value);
 }  // namespace httpserver::detail
