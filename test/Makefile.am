@@ -1912,3 +1912,7 @@ http2_rate_budget_SOURCES = unit/http2_rate_budget_test.cpp
 http2_fair_output_LDADD = $(http2_frame_LDADD)
 http2_reset_LDADD = $(http2_frame_LDADD)
 http2_rate_budget_LDADD = $(http2_frame_LDADD)
+
+check_PROGRAMS += http2_drain
+http2_drain_SOURCES = unit/http2_drain_test.cpp
+http2_drain_LDADD = $(http2_frame_LDADD)

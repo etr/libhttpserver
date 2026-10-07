@@ -59,6 +59,8 @@
 
 namespace httpserver {
 
+namespace detail { struct drain_ticket_access; }
+
 namespace server {
 
 // The two-state outcome of a drain ticket wait (PRD-V3N-REQ-032):
@@ -98,6 +100,7 @@ class drain_ticket {
 
  private:
     friend class native_server;
+    friend struct ::httpserver::detail::drain_ticket_access;
     class impl;
 
     explicit drain_ticket(std::unique_ptr<impl> inner);

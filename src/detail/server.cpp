@@ -426,3 +426,9 @@ peer_policy& native_server::peer_policy() const noexcept {
 }  // namespace server
 
 }  // namespace httpserver
+
+namespace httpserver::detail {
+server::drain_ticket drain_ticket_access::make(std::shared_ptr<drain_scope> scope) {
+    return server::drain_ticket(std::make_unique<server::drain_ticket::impl>(std::move(scope)));
+}
+}  // namespace httpserver::detail

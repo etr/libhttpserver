@@ -87,6 +87,14 @@ enum class task_state : std::uint8_t {
     done,     // completed; result available for one consumption
 };
 
+// Owned executor adapters install a lease while resuming tasks. Affinity
+// assignment passes that lease to the frame witness, so in-flight completion
+// nodes keep their raw affinity pointer callable after engine teardown.
+inline std::shared_ptr<void>& current_task_executor_lifetime() noexcept {
+    thread_local std::shared_ptr<void> lifetime;
+    return lifetime;
+}
+
 // Lifetime witness shared between a coroutine frame and every
 // "resume this frame" job posted to an executor. A job posted for a
 // frame that gets destroyed while the job is in flight observes
@@ -97,6 +105,7 @@ struct frame_witness {
     // witness while the same thread is inside guarded_resume().
     std::recursive_mutex mu;
     bool valid = true;
+    std::shared_ptr<void> executor_lifetime;
 };
 
 inline void guarded_resume(const std::shared_ptr<frame_witness>& witness,
@@ -162,7 +171,10 @@ class task_frame_base {
     }
 
     // -- consumer plumbing (used by task_awaiter) ------------------------
-    void set_affinity(executor* ex) noexcept { affinity_ = ex; }
+    void set_affinity(executor* ex, std::shared_ptr<void> lifetime = {}) noexcept {
+        affinity_ = ex;
+        witness_->executor_lifetime = std::move(lifetime);
+    }
 
     void register_consumer(std::coroutine_handle<> awaiting,
                            executor* consumer_ex,
@@ -439,7 +451,9 @@ class task_awaiter final {
                     fail_consumer("httpserver::task consumed twice");
                     return awaiting;
                 }
-                promise.set_affinity(consumer_ex);
+                promise.set_affinity(consumer_ex, consumer_
+                    ? consumer_->frame_witness_ptr()->executor_lifetime
+                    : current_task_executor_lifetime());
                 promise.register_consumer(
                     awaiting, consumer_ex,
                     consumer_ ? consumer_->frame_witness_ptr() : nullptr);
@@ -691,7 +705,8 @@ void spawn_impl(executor& ex,
         ex.post([block] { block->run(); });
         return;
     }
-    promise.set_affinity(&ex);
+    promise.set_affinity(&ex, current_executor() == &ex
+        ? current_task_executor_lifetime() : std::shared_ptr<void>{});
     promise.register_spawn_block(
         block, &promise, &task<T>::promise_type::pack_result,
         [block] { block->run(); });
