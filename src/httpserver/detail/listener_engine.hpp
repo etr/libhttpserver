@@ -53,7 +53,7 @@
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/io_connection_owner.hpp>
 #include <httpserver/detail/io_operation.hpp>
-#include <httpserver/detail/io_poll_backend.hpp>
+#include <httpserver/detail/io_socket_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/net/address.hpp>
@@ -70,7 +70,7 @@ class drain_scope;
 class listener_engine final
     : public std::enable_shared_from_this<listener_engine> {
  public:
-    listener_engine(io_poll_backend& backend, worker_pool& pool,
+    listener_engine(io_socket_backend& backend, worker_pool& pool,
                     const server::route_registry& routes,
                     const server::hook_bus& hooks,
                     const server::resource_budget& budget,
@@ -128,7 +128,7 @@ class listener_engine final
     // connection ids (a fresh counter from 1), so the two never alias.
     static constexpr std::uint64_t k_listener_id_base = 1ULL << 62;
 
-    io_poll_backend& backend_;
+    io_socket_backend& backend_;
     worker_pool& pool_;
     const server::route_registry& routes_;
     const server::hook_bus& hooks_;

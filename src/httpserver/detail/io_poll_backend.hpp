@@ -69,7 +69,7 @@
 #include <utility>
 #include <vector>
 
-#include <httpserver/detail/io_operation.hpp>
+#include <httpserver/detail/io_socket_backend.hpp>
 #include <httpserver/detail/io_poll_sys.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/options.hpp>
@@ -118,14 +118,14 @@ inline int poll_timeout_ms(
     return static_cast<int>(gap.count());
 }
 
-class io_poll_backend final : public io_backend, public server::readiness_driver {
+class io_poll_backend final : public io_socket_backend {
  public:
     // Managed mode starts the driver thread; external mode is host-driven.
     explicit io_poll_backend(server::loop_mode mode = server::loop_mode::managed);
 
     // External mode has no polling thread. Activation occurs after listen.
-    http::outcome ready() const;
-    void activate_external();
+    http::outcome ready() const override;
+    void activate_external() override;
     server::interest_snapshot interests() const override;
     http::outcome dispatch(std::span<const server::readiness_event> events,
                            std::chrono::steady_clock::time_point now) override;
@@ -148,29 +148,29 @@ class io_poll_backend final : public io_backend, public server::readiness_driver
     // ::set_nonblocking) and nobody else may close it. Adopting a live
     // id is a std::logic_error; re-adopting a released id is fine.
     void adopt_connection(std::uint64_t id,
-                          pollsys::native_socket_t socket);
+                          pollsys::native_socket_t socket) override;
 
     // Same, flagged as a listener (accept ops poll for readability).
-    void adopt_listener(std::uint64_t id, pollsys::native_socket_t socket);
+    void adopt_listener(std::uint64_t id, pollsys::native_socket_t socket) override;
 
     // The socket registered under @p id, or k_invalid_socket. Does not
     // transfer ownership: release_connection (or destruction) closes.
-    pollsys::native_socket_t native_handle(std::uint64_t id) const;
+    pollsys::native_socket_t native_handle(std::uint64_t id) const override;
 
     // Terminal-fails every pending op of the connection with
     // connection_closed, closes and forgets its socket, and rejects
     // further submits for that id. Unknown ids are a no-op.
-    void release_connection(std::uint64_t id);
+    void release_connection(std::uint64_t id) override;
 
     // Completes every pending wake op with {ok} (fake fire_wake
     // parity). Returns how many fired.
-    std::size_t wake();
+    std::size_t wake() override;
 
     // Terminal teardown: claims every pending op with connection_closed
     // and enqueues each to its owner. Later submits complete
     // immediately; a second close returns 0. Does not close adopted
     // sockets: ops and connections have separate teardown surfaces.
-    std::size_t close();
+    std::size_t close() override;
 
     // Operations registered but not yet terminal.
     std::size_t pending_count() const;

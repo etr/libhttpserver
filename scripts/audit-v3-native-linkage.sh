@@ -82,6 +82,8 @@ src/detail/io_operation.cpp
 src/detail/io_connection_owner.cpp
 src/detail/fake_io_backend.cpp
 src/detail/io_poll_backend.cpp
+src/detail/io_epoll_backend.cpp
+src/detail/io_managed_backend.cpp
 src/detail/worker_pool.cpp
 src/detail/connection_engine.cpp
 src/detail/connection_engine_request.cpp
@@ -109,6 +111,9 @@ src/detail/websocket_session.cpp
 # are part of the native TLS-off surface and stay under the same ban.
 # TASK-115 adds the Digest nonce/ledger/parser/response chain.
 V3_DETAIL_HEADERS="
+src/httpserver/detail/io_socket_backend.hpp
+src/httpserver/detail/io_epoll_backend.hpp
+src/httpserver/detail/io_managed_backend.hpp
 src/httpserver/detail/http1_websocket_handshake.hpp
 src/httpserver/detail/websocket_driver.hpp
 src/httpserver/detail/websocket_codec.hpp

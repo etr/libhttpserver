@@ -20,7 +20,7 @@
 */
 
 // TASK-108: the native_server pimpl. Owns, in destruction order: the
-// stop flags, the poll-driven transport engine (its close completes
+// stop flags, the managed transport engine (its close completes
 // every pending operation), the worker pool (drains those
 // completions), the listener engines (their connection records are all
 // erased by then), the route registry, and the budget scope it
@@ -37,7 +37,7 @@
 
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/drain_scope.hpp>
-#include <httpserver/detail/io_poll_backend.hpp>
+#include <httpserver/detail/io_managed_backend.hpp>
 #include <httpserver/detail/listener_engine.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/server/hooks.hpp>
@@ -57,7 +57,7 @@ class native_server::impl {
           options_(std::move(options)),
           budget_(resource_budget::root(options_.budgets())),
           pool_(options_.concurrency().workers),
-          backend_(options_.loop()) {
+          backend_(engine::make_socket_backend(options_.loop())) {
         registry_state_ = route_registry::create(budget_, registry_);
     }
 
@@ -125,7 +125,7 @@ class native_server::impl {
             return valid;
         }
         if (!registry_state_.ok()) return registry_state_;
-        return backend_.ready();
+        return backend_->ready();
     }
 
     http::outcome listen() {
@@ -170,7 +170,7 @@ class native_server::impl {
 
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             listeners_.push_back(std::make_shared<engine::listener_engine>(
-                backend_, pool_, registry_, hooks_, budget_, peers_,
+                *backend_, pool_, registry_, hooks_, budget_, peers_,
                 *scope_, config));
             const http::outcome bound =
                 listeners_.back()->listen(options_.listener(i), i);
@@ -182,7 +182,7 @@ class native_server::impl {
                 return bound;
             }
         }
-        backend_.activate_external();
+        backend_->activate_external();
         running_.store(true, std::memory_order_release);
         return http::outcome::okay();
     }
@@ -194,14 +194,14 @@ class native_server::impl {
              listeners_) {
             listener->request_stop();
         }
-        static_cast<void>(backend_.wake());
+        static_cast<void>(backend_->wake());
     }
 
     void stop() {
         request_stop();
         // Terminal-fails every pending operation; the completions queue
         // onto the pool, and the drain joins the engines' unwinding.
-        static_cast<void>(backend_.close());
+        static_cast<void>(backend_->close());
         pool_.drain_and_join();
     }
 
@@ -253,7 +253,7 @@ class native_server::impl {
              listeners_) {
             listener->quiesce(deadline);
         }
-        static_cast<void>(backend_.wake());
+        static_cast<void>(backend_->wake());
         return http::outcome::okay();
     }
 
@@ -271,7 +271,7 @@ class native_server::impl {
     }
 
     readiness_driver* readiness() noexcept {
-        return options_.loop() == loop_mode::external ? &backend_ : nullptr;
+        return options_.loop() == loop_mode::external ? backend_.get() : nullptr;
     }
 
     hook_bus& hooks() const noexcept { return hooks_; }
@@ -304,7 +304,7 @@ class native_server::impl {
     mutable server::peer_policy peers_;
     std::vector<std::shared_ptr<engine::listener_engine>> listeners_;
     engine::worker_pool pool_;
-    engine::io_poll_backend backend_;
+    std::unique_ptr<engine::io_socket_backend> backend_;
     std::atomic<bool> running_{false};
     std::atomic<bool> stop_requested_{false};
     std::atomic<bool> drain_begun_{false};

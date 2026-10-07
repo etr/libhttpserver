@@ -41,8 +41,8 @@
 // iteration bounds) live in the poll-only busy-loop scenarios.
 //
 // Scenario families (S1-S11 are driver-agnostic; S12-S18, the
-// socket-only scenarios, live at the bottom, typed against the concrete
-// poll driver):
+// socket-only scenarios, live at the bottom, parameterized by the
+// concrete socket driver):
 //   S1  read delivers the stimulated bytes exactly once
 //   S2  write completes with transferred == stimulated size
 //   S3  timer fires at/after its deadline, never before (S3b: two
@@ -680,17 +680,18 @@ void cancel_vs_stimulus_race(littletest::test_runner* __lt_tr__,
     LT_CHECK(cancelled_count > 0);
 }
 
-// ---- poll-only scenarios (S12-S18) ----------------------------------------
+// Socket-driver scenarios (S12-S18).
 //
 // These pin the socket behavior the scripted fixture cannot express:
 // accept, byte-exact HTTP/1-shaped round trips, partial reads, hangups,
-// and the no-busy-loop bounds. They type against the concrete driver,
-// not the seam. Member order keeps the documented teardown: the backend
+// and the no-busy-loop bounds. One fixture instantiates them against each
+// concrete driver. Member order keeps the documented teardown: the backend
 // is destroyed before the executor/owner rig it enqueues into.
 
-struct poll_rig {
+template<typename Backend>
+struct socket_rig {
     contract_rig rig;
-    hd::io_poll_backend backend;
+    Backend backend;
 
     // Adopts a fresh loopback pair under @p id; the peer end stays with
     // the returned pair, the adopted end's handle moves to the backend
@@ -712,6 +713,8 @@ struct poll_rig {
     }
 };
 
+using poll_rig = socket_rig<hd::io_poll_backend>;
+
 // Byte-span helper for wire-shaped literals.
 inline std::span<const std::byte> as_bytes(const char* text) noexcept {
     return std::span<const std::byte>(
@@ -727,11 +730,12 @@ inline bool bytes_equal(const std::byte* lhs, const std::byte* rhs,
 // S12: accept round trip. A listener adopted under id 2 accepts one
 // connection; the fresh fabricated id carries a valid handle; read and
 // write ops work over it in both directions.
+template<typename Backend>
 inline void accept_round_trip(littletest::test_runner* __lt_tr__,
-                              const char* __lt_name__, poll_rig& rig) {
+                              const char* __lt_name__, socket_rig<Backend>& rig) {
     (void)__lt_name__;
     contract_rig& r = rig.rig;
-    hd::io_poll_backend& backend = rig.backend;
+    auto& backend = rig.backend;
     const io_loopback::listener listener = rig.adopt_listener(2);
     LT_CHECK(listener.port() != 0);
 
@@ -786,8 +790,9 @@ inline void accept_round_trip(littletest::test_runner* __lt_tr__,
 // S13: the acceptance-criteria scenario. One HTTP/1-shaped round trip:
 // a write op pushes a response head while a read op receives a GET
 // request -- byte-exact in both directions over one loopback pair.
+template<typename Backend>
 inline void http1_round_trip(littletest::test_runner* __lt_tr__,
-                             const char* __lt_name__, poll_rig& rig) {
+                             const char* __lt_name__, socket_rig<Backend>& rig) {
     (void)__lt_name__;
     contract_rig& r = rig.rig;
     const io_loopback::pair conn = rig.adopt_pair(1);
@@ -835,8 +840,9 @@ inline void http1_round_trip(littletest::test_runner* __lt_tr__,
 // S14: partial read. A peer sending more than the op buffer completes
 // the op with transferred == buffer size; the next op receives the
 // remainder, byte-exact.
+template<typename Backend>
 inline void partial_read(littletest::test_runner* __lt_tr__,
-                         const char* __lt_name__, poll_rig& rig) {
+                         const char* __lt_name__, socket_rig<Backend>& rig) {
     (void)__lt_name__;
     contract_rig& r = rig.rig;
     const io_loopback::pair conn = rig.adopt_pair(1);
@@ -871,8 +877,9 @@ inline void partial_read(littletest::test_runner* __lt_tr__,
 
 // S15: read hangup. The peer closes while a read is pending: the read
 // completes connection_closed exactly once and nothing stays pending.
+template<typename Backend>
 inline void read_hangup(littletest::test_runner* __lt_tr__,
-                        const char* __lt_name__, poll_rig& rig) {
+                        const char* __lt_name__, socket_rig<Backend>& rig) {
     (void)__lt_name__;
     contract_rig& r = rig.rig;
     io_loopback::pair conn = rig.adopt_pair(1);
@@ -900,8 +907,9 @@ inline void read_hangup(littletest::test_runner* __lt_tr__,
 // iteration count and the deadline are failure detectors only (the
 // platform decides how many sends the kernel still accepts after the
 // close).
+template<typename Backend>
 inline void write_hangup(littletest::test_runner* __lt_tr__,
-                         const char* __lt_name__, poll_rig& rig) {
+                         const char* __lt_name__, socket_rig<Backend>& rig) {
     (void)__lt_name__;
     contract_rig& r = rig.rig;
     io_loopback::pair conn = rig.adopt_pair(1);
@@ -947,9 +955,10 @@ inline void write_hangup(littletest::test_runner* __lt_tr__,
 // timer, the driver must not iterate while it waits: the iteration
 // count over a quiet 250 ms window stays <= 2 and the timer has not
 // fired, then the timer fires at/after its deadline.
+template<typename Backend>
 inline void idle_iterations_stay_bounded(littletest::test_runner* __lt_tr__,
                                          const char* __lt_name__,
-                                         poll_rig& rig) {
+                                         socket_rig<Backend>& rig) {
     (void)__lt_name__;
     contract_rig& r = rig.rig;
     io_loopback::pair conn = rig.adopt_pair(1);
@@ -993,9 +1002,10 @@ inline void idle_iterations_stay_bounded(littletest::test_runner* __lt_tr__,
 // write ops against a trickling client: every byte arrives in order,
 // and the driver's iteration count stays bounded by the resubmit count
 // (waking once per state change, never spinning).
+template<typename Backend>
 inline void slow_reader_no_busy_loop(littletest::test_runner* __lt_tr__,
                                      const char* __lt_name__,
-                                     poll_rig& rig) {
+                                     socket_rig<Backend>& rig) {
     (void)__lt_name__;
     contract_rig& r = rig.rig;
     io_loopback::pair conn = rig.adopt_pair(1);

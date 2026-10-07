@@ -30,6 +30,7 @@
 #include <utility>
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/websocket_session_state.hpp>
 #include "./io_loopback.hpp"
 #include "./websocket_test_helpers.hpp"

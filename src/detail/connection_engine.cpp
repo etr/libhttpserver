@@ -39,7 +39,7 @@ namespace httpserver {
 
 namespace detail {
 
-connection_engine::connection_engine(io_poll_backend& backend, worker_pool& pool,
+connection_engine::connection_engine(io_socket_backend& backend, worker_pool& pool,
                                      const server::route_registry& routes,
                                      const server::hook_bus& hooks,
                                      const server::resource_budget& budget,
