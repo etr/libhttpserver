@@ -83,7 +83,9 @@ src/detail/io_connection_owner.cpp
 src/detail/fake_io_backend.cpp
 src/detail/io_poll_backend.cpp
 src/detail/io_epoll_backend.cpp
+src/detail/io_kqueue_backend.cpp
 src/detail/io_managed_backend.cpp
+src/detail/io_managed_socket_backend.cpp
 src/detail/worker_pool.cpp
 src/detail/connection_engine.cpp
 src/detail/connection_engine_request.cpp
@@ -113,7 +115,9 @@ src/detail/websocket_session.cpp
 V3_DETAIL_HEADERS="
 src/httpserver/detail/io_socket_backend.hpp
 src/httpserver/detail/io_epoll_backend.hpp
+src/httpserver/detail/io_kqueue_backend.hpp
 src/httpserver/detail/io_managed_backend.hpp
+src/httpserver/detail/io_managed_socket_backend.hpp
 src/httpserver/detail/http1_websocket_handshake.hpp
 src/httpserver/detail/websocket_driver.hpp
 src/httpserver/detail/websocket_codec.hpp

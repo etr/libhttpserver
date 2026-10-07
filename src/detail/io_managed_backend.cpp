@@ -8,12 +8,16 @@
 #include <httpserver/detail/io_poll_backend.hpp>
 #if defined(__linux__)
 #include <httpserver/detail/io_epoll_backend.hpp>
+#elif defined(__APPLE__) || defined(__FreeBSD__)
+#include <httpserver/detail/io_kqueue_backend.hpp>
 #endif
 namespace httpserver {
 namespace detail {
 std::unique_ptr<io_socket_backend> make_socket_backend(server::loop_mode mode) {
 #if defined(__linux__)
     if (mode == server::loop_mode::managed) return std::make_unique<io_epoll_backend>();
+#elif defined(__APPLE__) || defined(__FreeBSD__)
+    if (mode == server::loop_mode::managed) return std::make_unique<io_kqueue_backend>();
 #endif
     return std::make_unique<io_poll_backend>(mode);
 }
