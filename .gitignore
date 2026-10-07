@@ -71,3 +71,9 @@ CLAUDE.md
 !test/integ/protocol_gate_runner_test.py
 !test/integ/protocol_fuzz_runner_test.py
 !scripts/run-v3-protocol-sanitizers.py
+
+!scripts/check-v3-tls-build.py
+!scripts/test-v3-native-linkage.py
+build-off/
+build-on/
+build-red-on/

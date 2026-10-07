@@ -50,6 +50,7 @@
 #include <httpserver/http/request_head.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
+#include <httpserver/features.hpp>
 #include <httpserver/server/server.hpp>
 
 namespace {
@@ -301,6 +302,8 @@ int audit_websocket_upgrade_link() {
 
 // All audits always run: plain | does not short-circuit.
 int main() {
+    const auto features = httpserver::query_features();
+    if (features.tcp_tls || features.http2 || features.http3) return 1;
     return audit_link_surface() | audit_basic_auth_link()
            | audit_digest_auth_link() | audit_forms_link()
            | audit_multipart_link() | audit_hooks_link() | audit_websocket_upgrade_link();

@@ -1692,3 +1692,93 @@ forms_multipart_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 ip_controls_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 EXTRA_DIST += conformance/websocket/close-below-range.wire conformance/websocket/close-reserved-1004.wire conformance/websocket/close-reserved-1006.wire conformance/websocket/close-reserved-1015.wire conformance/websocket/close-above-range.wire conformance/websocket/close-empty.wire
+
+check_PROGRAMS += consumer_v3_features
+consumer_v3_features_SOURCES = headers/consumer_v3_features.cpp
+consumer_v3_features_CPPFLAGS = -I$(top_srcdir)/src
+consumer_v3_features_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+AM_TESTS_ENVIRONMENT = V3_TLS_MODE="$(enable_v3_tls)"; export V3_TLS_MODE;
+
+basic_auth_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+body_reader_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+consumer_v3_exchange_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+consumer_v3_features_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+consumer_v3_websocket_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+digest_auth_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+exchange_decisions_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+exchange_routing_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+external_http1_e2e_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+external_readiness_adapter_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+forms_multipart_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+forms_urlencoded_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+hooks_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+http1_body_source_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+http1_conformance_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+http1_websocket_handshake_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+http1_websocket_upgrade_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+io_backend_contract_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+io_epoll_backend_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+io_kqueue_backend_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+ip_controls_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+native_http1_conformance_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+native_http1_e2e_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+native_http1_parity_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+native_protocol_memory_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+native_websocket_fixture_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+protocol_fuzz_replay_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+response_definition_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+response_sources_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+response_writer_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+route_sync_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+routing_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+v3_native_linkage_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_codec_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_conformance_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_drain_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_drain_race_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_progress_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_session_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_session_race_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_upgrade_decision_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+websocket_utf8_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

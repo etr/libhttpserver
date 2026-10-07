@@ -51,6 +51,96 @@ AC_SYS_LARGEFILE
 # Minimal feature-set required
 AX_CXX_COMPILE_STDCXX([20], [noext], [mandatory])
 
+# The native provider is independent of the transitional legacy TLS lane.
+AC_ARG_ENABLE([v3-tls],
+    [AS_HELP_STRING([--enable-v3-tls], [enable native OpenSSL 3.5 LTS provider (default=no)])],
+    [], [enable_v3_tls=no])
+AS_CASE([$enable_v3_tls], [yes|no], [],
+    [AC_MSG_ERROR([--enable-v3-tls accepts only yes or no])])
+AC_ARG_VAR([V3_TLS_CFLAGS], [private native provider include flags])
+AC_ARG_VAR([V3_TLS_LIBS], [private native provider link flags])
+AS_IF([test "x$enable_v3_tls" = xyes], [
+    # Explicit selections never fall back to another installation.
+    AS_IF([test "${V3_TLS_CFLAGS+set}" != set && test "${V3_TLS_LIBS+set}" != set], [
+        AC_PATH_TOOL([PKG_CONFIG], [pkg-config])
+        AS_IF([test -z "$PKG_CONFIG" || ! $PKG_CONFIG --exists openssl],
+            [AC_MSG_ERROR([native TLS requires OpenSSL 3.5 LTS; select V3_TLS_CFLAGS and V3_TLS_LIBS])])
+        V3_TLS_CFLAGS=`$PKG_CONFIG --cflags openssl`
+        V3_TLS_LIBS=`$PKG_CONFIG --libs openssl`
+    ])
+    AS_IF([test -z "$V3_TLS_LIBS"],
+        [AC_MSG_ERROR([native TLS requires OpenSSL 3.5 LTS library flags])])
+    # Search paths precede ambient paths without repeating library objects.
+    V3_TLS_LDFLAGS=
+    for v3_flag in $V3_TLS_LIBS; do
+        AS_CASE([$v3_flag], [-L*|-Wl,*|-F*],
+            [V3_TLS_LDFLAGS="$V3_TLS_LDFLAGS $v3_flag"])
+    done
+    v3_saved_CPPFLAGS=$CPPFLAGS
+    v3_saved_LIBS=$LIBS
+    v3_saved_LDFLAGS=$LDFLAGS
+    CPPFLAGS="$V3_TLS_CFLAGS $CPPFLAGS"
+    LIBS="$V3_TLS_LIBS $LIBS"
+    LDFLAGS="$V3_TLS_LDFLAGS $LDFLAGS"
+    AC_MSG_CHECKING([for stable OpenSSL 3.5.9 or later in the 3.5 LTS line])
+    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+        #include <openssl/opensslv.h>
+        #ifdef LIBRESSL_VERSION_NUMBER
+        #error LibreSSL is not the native provider
+        #endif
+        #if OPENSSL_VERSION_MAJOR != 3 || OPENSSL_VERSION_MINOR != 5 || OPENSSL_VERSION_PATCH < 9
+        #error wrong LTS line or patch floor
+        #endif
+        static_assert(sizeof(OPENSSL_VERSION_PRE_RELEASE) == 1, "prerelease unsupported");
+        int main() { return 0; }
+    ]])], [AC_MSG_RESULT([yes])],
+        [AC_MSG_ERROR([native TLS requires stable OpenSSL 3.5.9 or later in the 3.5 LTS line])])
+    AC_MSG_CHECKING([for the linkable third-party QUIC TLS callback API])
+    AC_LINK_IFELSE([AC_LANG_SOURCE([[
+        #include <openssl/ssl.h>
+        #include <openssl/core_dispatch.h>
+        OSSL_FUNC_SSL_QUIC_TLS_crypto_send_fn *send_cb = nullptr;
+        OSSL_FUNC_SSL_QUIC_TLS_crypto_recv_rcd_fn *recv_cb = nullptr;
+        OSSL_FUNC_SSL_QUIC_TLS_crypto_release_rcd_fn *release_cb = nullptr;
+        OSSL_FUNC_SSL_QUIC_TLS_yield_secret_fn *secret_cb = nullptr;
+        OSSL_FUNC_SSL_QUIC_TLS_got_transport_params_fn *params_cb = nullptr;
+        OSSL_FUNC_SSL_QUIC_TLS_alert_fn *alert_cb = nullptr;
+        int ids[] = { OSSL_FUNC_SSL_QUIC_TLS_CRYPTO_SEND,
+            OSSL_FUNC_SSL_QUIC_TLS_CRYPTO_RECV_RCD,
+            OSSL_FUNC_SSL_QUIC_TLS_CRYPTO_RELEASE_RCD,
+            OSSL_FUNC_SSL_QUIC_TLS_YIELD_SECRET,
+            OSSL_FUNC_SSL_QUIC_TLS_GOT_TRANSPORT_PARAMS,
+            OSSL_FUNC_SSL_QUIC_TLS_ALERT };
+        auto *volatile callbacks = &SSL_set_quic_tls_cbs;
+        auto *volatile parameters = &SSL_set_quic_tls_transport_params;
+        auto *volatile early = &SSL_set_quic_tls_early_data_enabled;
+        int main() { return callbacks == nullptr || parameters == nullptr || early == nullptr || ids[0] == 0; }
+    ]])], [AC_MSG_RESULT([yes])],
+        [AC_MSG_ERROR([native TLS requires the linkable OpenSSL 3.5 QUIC TLS callback API])])
+    AC_MSG_CHECKING([that selected native provider libraries match their headers])
+    AC_RUN_IFELSE([AC_LANG_SOURCE([[
+        #include <openssl/crypto.h>
+        #include <openssl/opensslv.h>
+        int main() { return OpenSSL_version_num() != OPENSSL_VERSION_NUMBER
+            || OPENSSL_version_pre_release()[0] != 0; }
+    ]])], [AC_MSG_RESULT([yes])],
+        [AC_MSG_ERROR([native TLS provider runtime does not match selected headers])],
+        [AC_MSG_RESULT([cross compiling; runtime smoke required on target])])
+    CPPFLAGS=$v3_saved_CPPFLAGS
+    LIBS=$v3_saved_LIBS
+    LDFLAGS=$v3_saved_LDFLAGS
+    AC_DEFINE([NATIVE_V3_TLS], [1], [Build the private native TLS provider])
+], [
+    V3_TLS_CFLAGS=
+    V3_TLS_LIBS=
+    V3_TLS_LDFLAGS=
+])
+AM_CONDITIONAL([NATIVE_V3_TLS], [test "x$enable_v3_tls" = xyes])
+AC_SUBST([V3_TLS_CFLAGS])
+AC_SUBST([V3_TLS_LIBS])
+AC_SUBST([V3_TLS_LDFLAGS])
+AC_SUBST([enable_v3_tls])
+
 native_srcdir=$srcdir
 
 AC_MSG_CHECKING([whether it is possible to compile in the same directory])
@@ -402,7 +492,8 @@ AC_MSG_NOTICE([Configuration Summary:
   Target directory:  ${prefix}
   License         :  LGPL only
   Debug	          :  ${debugit}
-  TLS Enabled     :  ${have_gnutls}
+  Legacy TLS      :  ${have_gnutls}
+  Native provider :  ${enable_v3_tls}
   Basic Auth      :  ${have_bauth}
   Digest Auth     :  ${have_dauth}
   WebSocket       :  ${have_websocket}
