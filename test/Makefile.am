@@ -1916,3 +1916,17 @@ http2_rate_budget_LDADD = $(http2_frame_LDADD)
 check_PROGRAMS += http2_drain
 http2_drain_SOURCES = unit/http2_drain_test.cpp
 http2_drain_LDADD = $(http2_frame_LDADD)
+
+check_PROGRAMS += http2_websocket_handshake
+http2_websocket_handshake_SOURCES = unit/http2_websocket_handshake_test.cpp
+http2_websocket_handshake_LDADD = $(http2_frame_LDADD)
+noinst_HEADERS += unit/http2_websocket_fixture.hpp
+check_PROGRAMS += http2_websocket
+http2_websocket_SOURCES = unit/http2_websocket_test.cpp
+http2_websocket_LDADD = $(http2_frame_LDADD)
+check_PROGRAMS += http2_websocket_flow
+http2_websocket_flow_SOURCES = unit/http2_websocket_flow_test.cpp
+http2_websocket_flow_LDADD = $(http2_frame_LDADD)
+check_PROGRAMS += http2_websocket_lifecycle
+http2_websocket_lifecycle_SOURCES = unit/http2_websocket_lifecycle_test.cpp
+http2_websocket_lifecycle_LDADD = $(http2_frame_LDADD)

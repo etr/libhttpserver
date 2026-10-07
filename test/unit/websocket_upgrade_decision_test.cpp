@@ -104,6 +104,17 @@ LT_BEGIN_AUTO_TEST(upgrade_decision_suite, interim_consumption_releases_all_queu
     slot.push_end({}); count = outbox.copy_front(buffer); outbox.consume_front(count);
     LT_CHECK(outbox.empty()); LT_CHECK_EQ(outbox.queued_bytes(), std::size_t{0});
 LT_END_AUTO_TEST(interim_consumption_releases_all_queue_capacity)
+LT_BEGIN_AUTO_TEST(upgrade_decision_suite, http2_upgrade_delegates_and_preserves_decision_rules)
+    h::detail::recording_sink sink; auto request = head(); request.request_protocol = h::http::protocol::http_2;
+    h::exchange x(request, &sink); auto result = complete(x.upgrade({}));
+    LT_CHECK(result.status.ok()); LT_CHECK(x.state() == h::exchange_state::upgraded);
+    LT_CHECK(complete(x.upgrade({})).status.code() == h::http::outcome_code::invalid_state); LT_CHECK_EQ(sink.upgrade_calls, 1);
+    rejecting_sink reject; h::exchange refused(request, &reject);
+    LT_CHECK(!complete(refused.upgrade({})).status.ok()); LT_CHECK_EQ(reject.attempts, 1);
+    LT_CHECK(refused.respond(h::http::status::from_code(403), {}).ok());
+    request.request_protocol = h::http::protocol::http_1_0; h::exchange unsupported(request, &sink);
+    LT_CHECK(complete(unsupported.upgrade({})).status.code() == h::http::outcome_code::not_supported);
+LT_END_AUTO_TEST(http2_upgrade_delegates_and_preserves_decision_rules)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

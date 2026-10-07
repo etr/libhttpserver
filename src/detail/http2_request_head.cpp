@@ -7,6 +7,7 @@
 #include <array>
 #include <limits>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <httpserver/detail/http2_request_head.hpp>
 #include <httpserver/detail/http1_host.hpp>
@@ -22,11 +23,11 @@ bool forbidden(std::string_view name) {
     return std::find(names.begin(), names.end(), name) != names.end();
 }
 struct pseudo_fields {
-    std::array<std::optional<std::string_view>, 4> values;
+    std::array<std::optional<std::string_view>, 5> values;
     bool regular = false;
     bool append(const hpack_field& field) {
         if (regular) return false;
-        constexpr std::array<std::string_view, 4> names{":method", ":scheme", ":path", ":authority"};
+        constexpr std::array<std::string_view, 5> names{":method", ":scheme", ":path", ":authority", ":protocol"};
         auto found = std::find(names.begin(), names.end(), field.name);
         if (found == names.end()) return false;
         auto& value = values[found - names.begin()];
@@ -81,12 +82,19 @@ bool set_origin_target(const pseudo_fields& pseudo, http::request_head& head) {
     head.raw_target = *path;
     return true;
 }
+bool set_extended_target(const pseudo_fields& pseudo, http::request_head& head) {
+    if (head.request_method.id() != http::method_id::connect || !http::detail::is_token(*pseudo.values[4]) || !pseudo.values[3]) return false;
+    if (!set_origin_target(pseudo, head) || head.raw_target.front() != '/') return false;
+    // Extended CONNECT routes an origin path while retaining its method.
+    return http1_target::derive_route_path(http::method::known(http::method_id::get), head.raw_target, head.route_path).ok();
+}
 bool set_target(const pseudo_fields& pseudo, http::request_head& head) {
     const auto& method = pseudo.values[0];
     if (!method) return false;
     auto parsed = http::method::parse(*method);
     if (!parsed) return false;
     head.request_method = *parsed;
+    if (pseudo.values[4]) return set_extended_target(pseudo, head);
     const bool valid = head.request_method.id() == http::method_id::connect ?
         set_connect_target(pseudo, head) : set_origin_target(pseudo, head);
     return valid && http1_target::derive_route_path(head.request_method, head.raw_target, head.route_path).ok();
@@ -116,7 +124,7 @@ bool http2_content_length(const http::fields& fields, std::optional<std::uint64_
 bool http2_trailer_field(std::string_view name, std::string_view value) {
     return http2_regular_field(name, value) && name != "content-length" && name != "host" && name != "te" && name != "trailer";
 }
-bool http2_convert_request(std::span<const hpack_field> fields, http::request_head& head) {
+bool http2_convert_request(std::span<const hpack_field> fields, http::request_head& head, http2_connect_metadata& connect) {
     pseudo_fields pseudo;
     for (const auto& field : fields) {
         if (field.name.starts_with(":")) {
@@ -130,6 +138,13 @@ bool http2_convert_request(std::span<const hpack_field> fields, http::request_he
     }
     head.request_protocol = http::protocol::http_2;
     std::optional<std::uint64_t> length;
-    return set_target(pseudo, head) && set_authority(pseudo, head) && http2_content_length(head.head_fields, length);
+    if (!set_target(pseudo, head) || !set_authority(pseudo, head) || !http2_content_length(head.head_fields, length)) return false;
+    if (pseudo.values[4]) connect.protocol = std::string(*pseudo.values[4]);
+    if (pseudo.values[1]) connect.scheme = *pseudo.values[1];
+    return true;
+}
+bool http2_convert_request(std::span<const hpack_field> fields, http::request_head& head) {
+    http2_connect_metadata connect;
+    return http2_convert_request(fields, head, connect);
 }
 }  // namespace httpserver::detail

@@ -34,6 +34,8 @@ namespace httpserver::detail {
 struct websocket_progress {
     bool input_ready = false, output_pending = false, closing = false, terminal = false;
     std::optional<std::chrono::steady_clock::time_point> output_pending_since, closing_since;
+    bool close_sent = false, peer_close = false, clean = false;
+    http::outcome_code terminal_code = http::outcome_code::ok;
 };
 class websocket_driver {
  public:

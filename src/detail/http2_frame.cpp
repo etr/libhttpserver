@@ -45,10 +45,14 @@ std::optional<http2_error> prefix_shape(http2_frame_header h) {
     return {};
 }
 std::optional<http2_error> setting_range(unsigned id, std::uint32_t value) {
-    if (id == 2 && value > 1) return error(http2_error_code::protocol_error);
+    if ((id == 2 || id == 8) && value > 1) return error(http2_error_code::protocol_error);
     if (id == 4 && value > 0x7fffffff) return error(http2_error_code::flow_control_error);
     if (id == 5 && (value < 16384 || value > 0xffffff)) return error(http2_error_code::protocol_error);
     return {};
+}
+std::optional<http2_error> connect_setting(http2_settings& s, std::uint32_t value) {
+    if (s.enable_connect_protocol && !value) return error(http2_error_code::protocol_error);
+    s.enable_connect_protocol = value; return {};
 }
 std::optional<http2_error> apply_setting(http2_settings& s, unsigned id, std::uint32_t value) {
     if (auto e = setting_range(id, value)) return e;
@@ -65,6 +69,7 @@ std::optional<http2_error> apply_setting(http2_settings& s, unsigned id, std::ui
             s.max_frame_size = value;
             break;
         case 6: s.max_header_list_size = value; break;
+        case 8: return connect_setting(s, value);
         default: break;
     }
     return {};
@@ -181,6 +186,7 @@ std::optional<http2_error> http2_frame_parser::take_prefix(std::span<const std::
         if (bytes[used++] != static_cast<std::uint8_t>(http2_magic[magic_used_++])) return error(http2_error_code::protocol_error);
     }
     if (magic_used_ != http2_magic.size()) return {};
+    if (!header_used_ && used < bytes.size()) ++frame_sequence_;
     while (header_used_ < 9 && used < bytes.size()) header_bytes_[header_used_++] = bytes[used++];
     return {};
 }

@@ -134,7 +134,7 @@ class exchange_sink {
 //     (streaming: respond's head commit, then writer() becomes usable)
 //   admit_body(policy)       from head              -> admitted
 //   suspend(out)             from head or admitted  (state unchanged)
-//   upgrade(options)         from an HTTP/1.1 head  -> upgraded
+//   upgrade(options)         from a supported protocol head  -> upgraded
 // Upgrade returns task<websocket_upgrade_result>; other decisions return
 // http::outcome. A typed precommit failure leaves the
 // state, the suspension flag, and the engine untouched (a double
@@ -307,9 +307,8 @@ class exchange {
         return http::outcome::okay();
     }
 
-    // Upgrade decision: transfers connection ownership to the upgrade
-    // session. The upgrade handshake exists on HTTP/1.1 only; other
-    // versions negotiate differently and report not_supported.
+    // Upgrade decision: the protocol sink transfers the ordered stream to
+    // the session (one connection for HTTP/1.1, one stream for HTTP/2).
     // Lazy like other tasks: options are owned before first suspension.
     // Await immediately while the engine-owned exchange is alive.
     task<websocket_upgrade_result> upgrade(ws_upgrade_options options) {
@@ -322,9 +321,9 @@ class exchange {
                 "exchange: upgrade() is a head-time decision"};
             co_return result;
         }
-        if (head_.request_protocol != http::protocol::http_1_1 || sink_ == nullptr) {
+        if ((head_.request_protocol != http::protocol::http_1_1 && head_.request_protocol != http::protocol::http_2) || sink_ == nullptr) {
             result.status = {http::outcome_code::not_supported,
-                "exchange: upgrade requires native HTTP/1.1"};
+                "exchange: upgrade protocol unsupported"};
             co_return result;
         }
         result = sink_->on_upgrade(options);

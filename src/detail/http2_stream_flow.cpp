@@ -28,9 +28,12 @@ void http2_request_engine::state::publish_stream_credit(stream& value) {
     auto& body = value.body;
     consumed += body.consumed; body.consumed = 0;
     if (local_initial || !body.admitted() || body.receive_ended() || value.reset_pending) return;
-    const auto target = static_cast<std::int64_t>(body.receive_capacity() - body.unread());
+    const auto target = value.websocket_input_blocked ? body.receive_window.available + value.credit_queued + value.padding_credit :
+        static_cast<std::int64_t>(body.receive_capacity() - body.unread());
     const auto gap = target - body.receive_window.available - value.credit_queued;
-    if (gap > 0 && gap <= 0x7fffffff && connection.queue_window_update(value.id, gap) == http::outcome_code::ok) value.credit_queued += gap;
+    if (gap > 0 && gap <= 0x7fffffff && connection.queue_window_update(value.id, gap) == http::outcome_code::ok) {
+        value.credit_queued += gap; value.padding_credit = 0;
+    }
 }
 void http2_request_engine::state::publish_credit() {
     if (connection.failure()) return;
@@ -81,16 +84,23 @@ std::optional<http2_error> http2_request_engine::state::data_frame() {
     if (h.flags & 8) payload = payload.subspan(1, payload.size() - payload.front() - 1);
     const auto padding = full - payload.size();
     consumed += padding;
-    const auto before = body.unread();
-    if (!body.receive(payload, h.flags & 1)) {
-        consumed += payload.size() - (body.unread() - before);
-        reset(h.stream_id, http2_error_code::protocol_error);
-    }
+    if (value.websocket) value.padding_credit += padding;
+    receive_data(value, payload, h.flags & 1);
     return {};
 }
+void http2_request_engine::state::receive_data(stream& value, std::span<const std::uint8_t> payload, bool ended) {
+    auto& body = value.body;
+    const auto before = body.unread();
+    if (!body.receive(payload, ended)) {
+        consumed += payload.size() - (body.unread() - before);
+        reset(value.id, http2_error_code::protocol_error);
+    }
+    if (value.websocket && !value.reset_pending) pump_websocket_input(value);
+}
+
 bool http2_request_engine::state::trailers(std::uint32_t id, bool ended, const std::vector<hpack_field>& fields) {
     auto& value = *streams.at(id);
-    if (!ended || value.body.receive_ended() || value.reset_pending) {
+    if (!value.http_trailers_allowed(ended)) {
         reset(id, http2_error_code::protocol_error);
         return false;
     }
@@ -116,6 +126,7 @@ bool http2_request_engine::state::data_ready(stream& value) {
     return value.headers_sent && value.response_started && !value.send_ended && !value.reset_pending;
 }
 bool http2_request_engine::state::frame_data(stream& value) {
+    if (value.websocket) return frame_websocket_data(value);
     auto& body = value.body;
     const bool end = body.finished() && !body.queued();
     if (end && !body.sent_trailers().empty()) return encode_trailers(value);

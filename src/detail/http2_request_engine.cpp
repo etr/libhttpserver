@@ -14,6 +14,22 @@ bool valid_queues(const http2_request_limits& limits) {
     return limits.body_buffer_bytes > 0 && limits.body_buffer_bytes <= 65535 &&
         limits.response_buffer_bytes > 0 && limits.response_buffer_bytes <= 65535;
 }
+bool valid_websocket_limits(const http2_request_limits& limits) {
+    const auto& ws = limits.websocket;
+    return ws.validate().ok() && ws.incoming_messages <= 256 && ws.outgoing_messages <= 256 &&
+        ws.incoming_bytes <= server::max_capacity(server::resource::body_buffer_bytes) &&
+        ws.output_bytes <= server::max_capacity(server::resource::response_queue_bytes) && server::detail::check_timeouts(limits.timeouts).ok();
+}
+bool valid_request_headers(const http2_request_limits& limits) {
+    const auto& h = limits.headers;
+    const bool headers = h.max_compressed_bytes && h.max_compressed_bytes <= server::max_capacity(server::resource::body_buffer_bytes) &&
+        h.max_expanded_bytes && h.max_expanded_bytes <= server::max_capacity(server::resource::header_bytes) / head_copy_allowance &&
+        h.max_fields && h.max_fields <= server::max_capacity(server::resource::header_fields);
+    return headers;
+}
+bool valid_request_limits(const http2_request_limits& limits) {
+    return valid_request_headers(limits) && limits.max_streams && valid_queues(limits) && valid_websocket_limits(limits);
+}
 }  // namespace
 http2_request_engine::http2_request_engine(server::resource_budget budget, const server::route_registry& routes,
                                           executor& owner, http2_request_limits limits)
@@ -21,12 +37,7 @@ http2_request_engine::http2_request_engine(server::resource_budget budget, const
     state_->handlers->after_resume([weak = std::weak_ptr<state>(state_)] {
         if (auto state = weak.lock()) state->retire_cancelled();
     });
-    const auto& h = limits.headers;
-    if (!h.max_compressed_bytes || h.max_compressed_bytes > server::max_capacity(server::resource::body_buffer_bytes) ||
-        !h.max_expanded_bytes || h.max_expanded_bytes > server::max_capacity(server::resource::header_bytes) / head_copy_allowance ||
-        !h.max_fields || h.max_fields > server::max_capacity(server::resource::header_fields) || !limits.max_streams || !valid_queues(limits)) {
-        state_->fail(connection_error(http2_error_code::internal_error, http::outcome_code::invalid_argument));
-    }
+    if (!valid_request_limits(limits)) state_->fail(connection_error(http2_error_code::internal_error, http::outcome_code::invalid_argument));
 }
 http2_request_engine::~http2_request_engine() = default;
 http::outcome http2_request_engine::begin_drain(http2_connection::time_point deadline, server::drain_ticket& out) {
@@ -40,6 +51,9 @@ http::outcome http2_request_engine::begin_drain(http2_connection::time_point dea
     state_->phase = state::drain_phase::announcing;
     state_->scope->arm(deadline, [owner = &state_->owner, handlers = state_->handlers.get()] { return owner->is_current() || current_executor() == handlers; },
         [control = state_->drain] { control->cancel_requested.store(true); });
+    ++state_->websocket_pumps;
+    for (auto& [id, value] : state_->streams) if (value->websocket) value->websocket->begin_close(1001, {});
+    --state_->websocket_pumps;
     out = std::move(ticket); return http::outcome::okay();
 }
 void http2_request_engine::state::cancel_drain() {
@@ -56,8 +70,9 @@ void http2_request_engine::state::cancel_drain() {
     retire_cancelled();
 }
 void http2_request_engine::state::check_drain(http2_connection::time_point now) {
-    if (phase == drain_phase::running || phase == drain_phase::finished) return;
     if (now == http2_connection::time_point{}) now = std::chrono::steady_clock::now();
+    check_websocket_timeouts(now);
+    if (phase == drain_phase::running || phase == drain_phase::finished) return;
     scope->expire_if_due(now);
     if (drain->cancel_requested.load()) {
         cancel_drain(); return;
@@ -106,7 +121,7 @@ http2_feed_result http2_request_engine::feed(std::span<const std::uint8_t> bytes
 http2_feed_result http2_request_engine::eof() {
     check_drain(std::chrono::steady_clock::now());
     auto result = state_->connection.eof();
-    if (!result.error && state_->phase != state::drain_phase::running) {
+    if (!result.error && (!state_->streams.empty() || state_->phase != state::drain_phase::running)) {
         auto error = connection_error(http2_error_code::no_error, http::outcome_code::connection_closed);
         result = {http2_progress::failed, 0, error};
     }
@@ -114,6 +129,15 @@ http2_feed_result http2_request_engine::eof() {
         state_->fail(*result.error); state_->reap();
     }
     return result;
+}
+std::optional<http2_error> http2_request_engine::state::peer_reset(std::uint32_t id) {
+    if (!(id & 1) || id > last_stream) return connection_error(http2_error_code::protocol_error);
+    std::erase_if(pending, [id](const response& r) { return r.stream == id; });
+    if (auto found = streams.find(id); found != streams.end()) {
+        discard(*found->second);
+        if (!handlers->running() && !websocket_pumps) streams.erase(found);
+    }
+    return {};
 }
 bool http2_request_engine::state::select_data() {
     if (!encode_data()) return false;
@@ -136,8 +160,9 @@ std::span<const std::uint8_t> http2_request_engine::state::control_output(http2_
 std::span<const std::uint8_t> http2_request_engine::output(http2_connection::time_point now) {
     check_drain(now);
     state_->reap();
-    auto borrowed = state_->borrowed_output(now);
-    if (!borrowed.empty()) return borrowed;
+    // During a reentrant close callback the final payload has retired, but
+    // its frame storage still belongs to advance_output's outer invocation.
+    if (state_->has_borrowed_output()) return state_->borrowed_output(now);
     for (;;) {
         state_->publish_credit();
         // Finish each exposed item (including a whole field block) before
@@ -170,18 +195,36 @@ bool http2_request_engine::advance_output(std::size_t count) {
         return true;
     }
     if (count > state_->active.size() - state_->active_used) return false;
+    const auto previous = state_->active_used;
     state_->active_used += count;
-    if (state_->active_used == state_->active.size()) {
-        if (auto found = state_->streams.find(state_->active_stream); found != state_->streams.end()) {
-            found->second->body.retire(state_->active_body);
-            if (state_->active_end) found->second->send_ended = true;
-        }
-        state_->active_stream = 0; state_->active_body = 0; state_->active_end = false;
-        std::vector<std::uint8_t>().swap(state_->active);
-        state_->active_used = 0; state_->active_charge.release();
-    }
+    state_->retire_websocket_output(previous);
+    if (state_->active_used == state_->active.size()) state_->retire_active_output();
     check_drain(std::chrono::steady_clock::now());
     return true;
+}
+void http2_request_engine::state::retire_websocket_output(std::size_t previous) {
+    auto driver = active_websocket;
+    if (driver && !driver->snapshot().terminal) {
+        const auto payload = [](std::size_t n) { return n > 9 ? n - 9 : 0; };
+        ++websocket_pumps;
+        const auto retired = payload(active_used) - payload(previous);
+        driver->consume_output(retired);
+        if (retired) {
+            auto found = streams.find(active_stream);
+            if (found != streams.end()) found->second->websocket_write_anchor = std::chrono::steady_clock::now();
+        }
+        --websocket_pumps;
+    }
+}
+void http2_request_engine::state::retire_active_output() {
+    if (auto found = streams.find(active_stream); found != streams.end()) {
+        if (!active_websocket) found->second->body.retire(active_body);
+        if (active_end) found->second->send_ended = true;
+    }
+    active_websocket.reset();
+    active_stream = 0; active_body = 0; active_end = false;
+    std::vector<std::uint8_t>().swap(active);
+    active_used = 0; active_charge.release();
 }
 const std::optional<http2_error>& http2_request_engine::failure() const { return state_->connection.failure(); }
 }  // namespace httpserver::detail

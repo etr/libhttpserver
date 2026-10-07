@@ -152,6 +152,36 @@ LT_BEGIN_AUTO_TEST(http2_settings_suite, advisory_local_limits_are_preserved_whe
     LT_CHECK_EQ(c.local_settings().max_concurrent_streams.value_or(0), 7U);
     LT_CHECK_EQ(c.local_settings().max_header_list_size.value_or(0), 4096U);
 LT_END_AUTO_TEST(advisory_local_limits_are_preserved_when_update_omits_them)
+LT_BEGIN_AUTO_TEST(http2_settings_suite, connect_setting_rejects_invalid_values_and_revocation)
+    for (auto values : {setting(8, 2), setting(8, UINT32_MAX)}) {
+        hd::http2_connection c(budget()); c.feed(preface());
+        auto result = c.feed(frame(4, 0, 0, values));
+        LT_ASSERT(result.error); LT_CHECK(result.error->wire_code == hd::http2_error_code::protocol_error);
+    }
+    for (bool same_frame : {true, false}) {
+        hd::http2_connection c(budget()); c.feed(preface());
+        auto values = setting(8, 1);
+        if (same_frame) append(values, setting(8, 0));
+        auto result = c.feed(frame(4, 0, 0, values));
+        if (!same_frame) {
+            LT_CHECK(!result.error); result = c.feed(frame(4, 0, 0, setting(8, 0)));
+        }
+        LT_ASSERT(result.error); LT_CHECK(result.error->wire_code == hd::http2_error_code::protocol_error);
+    }
+LT_END_AUTO_TEST(connect_setting_rejects_invalid_values_and_revocation)
+LT_BEGIN_AUTO_TEST(http2_settings_suite, local_connect_capability_is_advertised_and_cannot_be_revoked)
+    hd::http2_settings settings;
+    // The standalone connection may advertise the capability explicitly.
+    settings.enable_connect_protocol = 1;
+    settings.max_concurrent_streams = 10; settings.max_header_list_size = 4096;
+    hd::http2_connection c(budget(), {}, settings);
+    auto wire = c.output(); LT_ASSERT_EQ(wire.size(), 45u);
+    LT_CHECK_EQ(wire[wire.size() - 5], 8); LT_CHECK_EQ(wire.back(), 1);
+    LT_CHECK_EQ(c.local_settings().enable_connect_protocol, 1u);
+    settings.enable_connect_protocol = 0;
+    LT_CHECK(c.queue_settings(settings) == httpserver::http::outcome_code::invalid_argument);
+    LT_CHECK_EQ(c.peer_settings().enable_connect_protocol, 0u);
+LT_END_AUTO_TEST(local_connect_capability_is_advertised_and_cannot_be_revoked)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

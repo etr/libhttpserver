@@ -48,6 +48,7 @@ class http2_connection {
     const http2_frame_header& header() const { return parser_.header(); }
     std::span<const std::uint8_t> payload() const { return parser_.payload(); }
     const http2_settings& peer_settings() const { return peer_; }
+    bool connect_protocol_at_frame_start() const { return connect_at_frame_start_; }
     const http2_settings& local_settings() const { return local_; }
     hpack_connection& compression() { return compression_; }
     std::span<const std::uint8_t> output(time_point now = {});
@@ -82,6 +83,7 @@ class http2_connection {
         std::size_t used = 0;
         bool take(time_point now, std::size_t allowance, std::chrono::steady_clock::duration interval);
     };
+    http2_feed_result parse(std::span<const std::uint8_t> bytes);
     bool enqueue(slot value);
     bool graceful_ready() const;
     bool advance_graceful(std::size_t count);
@@ -100,6 +102,7 @@ class http2_connection {
     std::array<slot, 3> graceful_{};
     std::size_t graceful_next_ = 0;
     std::uint32_t graceful_cutoff_ = 0;
+    bool connect_at_frame_start_ = false;
     bool graceful_started_ = false, graceful_exposed_ = false, barrier_sent_ = false, barrier_acknowledged_ = false;
     std::array<slot, 64> slots_{};
     std::array<pending, 16> pending_{};

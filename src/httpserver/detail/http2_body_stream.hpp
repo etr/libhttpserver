@@ -46,6 +46,8 @@ class http2_body_stream final : public body_source, public body_sink {
     bool receive_ended() const { return receive_ended_; }
     bool finished() const { return finished_; }
     const http::fields& sent_trailers() const { return sent_trailers_; }
+    std::span<const std::byte> receive_prefix() const;
+    void consume_received(std::size_t n);
     void discard_received() { if (received_.size) received_.consume(received_.size); }
     bool failed() const { return !failure_.ok(); }
     http2_window send_window, receive_window;
