@@ -251,7 +251,9 @@ void connection_engine::stage_body(const http1_body_mode& mode,
                                    std::string seed) {
     {
         std::lock_guard<std::mutex> lock(mu_);
-        body_ = std::make_unique<http1_body_source>(mode, config_.body);
+        body_ = std::make_unique<http1_body_source>(mode, config_.body, [weak = weak_from_this()] {
+            if (auto engine = weak.lock()) engine->wake_loops_ordered();
+        });
         gate_ = body_gate::pending;
         early_bytes_ = std::move(seed);
     }
@@ -369,16 +371,42 @@ bool connection_engine::reader_may_read_locked() const {
         case body_gate::pending:
             return early_bytes_.size() < config_.body.max_staged_bytes;
         case body_gate::admitted:
+            return admitted_body_may_read_locked();
         case body_gate::draining:
             return true;
     }
     return true;
 }
 
+bool connection_engine::admitted_body_may_read_locked() const {
+    if (body_ == nullptr || body_->message_complete())
+        return pending_tail_.size() < config_.body.max_staged_bytes;
+    return pending_tail_.empty() && body_->staged_bytes() < config_.body.max_staged_bytes;
+}
+
+bool connection_engine::body_tail_ready_locked() const {
+    return gate_ == body_gate::admitted && body_ && !body_->message_complete()
+        && !pending_tail_.empty() && body_->staged_bytes() < config_.body.max_staged_bytes;
+}
+
+void connection_engine::feed_body_tail() {
+    bool failed = false;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (!shutdown_ && body_tail_ready_locked())
+            failed = absorb_admitted_locked({});
+    }
+    if (failed) {
+        disconnect_current(http::outcome_code::protocol_error, "request body framing failed");
+        request_close();
+    }
+}
+
 task<void> connection_engine::reader_loop(
     std::shared_ptr<connection_engine> self) {
     std::array<std::byte, k_read_buffer_bytes> buffer;
     for (;;) {
+        self->feed_body_tail();
         self->feed_websocket_tail();
         wake_operation gate_op(self->owner_, self->id_);
         const auto posture = self->reader_posture(gate_op);

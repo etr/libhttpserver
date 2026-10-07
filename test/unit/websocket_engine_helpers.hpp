@@ -41,6 +41,30 @@
 // Internal seam keeps scheduling and copy-work assertions out of the public API.
 namespace httpserver::detail {
 struct connection_engine_test_access {
+    struct queue_snapshot {
+        std::size_t tail = 0, body = 0, output = 0, ws_input = 0, ws_output = 0;
+        std::size_t total() const { return tail + body + output + ws_input + ws_output; }
+    };
+    static queue_snapshot queues(connection_engine& engine) {
+        std::lock_guard lock(engine.mu_);
+        queue_snapshot result;
+        result.tail = engine.pending_tail_.size() + engine.early_bytes_.size();
+        result.body = engine.body_ ? engine.body_->staged_bytes() : 0;
+        result.output = engine.outbox_.queued_bytes();
+        if (engine.websocket_) {
+            auto usage = engine.websocket_->usage();
+            result.ws_input = usage.incoming_bytes; result.ws_output = usage.output_bytes;
+        }
+        return result;
+    }
+    static bool http_idle(connection_engine& engine) {
+        std::lock_guard lock(engine.mu_);
+        return engine.current_ == nullptr && !engine.head_routed_;
+    }
+    static http1_response_sink& output_slot(connection_engine& engine) {
+        return engine.outbox_.open(1, {});
+    }
+
     static bool head_consumed_before_end(connection_engine& engine) {
         std::lock_guard lock(engine.mu_);
         return !engine.outbox_.empty() && engine.outbox_.queued_bytes() == 0
@@ -123,11 +147,12 @@ struct rig {
     io_loopback::pair pair = io_loopback::pair::make();
     h::detail::connection_engine_config config;
     std::atomic<bool> stopped{false}, accepted{false};
+    std::atomic<int> stop_calls{0};
     bool started = false;
     std::shared_ptr<h::detail::connection_engine> engine;
     rig() { h::server::route_registry::create(root, routes); }
     void create_engine() {
-        engine = std::make_shared<h::detail::connection_engine>(backend, pool, routes, hooks, root, scope, config, 1, [this] { stopped = true; });
+        engine = std::make_shared<h::detail::connection_engine>(backend, pool, routes, hooks, root, scope, config, 1, [this] { ++stop_calls; stopped = true; });
     }
     bool start() {
         if (!pair.ok()) return false;

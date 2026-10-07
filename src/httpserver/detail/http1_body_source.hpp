@@ -45,8 +45,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <string_view>
+#include <utility>
 
 #include <httpserver/body_reader.hpp>
 #include <httpserver/detail/http1_body_decoder.hpp>
@@ -58,8 +60,9 @@ namespace detail {
 
 class http1_body_source final : public body_source {
  public:
-    http1_body_source(const http1_body_mode& mode, http1_body_budget budget)
-        : decoder_(mode, budget) { }
+    http1_body_source(const http1_body_mode& mode, http1_body_budget budget,
+                      std::function<void()> room_released = {})
+        : decoder_(mode, budget), room_released_(std::move(room_released)) { }
 
     http1_body_source(const http1_body_source&) = delete;
     http1_body_source& operator=(const http1_body_source&) = delete;
@@ -149,8 +152,13 @@ class http1_body_source final : public body_source {
     // -- detail::body_source seam ----------------------------------------
 
     body_pull_result pull(std::span<std::byte> into) override {
-        std::lock_guard<std::mutex> lock(mu_);
-        return decoder_.pull(into);
+        body_pull_result result;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            result = decoder_.pull(into);
+        }
+        if (result.kind == body_pull::data && room_released_) room_released_();
+        return result;
     }
 
     // Trailers are final once a pull returned end; after that no feed
@@ -202,6 +210,7 @@ class http1_body_source final : public body_source {
 
     mutable std::mutex mu_;
     http1_body_decoder decoder_;
+    std::function<void()> room_released_;
     body_wait* waiter_ = nullptr;
 };
 

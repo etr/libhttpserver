@@ -1202,6 +1202,21 @@ jobs:
       # crash on the OFF lane for the BAUTH/DAUTH/WS unit tests anyway).
       if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' && matrix.build-type != 'flag-invariance-on' && matrix.build-type != 'flag-invariance-off' }}
 
+    - name: Run focused native HTTP/1 and WebSocket gates
+      timeout-minutes: 10
+      run: |
+        make -C build/test check-v3-http1-websocket
+      if: ${{ matrix.build-type == 'asan' || matrix.build-type == 'ubsan' || matrix.build-type == 'tsan' }}
+
+    - name: Rebuild native combined sanitizer gate with pinned independent client and fuzzing
+      timeout-minutes: 20
+      run: |
+        python3 -m venv build/protocol-client
+        build/protocol-client/bin/pip install websockets==15.0.1
+        python3 scripts/run-v3-protocol-sanitizers.py --build-dir build/protocol-asan-ubsan --compiler clang++ --sanitizer address,undefined --python "$PWD/build/protocol-client/bin/python" --independent
+        scripts/run-v3-protocol-fuzz.sh --build-dir build/protocol-fuzz --compiler clang++ --runs 2000 --seconds 30
+      if: ${{ matrix.build-type == 'asan' && runner.os == 'Linux' }}
+
     - name: Run route_table_concurrency under TSan (TASK-092)
       # TASK-092: deliberate, time-boxed multi-iteration run of the
       # DR-008 lock-order stress binary on the tsan lane. `make check`

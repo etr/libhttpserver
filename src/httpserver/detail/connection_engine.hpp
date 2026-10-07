@@ -345,6 +345,9 @@ class connection_engine final
     // (not reading) is the pre-admission memory bound; the mutex must
     // be held.
     bool reader_may_read_locked() const;
+    void feed_body_tail();
+    bool body_tail_ready_locked() const;
+    bool admitted_body_may_read_locked() const;
 
     // Disconnects the live exchange, if one is being routed.
     void disconnect_current(http::outcome_code reason,

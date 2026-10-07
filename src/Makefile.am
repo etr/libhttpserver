@@ -83,3 +83,5 @@ install-data-hook:
 
 uninstall-hook:
 	(cd $(DESTDIR)$(includedir) && rm -f httpserverpp)
+
+noinst_HEADERS += httpserver/detail/http1_host.hpp

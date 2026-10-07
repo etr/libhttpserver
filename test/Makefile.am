@@ -1587,3 +1587,108 @@ io_backend_contract_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 io_kqueue_backend_SOURCES = unit/io_kqueue_backend_test.cpp
 io_kqueue_backend_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+
+# TASK-128: reusable RFC corpora, deterministic fuzz replay and native plateaus.
+check_PROGRAMS += http1_conformance native_http1_conformance websocket_conformance protocol_fuzz_replay native_protocol_memory
+protocol_corpus_flags = -DHTTP1_CORPUS_DIR='"$(top_srcdir)/test/conformance/http1"' -DWEBSOCKET_CORPUS_DIR='"$(top_srcdir)/test/conformance/websocket"'
+http1_conformance_SOURCES = unit/http1_conformance_test.cpp
+http1_conformance_CPPFLAGS = $(AM_CPPFLAGS) $(protocol_corpus_flags)
+http1_conformance_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+native_http1_conformance_SOURCES = integ/native_http1_conformance_test.cpp parity/response_frame.cpp parity/normalize.cpp
+native_http1_conformance_CPPFLAGS = $(AM_CPPFLAGS) $(protocol_corpus_flags)
+native_http1_conformance_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+websocket_conformance_SOURCES = unit/websocket_conformance_test.cpp
+websocket_conformance_CPPFLAGS = $(AM_CPPFLAGS) $(protocol_corpus_flags)
+websocket_conformance_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+protocol_fuzz_replay_SOURCES = fuzz/protocol_fuzz_replay.cpp fuzz/http1_head_fuzz.cpp fuzz/http1_body_fuzz.cpp fuzz/websocket_codec_fuzz.cpp
+protocol_fuzz_replay_CPPFLAGS = $(AM_CPPFLAGS) $(protocol_corpus_flags)
+protocol_fuzz_replay_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+native_protocol_memory_SOURCES = integ/native_protocol_memory_test.cpp
+native_protocol_memory_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+EXTRA_DIST += conformance/corpus.hpp fuzz/protocol_fuzz.hpp conformance/http1/README.md conformance/http1/cases.tsv conformance/websocket/README.md conformance/websocket/cases.tsv
+EXTRA_DIST += conformance/http1/absolute-invalid.wire \
+	conformance/http1/bad-chunk.wire \
+	conformance/http1/bad-percent.wire \
+	conformance/http1/bad-token.wire \
+	conformance/http1/bad-trailer.wire \
+	conformance/http1/bare-cr.wire \
+	conformance/http1/chunk-extension.wire \
+	conformance/http1/chunk-overflow.wire \
+	conformance/http1/chunk-terminator.wire \
+	conformance/http1/chunk-trailers.wire \
+	conformance/http1/comma-cl.wire \
+	conformance/http1/conflicting-cl.wire \
+	conformance/http1/control-value.wire \
+	conformance/http1/double-chunked.wire \
+	conformance/http1/duplicate-cl.wire \
+	conformance/http1/duplicate-host.wire \
+	conformance/http1/empty-target.wire \
+	conformance/http1/forbidden-trailer.wire \
+	conformance/http1/http10-te.wire \
+	conformance/http1/http10.wire \
+	conformance/http1/http11.wire \
+	conformance/http1/invalid-host.wire \
+	conformance/http1/lone-lf.wire \
+	conformance/http1/malformed-cl.wire \
+	conformance/http1/missing-host.wire \
+	conformance/http1/negative-cl.wire \
+	conformance/http1/nul-value.wire \
+	conformance/http1/obs-fold.wire \
+	conformance/http1/overflow-cl.wire \
+	conformance/http1/space-colon.wire \
+	conformance/http1/te-cl.wire \
+	conformance/http1/trailer-bytes-over.wire \
+	conformance/http1/trailer-fields-over.wire \
+	conformance/http1/truncated-chunk.wire \
+	conformance/http1/truncated-length.wire \
+	conformance/http1/unsupported-te.wire \
+	conformance/http1/wrong-te-order.wire \
+	conformance/http1/zero-body.wire \
+	conformance/websocket/binary.wire \
+	conformance/websocket/close-invalid-reason.wire \
+	conformance/websocket/close-one-byte.wire \
+	conformance/websocket/close-reserved.wire \
+	conformance/websocket/empty-text.wire \
+	conformance/websocket/fragment-limit.wire \
+	conformance/websocket/fragmented-control.wire \
+	conformance/websocket/fragmented.wire \
+	conformance/websocket/high-bit64.wire \
+	conformance/websocket/incomplete-utf8.wire \
+	conformance/websocket/invalid-text.wire \
+	conformance/websocket/large-control.wire \
+	conformance/websocket/message-limit.wire \
+	conformance/websocket/new-message-in-fragment.wire \
+	conformance/websocket/nonminimal16.wire \
+	conformance/websocket/nonminimal64.wire \
+	conformance/websocket/orphan-continuation.wire \
+	conformance/websocket/ping.wire \
+	conformance/websocket/reserved-control.wire \
+	conformance/websocket/reserved-opcode.wire \
+	conformance/websocket/rsv1.wire \
+	conformance/websocket/rsv2.wire \
+	conformance/websocket/rsv3.wire \
+	conformance/websocket/split-utf8.wire \
+	conformance/websocket/text.wire \
+	conformance/websocket/unmasked.wire
+
+# Fuzz targets stay outside check_PROGRAMS; replay is deterministic.
+.PHONY: check-v3-http1-websocket
+V3_PROTOCOL_TESTS = http1_conformance native_http1_conformance websocket_conformance protocol_fuzz_replay native_protocol_memory http1_parser http1_body_mode http1_body_decoder http1_body_source http1_response_outbox native_http1_e2e native_http1_parity websocket_codec websocket_utf8 websocket_session websocket_session_race websocket_progress http1_websocket_handshake http1_websocket_upgrade websocket_upgrade_decision websocket_drain websocket_drain_race routing_corpus hooks_corpus basic_auth_corpus digest_auth_corpus forms_urlencoded_corpus forms_multipart_corpus ip_controls_corpus
+check-v3-http1-websocket: $(V3_PROTOCOL_TESTS) native_websocket_fixture
+	$(top_srcdir)/scripts/run-v3-http1-websocket-gates.sh --build-dir $(abs_top_builddir)
+TESTS += integ/protocol_gate_runner_test.py integ/protocol_fuzz_runner_test.py
+EXTRA_DIST += integ/protocol_gate_runner_test.py integ/protocol_fuzz_runner_test.py
+EXTRA_DIST += conformance/http1/host-path.wire conformance/http1/host-userinfo.wire conformance/http1/host-port-invalid.wire conformance/http1/host-bracket-invalid.wire conformance/http1/host-percent-invalid.wire conformance/http1/host-ipv6.wire conformance/http1/host-regname.wire conformance/http1/host-empty.wire
+
+# These protocol consumers need only the native archive.
+native_http1_parity_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+native_http1_e2e_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+routing_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+hooks_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+basic_auth_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+digest_auth_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+forms_urlencoded_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+forms_multipart_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+ip_controls_corpus_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+
+EXTRA_DIST += conformance/websocket/close-below-range.wire conformance/websocket/close-reserved-1004.wire conformance/websocket/close-reserved-1006.wire conformance/websocket/close-reserved-1015.wire conformance/websocket/close-above-range.wire conformance/websocket/close-empty.wire
