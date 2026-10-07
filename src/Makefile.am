@@ -103,3 +103,6 @@ noinst_HEADERS += httpserver/detail/tls_io_backend.hpp httpserver/detail/tls_ses
 
 # TASK-137: HPACK primitives are private, header-only native helpers.
 noinst_HEADERS += httpserver/detail/hpack_primitives.hpp httpserver/detail/hpack_static_table.hpp httpserver/detail/hpack_huffman_table.hpp
+
+noinst_HEADERS += httpserver/detail/hpack_dynamic_table.hpp httpserver/detail/hpack_field_section.hpp \
+                  httpserver/detail/hpack_decoder.hpp httpserver/detail/hpack_encoder.hpp httpserver/detail/hpack_connection.hpp

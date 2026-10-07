@@ -26,6 +26,7 @@
 #include <span>
 #include <string>
 
+#include <httpserver/detail/hpack_connection.hpp>
 #include <httpserver/detail/hpack_primitives.hpp>
 #include "fuzz/hpack_fuzz.hpp"
 
@@ -54,8 +55,61 @@ void check_bytes(const hpack_bytes_result& first, const hpack_bytes_result& seco
 }
 }  // namespace
 
-// No network or unbounded setup: only the first 512 bytes participate; all
-// output budgets are <= 64. Controls also exercise invalid parameters.
+// Two consecutive sections share each directional table. Wire/output <= 64,
+// expanded bytes <= 128, fields <= 4, each table <= 128. The source connection
+// charges <= 256; an independent output decoder charges <= 128.
+void hpack_fuzz_sections(std::span<const std::uint8_t> input) {
+    using httpserver::detail::hpack_connection;
+    using httpserver::detail::hpack_section_limits;
+    input = input.first(std::min(input.size(), std::size_t{64}));
+    httpserver::server::budget_limits budget_limits;
+    budget_limits.set(httpserver::server::resource::hpack_table_bytes, 256);
+    const auto budget = httpserver::server::resource_budget::root(budget_limits);
+    hpack_connection connection(budget);
+    const auto relay_budget = httpserver::server::resource_budget::root(budget_limits);
+    httpserver::detail::hpack_decoder relay(relay_budget);
+    require(connection.encoder().choose_capacity(128).ok());
+    require(connection.decoder().acknowledge_maximum(128).ok());
+    const std::string setup("\x3f\x61\x40\x01x\x01y", 7);
+    require(connection.decoder().decode(octets(setup), {64, 128, 4}).status.ok());
+    const auto control = input.empty() ? 0 : input[0];
+    const hpack_section_limits controlled{64, static_cast<std::size_t>(control % 129), static_cast<std::size_t>(control % 5)};
+    for (unsigned block = 0; block < 2; ++block) {
+        const auto limits = block == 0 ? hpack_section_limits{64, 128, 4} : controlled;
+        const auto decoded = connection.decoder().decode(input, limits);
+        require(connection.decoder().table().bytes() <= 128);
+        if (!decoded.status.ok()) {
+            require(decoded.fields.empty() && !connection.decoder().usable());
+            require(connection.decoder().table().bytes() == 0);
+            continue;
+        }
+        require(decoded.fields.size() <= limits.max_fields);
+        std::size_t expanded = 0;
+        for (const auto& field : decoded.fields) expanded += field.name.size() + field.value.size() + 32;
+        require(expanded <= limits.max_expanded_bytes);
+        const auto encoded = connection.encoder().encode_section(decoded.fields, limits, (control & 1) != 0);
+        require(connection.encoder().table().bytes() <= 128);
+        if (!encoded.status.ok()) {
+            require(encoded.value.empty() && encoded.consumed == 0 && !connection.encoder().usable());
+            require(connection.encoder().table().bytes() == 0);
+        } else {
+            require(encoded.value.size() <= 64 && encoded.consumed == encoded.value.size());
+            const auto replay = relay.decode(octets(encoded.value), {64, 128, 4});
+            require(replay.status.ok() && replay.fields.size() == decoded.fields.size());
+            for (std::size_t i = 0; i < decoded.fields.size(); ++i) {
+                require(replay.fields[i].name == decoded.fields[i].name && replay.fields[i].value == decoded.fields[i].value);
+                if (decoded.fields[i].indexing == httpserver::detail::hpack_indexing::never_indexed) {
+                    require(replay.fields[i].indexing == httpserver::detail::hpack_indexing::never_indexed);
+                }
+            }
+            require(relay.table().bytes() <= 128);
+        }
+    }
+    require(budget.in_use(httpserver::server::resource::hpack_table_bytes) <= 256);
+}
+
+// No network or unbounded setup: only the first 512 bytes participate.
+// Primitive output budgets are <= 64; controls include invalid parameters.
 void hpack_fuzz_input(std::span<const std::uint8_t> input) {
     input = input.first(std::min(input.size(), std::size_t{512}));
     const auto control = [input](std::size_t pos) -> unsigned { return pos < input.size() ? input[pos] : 0; };
@@ -65,6 +119,7 @@ void hpack_fuzz_input(std::span<const std::uint8_t> input) {
     const auto output_limit = control(6) % 65;
     const auto wire = input.subspan(std::min(input.size(), std::size_t{8}));
     const std::string saved(wire.begin(), wire.end());
+    hpack_fuzz_sections(wire);
     const auto a = hpack_decode_integer(wire, prefix, integers);
     const auto b = hpack_decode_integer(wire, prefix, integers);
     require(a.status.state == b.status.state && a.value == b.value && a.consumed == b.consumed);

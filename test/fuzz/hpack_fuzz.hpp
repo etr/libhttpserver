@@ -23,5 +23,6 @@
 #define TEST_FUZZ_HPACK_FUZZ_HPP_
 #include <cstdint>
 #include <span>
+void hpack_fuzz_sections(std::span<const std::uint8_t> input);
 void hpack_fuzz_input(std::span<const std::uint8_t> input);
 #endif  // TEST_FUZZ_HPACK_FUZZ_HPP_

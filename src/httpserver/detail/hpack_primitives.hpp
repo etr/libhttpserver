@@ -19,7 +19,7 @@
      02110-1301 USA
 */
 
-// Private HPACK primitives; field sections and connection tables belong to TASK-138.
+// Private HPACK primitives composed by the connection-owned field-section codec.
 #if !defined(HTTPSERVER_COMPILATION)
 #error "hpack_primitives.hpp is internal to libhttpserver"
 #endif
@@ -156,7 +156,7 @@ inline hpack_bytes_result hpack_encode_integer(std::uint64_t value, unsigned pre
 }
 
 // These are payload and expanded-output allowances, independent of connection
-// table capacity. The future field-section owner supplies its remaining budget.
+// table capacity. The field-section owner supplies its remaining budget.
 struct hpack_string_limits {
     std::size_t max_encoded_bytes;
     std::size_t max_decoded_bytes;
