@@ -38,7 +38,7 @@ endif
 
 endif
 
-EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
+EXTRA_DIST = docs/external-loop-contract.md libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
 	scripts/check-doxygen.sh scripts/check-hooks-doc-spotcheck.sh \
 	scripts/check-soversion.sh \
@@ -176,6 +176,8 @@ check-headers:
 	fi
 	@rm -f check-headers-A4.log
 	@echo "  PASS: A.4 umbrella does not leak _HTTPSERVER_HPP_INSIDE_"
+	@$(CXX) -std=c++20 -I$(top_srcdir)/src -c $(top_srcdir)/test/headers/consumer_v3_readiness.cpp -o /dev/null
+	@echo "  PASS: standalone readiness consumer uses only public source includes"
 
 # check-install-layout asserts that `make install DESTDIR=$(STAGE)` produces
 # a public include tree with NO `detail/` directory and NO `*_impl.hpp` files,
@@ -232,8 +234,9 @@ check-install-layout:
 	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi
+	@$(CXX) -std=c++20 -I$(CHECK_INSTALL_STAGE)$(includedir) -c $(top_srcdir)/test/headers/consumer_v3_readiness.cpp -o /dev/null
 	@if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi
-	@echo "  PASS: staged install layout is clean"
+	@echo "  PASS: staged install layout and standalone readiness consumer are clean"
 
 # ---------------------------------------------------------------------------
 # Header-hygiene preprocessor gate (TASK-007).
