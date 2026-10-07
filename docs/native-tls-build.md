@@ -50,3 +50,8 @@ legacy MHD/GnuTLS/curl dependencies. TASK-184 owns their removal and package/ABI
 cutover; this task establishes the native convenience archive boundary. Provider
 build proof is not TCP TLS or QUIC interoperability proof. Nonlocal BSD and
 Windows checks belong to CI and the v3 PR.
+
+TASK-130 establishes a private nonblocking TCP TLS adapter over owned raw I/O
+operations. Its [local evidence](task-130-tls-io-evidence.md) covers the adapter
+and independent loopback peers. Public TCP TLS availability remains false until
+listeners have a usable credential/configuration path.

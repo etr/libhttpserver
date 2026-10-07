@@ -641,3 +641,5 @@ EXTRA_DIST += scripts/check-v3-tls-build.py scripts/test-v3-native-linkage.py do
 check-v3-tls-build:
 	@python3 $(top_srcdir)/scripts/check-v3-tls-build.py
 	@python3 $(top_srcdir)/scripts/test-v3-native-linkage.py
+
+EXTRA_DIST += docs/task-130-tls-io-evidence.md

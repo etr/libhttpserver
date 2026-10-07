@@ -73,7 +73,7 @@ class op_state;
 class op_handle;
 class op_awaiter;
 
-// The six operation kinds of the private completion model (§3.4).
+// Raw completion kinds, followed by controls intercepted by the TLS adapter.
 enum class io_op_kind : std::uint8_t {
     accept,
     read,
@@ -81,7 +81,13 @@ enum class io_op_kind : std::uint8_t {
     timer,
     wake,
     cancel,
+    tls_handshake,
+    tls_shutdown,
 };
+
+constexpr bool is_tls_control(io_op_kind kind) noexcept {
+    return kind == io_op_kind::tls_handshake || kind == io_op_kind::tls_shutdown;
+}
 
 // One terminal result. The vocabulary is http::outcome_code only.
 struct io_result {
@@ -96,12 +102,15 @@ struct io_result {
 
 // Per-kind owned payload carried inside op_state. Buffers are
 // caller-owned memory the operation borrows until the terminal result.
+// TLS consumes read/write deadlines; raw backends use timer_operation.
 struct accept_payload { };
 struct read_payload {
     std::span<std::byte> buffer;
+    std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max();
 };
 struct write_payload {
     std::span<const std::byte> bytes;
+    std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max();
 };
 struct timer_payload {
     std::chrono::steady_clock::time_point deadline;
@@ -382,10 +391,11 @@ class accept_operation final : public op_handle {
 class read_operation final : public op_handle {
  public:
     read_operation(io_connection_owner& owner, std::uint64_t connection,
-                   std::span<std::byte> buffer)
+                   std::span<std::byte> buffer,
+                   std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max())
         : op_handle(std::make_shared<op_state>(
               io_op_kind::read, &owner, connection,
-              op_payload{read_payload{buffer}})) { }
+              op_payload{read_payload{buffer, deadline}})) { }
 
     std::span<std::byte> buffer() const noexcept {
         return std::get<read_payload>(state()->payload()).buffer;
@@ -395,10 +405,11 @@ class read_operation final : public op_handle {
 class write_operation final : public op_handle {
  public:
     write_operation(io_connection_owner& owner, std::uint64_t connection,
-                    std::span<const std::byte> bytes)
+                    std::span<const std::byte> bytes,
+                    std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max())
         : op_handle(std::make_shared<op_state>(
               io_op_kind::write, &owner, connection,
-              op_payload{write_payload{bytes}})) { }
+              op_payload{write_payload{bytes, deadline}})) { }
 
     std::span<const std::byte> bytes() const noexcept {
         return std::get<write_payload>(state()->payload()).bytes;

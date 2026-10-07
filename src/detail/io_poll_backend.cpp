@@ -89,6 +89,14 @@ io_poll_backend::~io_poll_backend() {
 
 void io_poll_backend::submit(op_state& op) {
     const auto state = op.shared_from_this();
+    if (is_tls_control(op.kind())) {
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            op.set_sequence(next_sequence_++);
+        }
+        finish_now(state, io_result{http::outcome_code::not_supported});
+        return;
+    }
     bool registered = false;
     bool rejected = false;
     {

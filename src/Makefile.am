@@ -90,7 +90,7 @@ noinst_HEADERS += httpserver/detail/http1_host.hpp
 libhttpserver_v3core_la_LIBADD =
 if NATIVE_V3_TLS
 noinst_LTLIBRARIES += libhttpserver_v3tls.la
-libhttpserver_v3tls_la_SOURCES = detail/tls_provider.cpp
+libhttpserver_v3tls_la_SOURCES = detail/tls_provider.cpp detail/tls_session.cpp detail/tls_io_backend.cpp
 libhttpserver_v3tls_la_CPPFLAGS = $(V3_TLS_CFLAGS) $(AM_CPPFLAGS) $(CPPFLAGS)
 libhttpserver_v3tls_la_LDFLAGS = $(V3_TLS_LDFLAGS)
 libhttpserver_v3tls_la_LIBADD = $(V3_TLS_LIBS)
@@ -98,3 +98,5 @@ libhttpserver_v3core_la_LIBADD += libhttpserver_v3tls.la
 endif
 noinst_HEADERS += httpserver/detail/tls_build_probe.hpp
 nobase_include_HEADERS += httpserver/features.hpp
+
+noinst_HEADERS += httpserver/detail/tls_io_backend.hpp httpserver/detail/tls_session.hpp
