@@ -9,9 +9,9 @@
 Provide HTTP/2 streaming bodies and two-level flow control for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Track independent stream and connection receive/send windows.
-- [ ] Release receive credit as application reads.
-- [ ] Keep control frames processable under blocked request data.
+- [x] Track independent stream and connection receive/send windows.
+- [x] Release receive credit as application reads.
+- [x] Keep control frames processable under blocked request data.
 
 **Dependencies:**
 - Blocked by: TASK-103, TASK-104, TASK-140
@@ -24,4 +24,6 @@ Provide HTTP/2 streaming bodies and two-level flow control for libhttpserver v3.
 **Related Requirements:** PRD-V3N-REQ-006, PRD-V3N-REQ-021, PRD-V3N-REQ-025, PRD-V3N-REQ-026, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Implementation evidence:** [Local HTTP/2 streaming and flow-control checks](../../../docs/task-141-http2-evidence.md)
+
+**Status:** Complete

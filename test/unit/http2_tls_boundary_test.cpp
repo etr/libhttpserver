@@ -172,6 +172,63 @@ LT_BEGIN_AUTO_TEST(http2_tls_boundary_suite, negotiated_h2_routes_segmented_head
         }
     }
 LT_END_AUTO_TEST(negotiated_h2_routes_segmented_heads_and_independent_responses)
+LT_BEGIN_AUTO_TEST(http2_tls_boundary_suite, segmented_tls_body_waits_for_stream_credit_then_sends_exact_response)
+    hd::tls_credentials_registry registry; LT_ASSERT(registry.replace(tls_test::credentials()).ok());
+    acme_test::adapter_connection peer(registry.acquire()->select_default(), false); LT_ASSERT(peer.connect());
+    auto budget = h2test::budget(); httpserver::server::route_registry routes;
+    LT_ASSERT(httpserver::server::route_registry::create(budget, routes).ok());
+    std::string body;
+    LT_ASSERT(routes.route(httpserver::http::method::known(httpserver::http::method_id::post), "/hello",
+        [&](httpserver::exchange& x) -> httpserver::task<void> {
+            x.admit_body({4}); auto received = co_await x.body().collect(4);
+            body.assign(reinterpret_cast<const char*>(received.data.data()), received.data.size());
+            x.start_response(httpserver::http::status::from_code(200), {});
+            co_await x.writer().write(std::as_bytes(std::span(body))); co_await x.writer().finish();
+        }).ok());
+    httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor); hd::hpack_encoder encoder(budget);
+    auto input = [&](const std::vector<std::uint8_t>& wire) {
+        std::size_t written = 0;
+        if (SSL_write_ex(peer.peer.get(), wire.data(), wire.size(), &written) != 1 || written != wire.size()) return false;
+        std::size_t total = 0;
+        for (unsigned round = 0; round < 1000 && total < wire.size(); ++round) {
+            std::array<std::byte, 5> bytes{}; hd::read_operation read(peer.owner, 1, bytes);
+            read.submit(*peer.tls); peer.drive();
+            if (!read.state()->applied()) return false;
+            auto n = read.state()->stored_result().transferred;
+            if (!n || !h2test::feed(engine, {reinterpret_cast<const std::uint8_t*>(bytes.data()), n})) return false;
+            total += n; executor.run_pending();
+        }
+        return total == wire.size();
+    };
+    auto transmit = [&](const std::vector<std::uint8_t>& plain) {
+        std::vector<std::uint8_t> received;
+        for (std::size_t at = 0; at < plain.size();) {
+            const auto n = std::min<std::size_t>(7, plain.size() - at);
+            hd::write_operation write(peer.owner, 1, {reinterpret_cast<const std::byte*>(plain.data() + at), n});
+            write.submit(*peer.tls); peer.drive();
+            if (!write.state()->applied() || write.state()->stored_result().transferred != n) return received;
+            at += n;
+        }
+        for (unsigned round = 0; round < 1000 && received.size() < plain.size(); ++round) {
+            std::array<std::uint8_t, 13> bytes{}; std::size_t n = 0;
+            SSL_read_ex(peer.peer.get(), bytes.data(), bytes.size(), &n);
+            received.insert(received.end(), bytes.begin(), bytes.begin() + n); peer.drive();
+        }
+        return received;
+    };
+    auto wire = h2test::preface(); h2test::append(wire, h2test::frame(4, 0, 0, h2test::setting(4, 0)));
+    auto fields = h2test::get(); fields[0].value = "POST"; fields.push_back({"content-length", "3"});
+    h2test::append(wire, h2test::frame(1, 4, 1, h2test::encode(encoder, fields)));
+    h2test::append(wire, h2test::frame(0, 0, 1, {'a'})); h2test::append(wire, h2test::frame(0, 1, 1, {'b', 'c'}));
+    LT_ASSERT(input(wire)); LT_CHECK_EQ(body, "abc");
+    auto head = h2test::output(engine); LT_CHECK_EQ(h2test::count_type(head, 0), 0u); LT_CHECK(transmit(head) == head);
+    auto heads = h2test::responses(head, true); LT_ASSERT_EQ(heads.size(), 1u); LT_CHECK(!heads[0].end_stream);
+    LT_ASSERT(input(h2test::frame(8, 0, 1, h2test::increment(3))));
+    auto data = h2test::output(engine, 1); auto decrypted = transmit(data); LT_CHECK(decrypted == data);
+    auto frames = h2test::frames(decrypted); LT_ASSERT_EQ(frames.size(), 2u);
+    LT_CHECK_EQ(std::string(frames[0].payload.begin(), frames[0].payload.end()), "abc");
+    LT_CHECK_EQ(frames[1].type, 0u); LT_CHECK_EQ(frames[1].flags, 1u); LT_CHECK(frames[1].payload.empty());
+LT_END_AUTO_TEST(segmented_tls_body_waits_for_stream_credit_then_sends_exact_response)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

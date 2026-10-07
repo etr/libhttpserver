@@ -31,9 +31,9 @@ void tuple(std::uint8_t* p, unsigned id, std::uint32_t n) {
     put32(p + 2, n);
 }
 }  // namespace
-http2_connection::http2_connection(server::resource_budget budget, http2_limits limits)
+http2_connection::http2_connection(server::resource_budget budget, http2_limits limits, http2_settings initial, bool reserve_frames)
     : parser_(budget), compression_(budget), limits_(limits) {
-    if (!valid_limits(limits_)) {
+    if (!valid_limits(limits_) || !valid_settings(initial)) {
         auto e = protocol();
         e.outcome = http::outcome_code::invalid_argument;
         fail(e);
@@ -43,7 +43,10 @@ http2_connection::http2_connection(server::resource_budget budget, http2_limits 
         fail(overload());
         return;
     }
-    queue_settings(local_);
+    if (reserve_frames && !parser_.reserve_frame_storage(initial.max_frame_size)) {
+        fail(overload()); return;
+    }
+    queue_settings(initial);
 }
 bool http2_connection::enqueue(slot value) {
     if (count_ >= limits_.control_frames || value.size > limits_.control_bytes - 17 - bytes_) return false;
@@ -76,6 +79,13 @@ http::outcome_code http2_connection::queue_settings(http2_settings settings) {
     advertised_ = settings;
     ++queued_settings_;
     return http::outcome_code::ok;
+}
+http::outcome_code http2_connection::queue_window_update(std::uint32_t stream, std::uint32_t increment) {
+    if (failure_) return failure_->outcome;
+    if (!increment || increment > 0x7fffffff || stream > 0x7fffffff) return http::outcome_code::invalid_argument;
+    slot value; value.size = 13; value.bytes[2] = 4; value.bytes[3] = 8;
+    put32(value.bytes.data() + 5, stream); put32(value.bytes.data() + 9, increment);
+    return enqueue(std::move(value)) ? http::outcome_code::ok : http::outcome_code::limit_exceeded;
 }
 void http2_connection::commit(slot& value, time_point now) {
     if (!value.settings) return;
@@ -144,6 +154,7 @@ std::optional<http2_error> http2_connection::control() {
     if (h.type == 4 && (h.flags & 1)) {
         if (!pending_count_) return protocol();  // Unsolicited ACK is a connection error.
         const auto snapshot = pending_[pending_head_].settings;
+        acknowledged_window_ = snapshot.initial_window_size;
         compression_.decoder().acknowledge_maximum(snapshot.header_table_size);
         pending_head_ = (pending_head_ + 1) % pending_.size();
         --pending_count_;

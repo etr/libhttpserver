@@ -77,8 +77,18 @@ http2_feed_result http2_frame_parser::fail(http2_error failure, std::size_t cons
     }
     return {http2_progress::failed, consumed, failure};
 }
+bool http2_frame_parser::reserve_frame_storage(std::uint32_t maximum) {
+    if (!budget_.reserve(server::resource::body_buffer_bytes, maximum + 128, frame_storage_).ok()) return false;
+    try {
+        payload_.reserve(maximum);
+    } catch (const std::bad_alloc&) {
+        frame_storage_.release(); return false;
+    }
+    return true;
+}
 void http2_frame_parser::clear() {
-    std::vector<std::uint8_t>().swap(payload_);
+    if (frame_storage_.owns()) payload_.clear();
+    else std::vector<std::uint8_t>().swap(payload_);
     retained_.release();
 }
 void http2_frame_parser::release_frame() {
@@ -93,6 +103,7 @@ std::optional<http2_error> http2_frame_parser::start_frame() {
     if (auto e = header_rules()) return e;
     settings_ = peer_;
     table_minimum_.reset();
+    window_peak_ = peer_.initial_window_size;
     scratch_.fill(0);
     return retain_payload();
 }
@@ -109,10 +120,14 @@ std::optional<http2_error> http2_frame_parser::sequence_rules() {
     if (!continuation_ && frame_.type == 9) return error(http2_error_code::protocol_error);
     return {};
 }
+bool http2_frame_parser::admit_payload() {
+    if (frame_storage_.owns()) return frame_.length <= payload_.capacity();
+    return budget_.reserve(server::resource::body_buffer_bytes, frame_.length, retained_).ok();
+}
 std::optional<http2_error> http2_frame_parser::retain_payload() {
-    const bool retain = frame_.type <= 9 && frame_.type != 4 && frame_.type != 6;
+    const bool retain = frame_.type <= 9 && frame_.type != 4 && frame_.type != 6 && frame_.type != 8;
     if (!retain || !frame_.length) return {};
-    if (!budget_.reserve(server::resource::body_buffer_bytes, frame_.length, retained_).ok()) {
+    if (!admit_payload()) {
         auto e = error(http2_error_code::enhance_your_calm);
         e.outcome = http::outcome_code::limit_exceeded;
         return e;
@@ -127,7 +142,7 @@ std::optional<http2_error> http2_frame_parser::retain_payload() {
     return {};
 }
 void http2_frame_parser::take_control(std::uint8_t byte) {
-    if (frame_.type == 6) scratch_[payload_used_] = byte;
+    if (frame_.type == 6 || frame_.type == 8) scratch_[payload_used_] = byte;
     if (frame_.type != 4) return;
     const auto index = payload_used_ % 6;
     scratch_[index] = byte;
@@ -135,6 +150,7 @@ void http2_frame_parser::take_control(std::uint8_t byte) {
     const auto id = (unsigned{scratch_[0]} << 8) | scratch_[1];
     const auto value = u32(scratch_.data() + 2);
     deferred_ = apply_setting(settings_, id, value);
+    if (id == 4) window_peak_ = std::max(window_peak_, value);
     if (id == 1) table_minimum_ = std::min(table_minimum_.value_or(value), value);
 }
 std::optional<http2_error> http2_frame_parser::payload_rules() {
@@ -142,7 +158,7 @@ std::optional<http2_error> http2_frame_parser::payload_rules() {
         const std::size_t prefix = frame_.type == 1 && (frame_.flags & 32) ? 6 : 1;
         if (payload_[0] > frame_.length - prefix) return error(http2_error_code::protocol_error);
     }
-    if (frame_.type == 8 && !(u32(payload_.data()) & 0x7fffffff)) return error(http2_error_code::protocol_error, frame_.stream_id);
+    if (frame_.type == 8 && !(u32(scratch_.data()) & 0x7fffffff)) return error(http2_error_code::protocol_error, frame_.stream_id);
     return {};
 }
 std::optional<http2_error> http2_frame_parser::priority_rules() {

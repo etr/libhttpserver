@@ -27,7 +27,7 @@ struct http2_limits {
 class http2_connection {
  public:
     using time_point = std::chrono::steady_clock::time_point;
-    explicit http2_connection(server::resource_budget budget, http2_limits limits = {});
+    explicit http2_connection(server::resource_budget budget, http2_limits limits = {}, http2_settings initial = {}, bool reserve_frames = false);
     http2_feed_result feed(std::span<const std::uint8_t> bytes, time_point now = {});
     http2_feed_result eof();
     void begin_turn() { processed_ = 0; }
@@ -46,6 +46,9 @@ class http2_connection {
     std::span<const std::uint8_t> output(time_point now = {});
     bool advance_output(std::size_t count);
     // Advisory limits omitted by an update retain the last advertised value.
+    http::outcome_code queue_window_update(std::uint32_t stream, std::uint32_t increment);
+    std::uint32_t acknowledged_window() const { return acknowledged_window_; }
+    std::uint32_t peer_window_peak() const { return parser_.window_peak(); }
     http::outcome_code queue_settings(http2_settings settings);
     std::optional<http2_error> check_timeout(time_point now);
     const std::optional<http2_error>& failure() const { return failure_; }
@@ -72,6 +75,7 @@ class http2_connection {
     std::array<std::uint8_t, 17> terminal_{};
     std::size_t head_ = 0, count_ = 0, bytes_ = 0, queued_settings_ = 0;
     std::size_t pending_head_ = 0, pending_count_ = 0, terminal_used_ = 17, processed_ = 0;
+    std::uint32_t acknowledged_window_ = 65535;
     std::uint32_t last_processed_stream_ = 0;
     http2_settings peer_, local_, advertised_;
     std::optional<http2_error> failure_;

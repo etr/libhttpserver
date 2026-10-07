@@ -57,7 +57,7 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, concurrent_gets_share_http1_routing_wit
     executor.run_pending(); LT_CHECK_EQ(sink.respond_code, 204u);
     LT_CHECK_EQ(seen.size(), 3u); LT_CHECK(seen[0] == seen[1] && seen[1] == seen[2]);
 LT_END_AUTO_TEST(concurrent_gets_share_http1_routing_without_head_of_line_blocking)
-LT_BEGIN_AUTO_TEST(http2_exchange_suite, route_boundary_synthesizes_errors_and_rejects_body_requests)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, route_boundary_synthesizes_errors_and_refuses_connect)
     auto budget = h2test::budget(); hs::route_registry routes;
     LT_ASSERT(hs::route_registry::create(budget, routes).ok());
     unsigned calls = 0;
@@ -73,14 +73,13 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, route_boundary_synthesizes_errors_and_r
     h2test::append(wire, h2test::frame(1, 5, 5, h2test::encode(encoder, h2test::get())));
     std::vector<hd::hpack_field> connect{{":method", "CONNECT"}, {":authority", "example.test:443"}};
     h2test::append(wire, h2test::frame(1, 5, 7, h2test::encode(encoder, connect)));
-    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending(); LT_CHECK_EQ(calls, 1u);
-    auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 2u);
-    LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 7u);
-    LT_CHECK_EQ(resets[1].stream, 7u); LT_CHECK_EQ(resets[1].code, 7u);
-    auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 2u);
-    LT_CHECK_EQ(replies[0].stream, 3u); LT_CHECK_EQ(replies[1].stream, 5u);
-    LT_CHECK_EQ(replies[0].fields[0].value, "404"); LT_CHECK_EQ(replies[1].fields[0].value, "500");
-LT_END_AUTO_TEST(route_boundary_synthesizes_errors_and_rejects_body_requests)
+    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending(); LT_CHECK_EQ(calls, 2u);
+    auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
+    LT_CHECK_EQ(resets[0].stream, 7u); LT_CHECK_EQ(resets[0].code, 7u);
+    auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 3u);
+    LT_CHECK_EQ(replies[0].stream, 1u); LT_CHECK_EQ(replies[1].stream, 3u); LT_CHECK_EQ(replies[2].stream, 5u);
+    LT_CHECK_EQ(replies[1].fields[0].value, "404"); LT_CHECK_EQ(replies[2].fields[0].value, "500");
+LT_END_AUTO_TEST(route_boundary_synthesizes_errors_and_refuses_connect)
 LT_BEGIN_AUTO_TEST(http2_exchange_suite, bounded_stream_admission_preserves_dynamic_table_and_releases_on_destruction)
     auto budget = h2test::budget(); hs::route_registry routes;
     LT_ASSERT(hs::route_registry::create(budget, routes).ok());
@@ -209,7 +208,7 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, destruction_cancels_owned_suspended_and
         for (auto kind : {hs::resource::streams, hs::resource::header_bytes, hs::resource::header_fields, hs::resource::response_queue_bytes}) LT_CHECK_EQ(budget.in_use(kind), 0u);
     }
 LT_END_AUTO_TEST(destruction_cancels_owned_suspended_and_queued_handler_frames)
-LT_BEGIN_AUTO_TEST(http2_exchange_suite, streaming_response_attempt_resets_instead_of_emitting_an_empty_success)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, unfinished_streaming_response_resets_after_handler_return)
     auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
     unsigned failures = 0;
     LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
@@ -222,10 +221,10 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, streaming_response_attempt_resets_inste
     hd::hpack_encoder encoder(budget); auto wire = h2test::preface();
     h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())));
     LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
-    auto output = h2test::output(engine); LT_CHECK_EQ(failures, 1u);
+    auto output = h2test::output(engine); LT_CHECK_EQ(failures, 0u);
     auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
     LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 2u); LT_CHECK_EQ(h2test::responses(output).size(), 0u);
-LT_END_AUTO_TEST(streaming_response_attempt_resets_instead_of_emitting_an_empty_success)
+LT_END_AUTO_TEST(unfinished_streaming_response_resets_after_handler_return)
 LT_BEGIN_AUTO_TEST(http2_exchange_suite, bodyless_response_length_must_match_zero_bytes)
     auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
     LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [](exchange& x) -> task<void> {

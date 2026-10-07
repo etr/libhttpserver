@@ -55,11 +55,13 @@ class http2_frame_parser {
     http2_feed_result feed(std::span<const std::uint8_t> bytes);
     http2_feed_result eof();
     void release_frame();
+    bool reserve_frame_storage(std::uint32_t maximum);
     void maximum_frame_size(std::uint32_t maximum) { maximum_ = maximum; }
     const http2_frame_header& header() const { return frame_; }
-    std::span<const std::uint8_t> payload() const { return payload_; }
+    std::span<const std::uint8_t> payload() const { return frame_.type == 8 ? std::span<const std::uint8_t>(scratch_).first(4) : std::span<const std::uint8_t>(payload_); }
     const std::array<std::uint8_t, 8>& control_payload() const { return scratch_; }
     const http2_settings& settings() const { return settings_; }
+    std::uint32_t window_peak() const { return window_peak_; }
     std::optional<std::uint32_t> table_minimum() const { return table_minimum_; }
     void peer_settings(const http2_settings& settings) { peer_ = settings; }
 
@@ -72,17 +74,19 @@ class http2_frame_parser {
     std::optional<http2_error> header_rules();
     std::optional<http2_error> sequence_rules();
     std::optional<http2_error> retain_payload();
+    bool admit_payload();
     std::optional<http2_error> payload_rules();
     std::optional<http2_error> priority_rules();
     std::optional<http2_error> take_prefix(std::span<const std::uint8_t> bytes, std::size_t& used);
     void take_payload(std::span<const std::uint8_t> bytes, std::size_t& used);
     void take_control(std::uint8_t byte);
     server::resource_budget budget_;
-    server::reservation retained_;
+    server::reservation retained_, frame_storage_;
     std::vector<std::uint8_t> payload_;
     std::array<std::uint8_t, 9> header_bytes_{};
     std::array<std::uint8_t, 8> scratch_{};
     std::size_t magic_used_ = 0, header_used_ = 0, payload_used_ = 0;
+    std::uint32_t window_peak_ = 65535;
     std::uint32_t maximum_ = 16384, continuation_ = 0;
     http2_frame_header frame_;
     http2_settings peer_, settings_;

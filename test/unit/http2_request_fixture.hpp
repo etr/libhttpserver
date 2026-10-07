@@ -51,12 +51,14 @@ inline std::vector<std::uint8_t> output(hd::http2_request_engine& engine, std::s
 struct response {
     std::uint32_t stream;
     std::vector<hd::hpack_field> fields;
+    bool end_stream = true;
 };
-inline std::vector<response> responses(const std::vector<std::uint8_t>& wire) {
+inline std::vector<response> responses(const std::vector<std::uint8_t>& wire, bool allow_streaming = false) {
     hd::hpack_decoder decoder(budget());
     std::vector<response> out;
     std::vector<std::uint8_t> block;
     std::uint32_t stream = 0;
+    bool ended = false;
     for (std::size_t at = 0; at < wire.size();) {
         if (wire.size() - at < 9) throw std::runtime_error("truncated output frame header");
         auto n = (wire[at] << 16) | (wire[at + 1] << 8) | wire[at + 2];
@@ -67,7 +69,8 @@ inline std::vector<response> responses(const std::vector<std::uint8_t>& wire) {
                 if (stream) throw std::runtime_error("nested output HEADERS");
                 if (!id) throw std::runtime_error("zero output stream");
                 stream = id;
-                if (!(wire[at + 4] & 1)) throw std::runtime_error("missing END_STREAM");
+                ended = (wire[at + 4] & 1) != 0;
+                if (!ended && !allow_streaming) throw std::runtime_error("missing END_STREAM");
             } else if (!stream || stream != static_cast<std::uint32_t>(id)) {
                 throw std::runtime_error("interleaved output block");
             }
@@ -75,7 +78,7 @@ inline std::vector<response> responses(const std::vector<std::uint8_t>& wire) {
             if (wire[at + 4] & 4) {
                 auto decoded = decoder.decode(block, {262144, 262144, 256});
                 if (!decoded.status.ok()) throw std::runtime_error("bad response HPACK");
-                out.push_back({stream, std::move(decoded.fields)});
+                out.push_back({stream, std::move(decoded.fields), ended});
                 block.clear(); stream = 0;
             }
         } else if (stream) {
@@ -85,6 +88,26 @@ inline std::vector<response> responses(const std::vector<std::uint8_t>& wire) {
     }
     if (stream) throw std::runtime_error("unfinished output block");
     return out;
+}
+struct wire_frame {
+    std::uint8_t type, flags;
+    std::uint32_t stream;
+    std::vector<std::uint8_t> payload;
+};
+inline std::vector<wire_frame> frames(const std::vector<std::uint8_t>& wire) {
+    std::vector<wire_frame> out;
+    for (std::size_t at = 0; at < wire.size();) {
+        if (wire.size() - at < 9) throw std::runtime_error("truncated frame header");
+        auto n = (wire[at] << 16) | (wire[at + 1] << 8) | wire[at + 2];
+        if (at + 9 + n > wire.size()) throw std::runtime_error("truncated frame payload");
+        auto id = (std::uint32_t{wire[at + 5]} << 24) | (wire[at + 6] << 16) | (wire[at + 7] << 8) | wire[at + 8];
+        out.push_back({wire[at + 3], wire[at + 4], id, {wire.begin() + at + 9, wire.begin() + at + 9 + n}});
+        at += 9 + n;
+    }
+    return out;
+}
+inline std::vector<std::uint8_t> increment(std::uint32_t n) {
+    return {static_cast<std::uint8_t>(n >> 24), static_cast<std::uint8_t>(n >> 16), static_cast<std::uint8_t>(n >> 8), static_cast<std::uint8_t>(n)};
 }
 struct stream_reset {
     std::uint32_t stream, code;
