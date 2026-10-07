@@ -26,4 +26,4 @@ Provide early SNI, default-host and ALPN selection for libhttpserver v3.0.
 
 **Implementation evidence:** [Local TLS selection, resumption and rotation receipts](../../../docs/task-132-tls-selection-evidence.md).
 
-**Status:** In Progress
+**Status:** Complete
