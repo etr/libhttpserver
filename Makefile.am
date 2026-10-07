@@ -633,3 +633,6 @@ dist-hook:
 	date >DIST_REVISION
 	git branch -vv >>DIST_REVISION
 	cp DIST_REVISION $(distdir)/
+
+EXTRA_DIST += scripts/run-v3-http1-websocket-gates.sh scripts/run-v3-protocol-fuzz.sh
+EXTRA_DIST += scripts/run-v3-protocol-sanitizers.py

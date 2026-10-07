@@ -9,9 +9,9 @@
 Provide HTTP/1 and WebSocket conformance, fuzzing and parity for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Build RFC 9112 malformed/smuggling corpus and parser fuzz targets.
-- [ ] Run applicable WebSocket codec conformance and independent clients.
-- [ ] Gate slow-peer memory plateaus and v2 HTTP/1 parity under sanitizers.
+- [x] Build RFC 9112 malformed/smuggling corpus and parser fuzz targets.
+- [x] Run applicable WebSocket codec conformance and independent clients.
+- [x] Gate slow-peer memory plateaus and v2 HTTP/1 parity under sanitizers.
 
 **Dependencies:**
 - Blocked by: TASK-113, TASK-115, TASK-117, TASK-118, TASK-120, TASK-122, TASK-123
@@ -24,4 +24,4 @@ Provide HTTP/1 and WebSocket conformance, fuzzing and parity for libhttpserver v
 **Related Requirements:** PRD-V3N-REQ-004, PRD-V3N-REQ-010, PRD-V3N-REQ-012, PRD-V3N-REQ-013, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete

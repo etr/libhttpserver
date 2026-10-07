@@ -428,7 +428,7 @@ task<void> watch_stop_and_abandon(httpserver::exchange& x,
 // trailer. Fills `flag` when the handler task ends.
 httpserver::task<void> stream_through(httpserver::exchange& x,
                                       http1_response_sink& sink,
-                                      const std::string& payload,
+                                      std::string payload,
                                       std::size_t chunk_bytes, int& flag) {
     if (!x.start_response(http::status::from_code(200),
                           length_fields(payload.size())).ok()) {

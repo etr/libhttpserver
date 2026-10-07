@@ -1,0 +1,3 @@
+RFC 9112 request corpus. Binary .wire files preserve CRLF, NUL and control bytes.
+
+Head/framing rejections occur before dispatch; body errors occur after admission. Truncation becomes a terminal error at native EOF. Host validation belongs to the connection engine. Equal duplicate and comma-list Content-Length are deliberately rejected by the approved v3 strict framing policy. Lone LF, invalid percent escapes and NUL rejection preserve documented v3 migration differences. Chunk extensions accept BWS and quoted strings. Each malformed head/framing wire is followed by a sentinel request in the native suite.

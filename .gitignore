@@ -68,3 +68,6 @@ libtool
 CLAUDE.md
 .groundwork-plans/
 .DS_Store
+!test/integ/protocol_gate_runner_test.py
+!test/integ/protocol_fuzz_runner_test.py
+!scripts/run-v3-protocol-sanitizers.py

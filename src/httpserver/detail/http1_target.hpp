@@ -150,6 +150,10 @@ inline http::outcome select_path_target(std::string_view raw,
     const std::size_t origin_begin =
         authority_end == std::string_view::npos ? after_scheme.size()
                                                 : authority_end;
+    if (origin_begin == 0 || after_scheme.empty()) {
+        return http::outcome(http::outcome_code::protocol_error,
+                             "absolute request-target has no authority");
+    }
     out = target_selection{form::absolute,
                            after_scheme.substr(origin_begin)};
     return http::outcome::okay();

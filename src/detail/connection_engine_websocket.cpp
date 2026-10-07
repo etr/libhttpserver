@@ -117,6 +117,10 @@ connection_engine::io_posture connection_engine::reader_posture(wake_operation& 
     std::lock_guard lock(mu_);
     if (shutdown_ || close_after_drain_) return io_posture::stop;
     if (websocket_ && (!pending_tail_.empty() || websocket_codec_blocked_) && websocket_->snapshot().input_ready) return io_posture::retry;
+    // A body pull can release room between tail replay and this locked
+    // posture check. Retry before parking so an earlier wake is not lost.
+    if (body_tail_ready_locked())
+        return io_posture::retry;
     if (reader_may_read_locked()) return io_posture::proceed;
     wake.submit(backend_);
     return io_posture::park;

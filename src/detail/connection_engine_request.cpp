@@ -35,6 +35,7 @@
 #include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/exchange_runner.hpp>
 #include <httpserver/detail/http1_body_mode.hpp>
+#include <httpserver/detail/http1_host.hpp>
 #include <httpserver/detail/http1_response_mode.hpp>
 #include <httpserver/detail/request_lifecycle.hpp>
 #include <httpserver/http/outcome.hpp>
@@ -93,6 +94,10 @@ task<bool> connection_engine::serve_one(
         self->head_routed_ = true;
         seed.append(self->pending_tail_);
         self->pending_tail_.clear();
+    }
+    if (!valid_http1_host(head)) {
+        self->emit_error(400);
+        co_return false;
     }
     const http1_body_mode mode = http1_body_mode::compute(head);
     if (mode.kind == http1_body_kind::rejected) {
@@ -158,16 +163,10 @@ task<bool> connection_engine::serve_one(
     co_await dispatch_request(self->routes_, self->hooks_,
                               *self->config_.pages, interceptor, routed,
                               self->peers_);
-    // TASK-119: a peer-refused settle is a never-responded exchange --
-    // nothing will ever queue to its outbox slot, so the writer's
-    // drain must not wait for an end marker that cannot arrive. Fail
-    // the slots (already-buffered bytes, if any, still flush first);
-    // the settle below then marks the close.
-    if (routed.disconnected()
-            && routed.disconnect_reason().code()
-                == http::outcome_code::peer_refused) {
-        self->outbox_.abandon();
-    }
+    // A disconnected exchange cannot finish its response slot. Abandon
+    // its unfinished slot so already-buffered bytes flush and the
+    // writer can close, including malformed-body failures after admission.
+    if (routed.disconnected()) self->outbox_.abandon();
     {
         std::lock_guard<std::mutex> lock(self->mu_);
         self->current_ = nullptr;
