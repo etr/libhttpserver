@@ -1784,7 +1784,7 @@ websocket_upgrade_decision_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 websocket_utf8_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 if NATIVE_V3_TLS
-check_PROGRAMS += tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation tls_selection tls_mtls tls_psk_contract
+check_PROGRAMS += tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation tls_selection tls_mtls tls_psk_contract tls_psk tls_psk_runtime
 tls_io_SOURCES = unit/tls_io_test.cpp
 tls_io_race_SOURCES = unit/tls_io_race_test.cpp
 tls_io_loopback_SOURCES = unit/tls_io_loopback_test.cpp
@@ -1801,6 +1801,14 @@ tls_credentials_SOURCES = unit/tls_credentials_test.cpp
 tls_credentials_CPPFLAGS = $(tls_io_CPPFLAGS)
 tls_credentials_LDADD = $(tls_io_LDADD)
 tls_credentials_LDFLAGS = $(tls_io_LDFLAGS)
+tls_psk_SOURCES = unit/tls_psk_test.cpp
+tls_psk_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+tls_psk_LDADD = $(tls_io_LDADD)
+tls_psk_LDFLAGS = $(tls_io_LDFLAGS)
+tls_psk_runtime_SOURCES = unit/tls_psk_runtime_test.cpp
+tls_psk_runtime_CPPFLAGS = $(tls_io_CPPFLAGS)
+tls_psk_runtime_LDADD = $(tls_io_LDADD)
+tls_psk_runtime_LDFLAGS = $(tls_io_LDFLAGS)
 tls_psk_contract_SOURCES = unit/tls_psk_contract_test.cpp
 tls_psk_contract_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 tls_psk_contract_LDADD = $(tls_io_LDADD)
@@ -1819,7 +1827,7 @@ tls_credentials_rotation_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 tls_credentials_rotation_LDADD = $(tls_io_LDADD)
 tls_credentials_rotation_LDFLAGS = $(tls_io_LDFLAGS)
 endif
-noinst_HEADERS += unit/tls_io_fixture.hpp unit/tls_credentials_fixture.hpp unit/tls_mtls_fixture.hpp
+noinst_HEADERS += unit/tls_io_fixture.hpp unit/tls_credentials_fixture.hpp unit/tls_mtls_fixture.hpp unit/tls_psk_fixture.hpp
 
 check_PROGRAMS += io_tls_control
 io_tls_control_SOURCES = unit/io_tls_control_test.cpp

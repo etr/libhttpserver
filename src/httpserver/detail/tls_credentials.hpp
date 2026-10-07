@@ -12,9 +12,11 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 #include <httpserver/detail/tls_io_backend.hpp>
+#include <httpserver/detail/tls_psk.hpp>
 #include <httpserver/server/options.hpp>
 namespace httpserver::detail {
 // Shared canonical DNS validation for configuration and current ClientHello.
@@ -27,6 +29,7 @@ struct tls_host_credentials {
     std::vector<std::string> alpn;
     server::tls_profile profile = server::tls_profile::certificates;
     server::tls_client_auth_options client_auth;
+    std::optional<tls_psk_config> psk;
 };
 struct tls_credentials_config {
     std::vector<tls_host_credentials> hosts;

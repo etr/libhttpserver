@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <httpserver/detail/tls_psk_runtime.hpp>
 #include "./tls_credentials_fixture.hpp"
 #include "./littletest.hpp"
 namespace hd = httpserver::detail;
@@ -200,6 +201,59 @@ LT_BEGIN_AUTO_TEST(tls_credentials_suite, client_auth_policy_replacement_is_atom
     LT_CHECK_EQ(registry.acquire()->generation(), std::uint64_t{2});
     LT_CHECK(registry.acquire()->hosts()[0].client_certificate_mode == srv::tls_client_certificate_mode::request);
 LT_END_AUTO_TEST(client_auth_policy_replacement_is_atomic)
+LT_BEGIN_AUTO_TEST(tls_credentials_suite, psk_only_publication_validates_all_conflicts_and_bounds)
+    namespace srv = httpserver::server;
+    hd::tls_credentials_registry registry;
+    hd::tls_credentials_config config;
+    hd::tls_host_credentials host;
+    host.host = "psk.example";
+    host.profile = srv::tls_profile::external_psk;
+    host.alpn = {"http/1.1"};
+    hd::tls_psk_config psk;
+    psk.runtime = std::make_shared<hd::tls_psk_runtime>();
+    psk.lookup = [](auto, const auto&) { return hd::psk_lookup_result{}; };
+    host.psk = psk;
+    config.hosts.push_back(host);
+    LT_ASSERT(registry.replace(config).ok());
+    const auto original = registry.acquire();
+    const std::vector<std::function<void(hd::tls_host_credentials&)>> invalid = {
+        [](auto& h) { h.psk.reset(); },
+        [](auto& h) { h.psk->lookup = {}; },
+        [](auto& h) { h.psk->runtime.reset(); },
+        [](auto& h) { h.psk->maximum_identity_bytes = 0; },
+        [](auto& h) { h.psk->maximum_identity_bytes = 65536; },
+        [](auto& h) { h.psk->maximum_key_bytes = 0; },
+        [](auto& h) { h.psk->maximum_key_bytes = 513; },
+        [](auto& h) { h.psk->maximum_attempts = 0; },
+        [](auto& h) { h.psk->maximum_attempts = 65536; },
+        [](auto& h) { h.certificate_chain_pem = "forbidden"; },
+        [](auto& h) { h.private_key_pem = "forbidden"; },
+        [](auto& h) { h.trust_roots_pem = "forbidden"; },
+        [](auto& h) { h.client_auth.mode = srv::tls_client_certificate_mode::request; },
+        [](auto& h) { h.client_auth.mode = srv::tls_client_certificate_mode::require; },
+        [](auto& h) { h.client_auth.timing = srv::tls_client_auth_timing::post_handshake; },
+        [](auto& h) { h.alpn = {"h2"}; },
+        [](auto& h) { h.alpn = {"h3"}; },
+        [](auto& h) { h.alpn = {"custom"}; },
+        [](auto& h) { h.profile = srv::tls_profile::certificates; },
+        [](auto& h) { h.profile = srv::tls_profile::mutual_tls; }
+    };
+    for (const auto& corrupt : invalid) {
+        auto candidate = config;
+        corrupt(candidate.hosts[0]);
+        LT_CHECK(!registry.replace(candidate).ok());
+        LT_CHECK(registry.acquire() == original);
+    }
+    auto certificate = tls_test::credentials();
+    certificate.hosts[0].psk = psk;
+    LT_CHECK(!registry.replace(certificate).ok());
+    config.hosts[0].alpn.clear();
+    LT_CHECK(registry.replace(config).ok());
+    LT_CHECK_EQ(registry.acquire()->generation(), std::uint64_t{2});
+    psk.runtime->stop();
+    LT_CHECK(!registry.replace(config).ok());
+    LT_CHECK(psk.runtime->drain(std::chrono::steady_clock::now() + std::chrono::seconds(1)));
+LT_END_AUTO_TEST(psk_only_publication_validates_all_conflicts_and_bounds)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

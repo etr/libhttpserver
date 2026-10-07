@@ -9,9 +9,9 @@
 Provide TLS 1.2 and 1.3 external-PSK profiles for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Map provider lookup to TLS 1.2 and TLS 1.3 external-PSK callbacks.
-- [ ] Separate PSK from incompatible certificate/mTLS profiles.
-- [ ] Test concurrent identities, unknown keys and 0-RTT rejection.
+- [x] Map provider lookup to TLS 1.2 and TLS 1.3 external-PSK callbacks.
+- [x] Separate PSK from incompatible certificate/mTLS profiles.
+- [x] Test concurrent identities, unknown keys and 0-RTT rejection.
 
 **Dependencies:**
 - Blocked by: TASK-131, TASK-132, TASK-134
@@ -24,4 +24,9 @@ Provide TLS 1.2 and 1.3 external-PSK profiles for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-034
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:**
+- [Local PSK evidence](../../../docs/task-135-psk-evidence.md): TLS 1.2/1.3 authentication and failures, secure storage, bounded runtime, SNI/rotation/mixed profiles, 0-RTT rejection and lifecycle races.
+- TLS-on/off C++20 builds, focused local tests and local gates pass. BSD, Windows and other nonlocal platform checks remain assigned to CI/the v3 PR under AGENTS.md.
+- Status remains In Progress pending caller-owned Groundwork validation/finalization.
