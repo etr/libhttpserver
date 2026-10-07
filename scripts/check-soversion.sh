@@ -6,16 +6,16 @@
 # that the on-disk layout matches the v2.0 SOVERSION contract:
 #
 #   A1. `make install DESTDIR=$STAGE` succeeds.
-#   A2. On Linux: $libdir/libhttpserver.so.2.0.0 exists as a regular file.
+#   A2. On Linux: $libdir/libhttpserver.so.<package-version> exists as a regular file.
 #       On Darwin: $libdir/libhttpserver.2.dylib exists as a regular file.
 #       (Note: with libtool's `-version-number A:B:C` on Darwin, only the
 #       major-numbered .2.dylib is produced. Linux produces the full
 #       three-file chain .so / .so.2 / .so.2.0.0.)
 #   A3. On Linux: $libdir/libhttpserver.so.2 exists and is a symlink that
-#       (transitively) resolves to libhttpserver.so.2.0.0.
+#       (transitively) resolves to libhttpserver.so.<package-version>.
 #       On Darwin: skipped (no intermediate symlink layer on Mach-O).
 #   A4. On Linux: $libdir/libhttpserver.so dev symlink exists and resolves
-#       to libhttpserver.so.2.0.0.
+#       to libhttpserver.so.<package-version>.
 #       On Darwin: $libdir/libhttpserver.dylib dev symlink exists and
 #       resolves to libhttpserver.2.dylib.
 #   A5. SONAME / install-name: on Linux `readelf -d` must report
@@ -24,7 +24,7 @@
 #       HARD prerequisite — if it is absent the script FAILS (rather than
 #       degrading to a filename-only check), so an under-provisioned CI lane
 #       can never mask a broken SONAME behind a green signal.
-#   A6. pkg-config: `pkg-config --modversion libhttpserver` prints 2.0.0,
+#   A6. pkg-config: `pkg-config --modversion libhttpserver` prints the configured package version,
 #       `--cflags` includes -I.../include, `--libs` includes -lhttpserver.
 #   A7. libhttpserver.la was installed and lists library_names that include
 #       the SONAME (libhttpserver.so.2 on Linux or libhttpserver.2.dylib on
@@ -90,6 +90,11 @@ if [ ! -d "$BUILD_DIR" ]; then
     fail "BUILD_DIR=$BUILD_DIR does not exist; run ./configure first"
 fi
 
+# Package metadata follows the configured patch release; the ABI SONAME stays 2.
+PACKAGE_VERSION="$(sed -n 's/^VERSION = //p' "$BUILD_DIR/Makefile")"
+[[ "$PACKAGE_VERSION" =~ ^2\.[0-9]+\.[0-9]+$ ]] \
+    || fail "expected configured v2 package version, got '$PACKAGE_VERSION'"
+
 CONFIG_STATUS="$BUILD_DIR/config.status"
 if [ ! -x "$CONFIG_STATUS" ]; then
     fail "$CONFIG_STATUS not found; run ./configure in $BUILD_DIR first"
@@ -133,10 +138,10 @@ STAGE_INC="$STAGE$INCDIR"
 # ---- A2/A3/A4: platform-specific filename + symlink checks --------------------
 case "$PLATFORM" in
     Linux)
-        FULL="$STAGE_LIB/libhttpserver.so.2.0.0"
+        FULL="$STAGE_LIB/libhttpserver.so.$PACKAGE_VERSION"
         SONAME_LINK="$STAGE_LIB/libhttpserver.so.2"
         DEV_LINK="$STAGE_LIB/libhttpserver.so"
-        FULL_BASENAME="libhttpserver.so.2.0.0"
+        FULL_BASENAME="libhttpserver.so.$PACKAGE_VERSION"
         SONAME_BASENAME="libhttpserver.so.2"
         HAS_INTERMEDIATE_SONAME_LINK=yes
         ;;
@@ -232,8 +237,8 @@ if command -v pkg-config >/dev/null 2>&1; then
         || fail "A6: pkg-config --exists libhttpserver failed"
 
     modver="$(PKG_CONFIG_PATH="$PC_DIR" pkg-config --modversion libhttpserver)"
-    [ "$modver" = "2.0.0" ] \
-        || fail "A6: pkg-config --modversion = '$modver', expected '2.0.0'"
+    [ "$modver" = "$PACKAGE_VERSION" ] \
+        || fail "A6: pkg-config --modversion = '$modver', expected '$PACKAGE_VERSION'"
 
     # `pkg-config --cflags` reports the canonical (installed, not DESTDIR'd)
     # include path; we just verify the canonical $INCDIR appears, NOT
@@ -250,7 +255,7 @@ if command -v pkg-config >/dev/null 2>&1; then
         *"-lhttpserver"*) ;;
         *) fail "A6: pkg-config --libs missing -lhttpserver ; got: $libs" ;;
     esac
-    pass "A6: pkg-config reports modversion=2.0.0 and consistent -I/-l flags"
+    pass "A6: pkg-config reports modversion=$PACKAGE_VERSION and consistent -I/-l flags"
 else
     # pkg-config is a hard CI prerequisite: the literal Version-line grep
     # fallback only proved the .pc string, never that pkg-config could parse

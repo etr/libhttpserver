@@ -1,3 +1,12 @@
+Version 2.0.1
+
+	Fixed an unauthenticated server crash when a multipart file part omits
+		the name attribute. Unnamed file parts are ignored before memory
+		or disk upload handling. Thanks to AllenYen for the private report.
+	Corrected the documentation include path and graph font configuration.
+	Fixed release-note extraction on macOS and made the ABI packaging gate
+		use the configured patch version while retaining SONAME 2.
+
 Version 2.0.0
 
 	Fixed macOS CI failure when verifying the pinned libmicrohttpd
