@@ -278,7 +278,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-130 | [Drive nonblocking TCP TLS through private I/O operations](M10-tls-http2/TASK-130.md) | M10 | Complete | TASK-099, TASK-129 |
 | TASK-131 | [Build and atomically publish immutable TLS credential snapshots](M10-tls-http2/TASK-131.md) | M10 | Complete | TASK-129, TASK-130 |
 | TASK-132 | [Implement early SNI, default-host and ALPN selection](M10-tls-http2/TASK-132.md) | M10 | Complete | TASK-130, TASK-131 |
-| TASK-133 | [Implement initial-handshake mTLS profiles and peer metadata](M10-tls-http2/TASK-133.md) | M10 | Not Started | TASK-131, TASK-132 |
+| TASK-133 | [Implement initial-handshake mTLS profiles and peer metadata](M10-tls-http2/TASK-133.md) | M10 | In Progress | TASK-131, TASK-132 |
 | TASK-134 | [Resolve external-PSK lookup and timeout execution contract](M10-tls-http2/TASK-134.md) | M10 | Not Started | TASK-129, TASK-131 |
 | TASK-135 | [Implement TLS 1.2 and 1.3 external-PSK profiles](M10-tls-http2/TASK-135.md) | M10 | Not Started | TASK-131, TASK-132, TASK-134 |
 | TASK-136 | [Implement ACME TLS-ALPN-01 publication and removal](M10-tls-http2/TASK-136.md) | M10 | Not Started | TASK-131, TASK-132 |

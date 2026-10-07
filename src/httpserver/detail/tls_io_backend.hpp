@@ -14,13 +14,16 @@
 #include <memory>
 #include <string_view>
 #include <httpserver/detail/io_operation.hpp>
+#include <httpserver/server/options.hpp>
+#include <httpserver/server/tls_peer_metadata.hpp>
 namespace httpserver::detail {
 // Contexts are immutable after construction. No provider types escape this seam.
 struct tls_credentials_selection;
 class tls_context {
  public:
     static std::shared_ptr<tls_context> client();
-    static std::shared_ptr<tls_context> server_pem(std::string_view certificate, std::string_view key, std::string_view roots = {});
+    static std::shared_ptr<tls_context> server_pem(std::string_view certificate, std::string_view key, std::string_view roots = {},
+        server::tls_client_certificate_mode mode = server::tls_client_certificate_mode::none);
 
  private:
     friend class tls_session;
@@ -50,6 +53,9 @@ class tls_io_backend final : public io_backend {
     // Publication waits for the pump to stop touching borrowed storage.
     http::outcome_code request_cancel(op_state& op) override;
     void close();
+    // Thread-safe immutable publication, visible before handshake completion.
+    // A retained value survives adapter teardown and credential replacement.
+    std::shared_ptr<const server::tls_peer_metadata> peer_metadata() const;
 
  private:
     struct core;

@@ -114,7 +114,6 @@ std::vector<unsigned char> encode_alpn(const std::vector<std::string>& protocols
 }
 void valid_profile(const tls_host_credentials& host) {
     require(host.profile == server::tls_profile::certificates || host.profile == server::tls_profile::mutual_tls);
-    if (host.profile == server::tls_profile::mutual_tls) require(!host.trust_roots_pem.empty());
 }
 }  // namespace
 std::string canonical_tls_host(std::string host) {
@@ -142,7 +141,7 @@ std::shared_ptr<tls_context> tls_context::client() {
     require(SSL_CTX_set_max_early_data(ctx, 0) == 1);
     return context;
 }
-std::shared_ptr<tls_context> tls_context::server_pem(std::string_view chain, std::string_view key, std::string_view roots) {
+std::shared_ptr<tls_context> tls_context::server_pem(std::string_view chain, std::string_view key, std::string_view roots, server::tls_client_certificate_mode mode) {
     error_scope errors;
     bounded(chain);
     bounded(key);
@@ -154,6 +153,16 @@ std::shared_ptr<tls_context> tls_context::server_pem(std::string_view chain, std
     require(SSL_CTX_use_PrivateKey(ctx, parsed_key.get()) == 1);
     require(SSL_CTX_check_private_key(ctx) == 1);
     install_roots(ctx, roots);
+    int verify = SSL_VERIFY_NONE;
+    switch (mode) {
+        case server::tls_client_certificate_mode::none: break;
+        case server::tls_client_certificate_mode::request: verify = SSL_VERIFY_PEER; break;
+        case server::tls_client_certificate_mode::require: verify = SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT; break;
+        default: require(false);
+    }
+    if (mode != server::tls_client_certificate_mode::none) require(!roots.empty());
+    SSL_CTX_set_verify(ctx, verify, nullptr);
+    SSL_CTX_set_post_handshake_auth(ctx, 0);
     context->configure_server();
     return context;
 }
@@ -168,11 +177,16 @@ http::outcome tls_credentials_registry::replace(const tls_credentials_config& co
         std::unordered_set<std::string> names;
         for (const auto& host : config.hosts) {
             valid_profile(host);
+            if (const auto policy = server::detail::check_client_auth(host.profile, host.client_auth); !policy.ok()) {
+                return {policy.code(), "TLS credentials invalid"};
+            }
+            const auto mode = server::detail::resolved_client_certificate_mode(host.profile, host.client_auth);
+            if (mode != server::tls_client_certificate_mode::none) require(!host.trust_roots_pem.empty());
             auto name = canonical_tls_host(host.host);
             require(names.insert(name).second);
             auto wire = encode_alpn(host.alpn);
-            candidate->contexts_.push_back(tls_context::server_pem(host.certificate_chain_pem, host.private_key_pem, host.trust_roots_pem));
-            candidate->hosts_.push_back({std::move(name), host.alpn, std::move(wire), host.profile});
+            candidate->contexts_.push_back(tls_context::server_pem(host.certificate_chain_pem, host.private_key_pem, host.trust_roots_pem, mode));
+            candidate->hosts_.push_back({std::move(name), host.alpn, std::move(wire), host.profile, mode});
         }
     } catch (const std::invalid_argument&) {
         return {http::outcome_code::invalid_argument, "TLS credentials invalid"};

@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -57,13 +58,24 @@ enum class tls_provider : std::uint8_t {
 
 // Credential profile used with the selected provider. `certificates`
 // authenticates this endpoint with a certificate chain; `mutual_tls`
-// additionally requires a client chain; `external_psk` uses
+// defaults to requiring a client chain; explicit request allows optional
+// verified client authentication; `external_psk` uses
 // out-of-band shared keys and is limited to HTTP/1 in v3.
 enum class tls_profile : std::uint8_t {
     none,
     certificates,
     mutual_tls,
     external_psk,
+};
+
+enum class tls_client_certificate_mode : std::uint8_t { none, request, require };
+enum class tls_client_auth_timing : std::uint8_t { initial_handshake, post_handshake };
+// Unset mode means require for mutual_tls and none for certificates.
+// Request verifies a presented chain but permits an anonymous peer. V3.0
+// supports initial-handshake authentication only, including for HTTP/3.
+struct tls_client_auth_options {
+    std::optional<tls_client_certificate_mode> mode;
+    tls_client_auth_timing timing = tls_client_auth_timing::initial_handshake;
 };
 
 // Documented configuration bounds quoted by validation diagnostics.
@@ -135,6 +147,7 @@ struct concurrency_options {
 struct tls_options {
     tls_provider provider = tls_provider::none;
     tls_profile profile = tls_profile::none;
+    tls_client_auth_options client_auth;
 };
 
 // TASK-119: the construction-time stance of the server-wide peer
@@ -541,11 +554,46 @@ inline http::outcome check_loop_mode(loop_mode loop, const tls_options& tls,
     return http::outcome::okay();
 }
 
+inline tls_client_certificate_mode resolved_client_certificate_mode(tls_profile profile,
+        const tls_client_auth_options& auth) noexcept {
+    return auth.mode.value_or(profile == tls_profile::mutual_tls
+        ? tls_client_certificate_mode::require : tls_client_certificate_mode::none);
+}
+
+constexpr bool valid_client_certificate_mode(tls_client_certificate_mode mode) noexcept {
+    switch (mode) {
+        case tls_client_certificate_mode::none:
+        case tls_client_certificate_mode::request:
+        case tls_client_certificate_mode::require: return true;
+    }
+    return false;
+}
+
+inline http::outcome check_client_auth(tls_profile profile, const tls_client_auth_options& auth) {
+    const auto mode = resolved_client_certificate_mode(profile, auth);
+    if (!valid_client_certificate_mode(mode)) {
+        return {http::outcome_code::invalid_argument, "TLS client certificate mode invalid"};
+    }
+    if (auth.timing != tls_client_auth_timing::initial_handshake && auth.timing != tls_client_auth_timing::post_handshake) {
+        return {http::outcome_code::invalid_argument, "TLS client authentication timing invalid"};
+    }
+    if ((profile == tls_profile::mutual_tls && mode == tls_client_certificate_mode::none) ||
+        ((profile == tls_profile::none || profile == tls_profile::external_psk) && mode != tls_client_certificate_mode::none)) {
+        return {http::outcome_code::invalid_argument, "TLS client authentication profile conflict"};
+    }
+    if (auth.timing == tls_client_auth_timing::post_handshake) {
+        return {http::outcome_code::not_supported, "TLS post-handshake authentication unavailable"};
+    }
+    return {};
+}
+
 // V7-V11: provider, profile, protocol, and per-listener TLS flags must
 // combine into a servable configuration.
 inline http::outcome check_tls_protocol_combination(
         const tls_options& tls, const protocol_set& protocols,
         const std::vector<listener_options>& listeners, loop_mode loop) {
+    if (const auto result = check_client_auth(tls.profile, tls.client_auth);
+        !result.ok()) return result;
     if (const auto result = check_loop_mode(loop, tls, protocols, listeners);
         !result.ok()) return result;
     if (const http::outcome result = check_tls_off(tls, protocols, listeners);

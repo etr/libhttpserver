@@ -1784,7 +1784,7 @@ websocket_upgrade_decision_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 websocket_utf8_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 if NATIVE_V3_TLS
-check_PROGRAMS += tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation tls_selection
+check_PROGRAMS += tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation tls_selection tls_mtls
 tls_io_SOURCES = unit/tls_io_test.cpp
 tls_io_race_SOURCES = unit/tls_io_race_test.cpp
 tls_io_loopback_SOURCES = unit/tls_io_loopback_test.cpp
@@ -1801,6 +1801,10 @@ tls_credentials_SOURCES = unit/tls_credentials_test.cpp
 tls_credentials_CPPFLAGS = $(tls_io_CPPFLAGS)
 tls_credentials_LDADD = $(tls_io_LDADD)
 tls_credentials_LDFLAGS = $(tls_io_LDFLAGS)
+tls_mtls_SOURCES = unit/tls_mtls_test.cpp
+tls_mtls_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+tls_mtls_LDADD = $(tls_io_LDADD)
+tls_mtls_LDFLAGS = $(tls_io_LDFLAGS)
 tls_selection_SOURCES = unit/tls_selection_test.cpp
 tls_selection_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 tls_selection_LDADD = $(tls_io_LDADD)
@@ -1811,7 +1815,7 @@ tls_credentials_rotation_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 tls_credentials_rotation_LDADD = $(tls_io_LDADD)
 tls_credentials_rotation_LDFLAGS = $(tls_io_LDFLAGS)
 endif
-noinst_HEADERS += unit/tls_io_fixture.hpp unit/tls_credentials_fixture.hpp
+noinst_HEADERS += unit/tls_io_fixture.hpp unit/tls_credentials_fixture.hpp unit/tls_mtls_fixture.hpp
 
 check_PROGRAMS += io_tls_control
 io_tls_control_SOURCES = unit/io_tls_control_test.cpp
@@ -1821,3 +1825,5 @@ io_tls_control_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 EXTRA_DIST += cert.pem key.pem
 
 EXTRA_DIST += data/tls_credentials/a.pem data/tls_credentials/a-key.pem data/tls_credentials/b.pem data/tls_credentials/b-key.pem data/tls_credentials/root.pem data/tls_credentials/intermediate.pem
+
+EXTRA_DIST += data/tls_credentials/client-expired-key.pem data/tls_credentials/client-expired.pem data/tls_credentials/client-intermediate.pem data/tls_credentials/client-no-cn-key.pem data/tls_credentials/client-no-cn.pem data/tls_credentials/client-other-key.pem data/tls_credentials/client-other-root.pem data/tls_credentials/client-other.pem data/tls_credentials/client-root.pem data/tls_credentials/client-valid-key.pem data/tls_credentials/client-valid.pem data/tls_credentials/client-wrong-purpose-key.pem data/tls_credentials/client-wrong-purpose.pem

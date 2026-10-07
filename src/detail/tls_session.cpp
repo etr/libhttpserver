@@ -11,15 +11,90 @@
 #include <openssl/rand.h>
 
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <ctime>
 #include <memory>
 #include <string>
 #include <stdexcept>
 #include <utility>
 namespace httpserver::detail {
+namespace {
+void metadata_check(bool valid) {
+    if (!valid) throw std::runtime_error("TLS peer metadata unavailable");
+}
+std::string distinguished_name(X509_NAME* name) {
+    std::unique_ptr<BIO, decltype(&BIO_free)> bio(BIO_new(BIO_s_mem()), BIO_free);
+    metadata_check(bio && name);
+    metadata_check(X509_NAME_print_ex(bio.get(), name, 0, XN_FLAG_RFC2253) >= 0);
+    char* data = nullptr;
+    const auto size = BIO_get_mem_data(bio.get(), &data);
+    metadata_check(size >= 0);
+    return size ? std::string(data, static_cast<std::size_t>(size)) : std::string{};
+}
+std::string common_name(X509_NAME* name) {
+    const int index = X509_NAME_get_index_by_NID(name, NID_commonName, -1);
+    if (index < 0) return {};
+    const auto* entry = X509_NAME_get_entry(name, index);
+    metadata_check(entry != nullptr);
+    unsigned char* data = nullptr;
+    const int size = ASN1_STRING_to_UTF8(&data, X509_NAME_ENTRY_get_data(entry));
+    const auto free_bytes = [](unsigned char* bytes) { OPENSSL_free(bytes); };
+    std::unique_ptr<unsigned char, decltype(free_bytes)> owned(data, free_bytes);
+    metadata_check(size >= 0);
+    return size ? std::string(reinterpret_cast<const char*>(data), static_cast<std::size_t>(size)) : std::string{};
+}
+std::string fingerprint(X509* certificate) {
+    unsigned char bytes[EVP_MAX_MD_SIZE];
+    unsigned size = 0;
+    metadata_check(X509_digest(certificate, EVP_sha256(), bytes, &size) == 1 && size == 32);
+    constexpr char hex[] = "0123456789abcdef";
+    std::string result;
+    result.reserve(64);
+    for (unsigned i = 0; i < size; ++i) {
+        result.push_back(hex[bytes[i] >> 4]);
+        result.push_back(hex[bytes[i] & 15]);
+    }
+    return result;
+}
+std::int64_t unix_seconds(const ASN1_TIME* time) {
+    std::tm tm{};
+    metadata_check(ASN1_TIME_to_tm(time, &tm) == 1);
+    using std::chrono::year_month_day;
+    using std::chrono::year;
+    using std::chrono::month;
+    using std::chrono::day;
+    using std::chrono::sys_days;
+    using std::chrono::seconds;
+    using std::chrono::duration_cast;
+    const year_month_day date{year{tm.tm_year + 1900}, month{static_cast<unsigned>(tm.tm_mon + 1)}, day{static_cast<unsigned>(tm.tm_mday)}};
+    metadata_check(date.ok());
+    return duration_cast<seconds>(sys_days{date}.time_since_epoch()).count() +
+        tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec;
+}
+std::shared_ptr<const server::tls_peer_metadata> copy_peer(SSL* ssl, bool server_side) {
+    auto result = std::make_shared<server::tls_peer_metadata>();
+    if (!server_side) return result;
+    std::unique_ptr<X509, decltype(&X509_free)> leaf(SSL_get1_peer_certificate(ssl), X509_free);
+    if (!leaf) return result;
+    result->has_client_certificate = true;
+    result->client_certificate_verified = (SSL_get_verify_mode(ssl) & SSL_VERIFY_PEER) && SSL_get_verify_result(ssl) == X509_V_OK;
+    result->subject_dn = distinguished_name(X509_get_subject_name(leaf.get()));
+    result->issuer_dn = distinguished_name(X509_get_issuer_name(leaf.get()));
+    result->common_name = common_name(X509_get_subject_name(leaf.get()));
+    result->fingerprint_sha256 = fingerprint(leaf.get());
+    result->not_before = unix_seconds(X509_get0_notBefore(leaf.get()));
+    result->not_after = unix_seconds(X509_get0_notAfter(leaf.get()));
+    return result;
+}
+}  // namespace
 struct tls_session::impl {
     tls_credentials_selection selection;
     SSL* ssl = nullptr;
     bool accepted_name = false;
+    bool server_side = false;
+    bool metadata_failed = false;
+    std::shared_ptr<const server::tls_peer_metadata> peer;
     std::size_t selected_host = 0;
     static int index() {
         static const int value = SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
@@ -35,6 +110,15 @@ struct tls_session::impl {
             throw std::invalid_argument("TLS server name invalid");
         }
         return canonical_tls_host(std::string(reinterpret_cast<const char*>(data + 5), size - 5));
+    }
+    void apply_verification() {
+        auto* ctx = static_cast<SSL_CTX*>(selection.context->native_.get());
+        SSL_set_verify(ssl, SSL_CTX_get_verify_mode(ctx), nullptr);
+        SSL_set_verify_depth(ssl, SSL_CTX_get_verify_depth(ctx));
+        if (SSL_set1_verify_cert_store(ssl, SSL_CTX_get_cert_store(ctx)) != 1 ||
+            SSL_set1_param(ssl, SSL_CTX_get0_param(ctx)) != 1) {
+            throw std::runtime_error("TLS verification unavailable");
+        }
     }
     int select_hello() {
         if (!selection.snapshot) return SSL_CLIENT_HELLO_SUCCESS;
@@ -54,6 +138,7 @@ struct tls_session::impl {
         if (!SSL_set_SSL_CTX(ssl, static_cast<SSL_CTX*>(selection.context->native_.get()))) {
             throw std::runtime_error("TLS selection unavailable");
         }
+        apply_verification();
         // SSL_set_SSL_CTX does not replace the initial ticket/cache owner.
         // Bind lookup to the selected immutable host before resumption runs.
         const auto& id = selection.context->session_namespace_;
@@ -170,15 +255,29 @@ tls_session::tls_session(tls_credentials_selection selection, bool server) : imp
         throw std::runtime_error("TLS session unavailable");
     }
     if (server) {
+        impl_->server_side = true;
+        impl_->apply_verification();
         SSL_set_accept_state(impl_->ssl);
     } else {
         SSL_set_connect_state(impl_->ssl);
     }
 }
 tls_session::~tls_session() = default;
+std::shared_ptr<const server::tls_peer_metadata> tls_session::peer_metadata() const { return impl_->peer; }
 tls_session::result tls_session::handshake() {
     ERR_clear_error();
-    return impl_->classify(SSL_do_handshake(impl_->ssl));
+    if (impl_->metadata_failed) return {progress::failed};
+    const auto result = impl_->classify(SSL_do_handshake(impl_->ssl));
+    if (result.state == progress::complete && !impl_->peer) {
+        try {
+            impl_->peer = copy_peer(impl_->ssl, impl_->server_side);
+        } catch (...) {
+            impl_->metadata_failed = true;
+            ERR_clear_error();
+            return {progress::failed};
+        }
+    }
+    return result;
 }
 tls_session::result tls_session::read(std::span<std::byte> buffer) {
     std::size_t bytes = 0;

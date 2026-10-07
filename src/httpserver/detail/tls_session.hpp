@@ -25,6 +25,8 @@ class tls_session final {
     tls_session(std::shared_ptr<const tls_context> context, bool server);
     tls_session(tls_credentials_selection selection, bool server);
     ~tls_session();
+    // Serialized pump access only. Null before success or after failed auth.
+    std::shared_ptr<const server::tls_peer_metadata> peer_metadata() const;
     result handshake();
     result read(std::span<std::byte> buffer);
     result write(std::span<const std::byte> bytes);
