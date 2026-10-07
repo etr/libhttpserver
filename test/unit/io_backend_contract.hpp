@@ -715,6 +715,47 @@ struct socket_rig {
 
 using poll_rig = socket_rig<hd::io_poll_backend>;
 
+// Native listeners reserve the upper identity range. Accepting between
+// listener registrations must leave the next listener identity available.
+template<typename Backend>
+inline void interleaved_native_listeners_keep_distinct_ids(
+        littletest::test_runner* __lt_tr__, const char* __lt_name__,
+        socket_rig<Backend>& rig) {
+    constexpr std::uint64_t first_id = 1ULL << 62;
+    constexpr std::uint64_t second_id = first_id + 1;
+    const auto first = rig.adopt_listener(first_id);
+    const auto first_handle = rig.backend.native_handle(first_id);
+    auto client = io_loopback::connect_to(first.port());
+    LT_CHECK(client != pollsys::k_invalid_socket);
+
+    hd::accept_operation op(rig.rig.owner, first_id);
+    op.submit(rig.backend);
+    probe accepted;
+    std::vector<task<void>> tasks;
+    launch_probe(rig.rig, std::move(op), &accepted, tasks);
+    LT_CHECK(wait_terminal(rig.rig, accepted));
+    LT_CHECK_EQ(accepted.delivered.load(), 1);
+    LT_CHECK(accepted.observed.code == hh::outcome_code::ok);
+    const auto accepted_id = accepted.observed.accepted_id;
+    const auto accepted_handle = rig.backend.native_handle(accepted_id);
+
+    LT_CHECK_NOTHROW(rig.adopt_listener(second_id));
+    LT_CHECK(accepted_id != 0);
+    LT_CHECK(accepted_id < first_id);
+    LT_CHECK(accepted_handle != pollsys::k_invalid_socket);
+    LT_CHECK_EQ(rig.backend.native_handle(first_id), first_handle);
+    LT_CHECK_EQ(rig.backend.native_handle(accepted_id), accepted_handle);
+    const auto second_handle = rig.backend.native_handle(second_id);
+    LT_CHECK(second_handle != pollsys::k_invalid_socket);
+    LT_CHECK_NEQ(second_handle, first_handle);
+    LT_CHECK_NEQ(second_handle, accepted_handle);
+
+    pollsys::close_socket(client);
+    rig.backend.release_connection(accepted_id);
+    rig.backend.release_connection(first_id);
+    rig.backend.release_connection(second_id);
+}
+
 // Byte-span helper for wire-shaped literals.
 inline std::span<const std::byte> as_bytes(const char* text) noexcept {
     return std::span<const std::byte>(

@@ -208,6 +208,11 @@ LT_BEGIN_AUTO_TEST(epoll_suite, accept_round_trip)
     io_contract::accept_round_trip(__lt_tr__, __lt_name__, rig);
 LT_END_AUTO_TEST(accept_round_trip)
 
+LT_BEGIN_AUTO_TEST(epoll_suite, interleaved_native_listeners_keep_distinct_ids)
+    epoll_rig rig;
+    io_contract::interleaved_native_listeners_keep_distinct_ids(__lt_tr__, __lt_name__, rig);
+LT_END_AUTO_TEST(interleaved_native_listeners_keep_distinct_ids)
+
 LT_BEGIN_AUTO_TEST(epoll_suite, http1_round_trip)
     epoll_rig rig;
     io_contract::http1_round_trip(__lt_tr__, __lt_name__, rig);

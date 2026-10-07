@@ -21,6 +21,7 @@
 namespace httpserver {
 namespace detail {
 namespace {
+constexpr std::uint64_t k_listener_id_base = 1ULL << 62;
 thread_local io_epoll_backend* current_driver = nullptr;
 struct driver_scope {
     explicit driver_scope(io_epoll_backend* driver)
@@ -164,7 +165,8 @@ void io_epoll_backend::adopt_locked(std::uint64_t id, pollsys::native_socket_t s
         tokens_.erase(record->token);
         throw;
     }
-    next_connection_ = std::max(next_connection_, id + 1);
+    // Native listener identities must not advance the accepted-ID counter.
+    if (id < k_listener_id_base) next_connection_ = std::max(next_connection_, id + 1);
 }
 
 void io_epoll_backend::adopt_connection(std::uint64_t id, pollsys::native_socket_t socket) {
@@ -317,6 +319,10 @@ bool io_epoll_backend::accept_locked(const std::shared_ptr<op_state>& op,
     if (result.status != pollsys::sys_status::ok) {
         retire_locked(op->connection(), done);
         return false;
+    }
+    if (next_connection_ >= k_listener_id_base) {
+        pollsys::close_socket(socket);
+        throw std::overflow_error("httpserver: accepted connection identity exhausted");
     }
     const auto id = next_connection_;
     adopt_locked(id, socket, false);
