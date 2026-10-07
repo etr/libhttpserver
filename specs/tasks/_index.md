@@ -290,7 +290,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-142 | [Implement HTTP/2 fair output, resets and rate budgets](M10-tls-http2/TASK-142.md) | M10 | Complete | TASK-141 |
 | TASK-143 | [Implement HTTP/2 staged GOAWAY and deadline drain](M10-tls-http2/TASK-143.md) | M10 | Complete | TASK-110, TASK-142 |
 | TASK-144 | [Implement WebSocket over HTTP/2 Extended CONNECT](M10-tls-http2/TASK-144.md) | M10 | Complete | TASK-121, TASK-140, TASK-141, TASK-143 |
-| TASK-145 | [Gate HTTP/2 conformance, fuzzing and independent clients](M10-tls-http2/TASK-145.md) | M10 | Not Started | TASK-138, TASK-139, TASK-140, TASK-141, TASK-142, TASK-143, TASK-144 |
+| TASK-145 | [Gate HTTP/2 conformance, fuzzing and independent clients](M10-tls-http2/TASK-145.md) | M10 | In Progress | TASK-138, TASK-139, TASK-140, TASK-141, TASK-142, TASK-143, TASK-144 |
 | TASK-146 | [Implement Windows IOCP managed I/O backend](M10-tls-http2/TASK-146.md) | M10 | Not Started | TASK-099, TASK-100 |
 | TASK-147 | [Verify certificate rotation, SNI, mTLS, PSK and ACME under concurrency](M10-tls-http2/TASK-147.md) | M10 | Not Started | TASK-133, TASK-135, TASK-136, TASK-146 |
 | TASK-148 | [Run TLS-on/off installed-consumer dependency audit](M10-tls-http2/TASK-148.md) | M10 | Not Started | TASK-129, TASK-145, TASK-146, TASK-147 |

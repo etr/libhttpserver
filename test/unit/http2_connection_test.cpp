@@ -70,7 +70,7 @@ LT_BEGIN_AUTO_TEST(http2_connection_suite, frame_errors_have_defined_scope_and_r
         {frame(5, 4, 1, {0, 0, 0, 2}), hd::http2_error_code::protocol_error, false},
         {frame(1, 8, 1, {1}), hd::http2_error_code::protocol_error, false},
         {frame(3, 0, 1, {0}), hd::http2_error_code::frame_size_error, false},
-        {frame(2, 0, 1, {0, 0, 0, 1, 5}), hd::http2_error_code::protocol_error, true}}) {
+        {frame(2, 0, 1, {0, 0, 0, 1, 5, 0}), hd::http2_error_code::frame_size_error, true}}) {
         hd::http2_connection c(budget());
         open(c);
         auto result = c.feed(item.wire);
@@ -186,7 +186,8 @@ LT_BEGIN_AUTO_TEST(http2_connection_suite, malformed_stream_frames_obey_turn_lim
     LT_CHECK(c.feed(frame(2, 0, 1, {1})).progress == hd::http2_progress::yield);
     hd::http2_connection headers(budget());
     open(headers);
-    LT_CHECK(headers.feed(frame(1, 32, 1, {0, 0, 0, 1, 0})).error.has_value());
+    // RFC 9113 ignores dependency semantics but retains CONTINUATION rules.
+    LT_CHECK(!headers.feed(frame(1, 32, 1, {0, 0, 0, 1, 0})).error);
     headers.release_frame();
     LT_CHECK(headers.feed(frame(6, 0, 0, std::vector<std::uint8_t>(8))).error.has_value());
 LT_END_AUTO_TEST(malformed_stream_frames_obey_turn_limit_and_header_continuation)

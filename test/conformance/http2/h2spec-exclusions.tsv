@@ -1,0 +1,4 @@
+# Pinned h2spec v2.6.0 (70ac2294010887f48b18e2d64f5cccd48421fad1).
+# Exact case ID / dryrun assertion / RFC9113 section / rationale.
+http2/5.3.1/1	Sends HEADERS frame that depends on itself	5.3.2,6.2,B	Deprecated dependency semantics; RFC9113 retains framing but does not require self-dependency rejection. Source http2/5_3_1_stream_dependencies.go first case.
+http2/5.3.1/2	Sends PRIORITY frame that depend on itself	5.3.2,6.3,B	Deprecated dependency semantics; RFC9113 retains framing but does not require self-dependency rejection. Source http2/5_3_1_stream_dependencies.go second case.

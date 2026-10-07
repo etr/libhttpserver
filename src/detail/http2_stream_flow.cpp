@@ -71,6 +71,8 @@ std::optional<http2_error> http2_request_engine::state::data_frame() {
     if (found == streams.end()) {
         consumed += h.length;
         if (h.stream_id > last_stream) return connection_error(http2_error_code::protocol_error);
+        const auto closed = closed_reason(h.stream_id);
+        if (closed != closed_kind::local_reset) return connection_error(http2_error_code::stream_closed);
         return {};
     }
     auto& value = *found->second; auto& body = value.body;
@@ -101,7 +103,7 @@ void http2_request_engine::state::receive_data(stream& value, std::span<const st
 bool http2_request_engine::state::trailers(std::uint32_t id, bool ended, const std::vector<hpack_field>& fields) {
     auto& value = *streams.at(id);
     if (!value.http_trailers_allowed(ended)) {
-        reset(id, http2_error_code::protocol_error);
+        reset(id, value.body.receive_ended() ? http2_error_code::stream_closed : http2_error_code::protocol_error);
         return false;
     }
     std::size_t size = 0;

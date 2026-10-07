@@ -647,3 +647,5 @@ EXTRA_DIST += docs/task-130-tls-io-evidence.md
 EXTRA_DIST += docs/task-131-tls-credentials-evidence.md
 
 EXTRA_DIST += docs/external-psk-lookup-contract.md docs/task-134-psk-contract-evidence.md
+
+EXTRA_DIST += scripts/run-v3-http2-gates.py docs/task-145-http2-evidence.md

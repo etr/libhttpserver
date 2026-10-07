@@ -76,7 +76,6 @@ class http2_frame_parser {
     std::optional<http2_error> retain_payload();
     bool admit_payload();
     std::optional<http2_error> payload_rules();
-    std::optional<http2_error> priority_rules();
     std::optional<http2_error> take_prefix(std::span<const std::uint8_t> bytes, std::size_t& used);
     void take_payload(std::span<const std::uint8_t> bytes, std::size_t& used);
     void take_control(std::uint8_t byte);

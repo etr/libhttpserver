@@ -1858,6 +1858,7 @@ hpack_primitives_LDADD =
 hpack_static_table_SOURCES = unit/hpack_static_table_test.cpp
 hpack_static_table_LDADD =
 hpack_corpus_SOURCES = unit/hpack_corpus_test.cpp fuzz/hpack_fuzz.cpp
+hpack_corpus_CPPFLAGS = $(AM_CPPFLAGS) -DHPACK_SEED_DIR='"$(top_srcdir)/test/data/hpack/seeds"'
 hpack_corpus_LDADD =
 EXTRA_DIST += data/hpack/rfc7541.hpp fuzz/hpack_fuzz.hpp fuzz/README-hpack.md
 
@@ -1930,3 +1931,85 @@ http2_websocket_flow_LDADD = $(http2_frame_LDADD)
 check_PROGRAMS += http2_websocket_lifecycle
 http2_websocket_lifecycle_SOURCES = unit/http2_websocket_lifecycle_test.cpp
 http2_websocket_lifecycle_LDADD = $(http2_frame_LDADD)
+
+check_PROGRAMS += http2_engine_conformance
+http2_engine_conformance_SOURCES = unit/http2_engine_conformance_test.cpp
+http2_engine_conformance_CPPFLAGS = $(AM_CPPFLAGS) -DHTTP2_ENGINE_CORPUS_DIR='"$(top_srcdir)/test/conformance/http2-engine"'
+http2_engine_conformance_LDADD = $(http2_frame_LDADD)
+EXTRA_DIST += conformance/http2-engine/authority-host.wire
+EXTRA_DIST += conformance/http2-engine/bad-value.wire
+EXTRA_DIST += conformance/http2-engine/cases.tsv
+EXTRA_DIST += conformance/http2-engine/closed-data.wire
+EXTRA_DIST += conformance/http2-engine/closed-reset.wire
+EXTRA_DIST += conformance/http2-engine/connect-duplicate-protocol.wire
+EXTRA_DIST += conformance/http2-engine/connect-not-advertised.wire
+EXTRA_DIST += conformance/http2-engine/connect-missing-authority.wire
+EXTRA_DIST += conformance/http2-engine/connection-field.wire
+EXTRA_DIST += conformance/http2-engine/connection-window-overflow.wire
+EXTRA_DIST += conformance/http2-engine/content-length-data.wire
+EXTRA_DIST += conformance/http2-engine/content-length-end.wire
+EXTRA_DIST += conformance/http2-engine/discarded-dynamic-context.wire
+EXTRA_DIST += conformance/http2-engine/duplicate-method.wire
+EXTRA_DIST += conformance/http2-engine/eof-field-block.wire
+EXTRA_DIST += conformance/http2-engine/even-head.wire
+EXTRA_DIST += conformance/http2-engine/head-priority-self.wire
+EXTRA_DIST += conformance/http2-engine/huffman-eos.wire
+EXTRA_DIST += conformance/http2-engine/huffman-padding.wire
+EXTRA_DIST += conformance/http2-engine/idle-data.wire
+EXTRA_DIST += conformance/http2-engine/idle-reset.wire
+EXTRA_DIST += conformance/http2-engine/index-oob.wire
+EXTRA_DIST += conformance/http2-engine/index-zero.wire
+EXTRA_DIST += conformance/http2-engine/interleaved-continuation.wire
+EXTRA_DIST += conformance/http2-engine/invalid-field.wire
+EXTRA_DIST += conformance/http2-engine/invalid-te.wire
+EXTRA_DIST += conformance/http2-engine/late-table-update.wire
+EXTRA_DIST += conformance/http2-engine/malformed-trailer.wire
+EXTRA_DIST += conformance/http2-engine/missing-method.wire
+EXTRA_DIST += conformance/http2-engine/missing-path.wire
+EXTRA_DIST += conformance/http2-engine/missing-scheme.wire
+EXTRA_DIST += conformance/http2-engine/padded-data.wire
+EXTRA_DIST += conformance/http2-engine/priority-self.wire
+EXTRA_DIST += conformance/http2-engine/priority-short.wire
+EXTRA_DIST += conformance/http2-engine/priority-zero.wire
+EXTRA_DIST += conformance/http2-engine/proxy-connection.wire
+EXTRA_DIST += conformance/http2-engine/pseudo-after-regular.wire
+EXTRA_DIST += conformance/http2-engine/stream-window-overflow.wire
+EXTRA_DIST += conformance/http2-engine/table-update-overflow.wire
+EXTRA_DIST += conformance/http2-engine/transfer-encoding.wire
+EXTRA_DIST += conformance/http2-engine/truncated-integer.wire
+EXTRA_DIST += conformance/http2-engine/truncated-literal.wire
+EXTRA_DIST += conformance/http2-engine/upgrade-field.wire
+EXTRA_DIST += conformance/http2-engine/uppercase-field.wire
+EXTRA_DIST += conformance/http2-engine/valid-te.wire
+EXTRA_DIST += conformance/http2-engine/zero-head.wire
+
+if NATIVE_V3_TLS
+noinst_PROGRAMS += http2_tls_fixture
+http2_tls_fixture_SOURCES = integ/http2_tls_fixture.cpp
+http2_tls_fixture_CPPFLAGS = $(V3_TLS_CFLAGS) $(AM_CPPFLAGS) -DTLS_TEST_DIR='"$(abs_top_srcdir)/test"'
+http2_tls_fixture_LDADD = $(tls_io_LDADD)
+http2_tls_fixture_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+
+check_PROGRAMS += http2_fuzz_replay
+http2_fuzz_replay_SOURCES = unit/http2_fuzz_replay_test.cpp fuzz/http2_engine_fuzz.cpp
+http2_fuzz_replay_CPPFLAGS = $(http2_engine_conformance_CPPFLAGS)
+http2_fuzz_replay_LDADD = $(http2_frame_LDADD)
+EXTRA_DIST += fuzz/http2_engine_fuzz.hpp integ/http2_client_h2.py integ/http2_client_node.mjs integ/http2_gate_runner_test.py integ/http2-client-requirements.txt conformance/http2/h2spec-exclusions.tsv
+EXTRA_DIST += data/hpack/seeds/huffman-eos.seed
+EXTRA_DIST += data/hpack/seeds/huffman-long-padding.seed
+EXTRA_DIST += data/hpack/seeds/huffman-zero-padding.seed
+EXTRA_DIST += data/hpack/seeds/index-oob.seed
+EXTRA_DIST += data/hpack/seeds/index-zero.seed
+EXTRA_DIST += data/hpack/seeds/integer-overflow.seed
+EXTRA_DIST += data/hpack/seeds/integer-truncated.seed
+EXTRA_DIST += data/hpack/seeds/late-table-update.seed
+EXTRA_DIST += data/hpack/seeds/literal-truncated.seed
+EXTRA_DIST += data/hpack/seeds/minimum-final-update.seed
+EXTRA_DIST += data/hpack/seeds/missing-minimum-update.seed
+EXTRA_DIST += data/hpack/seeds/oversized-table-update.seed
+EXTRA_DIST += data/hpack/seeds/rfc-huffman.seed
+EXTRA_DIST += data/hpack/seeds/rfc-request.seed
+EXTRA_DIST += conformance/http2-engine/README.md data/hpack/seeds/README.md
+EXTRA_DIST += conformance/http2-engine/peer-reset-data.wire conformance/http2-engine/peer-reset-head.wire conformance/http2-engine/closed-head.wire conformance/http2-engine/implicit-closed-head.wire conformance/http2-engine/half-closed-head.wire
+EXTRA_DIST += conformance/http2-engine/peer-reset-invalid-hpack.wire conformance/http2-engine/closed-invalid-hpack.wire

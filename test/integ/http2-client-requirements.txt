@@ -1,0 +1,4 @@
+# TASK-145 independent HTTP/2 client; requires Python >=3.10.
+h2==4.4.1
+hpack==4.2.0
+hyperframe==6.1.0

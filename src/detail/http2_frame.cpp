@@ -166,20 +166,15 @@ std::optional<http2_error> http2_frame_parser::payload_rules() {
     if (frame_.type == 8 && !(u32(scratch_.data()) & 0x7fffffff)) return error(http2_error_code::protocol_error, frame_.stream_id);
     return {};
 }
-std::optional<http2_error> http2_frame_parser::priority_rules() {
-    std::optional<std::size_t> offset;
-    if (frame_.type == 2) offset = 0;
-    if (frame_.type == 1 && (frame_.flags & 32)) offset = (frame_.flags & 8) ? 1 : 0;
-    if (offset && (u32(payload_.data() + *offset) & 0x7fffffff) == frame_.stream_id) return error(http2_error_code::protocol_error, frame_.stream_id);
-    return {};
-}
 std::optional<http2_error> http2_frame_parser::finish_frame() {
     if (deferred_) return deferred_;
     if (auto e = payload_rules()) return e;
     if (frame_.type == 1 && !(frame_.flags & 4)) continuation_ = frame_.stream_id;
     if (frame_.type == 9 && (frame_.flags & 4)) continuation_ = 0;
     initial_ = false;
-    return priority_rules();
+    // RFC 9113 sections 5.3.2 and 6.3 deprecate dependency semantics.
+    // Placement, length, padding and continuation rules remain mandatory.
+    return {};
 }
 std::optional<http2_error> http2_frame_parser::take_prefix(std::span<const std::uint8_t> bytes, std::size_t& used) {
     while (magic_used_ < http2_magic.size() && used < bytes.size()) {

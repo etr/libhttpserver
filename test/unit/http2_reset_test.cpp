@@ -56,11 +56,14 @@ LT_BEGIN_AUTO_TEST(http2_reset_suite, closed_stream_traffic_preserves_hpack_and_
     auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok()); unsigned calls = 0;
     LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> { ++calls; x.respond(http::status::from_code(204), {}); co_return; }).ok());
     httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor); hd::hpack_encoder encoder(budget);
-    auto wire = h2test::preface(); h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())));
+    // Only an endpoint that SENT reset must discard in-flight frames (RFC 9113 5.1).
+    auto opening = h2test::get(); opening.push_back({":method", "GET"});
+    auto wire = h2test::preface(); h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, opening)));
     LT_ASSERT(h2test::feed(engine, wire));
-    LT_ASSERT(h2test::feed(engine, h2test::frame(3, 0, 1, h2test::increment(8)))); executor.run_pending(); LT_CHECK_EQ(calls, 0u);
+    executor.run_pending(); LT_CHECK_EQ(calls, 0u);
+    const auto initial_resets = h2test::resets(h2test::output(engine));
+    LT_ASSERT_EQ(initial_resets.size(), 1u); LT_CHECK_EQ(initial_resets[0].code, 1u);
     for (unsigned i = 0; i < 3; ++i) {
-        LT_ASSERT(h2test::feed(engine, h2test::frame(3, 0, 1, h2test::increment(8))));
         LT_ASSERT(h2test::feed(engine, h2test::frame(0, 0, 1, {'a', 'b'})));
     }
     auto fields = h2test::get(); fields.push_back({"x-state", "inserted-after-reset"});
