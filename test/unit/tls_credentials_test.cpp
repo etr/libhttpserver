@@ -154,7 +154,7 @@ LT_BEGIN_AUTO_TEST(tls_credentials_suite, retained_selection_survives_registry_a
     LT_CHECK_EQ(errors.load(), 0u);
     LT_CHECK_EQ(registry.acquire()->generation(), std::uint64_t{41});
 LT_END_AUTO_TEST(retained_selection_survives_registry_and_concurrent_publication)
-LT_BEGIN_AUTO_TEST(tls_credentials_suite, mutual_policy_and_explicit_roots_remain_owned_without_client_auth)
+LT_BEGIN_AUTO_TEST(tls_credentials_suite, mutual_policy_and_explicit_roots_remain_owned)
     hd::tls_credentials_registry registry;
     auto config = tls_test::credentials();
     config.hosts[0].profile = httpserver::server::tls_profile::mutual_tls;
@@ -170,7 +170,36 @@ LT_BEGIN_AUTO_TEST(tls_credentials_suite, mutual_policy_and_explicit_roots_remai
     const auto cert = tls_test::credentials().hosts[0].certificate_chain_pem;
     const auto key = tls_test::credentials().hosts[0].private_key_pem;
     LT_CHECK_THROW(hd::tls_context::server_pem(cert, key, std::string_view(cert.data(), oversized)));
-LT_END_AUTO_TEST(mutual_policy_and_explicit_roots_remain_owned_without_client_auth)
+LT_END_AUTO_TEST(mutual_policy_and_explicit_roots_remain_owned)
+LT_BEGIN_AUTO_TEST(tls_credentials_suite, client_auth_policy_replacement_is_atomic)
+    namespace srv = httpserver::server;
+    hd::tls_credentials_registry registry;
+    auto config = tls_test::credentials();
+    config.hosts[0].profile = srv::tls_profile::mutual_tls;
+    LT_ASSERT(registry.replace(config).ok());
+    auto original = registry.acquire();
+    LT_CHECK(original->hosts()[0].client_certificate_mode == srv::tls_client_certificate_mode::require);
+    for (int failure = 0; failure < 5; ++failure) {
+        auto bad = config;
+        if (failure == 0) bad.hosts[0].client_auth.mode = srv::tls_client_certificate_mode::none;
+        if (failure == 1) bad.hosts[0].client_auth.mode = static_cast<srv::tls_client_certificate_mode>(99);
+        if (failure == 2) {
+            bad.hosts[0].profile = srv::tls_profile::certificates;
+            bad.hosts[0].client_auth.mode = srv::tls_client_certificate_mode::request;
+            bad.hosts[0].trust_roots_pem.clear();
+        }
+        if (failure == 3) bad.hosts[0].client_auth.timing = srv::tls_client_auth_timing::post_handshake;
+        if (failure == 4) bad.hosts[0].client_auth.timing = static_cast<srv::tls_client_auth_timing>(99);
+        const auto result = registry.replace(bad);
+        LT_CHECK(result.code() == (failure == 3 ? hh::outcome_code::not_supported : hh::outcome_code::invalid_argument));
+        LT_CHECK(registry.acquire() == original);
+        LT_CHECK(registry.acquire()->select_default().context == original->select_default().context);
+    }
+    config.hosts[0].client_auth.mode = srv::tls_client_certificate_mode::request;
+    LT_ASSERT(registry.replace(config).ok());
+    LT_CHECK_EQ(registry.acquire()->generation(), std::uint64_t{2});
+    LT_CHECK(registry.acquire()->hosts()[0].client_certificate_mode == srv::tls_client_certificate_mode::request);
+LT_END_AUTO_TEST(client_auth_policy_replacement_is_atomic)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

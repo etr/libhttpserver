@@ -26,6 +26,7 @@ struct tls_host_credentials {
     std::string trust_roots_pem;
     std::vector<std::string> alpn;
     server::tls_profile profile = server::tls_profile::certificates;
+    server::tls_client_auth_options client_auth;
 };
 struct tls_credentials_config {
     std::vector<tls_host_credentials> hosts;
@@ -36,6 +37,7 @@ struct tls_host_metadata {
     std::vector<std::string> alpn;
     std::vector<unsigned char> alpn_wire;
     server::tls_profile profile;
+    server::tls_client_certificate_mode client_certificate_mode = server::tls_client_certificate_mode::none;
 };
 class tls_credentials_snapshot;
 // Acquiring once pins the whole generation before SSL_new. Keep this owner

@@ -39,6 +39,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
     bool dead = false;
     std::atomic<bool> close_requested{false};
     bool established = false;
+    std::shared_ptr<const server::tls_peer_metadata> peer;
     std::atomic<std::uint64_t> sequence{1};
     std::shared_ptr<request> control, reader, writer;
     std::shared_ptr<op_state> raw_read, raw_write;
@@ -307,6 +308,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         if (control && control->complete) {
             const bool shutdown = control->op->kind() == io_op_kind::tls_shutdown;
             established = !shutdown;
+            if (!shutdown) std::atomic_store_explicit(&peer, session.peer_metadata(), std::memory_order_release);
             finish(control, control->result);
             if (shutdown) {
                 abort();
@@ -379,6 +381,7 @@ outcome_code tls_io_backend::request_cancel(op_state& op) {
     });
     return outcome_code::ok;
 }
+std::shared_ptr<const server::tls_peer_metadata> tls_io_backend::peer_metadata() const { return std::atomic_load_explicit(&core_->peer, std::memory_order_acquire); }
 void tls_io_backend::close() {
     auto self = core_;
     if (self && !self->close_requested.exchange(true, std::memory_order_acq_rel)) {

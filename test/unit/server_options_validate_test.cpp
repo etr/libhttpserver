@@ -449,6 +449,34 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, loop_selection_is_semantic_and
     LT_CHECK(options.validate().code() == outcome_code::not_supported);
 LT_END_AUTO_TEST(loop_selection_is_semantic_and_validated)
 
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, initial_client_auth_policy)
+    for (auto profile : {srv::tls_profile::none, srv::tls_profile::certificates, srv::tls_profile::mutual_tls, srv::tls_profile::external_psk}) {
+        for (auto mode : {srv::tls_client_certificate_mode::none, srv::tls_client_certificate_mode::request, srv::tls_client_certificate_mode::require}) {
+            auto options = with_listener("*", 0, profile != srv::tls_profile::none);
+            options.tls().provider = profile == srv::tls_profile::none ? srv::tls_provider::none : srv::tls_provider::system_default;
+            options.tls().profile = profile;
+            options.tls().client_auth.mode = mode;
+            const bool valid = profile == srv::tls_profile::certificates ||
+                (profile == srv::tls_profile::mutual_tls && mode != srv::tls_client_certificate_mode::none) ||
+                ((profile == srv::tls_profile::none || profile == srv::tls_profile::external_psk) && mode == srv::tls_client_certificate_mode::none);
+            LT_CHECK(options.validate().code() == (valid ? outcome_code::ok : outcome_code::invalid_argument));
+        }
+    }
+    auto options = with_listener("*", 0, true);
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::mutual_tls;
+    LT_CHECK(options.validate().ok());
+    options.tls().client_auth.mode = static_cast<srv::tls_client_certificate_mode>(99);
+    LT_CHECK(options.validate().code() == outcome_code::invalid_argument);
+    options.tls().client_auth.mode.reset();
+    options.tls().client_auth.timing = static_cast<srv::tls_client_auth_timing>(99);
+    LT_CHECK(options.validate().code() == outcome_code::invalid_argument);
+    options.tls().client_auth.timing = srv::tls_client_auth_timing::post_handshake;
+    LT_CHECK(options.validate().code() == outcome_code::not_supported);
+    options.protocols().enable(http::protocol::http_3);
+    LT_CHECK(options.validate().code() == outcome_code::not_supported);
+LT_END_AUTO_TEST(initial_client_auth_policy)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -9,9 +9,9 @@
 Provide initial-handshake mTLS profiles and peer metadata for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Implement none, request and require client-certificate modes.
-- [ ] Validate trust chain and copy library-owned peer metadata.
-- [ ] Reject post-handshake client-auth policy on QUIC.
+- [x] Implement none, request and require client-certificate modes.
+- [x] Validate trust chain and copy library-owned peer metadata.
+- [x] Reject post-handshake client-auth policy on QUIC.
 
 **Dependencies:**
 - Blocked by: TASK-131, TASK-132
@@ -24,4 +24,4 @@ Provide initial-handshake mTLS profiles and peer metadata for libhttpserver v3.0
 **Related Requirements:** PRD-V3N-REQ-034
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** Not Started
+**Status:** Complete
