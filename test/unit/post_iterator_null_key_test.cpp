@@ -24,6 +24,7 @@
 #include "httpserver/create_test_request.hpp"
 #include "httpserver/detail/connection_context.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
+#include "httpserver/detail/upload_pipeline.hpp"
 
 #include "./littletest.hpp"
 
@@ -120,6 +121,42 @@ LT_BEGIN_AUTO_TEST(post_iterator_null_key_suite, valid_key_continuation_appends)
     LT_CHECK_EQ(std::string(f.conn.request->get_arg_flat("field")),
                 std::string("hello"));
 LT_END_AUTO_TEST(valid_key_continuation_appends)
+
+// An unnamed file part must be ignored before either upload target is touched.
+LT_BEGIN_AUTO_TEST(post_iterator_null_key_suite, unnamed_file_has_no_side_effects)
+    for (auto target : {httpserver::FILE_UPLOAD_MEMORY_ONLY,
+                        httpserver::FILE_UPLOAD_DISK_ONLY,
+                        httpserver::FILE_UPLOAD_MEMORY_AND_DISK}) {
+        for (const char* filename : {"x", ""}) {
+            request_fixture f;
+            httpserver::webserver_config config;
+            config.file_upload_target = target;
+            httpserver::detail::upload_pipeline uploads(config);
+            for (int chunk = 0; chunk < 2; ++chunk) {
+                MHD_Result r = MHD_NO;
+                LT_CHECK_NOTHROW(r = uploads.iterate_file(
+                    &f.conn, nullptr, filename, nullptr, nullptr, "data", 4));
+                LT_CHECK_EQ(r, MHD_YES);
+                LT_CHECK_EQ(f.req.get_args().size(), static_cast<size_t>(0));
+                LT_CHECK_EQ(f.req.get_files().size(), static_cast<size_t>(0));
+                LT_CHECK_EQ(f.conn.upload_ostrm.get(), nullptr);
+                LT_CHECK_EQ(f.conn.upload_key, std::string());
+                LT_CHECK_EQ(f.conn.upload_filename, std::string());
+            }
+        }
+    }
+LT_END_AUTO_TEST(unnamed_file_has_no_side_effects)
+
+LT_BEGIN_AUTO_TEST(post_iterator_null_key_suite, named_file_chunks_append)
+    request_fixture f;
+    httpserver::webserver_config config;
+    httpserver::detail::upload_pipeline uploads(config);
+    LT_CHECK_EQ(uploads.iterate_file(
+        &f.conn, "f", "x", nullptr, nullptr, "hel", 3), MHD_YES);
+    LT_CHECK_EQ(uploads.iterate_file(
+        &f.conn, "f", "x", nullptr, nullptr, "lo", 2), MHD_YES);
+    LT_CHECK_EQ(std::string(f.req.get_arg_flat("f")), std::string("hello"));
+LT_END_AUTO_TEST(named_file_chunks_append)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

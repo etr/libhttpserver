@@ -27,7 +27,7 @@ if [ -z "$VERSION" ]; then
         }
         found && /^$/ && !started { next }
         found { started = 1; print }
-    ' "$CHANGELOG" | sed -e :a -e '/^[[:space:]]*$/{ $d; N; ba; }'
+    ' "$CHANGELOG" | sed -e ':a' -e '/^[[:space:]]*$/ {' -e '$d' -e 'N' -e 'ba' -e '}'
 else
     # Extract notes for the specific version
     awk -v ver="$VERSION" '
@@ -40,5 +40,5 @@ else
         }
         found && /^$/ && !started { next }
         found { started = 1; print }
-    ' "$CHANGELOG" | sed -e :a -e '/^[[:space:]]*$/{ $d; N; ba; }'
+    ' "$CHANGELOG" | sed -e ':a' -e '/^[[:space:]]*$/ {' -e '$d' -e 'N' -e 'ba' -e '}'
 fi

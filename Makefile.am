@@ -38,7 +38,7 @@ endif
 
 endif
 
-EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
+EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/test_extract_release_notes.sh scripts/validate-version.sh \
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
 	scripts/check-doxygen.sh scripts/check-hooks-doc-spotcheck.sh \
 	scripts/check-soversion.sh \
@@ -63,7 +63,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
 	test/headers/consumer_umbrella_no_backend.cpp \
-	LICENSE RELEASE_NOTES.md CONTRIBUTING.md CODE_OF_CONDUCT.md
+	LICENSE RELEASE_NOTES.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md
 
 # ---------------------------------------------------------------------------
 # Header-hygiene checks (TASK-002)
@@ -414,6 +414,7 @@ check-readme:
 
 # TASK-042: static checks on RELEASE_NOTES.md — see scripts/check-release-notes.sh
 check-release-notes:
+	@$(top_srcdir)/scripts/test_extract_release_notes.sh
 	@echo "=== check-release-notes: enforce TASK-042 invariants on RELEASE_NOTES.md ==="
 	@$(top_srcdir)/scripts/check-release-notes.sh
 

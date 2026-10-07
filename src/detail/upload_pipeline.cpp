@@ -135,6 +135,9 @@ MHD_Result upload_pipeline::process_file_upload(detail::connection_context* conn
 MHD_Result upload_pipeline::iterate_file(detail::connection_context* conn,
         const char* key, const char* filename, const char* content_type,
         const char* transfer_encoding, const char* data, size_t size) {
+    // MHD supplies a null key for file parts without a name attribute.
+    // Ignore them before touching either the memory or disk upload target.
+    if (key == nullptr) return MHD_YES;
     try {
         if (config_.file_upload_target != FILE_UPLOAD_DISK_ONLY) {
             conn->request->set_arg_flat(key,

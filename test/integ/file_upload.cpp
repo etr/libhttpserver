@@ -295,6 +295,28 @@ class print_file_upload_resource : public http_resource {
      string content;
 };
 
+// Raw multipart bytes preserve the missing name attribute; curl_mime would
+// supply a name and conceal this malformed-input regression.
+static std::pair<CURLcode, long> send_raw_multipart(int port, const string& body) {
+    CURL* curl = curl_easy_init();
+    const string url = "http://127.0.0.1:" + std::to_string(port) + "/anything";
+    curl_slist* headers = curl_slist_append(nullptr,
+        "Content-Type: multipart/form-data; boundary=BOUNDARY");
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+        +[](char*, size_t size, size_t count, void*) -> size_t { return size * count; });
+    const CURLcode result = curl_easy_perform(curl);
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_easy_cleanup(curl);
+    curl_slist_free_all(headers);
+    return {result, status};
+}
+
 LT_BEGIN_SUITE(file_upload_suite)
     void set_up() {
     }
@@ -1068,6 +1090,33 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_sanitize_keeps_basename)
     unlink(expected_path.c_str());
     rmdir(upload_directory.c_str());
 LT_END_AUTO_TEST(file_upload_sanitize_keeps_basename)
+
+LT_BEGIN_AUTO_TEST(file_upload_suite, unnamed_multipart_file_keeps_server_alive)
+    curl_global_init(CURL_GLOBAL_ALL);
+    webserver ws{create_webserver(0)};
+    ws.on_get("/hello", [](const http_request&) {
+        return http_response::string("hello");
+    });
+    ws.start(false);
+    LT_CHECK_EQ(ws.is_running(), true);
+    const int port = ws.get_bound_port();
+    for (const char* disposition : {"filename=\"x\"", "filename=\"\"",
+                                    "name=\"f\"; filename=\"x\""}) {
+        const string body = string("--BOUNDARY\r\nContent-Disposition: form-data; ")
+            + disposition + "\r\n\r\ndata\r\n--BOUNDARY--\r\n";
+        const auto result = send_raw_multipart(port, body);
+        LT_CHECK_EQ(result.first, CURLE_OK);
+        LT_CHECK_EQ(result.second, 404L);
+        // A second HTTP request proves the daemon still handles connections.
+        const auto followup = send_raw_multipart(port,
+            "--BOUNDARY\r\nContent-Disposition: form-data; name=\"f\"\r\n"
+            "\r\nok\r\n--BOUNDARY--\r\n");
+        LT_CHECK_EQ(followup.first, CURLE_OK);
+        LT_CHECK_EQ(followup.second, 404L);
+    }
+    ws.stop();
+    curl_global_cleanup();
+LT_END_AUTO_TEST(unnamed_multipart_file_keeps_server_alive)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
