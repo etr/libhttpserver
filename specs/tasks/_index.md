@@ -270,67 +270,67 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | [TASK-122](M9-http1-parity-websocket/TASK-122.md) | Implement WebSocket over HTTP/1.1 upgrade | M9 | Complete | TASK-105, TASK-108, TASK-121 |
 | [TASK-123](M9-http1-parity-websocket/TASK-123.md) | Integrate WebSocket close with cancellation and server drain | M9 | Complete | TASK-110, TASK-121, TASK-122 |
 | [TASK-124](M9-http1-parity-websocket/TASK-124.md) | Freeze portable external-loop readiness contract | M9 | Complete | TASK-099 |
-| [TASK-125](M9-http1-parity-websocket/TASK-125.md) | Implement external-loop readiness adapter | M9 | Not Started | TASK-100, TASK-124 |
-| [TASK-126](M9-http1-parity-websocket/TASK-126.md) | Implement Linux epoll managed I/O backend | M9 | Not Started | TASK-099, TASK-100 |
-| [TASK-127](M9-http1-parity-websocket/TASK-127.md) | Implement BSD/macOS kqueue managed I/O backend | M9 | Not Started | TASK-099, TASK-100 |
-| [TASK-128](M9-http1-parity-websocket/TASK-128.md) | Gate HTTP/1 and WebSocket conformance, fuzzing and parity | M9 | Not Started | TASK-113, TASK-115, TASK-117, TASK-118, TASK-120, TASK-122, TASK-123 |
-| [TASK-129](M10-tls-http2/TASK-129.md) | Establish OpenSSL 3.5 LTS build boundary and feature gates | M10 | Not Started | TASK-108 |
-| [TASK-130](M10-tls-http2/TASK-130.md) | Drive nonblocking TCP TLS through private I/O operations | M10 | Not Started | TASK-099, TASK-129 |
-| [TASK-131](M10-tls-http2/TASK-131.md) | Build and atomically publish immutable TLS credential snapshots | M10 | Not Started | TASK-129, TASK-130 |
-| [TASK-132](M10-tls-http2/TASK-132.md) | Implement early SNI, default-host and ALPN selection | M10 | Not Started | TASK-130, TASK-131 |
-| [TASK-133](M10-tls-http2/TASK-133.md) | Implement initial-handshake mTLS profiles and peer metadata | M10 | Not Started | TASK-131, TASK-132 |
-| [TASK-134](M10-tls-http2/TASK-134.md) | Resolve external-PSK lookup and timeout execution contract | M10 | Not Started | TASK-129, TASK-131 |
-| [TASK-135](M10-tls-http2/TASK-135.md) | Implement TLS 1.2 and 1.3 external-PSK profiles | M10 | Not Started | TASK-131, TASK-132, TASK-134 |
-| [TASK-136](M10-tls-http2/TASK-136.md) | Implement ACME TLS-ALPN-01 publication and removal | M10 | Not Started | TASK-131, TASK-132 |
-| [TASK-137](M10-tls-http2/TASK-137.md) | Implement bounded HPACK primitives and static tables | M10 | Not Started | TASK-097 |
-| [TASK-138](M10-tls-http2/TASK-138.md) | Implement connection-owned HPACK dynamic tables | M10 | Not Started | TASK-137 |
-| [TASK-139](M10-tls-http2/TASK-139.md) | Implement HTTP/2 preface, frame and SETTINGS machine | M10 | Not Started | TASK-130, TASK-132, TASK-137 |
-| [TASK-140](M10-tls-http2/TASK-140.md) | Route HTTP/2 headers-only streams through the exchange | M10 | Not Started | TASK-102, TASK-138, TASK-139 |
-| [TASK-141](M10-tls-http2/TASK-141.md) | Implement HTTP/2 streaming bodies and two-level flow control | M10 | Not Started | TASK-103, TASK-104, TASK-140 |
-| [TASK-142](M10-tls-http2/TASK-142.md) | Implement HTTP/2 fair output, resets and rate budgets | M10 | Not Started | TASK-141 |
-| [TASK-143](M10-tls-http2/TASK-143.md) | Implement HTTP/2 staged GOAWAY and deadline drain | M10 | Not Started | TASK-110, TASK-142 |
-| [TASK-144](M10-tls-http2/TASK-144.md) | Implement WebSocket over HTTP/2 Extended CONNECT | M10 | Not Started | TASK-121, TASK-140, TASK-141, TASK-143 |
-| [TASK-145](M10-tls-http2/TASK-145.md) | Gate HTTP/2 conformance, fuzzing and independent clients | M10 | Not Started | TASK-138, TASK-139, TASK-140, TASK-141, TASK-142, TASK-143, TASK-144 |
-| [TASK-146](M10-tls-http2/TASK-146.md) | Implement Windows IOCP managed I/O backend | M10 | Not Started | TASK-099, TASK-100 |
-| [TASK-147](M10-tls-http2/TASK-147.md) | Verify certificate rotation, SNI, mTLS, PSK and ACME under concurrency | M10 | Not Started | TASK-133, TASK-135, TASK-136, TASK-146 |
-| [TASK-148](M10-tls-http2/TASK-148.md) | Run TLS-on/off installed-consumer dependency audit | M10 | Not Started | TASK-129, TASK-145, TASK-146, TASK-147 |
-| [TASK-149](M11-http3-first-slice/TASK-149.md) | Add owned UDP send/receive operations and CID dispatch seam | M11 | Not Started | TASK-099, TASK-100 |
-| [TASK-150](M11-http3-first-slice/TASK-150.md) | Add deterministic QUIC network, clock and fuzz harness | M11 | Not Started | TASK-149 |
-| [TASK-151](M11-http3-first-slice/TASK-151.md) | Implement strict QUIC v1 packet, frame and parameter codecs | M11 | Not Started | TASK-150 |
-| [TASK-152](M11-http3-first-slice/TASK-152.md) | Implement QUIC packet protection and key lifecycle with OpenSSL EVP | M11 | Not Started | TASK-129, TASK-151 |
-| [TASK-153](M11-http3-first-slice/TASK-153.md) | Implement server CID admission, Retry and amplification limits | M11 | Not Started | TASK-149, TASK-151, TASK-152 |
-| [TASK-154](M11-http3-first-slice/TASK-154.md) | Implement QUIC stream state and bounded reassembly | M11 | Not Started | TASK-151 |
-| [TASK-155](M11-http3-first-slice/TASK-155.md) | Bridge OpenSSL QUIC TLS callbacks to owned CRYPTO streams | M11 | Not Started | TASK-131, TASK-132, TASK-152, TASK-153 |
-| [TASK-156](M11-http3-first-slice/TASK-156.md) | Implement ACK generation, RFC 9002 loss detection and PTO | M11 | Not Started | TASK-151, TASK-152, TASK-155 |
-| [TASK-157](M11-http3-first-slice/TASK-157.md) | Implement QUIC stream/connection flow control | M11 | Not Started | TASK-154, TASK-156 |
-| [TASK-158](M11-http3-first-slice/TASK-158.md) | Implement QUIC congestion control, pacing and fair send scheduling | M11 | Not Started | TASK-156, TASK-157 |
-| [TASK-159](M11-http3-first-slice/TASK-159.md) | Implement bounded static-only QPACK codec | M11 | Not Started | TASK-097 |
-| [TASK-160](M11-http3-first-slice/TASK-160.md) | Implement HTTP/3 control streams, SETTINGS and frame roles | M11 | Not Started | TASK-155, TASK-157, TASK-159 |
-| [TASK-161](M11-http3-first-slice/TASK-161.md) | Bridge HTTP/3 request streams to semantic exchanges | M11 | Not Started | TASK-102, TASK-103, TASK-104, TASK-158, TASK-160 |
-| [TASK-162](M11-http3-first-slice/TASK-162.md) | Run independent HTTP/3 client smoke tests | M11 | Not Started | TASK-161 |
-| [TASK-163](M11-http3-first-slice/TASK-163.md) | Package a QUIC interop-runner endpoint and diagnostics | M11 | Not Started | TASK-155, TASK-157, TASK-161 |
-| [TASK-164](M12-http3-full/TASK-164.md) | Implement QUIC CID lifecycle, path validation and rebinding | M12 | Not Started | TASK-153, TASK-156, TASK-158 |
-| [TASK-165](M12-http3-full/TASK-165.md) | Implement QUIC datagram sizing and black-hole recovery | M12 | Not Started | TASK-158, TASK-164 |
-| [TASK-166](M12-http3-full/TASK-166.md) | Implement QUIC idle, close, drain and key disposal | M12 | Not Started | TASK-110, TASK-156, TASK-157, TASK-164 |
-| [TASK-167](M12-http3-full/TASK-167.md) | Implement QPACK dynamic table and instruction codecs | M12 | Not Started | TASK-159 |
-| [TASK-168](M12-http3-full/TASK-168.md) | Implement QPACK blocked-section and critical-stream accounting | M12 | Not Started | TASK-160, TASK-167 |
-| [TASK-169](M12-http3-full/TASK-169.md) | Integrate dynamic QPACK with HTTP/3 request scheduling | M12 | Not Started | TASK-161, TASK-168 |
-| [TASK-170](M12-http3-full/TASK-170.md) | Implement staged HTTP/3 GOAWAY and graceful drain | M12 | Not Started | TASK-143, TASK-166, TASK-169 |
-| [TASK-171](M12-http3-full/TASK-171.md) | Implement HTTP/3 WebSocket Extended CONNECT negotiation | M12 | Not Started | TASK-121, TASK-161, TASK-169 |
-| [TASK-172](M12-http3-full/TASK-172.md) | Implement WebSocket-over-HTTP/3 DATA and lifecycle adapter | M12 | Not Started | TASK-166, TASK-170, TASK-171 |
-| [TASK-173](M12-http3-full/TASK-173.md) | Run required QUIC interop-runner matrix | M12 | Not Started | TASK-163, TASK-164, TASK-165, TASK-166 |
-| [TASK-174](M12-http3-full/TASK-174.md) | Run independent HTTP/3 semantic client matrix | M12 | Not Started | TASK-169, TASK-170 |
-| [TASK-175](M12-http3-full/TASK-175.md) | Build independent WebSocket-over-HTTP/3 client harness | M12 | Not Started | TASK-172 |
-| [TASK-176](M12-http3-full/TASK-176.md) | Fuzz QUIC recovery and TLS callback event sequences | M12 | Not Started | TASK-166 |
-| [TASK-177](M12-http3-full/TASK-177.md) | Fuzz HTTP/3 framing, QPACK and blocked streams | M12 | Not Started | TASK-169, TASK-170 |
-| [TASK-178](M12-http3-full/TASK-178.md) | Gate full HTTP/3 and WebSocket-over-H3 conformance | M12 | Not Started | TASK-173, TASK-174, TASK-175, TASK-176, TASK-177 |
-| [TASK-179](M13-v3-release/TASK-179.md) | Audit v2-to-v3 behavior parity across all protocols | M13 | Not Started | TASK-128, TASK-145, TASK-178 |
-| [TASK-180](M13-v3-release/TASK-180.md) | Verify hierarchical resource limits and slow-peer plateaus across engines | M13 | Not Started | TASK-128, TASK-145, TASK-178 |
-| [TASK-181](M13-v3-release/TASK-181.md) | Expose bounded diagnostic callbacks and counters | M13 | Not Started | TASK-108, TASK-145, TASK-178 |
-| [TASK-182](M13-v3-release/TASK-182.md) | Complete four-platform managed/external-loop package validation | M13 | Not Started | TASK-125, TASK-126, TASK-127, TASK-146, TASK-178 |
-| [TASK-183](M13-v3-release/TASK-183.md) | Publish v2-to-v3 migration guide and API examples | M13 | Not Started | TASK-179 |
-| [TASK-184](M13-v3-release/TASK-184.md) | Remove MHD build/link paths and bump v3 SOVERSION | M13 | Not Started | TASK-179, TASK-182, TASK-183 |
-| [TASK-185](M13-v3-release/TASK-185.md) | Run final dependency, conformance, sanitizer and performance release gates | M13 | Not Started | TASK-180, TASK-181, TASK-182, TASK-183, TASK-184 |
+| TASK-125 | [Implement external-loop readiness adapter](M9-http1-parity-websocket/TASK-125.md) | M9 | Not Started | TASK-100, TASK-124 |
+| TASK-126 | [Implement Linux epoll managed I/O backend](M9-http1-parity-websocket/TASK-126.md) | M9 | Not Started | TASK-099, TASK-100 |
+| TASK-127 | [Implement BSD/macOS kqueue managed I/O backend](M9-http1-parity-websocket/TASK-127.md) | M9 | Not Started | TASK-099, TASK-100 |
+| TASK-128 | [Gate HTTP/1 and WebSocket conformance, fuzzing and parity](M9-http1-parity-websocket/TASK-128.md) | M9 | Not Started | TASK-113, TASK-115, TASK-117, TASK-118, TASK-120, TASK-122, TASK-123 |
+| TASK-129 | [Establish OpenSSL 3.5 LTS build boundary and feature gates](M10-tls-http2/TASK-129.md) | M10 | Not Started | TASK-108 |
+| TASK-130 | [Drive nonblocking TCP TLS through private I/O operations](M10-tls-http2/TASK-130.md) | M10 | Not Started | TASK-099, TASK-129 |
+| TASK-131 | [Build and atomically publish immutable TLS credential snapshots](M10-tls-http2/TASK-131.md) | M10 | Not Started | TASK-129, TASK-130 |
+| TASK-132 | [Implement early SNI, default-host and ALPN selection](M10-tls-http2/TASK-132.md) | M10 | Not Started | TASK-130, TASK-131 |
+| TASK-133 | [Implement initial-handshake mTLS profiles and peer metadata](M10-tls-http2/TASK-133.md) | M10 | Not Started | TASK-131, TASK-132 |
+| TASK-134 | [Resolve external-PSK lookup and timeout execution contract](M10-tls-http2/TASK-134.md) | M10 | Not Started | TASK-129, TASK-131 |
+| TASK-135 | [Implement TLS 1.2 and 1.3 external-PSK profiles](M10-tls-http2/TASK-135.md) | M10 | Not Started | TASK-131, TASK-132, TASK-134 |
+| TASK-136 | [Implement ACME TLS-ALPN-01 publication and removal](M10-tls-http2/TASK-136.md) | M10 | Not Started | TASK-131, TASK-132 |
+| TASK-137 | [Implement bounded HPACK primitives and static tables](M10-tls-http2/TASK-137.md) | M10 | Not Started | TASK-097 |
+| TASK-138 | [Implement connection-owned HPACK dynamic tables](M10-tls-http2/TASK-138.md) | M10 | Not Started | TASK-137 |
+| TASK-139 | [Implement HTTP/2 preface, frame and SETTINGS machine](M10-tls-http2/TASK-139.md) | M10 | Not Started | TASK-130, TASK-132, TASK-137 |
+| TASK-140 | [Route HTTP/2 headers-only streams through the exchange](M10-tls-http2/TASK-140.md) | M10 | Not Started | TASK-102, TASK-138, TASK-139 |
+| TASK-141 | [Implement HTTP/2 streaming bodies and two-level flow control](M10-tls-http2/TASK-141.md) | M10 | Not Started | TASK-103, TASK-104, TASK-140 |
+| TASK-142 | [Implement HTTP/2 fair output, resets and rate budgets](M10-tls-http2/TASK-142.md) | M10 | Not Started | TASK-141 |
+| TASK-143 | [Implement HTTP/2 staged GOAWAY and deadline drain](M10-tls-http2/TASK-143.md) | M10 | Not Started | TASK-110, TASK-142 |
+| TASK-144 | [Implement WebSocket over HTTP/2 Extended CONNECT](M10-tls-http2/TASK-144.md) | M10 | Not Started | TASK-121, TASK-140, TASK-141, TASK-143 |
+| TASK-145 | [Gate HTTP/2 conformance, fuzzing and independent clients](M10-tls-http2/TASK-145.md) | M10 | Not Started | TASK-138, TASK-139, TASK-140, TASK-141, TASK-142, TASK-143, TASK-144 |
+| TASK-146 | [Implement Windows IOCP managed I/O backend](M10-tls-http2/TASK-146.md) | M10 | Not Started | TASK-099, TASK-100 |
+| TASK-147 | [Verify certificate rotation, SNI, mTLS, PSK and ACME under concurrency](M10-tls-http2/TASK-147.md) | M10 | Not Started | TASK-133, TASK-135, TASK-136, TASK-146 |
+| TASK-148 | [Run TLS-on/off installed-consumer dependency audit](M10-tls-http2/TASK-148.md) | M10 | Not Started | TASK-129, TASK-145, TASK-146, TASK-147 |
+| TASK-149 | [Add owned UDP send/receive operations and CID dispatch seam](M11-http3-first-slice/TASK-149.md) | M11 | Not Started | TASK-099, TASK-100 |
+| TASK-150 | [Add deterministic QUIC network, clock and fuzz harness](M11-http3-first-slice/TASK-150.md) | M11 | Not Started | TASK-149 |
+| TASK-151 | [Implement strict QUIC v1 packet, frame and parameter codecs](M11-http3-first-slice/TASK-151.md) | M11 | Not Started | TASK-150 |
+| TASK-152 | [Implement QUIC packet protection and key lifecycle with OpenSSL EVP](M11-http3-first-slice/TASK-152.md) | M11 | Not Started | TASK-129, TASK-151 |
+| TASK-153 | [Implement server CID admission, Retry and amplification limits](M11-http3-first-slice/TASK-153.md) | M11 | Not Started | TASK-149, TASK-151, TASK-152 |
+| TASK-154 | [Implement QUIC stream state and bounded reassembly](M11-http3-first-slice/TASK-154.md) | M11 | Not Started | TASK-151 |
+| TASK-155 | [Bridge OpenSSL QUIC TLS callbacks to owned CRYPTO streams](M11-http3-first-slice/TASK-155.md) | M11 | Not Started | TASK-131, TASK-132, TASK-152, TASK-153 |
+| TASK-156 | [Implement ACK generation, RFC 9002 loss detection and PTO](M11-http3-first-slice/TASK-156.md) | M11 | Not Started | TASK-151, TASK-152, TASK-155 |
+| TASK-157 | [Implement QUIC stream/connection flow control](M11-http3-first-slice/TASK-157.md) | M11 | Not Started | TASK-154, TASK-156 |
+| TASK-158 | [Implement QUIC congestion control, pacing and fair send scheduling](M11-http3-first-slice/TASK-158.md) | M11 | Not Started | TASK-156, TASK-157 |
+| TASK-159 | [Implement bounded static-only QPACK codec](M11-http3-first-slice/TASK-159.md) | M11 | Not Started | TASK-097 |
+| TASK-160 | [Implement HTTP/3 control streams, SETTINGS and frame roles](M11-http3-first-slice/TASK-160.md) | M11 | Not Started | TASK-155, TASK-157, TASK-159 |
+| TASK-161 | [Bridge HTTP/3 request streams to semantic exchanges](M11-http3-first-slice/TASK-161.md) | M11 | Not Started | TASK-102, TASK-103, TASK-104, TASK-158, TASK-160 |
+| TASK-162 | [Run independent HTTP/3 client smoke tests](M11-http3-first-slice/TASK-162.md) | M11 | Not Started | TASK-161 |
+| TASK-163 | [Package a QUIC interop-runner endpoint and diagnostics](M11-http3-first-slice/TASK-163.md) | M11 | Not Started | TASK-155, TASK-157, TASK-161 |
+| TASK-164 | [Implement QUIC CID lifecycle, path validation and rebinding](M12-http3-full/TASK-164.md) | M12 | Not Started | TASK-153, TASK-156, TASK-158 |
+| TASK-165 | [Implement QUIC datagram sizing and black-hole recovery](M12-http3-full/TASK-165.md) | M12 | Not Started | TASK-158, TASK-164 |
+| TASK-166 | [Implement QUIC idle, close, drain and key disposal](M12-http3-full/TASK-166.md) | M12 | Not Started | TASK-110, TASK-156, TASK-157, TASK-164 |
+| TASK-167 | [Implement QPACK dynamic table and instruction codecs](M12-http3-full/TASK-167.md) | M12 | Not Started | TASK-159 |
+| TASK-168 | [Implement QPACK blocked-section and critical-stream accounting](M12-http3-full/TASK-168.md) | M12 | Not Started | TASK-160, TASK-167 |
+| TASK-169 | [Integrate dynamic QPACK with HTTP/3 request scheduling](M12-http3-full/TASK-169.md) | M12 | Not Started | TASK-161, TASK-168 |
+| TASK-170 | [Implement staged HTTP/3 GOAWAY and graceful drain](M12-http3-full/TASK-170.md) | M12 | Not Started | TASK-143, TASK-166, TASK-169 |
+| TASK-171 | [Implement HTTP/3 WebSocket Extended CONNECT negotiation](M12-http3-full/TASK-171.md) | M12 | Not Started | TASK-121, TASK-161, TASK-169 |
+| TASK-172 | [Implement WebSocket-over-HTTP/3 DATA and lifecycle adapter](M12-http3-full/TASK-172.md) | M12 | Not Started | TASK-166, TASK-170, TASK-171 |
+| TASK-173 | [Run required QUIC interop-runner matrix](M12-http3-full/TASK-173.md) | M12 | Not Started | TASK-163, TASK-164, TASK-165, TASK-166 |
+| TASK-174 | [Run independent HTTP/3 semantic client matrix](M12-http3-full/TASK-174.md) | M12 | Not Started | TASK-169, TASK-170 |
+| TASK-175 | [Build independent WebSocket-over-HTTP/3 client harness](M12-http3-full/TASK-175.md) | M12 | Not Started | TASK-172 |
+| TASK-176 | [Fuzz QUIC recovery and TLS callback event sequences](M12-http3-full/TASK-176.md) | M12 | Not Started | TASK-166 |
+| TASK-177 | [Fuzz HTTP/3 framing, QPACK and blocked streams](M12-http3-full/TASK-177.md) | M12 | Not Started | TASK-169, TASK-170 |
+| TASK-178 | [Gate full HTTP/3 and WebSocket-over-H3 conformance](M12-http3-full/TASK-178.md) | M12 | Not Started | TASK-173, TASK-174, TASK-175, TASK-176, TASK-177 |
+| TASK-179 | [Audit v2-to-v3 behavior parity across all protocols](M13-v3-release/TASK-179.md) | M13 | Not Started | TASK-128, TASK-145, TASK-178 |
+| TASK-180 | [Verify hierarchical resource limits and slow-peer plateaus across engines](M13-v3-release/TASK-180.md) | M13 | Not Started | TASK-128, TASK-145, TASK-178 |
+| TASK-181 | [Expose bounded diagnostic callbacks and counters](M13-v3-release/TASK-181.md) | M13 | Not Started | TASK-108, TASK-145, TASK-178 |
+| TASK-182 | [Complete four-platform managed/external-loop package validation](M13-v3-release/TASK-182.md) | M13 | Not Started | TASK-125, TASK-126, TASK-127, TASK-146, TASK-178 |
+| TASK-183 | [Publish v2-to-v3 migration guide and API examples](M13-v3-release/TASK-183.md) | M13 | Not Started | TASK-179 |
+| TASK-184 | [Remove MHD build/link paths and bump v3 SOVERSION](M13-v3-release/TASK-184.md) | M13 | Not Started | TASK-179, TASK-182, TASK-183 |
+| TASK-185 | [Run final dependency, conformance, sanitizer and performance release gates](M13-v3-release/TASK-185.md) | M13 | Not Started | TASK-180, TASK-181, TASK-182, TASK-183, TASK-184 |
 
 ## PRD requirement coverage
 
