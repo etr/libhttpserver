@@ -53,7 +53,7 @@ std::optional<http2_error> http2_connection::open_stream(time_point now) {
     return failure_;
 }
 http2_connection::http2_connection(server::resource_budget budget, http2_limits limits, http2_settings initial, bool reserve_frames)
-    : parser_(budget), compression_(budget), limits_(limits) {
+    : budget_(budget), parser_(budget), compression_(budget), limits_(limits) {
     if (!valid_limits(limits_) || !valid_settings(initial)) {
         auto e = protocol();
         e.outcome = http::outcome_code::invalid_argument;
@@ -135,7 +135,33 @@ void http2_connection::commit(slot& value, time_point now) {
     parser_.maximum_frame_size(local_.max_frame_size);
     value.settings.reset();
 }
+http::outcome_code http2_connection::begin_graceful_goaway(std::uint32_t cutoff) {
+    if (failure_ || graceful_started_) return http::outcome_code::invalid_state;
+    if (!budget_.reserve(server::resource::response_queue_bytes, 51, graceful_charge_).ok()) return http::outcome_code::limit_exceeded;
+    graceful_started_ = true; graceful_cutoff_ = cutoff;
+    for (auto& value : graceful_) {
+        value.size = 17; value.bytes[2] = 8; value.bytes[3] = 7;
+    }
+    put32(graceful_[0].bytes.data() + 9, 0x7fffffff);
+    graceful_[1].bytes[3] = 6;
+    constexpr std::array<std::uint8_t, 8> token{'h', '2', 'd', 'r', 'a', 'i', 'n', 1};
+    std::copy(token.begin(), token.end(), graceful_[1].bytes.begin() + 9);
+    put32(graceful_[2].bytes.data() + 9, cutoff);
+    return http::outcome_code::ok;
+}
+bool http2_connection::graceful_ready() const {
+    if (graceful_exposed_) return true;
+    if (failure_ || !graceful_started_ || graceful_next_ == graceful_.size()) return false;
+    if (graceful_next_ == 2 && !barrier_acknowledged_) return false;
+    // SETTINGS must remain the first server frame, even on an idle drain.
+    if (count_ && (slots_[head_].exposed || slots_[head_].settings)) return false;
+    return true;
+}
 std::span<const std::uint8_t> http2_connection::output(time_point now) {
+    if (graceful_ready()) {
+        auto& value = graceful_[graceful_next_]; graceful_exposed_ = value.exposed = true;
+        return std::span(value.bytes).subspan(value.used, value.size - value.used);
+    }
     if (count_) {
         auto& value = slots_[head_];
         commit(value, now);
@@ -144,7 +170,19 @@ std::span<const std::uint8_t> http2_connection::output(time_point now) {
     }
     return std::span(terminal_).subspan(terminal_used_);
 }
+bool http2_connection::advance_graceful(std::size_t count) {
+    auto& value = graceful_[graceful_next_];
+    if (count > value.size - value.used) return false;
+    value.used += count;
+    if (value.used == value.size) {
+        if (graceful_next_ == 1) barrier_sent_ = true;
+        ++graceful_next_; graceful_exposed_ = false;
+        if (graceful_complete() || failure_) graceful_charge_.release();
+    }
+    return true;
+}
 bool http2_connection::advance_output(std::size_t count) {
+    if (graceful_exposed_) return advance_graceful(count);
     if (!count_) {
         if (count > terminal_.size() - terminal_used_) return false;
         terminal_used_ += count;
@@ -162,10 +200,7 @@ bool http2_connection::advance_output(std::size_t count) {
     }
     return true;
 }
-void http2_connection::fail(http2_error e) {
-    if (failure_ || e.scope == http2_error_scope::stream) return;
-    failure_ = e;
-    parser_.clear();
+void http2_connection::preserve_borrowed_control() {
     // A started wire frame must finish before the terminal frame. Preserve its
     // storage as well, since the owner may still hold the borrowed output span.
     const bool started = count_ && slots_[head_].exposed;
@@ -175,12 +210,25 @@ void http2_connection::fail(http2_error e) {
     count_ = started ? 1 : 0;
     bytes_ = started ? slots_[head_].size : 0;
     queued_settings_ = pending_count_ = 0;
+}
+void http2_connection::fail(http2_error e) {
+    if (failure_ || e.scope == http2_error_scope::stream) return;
+    failure_ = e;
+    if (!graceful_exposed_) graceful_charge_.release();
+    parser_.clear();
+    preserve_borrowed_control();
     terminal_.fill(0);
     terminal_[2] = 8;
     terminal_[3] = 7;
-    put32(terminal_.data() + 9, last_processed_stream_);
+    put32(terminal_.data() + 9, graceful_started_ ? std::min(last_processed_stream_, graceful_cutoff_) : last_processed_stream_);
     put32(terminal_.data() + 13, static_cast<std::uint32_t>(e.wire_code));
     terminal_used_ = control_charge_.owns() ? 0 : terminal_.size();
+}
+void http2_connection::acknowledge_barrier() {
+    if (barrier_sent_ && graceful_started_ &&
+        std::equal(parser_.control_payload().begin(), parser_.control_payload().end(), graceful_[1].bytes.begin() + 9)) {
+        barrier_acknowledged_ = true;
+    }
 }
 std::optional<http2_error> http2_connection::control() {
     const auto h = parser_.header();
@@ -206,7 +254,10 @@ std::optional<http2_error> http2_connection::control() {
         parser_.peer_settings(peer_);
         return {};
     }
-    if (h.flags & 1) return {};
+    if (h.flags & 1) {
+        acknowledge_barrier();
+        return {};
+    }
     response.size = 17;
     response.bytes[2] = 8;
     std::copy(parser_.control_payload().begin(), parser_.control_payload().end(), response.bytes.begin() + 9);

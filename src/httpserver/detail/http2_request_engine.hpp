@@ -12,6 +12,7 @@
 #include <httpserver/detail/http2_connection.hpp>
 #include <httpserver/concurrency/executor.hpp>
 #include <httpserver/server/routes.hpp>
+#include <httpserver/server/server.hpp>
 namespace httpserver::detail {
 struct http2_request_limits {
     hpack_section_limits headers{65536, 65536, 256};
@@ -32,6 +33,13 @@ class http2_request_engine {
     http2_request_engine(server::resource_budget budget, const server::route_registry& routes,
                         executor& owner, http2_request_limits limits = {});
     ~http2_request_engine();
+    http2_request_engine(const http2_request_engine&) = delete;
+    http2_request_engine& operator=(const http2_request_engine&) = delete;
+    // Nonblocking, owner-serialized initiation. remaining counts one connection
+    // plus each admitted stream. The owner must pump at the absolute deadline:
+    // this composition seam has no transport timer. Waiters only request cancel.
+    http::outcome begin_drain(http2_connection::time_point deadline, server::drain_ticket& out);
+    void check_drain(http2_connection::time_point now);
     void begin_turn();
     http2_feed_result feed(std::span<const std::uint8_t> bytes, http2_connection::time_point now = {});
     http2_feed_result eof();
@@ -40,7 +48,7 @@ class http2_request_engine {
     const std::optional<http2_error>& failure() const;
  private:
     struct state;
-    std::unique_ptr<state> state_;
+    std::shared_ptr<state> state_;
 };
 }  // namespace httpserver::detail
 #endif  // SRC_HTTPSERVER_DETAIL_HTTP2_REQUEST_ENGINE_HPP_

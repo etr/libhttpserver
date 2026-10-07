@@ -10,6 +10,7 @@
 #define SRC_HTTPSERVER_DETAIL_HTTP2_REQUEST_STATE_HPP_
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <coroutine>
 #include <deque>
 #include <map>
@@ -17,6 +18,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/http2_request_engine.hpp>
 #include <httpserver/detail/http2_request_head.hpp>
 #include <httpserver/detail/http2_body_stream.hpp>
@@ -53,21 +55,62 @@ inline bool valid_response_lengths(const http::fields& fields, bool metadata_onl
     }
     return true;
 }
+// Every handler resume (including nested tasks and application signals) goes
+// through this adapter. Destruction is deferred until the outermost resume
+// returns, even when the connection owner uses an inline executor.
+class route_executor final : public executor, public std::enable_shared_from_this<route_executor> {
+ public:
+    struct resume_state {
+        std::size_t running = 0;
+        std::atomic<bool> enabled{true};
+        handler after_resume;
+    };
+    explicit route_executor(executor& owner) : owner_(owner) {}
+    void post(handler work) override {
+        owner_.post([affinity = shared_from_this(), resume = resumes_, work = std::move(work)]() mutable {
+            if (!resume->enabled) return;
+            struct guard {
+                std::shared_ptr<resume_state> resume;
+                executor* previous;
+                std::shared_ptr<void> previous_lifetime;
+                ~guard() {
+                    current_executor_slot() = previous;
+                    current_task_executor_lifetime() = std::move(previous_lifetime);
+                    if (--resume->running == 0 && resume->after_resume) resume->after_resume();
+                }
+            };
+            ++resume->running;
+            guard lifetime{resume, current_executor_slot(), std::move(current_task_executor_lifetime())};
+            current_task_executor_lifetime() = affinity;
+            current_executor_slot() = affinity.get(); work();
+        });
+    }
+    bool is_current() const noexcept override { return resumes_->enabled && current_executor() == this; }
+    bool running() const { return resumes_->running != 0; }
+    void disable() { resumes_->enabled = false; }
+    void after_resume(handler callback) { resumes_->after_resume = std::move(callback); }
+
+ private:
+    executor& owner_;
+    std::shared_ptr<resume_state> resumes_ = std::make_shared<resume_state>();
+};
 // A consumer keeps final_suspend alive, so the stream owns every nested
 // handler frame until reaping. Queued resumes carry the task's witness and
 // become no-ops after destruction, including application-owned signals.
 class route_task {
  public:
     ~route_task() { clear(); }
-    void start(executor& owner, task<void> task) {
+    void start(route_executor& owner, task<void> task) {
         frame_ = task.release();
         auto& promise = frame_.promise();
         promise.try_consume();
         promise.set_affinity(&owner);
+        promise.frame_witness_ptr()->executor_lifetime = owner.shared_from_this();
         promise.register_consumer(std::noop_coroutine(), &owner, {});
         owner.post([witness = promise.frame_witness_ptr(), frame = frame_] { guarded_resume(witness, frame); });
     }
     bool done() const { return frame_ && frame_.promise().state() == task_state::done; }
+    void invalidate() { if (frame_) frame_.promise().invalidate(); }
     void clear() {
         if (!frame_) return;
         frame_.promise().invalidate();
@@ -84,6 +127,7 @@ struct http2_request_engine::state {
         std::uint32_t id;
         http::request_head head;
         server::reservation count_charge, bytes_charge, fields_charge, trailer_charge, trailer_fields_charge, metadata_charge;
+        std::optional<drain_scope::unit> drain_unit;
         http2_body_stream body;
         exchange request;
         route_task handler;
@@ -130,8 +174,16 @@ struct http2_request_engine::state {
     server::resource_budget budget;
     const server::route_registry& routes;
     executor& owner;
+    std::shared_ptr<route_executor> handlers;
     http2_request_limits limits;
     http2_connection connection;
+    enum class drain_phase { running, announcing, draining, finished, cancelled };
+    struct drain_control { std::atomic<bool> cancel_requested{false}; };
+    std::shared_ptr<drain_scope> scope = std::make_shared<drain_scope>();
+    std::shared_ptr<drain_control> drain = std::make_shared<drain_control>();
+    drain_phase phase = drain_phase::running;
+    bool connection_counted = true;
+    std::uint32_t accepted_stream = 0;
     std::map<std::uint32_t, std::unique_ptr<stream>> streams;
     std::deque<response> pending;
     std::vector<std::uint8_t> block, active;
@@ -146,7 +198,23 @@ struct http2_request_engine::state {
     bool end_stream = false, control_exposed = false, closed_headers = false;
     std::optional<http2_error_code> rejected;
     state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l)
-        : budget(b), routes(r), owner(e), limits(l), connection(b, l.connection, receive_settings(), true) {}
+        : budget(b), routes(r), owner(e), handlers(std::make_shared<route_executor>(e)), limits(l), connection(b, l.connection, receive_settings(), true) { scope->enter(); }
+    ~state() { handlers->disable(); streams.clear(); leave_connection(); }
+    void leave_connection() {
+        if (connection_counted) {
+            connection_counted = false; scope->leave();
+        }
+    }
+    void check_drain(http2_connection::time_point now);
+    void cancel_drain();
+    bool drain_output_retired() const {
+        return streams.empty() && pending.empty() && active.empty() && connection.output_idle();
+    }
+    void retire_cancelled() {
+        if (phase == drain_phase::cancelled && !handlers->running()) {
+            streams.clear(); leave_connection();
+        }
+    }
     static http2_settings receive_settings() { http2_settings settings; settings.initial_window_size = 0; return settings; }
     void discard(stream& value) {
         connection.discard_stream_credit(value.id);
@@ -164,6 +232,10 @@ struct http2_request_engine::state {
         return value.reset_pending || (value.handler.done() && value.send_ended && value.body.receive_ended());
     }
     void reap() {
+        if (handlers->running()) return;
+        if (phase == drain_phase::cancelled) {
+            retire_cancelled(); return;
+        }
         if (connection.failure()) {
             streams.clear();
             return;
@@ -203,6 +275,7 @@ struct http2_request_engine::state {
         block_charge.release(); assembling = 0;
     }
     void fail(http2_error error) {
+        handlers->disable();
         connection.terminate(error);
         clear_block(); pending.clear();
         // A sink may fail while its handler is executing. Destruction must
@@ -264,8 +337,9 @@ struct http2_request_engine::state {
         return {};
     }
     bool discard_headers(std::uint32_t id) {
-        if (!closed_headers && !rejected) return false;
-        if (!closed_headers) reset(id, *rejected);
+        const bool draining_opening = phase != drain_phase::running && !streams.contains(id);
+        if (!closed_headers && !rejected && !draining_opening) return false;
+        if (!closed_headers) reset(id, rejected.value_or(http2_error_code::refused_stream));
         closed_headers = false; rejected.reset(); return true;
     }
     std::optional<http2_error> dispatch() {
@@ -330,8 +404,10 @@ struct http2_request_engine::state {
         }
         auto* accepted = value.get();
         streams.emplace(id, std::move(value));
+        accepted_stream = std::max(accepted_stream, id);
+        accepted->drain_unit.emplace(*scope);
         connection.processed_stream(id);
-        accepted->handler.start(owner, run_route(routes, accepted->request));
+        accepted->handler.start(*handlers, run_route(routes, accepted->request));
         return {};
     }
     std::optional<http2_error> admit_opening(http2_connection::time_point now) {

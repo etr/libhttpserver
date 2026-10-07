@@ -4,6 +4,8 @@
      SPDX-License-Identifier: LGPL-2.1-or-later
 */
 #include <algorithm>
+#include <memory>
+#include <utility>
 #include <vector>
 #include <httpserver/detail/http2_request_state.hpp>
 namespace httpserver::detail {
@@ -15,7 +17,10 @@ bool valid_queues(const http2_request_limits& limits) {
 }  // namespace
 http2_request_engine::http2_request_engine(server::resource_budget budget, const server::route_registry& routes,
                                           executor& owner, http2_request_limits limits)
-    : state_(std::make_unique<state>(budget, routes, owner, limits)) {
+    : state_(std::make_shared<state>(budget, routes, owner, limits)) {
+    state_->handlers->after_resume([weak = std::weak_ptr<state>(state_)] {
+        if (auto state = weak.lock()) state->retire_cancelled();
+    });
     const auto& h = limits.headers;
     if (!h.max_compressed_bytes || h.max_compressed_bytes > server::max_capacity(server::resource::body_buffer_bytes) ||
         !h.max_expanded_bytes || h.max_expanded_bytes > server::max_capacity(server::resource::header_bytes) / head_copy_allowance ||
@@ -24,10 +29,52 @@ http2_request_engine::http2_request_engine(server::resource_budget budget, const
     }
 }
 http2_request_engine::~http2_request_engine() = default;
+http::outcome http2_request_engine::begin_drain(http2_connection::time_point deadline, server::drain_ticket& out) {
+    if (state_->phase != state::drain_phase::running || state_->connection.failure())
+        return {http::outcome_code::invalid_state, "HTTP/2 drain already initiated or terminal"};
+    if (deadline <= std::chrono::steady_clock::now())
+        return {http::outcome_code::invalid_argument, "HTTP/2 drain deadline elapsed"};
+    auto ticket = drain_ticket_access::make(state_->scope);
+    auto result = state_->connection.begin_graceful_goaway(state_->accepted_stream);
+    if (result != http::outcome_code::ok) return {result, "HTTP/2 drain control reservation refused"};
+    state_->phase = state::drain_phase::announcing;
+    state_->scope->arm(deadline, [owner = &state_->owner, handlers = state_->handlers.get()] { return owner->is_current() || current_executor() == handlers; },
+        [control = state_->drain] { control->cancel_requested.store(true); });
+    out = std::move(ticket); return http::outcome::okay();
+}
+void http2_request_engine::state::cancel_drain() {
+    if (phase != drain_phase::cancelled) {
+        phase = drain_phase::cancelled;
+        handlers->disable();
+        for (auto& [id, value] : streams) {
+            value->handler.invalidate();
+            value->request.disconnect(http::outcome_code::timeout, "HTTP/2 drain deadline expired");
+            value->body.fail(http::outcome_code::timeout);
+        }
+        fail(connection_error(http2_error_code::no_error, http::outcome_code::timeout));
+    }
+    retire_cancelled();
+}
+void http2_request_engine::state::check_drain(http2_connection::time_point now) {
+    if (phase == drain_phase::running || phase == drain_phase::finished) return;
+    if (now == http2_connection::time_point{}) now = std::chrono::steady_clock::now();
+    scope->expire_if_due(now);
+    if (drain->cancel_requested.load()) {
+        cancel_drain(); return;
+    }
+    reap();
+    if (connection.graceful_complete()) phase = drain_phase::draining;
+    if ((connection.graceful_complete() || connection.failure()) && drain_output_retired()) {
+        leave_connection(); phase = drain_phase::finished;
+    }
+}
+void http2_request_engine::check_drain(http2_connection::time_point now) { state_->check_drain(now); }
 void http2_request_engine::begin_turn() {
+    check_drain(std::chrono::steady_clock::now());
     state_->reap(); state_->connection.begin_turn();
 }
 http2_feed_result http2_request_engine::feed(std::span<const std::uint8_t> bytes, http2_connection::time_point now) {
+    check_drain(now);
     auto result = state_->connection.feed(bytes, now);
     state_->sync_settings();
     if (state_->connection.failure()) {
@@ -57,7 +104,12 @@ http2_feed_result http2_request_engine::feed(std::span<const std::uint8_t> bytes
     return result;
 }
 http2_feed_result http2_request_engine::eof() {
+    check_drain(std::chrono::steady_clock::now());
     auto result = state_->connection.eof();
+    if (!result.error && state_->phase != state::drain_phase::running) {
+        auto error = connection_error(http2_error_code::no_error, http::outcome_code::connection_closed);
+        result = {http2_progress::failed, 0, error};
+    }
     if (result.error) {
         state_->fail(*result.error); state_->reap();
     }
@@ -82,6 +134,7 @@ std::span<const std::uint8_t> http2_request_engine::state::control_output(http2_
     return control;
 }
 std::span<const std::uint8_t> http2_request_engine::output(http2_connection::time_point now) {
+    check_drain(now);
     state_->reap();
     auto borrowed = state_->borrowed_output(now);
     if (!borrowed.empty()) return borrowed;
@@ -108,6 +161,7 @@ std::span<const std::uint8_t> http2_request_engine::output(http2_connection::tim
     }
 }
 bool http2_request_engine::advance_output(std::size_t count) {
+    check_drain(std::chrono::steady_clock::now());
     if (state_->control_exposed) {
         auto n = state_->connection.output().size();
         if (!state_->connection.advance_output(count)) return false;

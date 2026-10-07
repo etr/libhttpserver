@@ -8,6 +8,7 @@
 #endif
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP2_CONNECTION_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP2_CONNECTION_HPP_
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <optional>
@@ -38,7 +39,7 @@ class http2_connection {
     void begin_turn() { processed_ = 0; }
     // Highest stream the exchange owner may have dispatched. GOAWAY must
     // not promise that a routed request was unprocessed.
-    void processed_stream(std::uint32_t id) { last_processed_stream_ = id; }
+    void processed_stream(std::uint32_t id) { last_processed_stream_ = std::max(last_processed_stream_, id); }
     // Stream engines escalate compression/admission failures through the same
     // terminal path as framing failures.
     void terminate(http2_error error) { fail(error); }
@@ -51,6 +52,12 @@ class http2_connection {
     hpack_connection& compression() { return compression_; }
     std::span<const std::uint8_t> output(time_point now = {});
     bool advance_output(std::size_t count);
+    // Fixed, separately budgeted shutdown storage cannot compete with ordinary
+    // controls or replace an exposed frame. A transmitted PING ACK gates stage 2.
+    http::outcome_code begin_graceful_goaway(std::uint32_t cutoff);
+    bool graceful_complete() const { return graceful_started_ && graceful_next_ == graceful_.size(); }
+    bool output_idle() const { return !count_ && terminal_used_ == terminal_.size() &&
+        (failure_ ? !graceful_exposed_ : (!graceful_started_ || graceful_complete())); }
     // Advisory limits omitted by an update retain the last advertised value.
     http::outcome_code queue_window_update(std::uint32_t stream, std::uint32_t increment);
     // Remove only unexposed receive grants; borrowed head storage stays put.
@@ -76,15 +83,24 @@ class http2_connection {
         bool take(time_point now, std::size_t allowance, std::chrono::steady_clock::duration interval);
     };
     bool enqueue(slot value);
+    bool graceful_ready() const;
+    bool advance_graceful(std::size_t count);
+    void preserve_borrowed_control();
+    void acknowledge_barrier();
     void fail(http2_error error);
     std::optional<http2_error> control();
     bool charge_frame(const http2_feed_result& result, time_point now);
     void commit(slot& value, time_point now);
+    server::resource_budget budget_;
     http2_frame_parser parser_;
     hpack_connection compression_;
     http2_limits limits_;
     rate_window control_rate_, stream_rate_;
-    server::reservation control_charge_;
+    server::reservation control_charge_, graceful_charge_;
+    std::array<slot, 3> graceful_{};
+    std::size_t graceful_next_ = 0;
+    std::uint32_t graceful_cutoff_ = 0;
+    bool graceful_started_ = false, graceful_exposed_ = false, barrier_sent_ = false, barrier_acknowledged_ = false;
     std::array<slot, 64> slots_{};
     std::array<pending, 16> pending_{};
     std::array<std::uint8_t, 17> terminal_{};

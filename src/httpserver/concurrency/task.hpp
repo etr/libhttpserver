@@ -87,6 +87,14 @@ enum class task_state : std::uint8_t {
     done,     // completed; result available for one consumption
 };
 
+// Owned executor adapters install a lease while constructing/resuming nested
+// tasks. In-flight completion nodes retain it through their frame witness,
+// so their raw affinity pointer stays callable after engine teardown.
+inline std::shared_ptr<void>& current_task_executor_lifetime() noexcept {
+    thread_local std::shared_ptr<void> lifetime;
+    return lifetime;
+}
+
 // Lifetime witness shared between a coroutine frame and every
 // "resume this frame" job posted to an executor. A job posted for a
 // frame that gets destroyed while the job is in flight observes
@@ -97,6 +105,7 @@ struct frame_witness {
     // witness while the same thread is inside guarded_resume().
     std::recursive_mutex mu;
     bool valid = true;
+    std::shared_ptr<void> executor_lifetime = current_task_executor_lifetime();
 };
 
 inline void guarded_resume(const std::shared_ptr<frame_witness>& witness,

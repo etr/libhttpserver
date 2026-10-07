@@ -127,6 +127,12 @@ class drain_scope final {
     concurrency::unique_function<void()> cancel_remaining_;   // mu_
 };
 
+// Ticket construction stays beside its private pimpl; protocol engines share
+// the existing public wait contract without adding a public ticket factory.
+struct drain_ticket_access {
+    static server::drain_ticket make(std::shared_ptr<drain_scope> scope);
+};
+
 }  // namespace detail
 
 }  // namespace httpserver
