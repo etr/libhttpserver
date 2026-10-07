@@ -9,9 +9,9 @@
 Provide HTTP/2 fair output, resets and rate budgets for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Schedule response DATA fairly under bounded queues.
-- [ ] Implement RST_STREAM and cancellation cleanup.
-- [ ] Rate-limit control amplification and rapid stream churn.
+- [x] Schedule response DATA fairly under bounded queues.
+- [x] Implement RST_STREAM and cancellation cleanup.
+- [x] Rate-limit control amplification and rapid stream churn.
 
 **Dependencies:**
 - Blocked by: TASK-141
@@ -24,4 +24,4 @@ Provide HTTP/2 fair output, resets and rate budgets for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-006, PRD-V3N-REQ-025, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** Complete

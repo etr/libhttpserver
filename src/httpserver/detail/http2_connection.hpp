@@ -18,6 +18,11 @@ namespace httpserver::detail {
 struct http2_limits {
     std::size_t control_frames = 64, control_bytes = 4096, pending_settings = 16, frames_per_turn = 64;
     std::chrono::steady_clock::duration settings_timeout = std::chrono::seconds(10);
+    // All non-DATA frames consume control work, including ignored headers.
+    // Internal fixed-window policy, independent of pump turns/queue draining.
+    // Adjacent window boundaries permit up to twice the allowance in a burst.
+    std::size_t control_events_per_interval = 256, stream_openings_per_interval = 128;
+    std::chrono::steady_clock::duration control_interval = std::chrono::seconds(1), stream_interval = std::chrono::seconds(1);
 };
 // Serialized connection owner. Start each bounded pump turn with begin_turn().
 // feed() exposes one stream frame until release_frame(). Output is borrowed
@@ -38,6 +43,7 @@ class http2_connection {
     // terminal path as framing failures.
     void terminate(http2_error error) { fail(error); }
     void release_frame() { parser_.release_frame(); }
+    std::optional<http2_error> open_stream(time_point now);
     const http2_frame_header& header() const { return parser_.header(); }
     std::span<const std::uint8_t> payload() const { return parser_.payload(); }
     const http2_settings& peer_settings() const { return peer_; }
@@ -47,6 +53,8 @@ class http2_connection {
     bool advance_output(std::size_t count);
     // Advisory limits omitted by an update retain the last advertised value.
     http::outcome_code queue_window_update(std::uint32_t stream, std::uint32_t increment);
+    // Remove only unexposed receive grants; borrowed head storage stays put.
+    void discard_stream_credit(std::uint32_t stream);
     std::uint32_t acknowledged_window() const { return acknowledged_window_; }
     std::uint32_t peer_window_peak() const { return parser_.window_peak(); }
     http::outcome_code queue_settings(http2_settings settings);
@@ -62,13 +70,20 @@ class http2_connection {
         bool exposed = false;
     };
     struct pending { http2_settings settings; time_point deadline; };
+    struct rate_window {
+        std::optional<time_point> start;
+        std::size_t used = 0;
+        bool take(time_point now, std::size_t allowance, std::chrono::steady_clock::duration interval);
+    };
     bool enqueue(slot value);
     void fail(http2_error error);
     std::optional<http2_error> control();
+    bool charge_frame(const http2_feed_result& result, time_point now);
     void commit(slot& value, time_point now);
     http2_frame_parser parser_;
     hpack_connection compression_;
     http2_limits limits_;
+    rate_window control_rate_, stream_rate_;
     server::reservation control_charge_;
     std::array<slot, 64> slots_{};
     std::array<pending, 16> pending_{};

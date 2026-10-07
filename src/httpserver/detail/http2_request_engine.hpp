@@ -18,6 +18,7 @@ struct http2_request_limits {
     // Bounds live streams and pending output items, including reset-only items.
     std::size_t max_streams = 128;
     std::size_t body_buffer_bytes = 16384, response_buffer_bytes = 16384;
+    http2_limits connection{};
 };
 // Internal streaming composition seam. The supplied executor must serialize
 // handlers with all engine calls in the connection owner's execution domain.

@@ -31,6 +31,7 @@ http2_feed_result http2_request_engine::feed(std::span<const std::uint8_t> bytes
     auto result = state_->connection.feed(bytes, now);
     state_->sync_settings();
     if (state_->connection.failure()) {
+        state_->fail(*state_->connection.failure());
         state_->reap(); return {http2_progress::failed, result.consumed, state_->connection.failure()};
     }
     if (result.error && state_->connection.header().type != 1) {
@@ -40,6 +41,9 @@ http2_feed_result http2_request_engine::feed(std::span<const std::uint8_t> bytes
     if (result.error) state_->rejected = result.error->wire_code;
     if (!result.error && result.progress != http2_progress::frame_ready) return result;
     try {
+        if (auto error = state_->admit_opening(now)) {
+            state_->fail(*error); state_->reap(); return {http2_progress::failed, result.consumed, error};
+        }
         auto error = state_->process_frame();
         state_->connection.release_frame();
         if (error) {
@@ -59,24 +63,48 @@ http2_feed_result http2_request_engine::eof() {
     }
     return result;
 }
+bool http2_request_engine::state::select_data() {
+    if (!encode_data()) return false;
+    non_data_burst = 0; return true;
+}
+std::span<const std::uint8_t> http2_request_engine::state::borrowed_output(http2_connection::time_point now) {
+    if (!active.empty()) return std::span(active).subspan(active_used);
+    if (control_exposed) return connection.output(now);
+    return {};
+}
+std::span<const std::uint8_t> http2_request_engine::state::control_output(http2_connection::time_point now) {
+    if (control_burst >= max_non_data_burst && !pending.empty()) return {};
+    auto control = connection.output(now);
+    if (control.empty()) return control;
+    expose_credit(control); control_exposed = true;
+    non_data_burst = std::min<std::size_t>(max_non_data_burst, non_data_burst + 1);
+    control_burst = std::min<std::size_t>(max_non_data_burst, control_burst + 1);
+    return control;
+}
 std::span<const std::uint8_t> http2_request_engine::output(http2_connection::time_point now) {
     state_->reap();
-    if (!state_->active.empty()) return std::span(state_->active).subspan(state_->active_used);
+    auto borrowed = state_->borrowed_output(now);
+    if (!borrowed.empty()) return borrowed;
     for (;;) {
         state_->publish_credit();
-        auto control = state_->connection.output(now);
-        if (!control.empty()) {
-            if (!state_->control_exposed) state_->expose_credit(control);
-            state_->control_exposed = true; return control;
+        // Finish each exposed item (including a whole field block) before
+        // rotating. Eight other items may precede an eligible DATA turn.
+        // After eight controls, service the pending semantic queue as well.
+        // DATA does not erase its claim, so at most one DATA turn intervenes.
+        // Initial SETTINGS is necessarily among the first eight controls.
+        if (state_->non_data_burst >= max_non_data_burst && state_->select_data()) return state_->active;
+        auto control = state_->control_output(now);
+        if (!control.empty()) return control;
+        if (!state_->pending.empty()) {
+            if (state_->encode_next()) {
+                state_->control_burst = 0;
+                state_->non_data_burst = std::min<std::size_t>(max_non_data_burst, state_->non_data_burst + 1); return state_->active;
+            }
+            continue;
         }
-        if (state_->pending.empty()) {
-            if (state_->encode_data()) return state_->active;
-            state_->reap();
-            if (!state_->pending.empty()) continue;
-            auto terminal = state_->connection.output(now);
-            state_->control_exposed = !terminal.empty(); return terminal;
-        }
-        if (state_->encode_next()) return state_->active;
+        if (state_->select_data()) return state_->active;
+        state_->reap();
+        if (state_->pending.empty()) return state_->control_output(now);
     }
 }
 bool http2_request_engine::advance_output(std::size_t count) {

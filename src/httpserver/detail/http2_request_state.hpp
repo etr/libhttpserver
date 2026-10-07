@@ -25,6 +25,7 @@ namespace httpserver::detail {
 namespace http2_request_helpers {
 // Bound simultaneous decoded fields, semantic fields and raw/derived targets.
 constexpr std::size_t head_copy_allowance = 3;
+constexpr std::size_t data_quantum = 16384, max_non_data_burst = 8;
 inline http2_error connection_error(http2_error_code code, http::outcome_code outcome = http::outcome_code::protocol_error) {
     return {http2_error_scope::connection, code, 0, outcome, "HTTP/2 request engine failure"};
 }
@@ -136,18 +137,20 @@ struct http2_request_engine::state {
     std::vector<std::uint8_t> block, active;
     server::reservation block_charge, active_charge;
     std::uint32_t assembling = 0, last_stream = 0;
-    std::size_t active_used = 0;
+    std::size_t active_used = 0, non_data_burst = 0, control_burst = 0;
     http2_window send_window, receive_window;
     std::uint64_t consumed = 0, connection_credit_queued = 0;
     std::uint32_t peer_initial = 65535, local_initial = 65535, selected = 0, active_stream = 0;
     std::size_t active_body = 0;
     bool active_end = false;
-    bool end_stream = false, control_exposed = false;
+    bool end_stream = false, control_exposed = false, closed_headers = false;
     std::optional<http2_error_code> rejected;
     state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l)
-        : budget(b), routes(r), owner(e), limits(l), connection(b, {}, receive_settings(), true) {}
+        : budget(b), routes(r), owner(e), limits(l), connection(b, l.connection, receive_settings(), true) {}
     static http2_settings receive_settings() { http2_settings settings; settings.initial_window_size = 0; return settings; }
     void discard(stream& value) {
+        connection.discard_stream_credit(value.id);
+        value.credit_queued = 0;
         consumed += value.body.unread() + value.body.consumed; value.body.consumed = 0;
         value.body.discard_received();
         value.body.fail(http::outcome_code::connection_closed);
@@ -189,6 +192,9 @@ struct http2_request_engine::state {
     std::optional<http2_error> data_frame();
     std::optional<http2_error> update_window();
     bool encode_data();
+    bool select_data();
+    std::span<const std::uint8_t> borrowed_output(http2_connection::time_point now);
+    std::span<const std::uint8_t> control_output(http2_connection::time_point now);
     bool frame_data(stream& value);
     bool encode_trailers(stream& value);
     bool trailers(std::uint32_t id, bool ended, const std::vector<hpack_field>& fields);
@@ -238,7 +244,7 @@ struct http2_request_engine::state {
         if (h.type == 1) {
             assembling = h.stream_id; end_stream = (h.flags & 1) != 0;
             if (!(assembling & 1)) return connection_error(http2_error_code::protocol_error);
-            if (assembling <= last_stream && !streams.contains(assembling)) rejected = http2_error_code::stream_closed;
+            closed_headers = assembling <= last_stream && !streams.contains(assembling);
             last_stream = std::max(last_stream, assembling);
             if (!reserve(server::resource::body_buffer_bytes, limits.headers.max_compressed_bytes, block_charge)) {
                 return connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded);
@@ -257,6 +263,11 @@ struct http2_request_engine::state {
         if (h.flags & 4) return dispatch();
         return {};
     }
+    bool discard_headers(std::uint32_t id) {
+        if (!closed_headers && !rejected) return false;
+        if (!closed_headers) reset(id, *rejected);
+        closed_headers = false; rejected.reset(); return true;
+    }
     std::optional<http2_error> dispatch() {
         server::reservation temporary_bytes, temporary_fields;
         auto decode_limits = limits.headers;
@@ -271,9 +282,7 @@ struct http2_request_engine::state {
         const auto id = assembling; const auto ended = end_stream;
         clear_block();
         if (!decoded.status.ok()) return connection_error(http2_error_code::compression_error);
-        if (rejected) {
-            reset(id, *rejected); rejected.reset(); return {};
-        }
+        if (discard_headers(id)) return {};
         if (streams.contains(id)) {
             temporary_bytes.release(); temporary_fields.release();
             trailers(id, ended, decoded.fields); return {};
@@ -325,10 +334,16 @@ struct http2_request_engine::state {
         accepted->handler.start(owner, run_route(routes, accepted->request));
         return {};
     }
+    std::optional<http2_error> admit_opening(http2_connection::time_point now) {
+        const auto h = connection.header();
+        if (h.type == 1 && (h.stream_id & 1) && h.stream_id > last_stream) return connection.open_stream(now);
+        return {};
+    }
     std::optional<http2_error> process_frame() {
         auto h = connection.header();
         if (h.type == 1 || h.type == 9) return assemble();
         if (h.type == 3) {
+            if (!(h.stream_id & 1) || h.stream_id > last_stream) return connection_error(http2_error_code::protocol_error);
             std::erase_if(pending, [h](const response& r) { return r.stream == h.stream_id; });
             if (auto found = streams.find(h.stream_id); found != streams.end()) {
                 discard(*found->second);
