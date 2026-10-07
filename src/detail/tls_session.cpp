@@ -5,47 +5,16 @@
 */
 
 #include <httpserver/detail/tls_session.hpp>
+#include <httpserver/detail/tls_credentials.hpp>
 #include <openssl/err.h>
-#include <openssl/pem.h>
 #include <openssl/ssl.h>
 
-#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <utility>
 namespace httpserver::detail {
-std::shared_ptr<tls_context> tls_context::client() {
-    auto context = std::make_shared<tls_context>();
-    context->native_ = {SSL_CTX_new(TLS_method()), [](void* p) { SSL_CTX_free(static_cast<SSL_CTX*>(p)); }};
-    if (!context->native_) {
-        throw std::runtime_error("TLS context unavailable");
-    }
-    SSL_CTX_set_min_proto_version(static_cast<SSL_CTX*>(context->native_.get()), TLS1_2_VERSION);
-    return context;
-}
-std::shared_ptr<tls_context> tls_context::server_pem(std::string_view certificate, std::string_view key) {
-    const auto maximum = static_cast<std::size_t>(std::numeric_limits<int>::max());
-    if (certificate.size() > maximum || key.size() > maximum) {
-        throw std::invalid_argument("TLS credentials too large");
-    }
-    auto context = client();
-    using bio_ptr = std::unique_ptr<BIO, decltype(&BIO_free)>;
-    bio_ptr cert_bio(BIO_new_mem_buf(certificate.data(), static_cast<int>(certificate.size())), BIO_free);
-    bio_ptr key_bio(BIO_new_mem_buf(key.data(), static_cast<int>(key.size())), BIO_free);
-    if (!cert_bio || !key_bio) {
-        throw std::runtime_error("TLS credentials unavailable");
-    }
-    std::unique_ptr<X509, decltype(&X509_free)> cert(PEM_read_bio_X509(cert_bio.get(), nullptr, nullptr, nullptr), X509_free);
-    std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> private_key(PEM_read_bio_PrivateKey(key_bio.get(), nullptr, nullptr, nullptr), EVP_PKEY_free);
-    auto* ctx = static_cast<SSL_CTX*>(context->native_.get());
-    if (!cert || !private_key || SSL_CTX_use_certificate(ctx, cert.get()) != 1 || SSL_CTX_use_PrivateKey(ctx, private_key.get()) != 1 || SSL_CTX_check_private_key(ctx) != 1) {
-        ERR_clear_error();
-        throw std::invalid_argument("TLS credentials invalid");
-    }
-    return context;
-}
 struct tls_session::impl {
-    std::shared_ptr<tls_context> context;
+    tls_credentials_selection selection;
     SSL* ssl = nullptr;
     BIO* wire = nullptr;
     ~impl() {
@@ -70,12 +39,13 @@ struct tls_session::impl {
         }
     }
 };
-tls_session::tls_session(std::shared_ptr<tls_context> context, bool server) : impl_(std::make_unique<impl>()) {
-    if (!context || !context->native_) {
+tls_session::tls_session(std::shared_ptr<const tls_context> context, bool server) : tls_session(tls_credentials_selection{nullptr, std::move(context)}, server) {}
+tls_session::tls_session(tls_credentials_selection selection, bool server) : impl_(std::make_unique<impl>()) {
+    if (!selection.context || !selection.context->native_) {
         throw std::invalid_argument("TLS context missing");
     }
-    impl_->context = std::move(context);
-    impl_->ssl = SSL_new(static_cast<SSL_CTX*>(impl_->context->native_.get()));
+    impl_->selection = std::move(selection);
+    impl_->ssl = SSL_new(static_cast<SSL_CTX*>(impl_->selection.context->native_.get()));
     BIO* local = nullptr;
     if (!impl_->ssl || BIO_new_bio_pair(&local, 16384, &impl_->wire, 16384) != 1) {
         throw std::runtime_error("TLS session unavailable");

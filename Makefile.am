@@ -643,3 +643,5 @@ check-v3-tls-build:
 	@python3 $(top_srcdir)/scripts/test-v3-native-linkage.py
 
 EXTRA_DIST += docs/task-130-tls-io-evidence.md
+
+EXTRA_DIST += docs/task-131-tls-credentials-evidence.md

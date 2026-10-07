@@ -22,7 +22,8 @@ class tls_session final {
         progress state;
         std::size_t bytes = 0;
     };
-    tls_session(std::shared_ptr<tls_context> context, bool server);
+    tls_session(std::shared_ptr<const tls_context> context, bool server);
+    tls_session(tls_credentials_selection selection, bool server);
     ~tls_session();
     result handshake();
     result read(std::span<std::byte> buffer);
