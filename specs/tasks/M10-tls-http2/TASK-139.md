@@ -24,6 +24,6 @@ Provide HTTP/2 preface, frame and SETTINGS machine for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-005, PRD-V3N-REQ-014, PRD-V3N-REQ-016
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [HTTP/2 evidence](../../../docs/task-139-http2-evidence.md). Private bounded framing/control implementation and local implementation checks complete; runner-owned validation and finalization pending.
