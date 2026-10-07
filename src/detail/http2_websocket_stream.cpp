@@ -46,7 +46,11 @@ bool http2_request_engine::state::reserve_websocket(stream& value, websocket::op
     options.incoming_messages = std::min(options.incoming_messages, cap.incoming_messages);
     options.outgoing_messages = std::min(options.outgoing_messages, cap.outgoing_messages);
     const auto input_fixed = 4096 + 256 * options.incoming_messages;
-    const auto output_fixed = 4096 + 256 * options.outgoing_messages;
+    // Each byte deque rounds up to a storage block independently, even for
+    // empty messages. Cover two 4KiB blocks plus container/map overhead per
+    // data frame, and one active control, pending Pong and pending Close.
+    // The byte multiplier below covers further blocks and encoding scratch.
+    const auto output_fixed = 4096 + (8192 + 256) * (options.outgoing_messages + 3);
     auto free = [&](server::resource kind) { return budget.capacity(kind) - budget.in_use(kind); };
     // Leave a separately charged DATA frame available after codec admission.
     const auto wire_headroom = data_quantum + 9 + 128;
