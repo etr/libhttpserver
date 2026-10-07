@@ -24,7 +24,7 @@ Provide external-PSK lookup and timeout execution contract for libhttpserver v3.
 **Related Requirements:** PRD-V3N-REQ-034
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation Evidence:**
 
