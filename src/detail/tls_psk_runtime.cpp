@@ -17,9 +17,13 @@ namespace httpserver::detail {
 namespace {
 using clock = std::chrono::steady_clock;
 struct lane : std::enable_shared_from_this<lane> {
+    struct job {
+        executor::handler work;
+        executor::handler completed;
+    };
     std::mutex mutex;
     std::condition_variable changed;
-    std::deque<executor::handler> queue;
+    std::deque<job> queue;
     std::size_t admitted = 0;
     std::size_t live = 0;
     std::size_t capacity = 0;
@@ -39,7 +43,7 @@ struct lane : std::enable_shared_from_this<lane> {
     }
     void run() {
         for (;;) {
-            executor::handler work;
+            job current;
             {
                 std::unique_lock lock(mutex);
                 changed.wait(lock, [&] { return cancellation.stop_requested() || !queue.empty(); });
@@ -48,27 +52,32 @@ struct lane : std::enable_shared_from_this<lane> {
                     changed.notify_all();
                     return;
                 }
-                work = std::move(queue.front());
+                current = std::move(queue.front());
                 queue.pop_front();
             }
             // Internal jobs own completion cleanup, including when stopped.
             try {
-                work();
+                current.work();
             } catch (...) { /* Never propagate into the worker. */ }
-            work = nullptr;
+            current.work = nullptr;
             {
                 std::lock_guard lock(mutex);
                 --admitted;
             }
             changed.notify_all();
+            // The completed provider step no longer owns admission. Its owner
+            // may execute inline and immediately submit the next step.
+            try {
+                if (current.completed) current.completed();
+            } catch (...) { /* Never propagate into the worker. */ }
         }
     }
-    http::outcome_code submit(executor::handler work) {
+    http::outcome_code submit(executor::handler work, executor::handler completed = {}) {
         {
             std::lock_guard lock(mutex);
             if (cancellation.stop_requested()) return http::outcome_code::cancelled;
             if (admitted >= capacity) return http::outcome_code::limit_exceeded;
-            queue.push_back(std::move(work));
+            queue.push_back({std::move(work), std::move(completed)});
             ++admitted;
         }
         changed.notify_one();
@@ -168,7 +177,9 @@ tls_psk_runtime::tls_psk_runtime(tls_psk_runtime_options options) : impl_(std::m
 tls_psk_runtime::~tls_psk_runtime() { stop(); }
 bool tls_psk_runtime::accepting() const { return !impl_->handshake->cancellation.stop_requested() && !impl_->lookup->cancellation.stop_requested(); }
 std::chrono::milliseconds tls_psk_runtime::handshake_timeout() const { return impl_->options.handshake_timeout; }
-http::outcome_code tls_psk_runtime::submit_handshake(executor::handler work) { return impl_->handshake->submit(std::move(work)); }
+http::outcome_code tls_psk_runtime::submit_handshake(executor::handler work, executor::handler completed) {
+    return impl_->handshake->submit(std::move(work), std::move(completed));
+}
 psk_lookup_result tls_psk_runtime::lookup(psk_lookup callback, std::span<const std::byte> identity, psk_handshake_context context) {
     const auto stop = impl_->lookup->cancellation.get_token();
     if (const auto status = unavailable(context, stop); status != psk_lookup_status::accepted) {

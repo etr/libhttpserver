@@ -19,6 +19,41 @@ LT_BEGIN_SUITE(psk_suite)
     void set_up() {}
     void tear_down() {}
 LT_END_SUITE(psk_suite)
+LT_BEGIN_AUTO_TEST(psk_suite, immediate_fragmented_handshake_authenticates_with_one_worker_and_no_queue)
+    for (int version : {TLS1_2_VERSION, TLS1_3_VERSION}) {
+        hd::tls_psk_runtime_options options;
+        options.handshake_workers = 1;
+        options.handshake_queue = 0;
+        auto runtime = std::make_shared<hd::tls_psk_runtime>(options);
+        auto config = psk_test::credentials(runtime, [](auto, const auto&) {
+            return hd::psk_lookup_result{hd::psk_lookup_status::accepted, hd::secure_bytes(psk_test::bytes("secret"))};
+        });
+        hd::tls_credentials_registry registry;
+        LT_ASSERT(registry.replace(config).ok());
+        auto context = psk_test::client(version);
+        std::unique_ptr<SSL, decltype(&SSL_free)> peer(SSL_new(context.get()), SSL_free);
+        psk_test::client_key material{"identity", psk_test::bytes("secret")};
+        SSL_set_bio(peer.get(), BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
+        SSL_set_connect_state(peer.get());
+        SSL_set_app_data(peer.get(), &material);
+        SSL_set_tlsext_host_name(peer.get(), "psk.example");
+        SSL_do_handshake(peer.get());
+        psk_test::immediate_executor ex;
+        hd::io_connection_owner owner(ex);
+        psk_test::immediate_transport raw(peer.get());
+        hd::tls_io_backend tls(raw, ex, 1, registry.acquire()->select_default(), true);
+        hd::tls_handshake_operation handshake(owner, 1, std::chrono::steady_clock::now() + 1s);
+        handshake.submit(tls);
+        const auto deadline = std::chrono::steady_clock::now() + 1s;
+        while (!handshake.state()->applied() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+        tls.close();
+        runtime->stop();
+        LT_CHECK(runtime->drain(std::chrono::steady_clock::now() + 1s));
+        LT_CHECK(handshake.state()->applied());
+        LT_CHECK(handshake.state()->stored_result().code == hh::outcome_code::ok);
+        LT_CHECK(SSL_is_init_finished(peer.get()));
+    }
+LT_END_AUTO_TEST(immediate_fragmented_handshake_authenticates_with_one_worker_and_no_queue)
 LT_BEGIN_AUTO_TEST(psk_suite, concurrent_versions_and_identities_authenticate_and_exchange)
     for (int version : {TLS1_2_VERSION, TLS1_3_VERSION}) {
         auto runtime = std::make_shared<hd::tls_psk_runtime>();

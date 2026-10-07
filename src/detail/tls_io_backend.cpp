@@ -339,7 +339,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         const auto weak = weak_from_this();
         const auto delivery = gate;
         handshake_outstanding = true;
-        const auto admitted = handshake_runtime->submit_handshake([step, request, stop, weak, delivery] {
+        const auto admitted = handshake_runtime->submit_handshake([step, request, stop] {
             if (stop.stop_requested()) {
                 step->result.failure = outcome_code::cancelled;
             } else if (std::chrono::steady_clock::now() >= request->deadline) {
@@ -350,6 +350,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
                     step->output->resize(step->session->drain(*step->output));
                 } catch (...) { step->result = {tls_session::progress::failed}; }
             }
+        }, [step, request, weak, delivery] {
             std::lock_guard lock(delivery->mutex);
             if (!delivery->open) return;
             if (auto self = weak.lock()) {

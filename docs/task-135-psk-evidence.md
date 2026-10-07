@@ -53,6 +53,12 @@ validated ranges and mixed-host scheduling are documented in
 A single absolute deadline covers admission queueing, lookup and subsequent
 provider steps; the adapter caps missing operation deadlines with runtime policy.
 
+Completed provider work retires its handshake admission before publishing the
+owner continuation. An inline serialized owner can immediately submit the next
+step with one handshake worker and zero queued slots. Worker lifetime still
+includes completion delivery, so stop/drain waits for delivery retirement; held
+provider/application work continues to retain admission until it returns.
+
 A handshake step owns the session and its ciphertext batches. While it is
 outstanding, the serialized owner processes timer/cancel/close events without
 accessing SSL/BIO or borrowed application storage. Accepting a result and
@@ -98,6 +104,7 @@ implementing the corresponding behavior:
 | Exclusive handoff | 4 failed owner responsiveness/held-cancel checks | Owner remains runnable and cancellation completes while lookup is held |
 | Per-attempt coalescing | 6 failed status/key/count/budget/wipe checks | Concurrent duplicates invoke lookup once; distinct excess rejects |
 | Application runtime stop | Stop token in copied application context was not requested | Combined cancellation and nonjoining destruction pass |
+| Validation repair: immediate step continuation | Four authentication/client-finished checks failed across TLS 1.2/1.3 with one worker, zero queue and immediate fragmented raw transport | Admission retires before owner publication; both versions authenticate |
 
 An intermediate held-deadline fixture gave TLS 1.3 too little time to transfer
 its fragmented ClientHello before lookup; the corrected 400 ms deadline first
@@ -150,6 +157,18 @@ git diff --check
 - Changed-file cpplint, changed-source CCN <= 10, source file-size gate and
   `git diff --check` pass. Existing macOS libtool linker deprecation and
   duplicate-library warnings remain.
+
+After the completion-order validation repair, the same TLS-on focused commands
+pass **12/12 executables; 87 tests / 1,931 checks**. The restricted attempt failed
+only loopback listener creation; the unrestricted retry passes all modes. The
+new regression first failed four checks, then passed with both client versions
+finished. Logs: `/private/tmp/task135-repair-red.log`,
+`task135-repair-green.log`, `task135-repair-focused-unrestricted.log`.
+`python3 /private/tmp/task135-repair-sanitizers.py` rebuilds the same affected
+objects in separate repair directories: ASan/UBSan and TSan each pass
+**42 tests / 1,272 checks**, without diagnostics in
+`/private/tmp/task135-repair-sanitizers.log`. Changed-file cpplint, changed-source
+CCN <= 10, file-size and diff whitespace gates pass after this repair.
 
 ## Sanitizer reproduction and unexecuted checks
 

@@ -29,7 +29,9 @@ class tls_psk_runtime final {
     ~tls_psk_runtime();
     bool accepting() const;
     std::chrono::milliseconds handshake_timeout() const;
-    http::outcome_code submit_handshake(executor::handler work);
+    // Completion runs on the worker after work and admission retirement. The
+    // worker stays live through completion, preserving stop/drain obligations.
+    http::outcome_code submit_handshake(executor::handler work, executor::handler completed = {});
     psk_lookup_result lookup(psk_lookup callback, std::span<const std::byte> identity, psk_handshake_context context);
     void stop();
     bool drain(std::chrono::steady_clock::time_point deadline);

@@ -5,9 +5,12 @@
 */
 #ifndef TEST_UNIT_TLS_PSK_FIXTURE_HPP_
 #define TEST_UNIT_TLS_PSK_FIXTURE_HPP_
+#include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <span>
 #include <string>
@@ -66,6 +69,63 @@ inline mtls_test::client_context client(int version) {
     SSL_CTX_set_psk_use_session_callback(ctx.get(), client_key::session);
     return ctx;
 }
+// Inline owner execution still serializes concurrent/reentrant posts.
+class immediate_executor final : public httpserver::executor {
+    std::mutex mutex_;
+    std::deque<handler> queue_;
+    bool running_ = false;
+
+ public:
+    void post(handler work) override {
+        {
+            std::lock_guard lock(mutex_);
+            queue_.push_back(std::move(work));
+            if (running_) return;
+            running_ = true;
+        }
+        const auto previous = hd::current_executor_slot();
+        hd::current_executor_slot() = this;
+        for (;;) {
+            handler next;
+            {
+                std::lock_guard lock(mutex_);
+                if (queue_.empty()) {
+                    running_ = false;
+                    break;
+                }
+                next = std::move(queue_.front());
+                queue_.pop_front();
+            }
+            next();
+        }
+        hd::current_executor_slot() = previous;
+    }
+    bool is_current() const noexcept override { return httpserver::current_executor() == this; }
+};
+// Independent client BIOs act as a transport that completes reads/writes
+// immediately; small reads force multiple provider-step continuations.
+class immediate_transport final : public hd::io_backend {
+    hd::fake_io_backend pending_;
+    SSL* peer_;
+
+ public:
+    explicit immediate_transport(SSL* peer) : peer_(peer) {}
+    void submit(hd::op_state& op) override {
+        pending_.submit(op);
+        if (op.kind() == hd::io_op_kind::read && BIO_ctrl_pending(SSL_get_wbio(peer_))) {
+            auto bytes = std::get<hd::read_payload>(op.payload()).buffer;
+            const int count = BIO_read(SSL_get_wbio(peer_), bytes.data(), static_cast<int>(std::min(bytes.size(), std::size_t{41})));
+            pending_.complete(op, {httpserver::http::outcome_code::ok, static_cast<std::size_t>(count)});
+        } else if (op.kind() == hd::io_op_kind::write) {
+            auto bytes = std::get<hd::write_payload>(op.payload()).bytes;
+            BIO_write(SSL_get_rbio(peer_), bytes.data(), static_cast<int>(bytes.size()));
+            ERR_clear_error();
+            SSL_do_handshake(peer_);
+            pending_.complete(op, {httpserver::http::outcome_code::ok, bytes.size()});
+        }
+    }
+    httpserver::http::outcome_code request_cancel(hd::op_state& op) override { return pending_.request_cancel(op); }
+};
 struct connection : mtls_test::adapter_connection {
     client_key material;
     explicit connection(hd::tls_credentials_selection selected, int version, std::string identity, std::vector<std::byte> key,
