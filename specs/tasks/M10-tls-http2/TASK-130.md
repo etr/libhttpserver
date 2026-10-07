@@ -24,7 +24,7 @@ Provide nonblocking TCP TLS through private I/O operations for libhttpserver v3.
 **Related Requirements:** PRD-V3N-REQ-005, PRD-V3N-REQ-034
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** In Progress
+**Status:** Complete
 
 
 **Prepared implementation evidence:** [Private adapter and local checks](../../../docs/task-130-tls-io-evidence.md).
