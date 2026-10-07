@@ -106,3 +106,6 @@ noinst_HEADERS += httpserver/detail/hpack_primitives.hpp httpserver/detail/hpack
 
 noinst_HEADERS += httpserver/detail/hpack_dynamic_table.hpp httpserver/detail/hpack_field_section.hpp \
                   httpserver/detail/hpack_decoder.hpp httpserver/detail/hpack_encoder.hpp httpserver/detail/hpack_connection.hpp
+
+noinst_HEADERS += httpserver/detail/http2_frame.hpp httpserver/detail/http2_connection.hpp
+libhttpserver_v3core_la_SOURCES += detail/http2_frame.cpp detail/http2_connection.cpp

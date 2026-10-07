@@ -1868,3 +1868,25 @@ hpack_field_section_SOURCES = unit/hpack_field_section_test.cpp
 hpack_field_section_LDADD =
 hpack_connection_SOURCES = unit/hpack_connection_test.cpp
 hpack_connection_LDADD =
+
+check_PROGRAMS += http2_frame http2_settings http2_connection
+http2_frame_SOURCES = unit/http2_frame_test.cpp
+http2_settings_SOURCES = unit/http2_settings_test.cpp
+http2_connection_SOURCES = unit/http2_connection_test.cpp
+http2_frame_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+http2_settings_LDADD = $(http2_frame_LDADD)
+http2_connection_LDADD = $(http2_frame_LDADD)
+noinst_HEADERS += unit/http2_fixture.hpp
+if NATIVE_V3_TLS
+check_PROGRAMS += http2_tls_boundary
+http2_tls_boundary_SOURCES = unit/http2_tls_boundary_test.cpp
+http2_tls_boundary_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+http2_tls_boundary_LDADD = $(tls_io_LDADD)
+http2_tls_boundary_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+
+check_PROGRAMS += http2_conformance
+http2_conformance_SOURCES = unit/http2_conformance_test.cpp
+http2_conformance_CPPFLAGS = $(AM_CPPFLAGS) -DHTTP2_CORPUS_DIR='"$(top_srcdir)/test/conformance/http2"'
+http2_conformance_LDADD = $(http2_frame_LDADD)
+EXTRA_DIST += conformance/http2/README.md conformance/http2/ack-payload.wire conformance/http2/bad-magic.wire conformance/http2/bad-ping-length.wire conformance/http2/bad-settings-length.wire conformance/http2/cases.tsv conformance/http2/continuation.wire conformance/http2/control-flood.wire conformance/http2/empty-settings.wire conformance/http2/interleaved.wire conformance/http2/invalid-then-valid.wire conformance/http2/local-ack.wire conformance/http2/orphan-continuation.wire conformance/http2/oversized.wire conformance/http2/ping-ack.wire conformance/http2/ping-stream.wire conformance/http2/ping.wire conformance/http2/priority-stream.wire conformance/http2/push.wire conformance/http2/settings-order.wire conformance/http2/settings-stream.wire conformance/http2/truncated-header.wire conformance/http2/truncated-magic.wire conformance/http2/truncated-payload.wire conformance/http2/unfinished-block.wire conformance/http2/unknown.wire conformance/http2/window-overflow.wire conformance/http2/wrong-first.wire conformance/http2/zero-connection-window.wire conformance/http2/zero-stream-window.wire
