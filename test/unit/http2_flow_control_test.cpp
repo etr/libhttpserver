@@ -115,6 +115,80 @@ LT_BEGIN_AUTO_TEST(http2_flow_control_suite, window_update_overflow_keeps_correc
         }
     }
 LT_END_AUTO_TEST(window_update_overflow_keeps_correct_error_scope)
+LT_BEGIN_AUTO_TEST(http2_flow_control_suite, stream_receive_boundary_counts_padding_and_resets_only_excess_stream)
+    for (bool padded : {false, true}) {
+        auto budget = h2test::budget(); hs::route_registry routes;
+        LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+        httpserver::resume_signal pause;
+        LT_ASSERT(routes.route(http::method::known(http::method_id::post), "/hello", [&](exchange& x) -> task<void> {
+            x.admit_body({4}); co_await pause.wait();
+        }).ok());
+        LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [](exchange& x) -> task<void> {
+            x.respond(http::status::from_code(204), {}); co_return;
+        }).ok());
+        httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor);
+        hd::hpack_encoder encoder(budget);
+        LT_ASSERT(h2test::feed(engine, h2test::preface())); h2test::output(engine);
+        LT_ASSERT(h2test::feed(engine, h2test::frame(4, 1)));
+        auto fields = h2test::get(); fields[0].value = "POST";
+        LT_ASSERT(h2test::feed(engine, h2test::frame(1, 4, 1, h2test::encode(encoder, fields)))); executor.run_pending();
+        auto grants = h2test::frames(h2test::output(engine)); LT_ASSERT_EQ(grants.size(), 1u);
+        LT_CHECK_EQ(grants[0].type, 8u); LT_CHECK_EQ(grants[0].stream, 1u);
+        LT_CHECK_EQ(h2test::read_u32(grants[0].payload.data()), 4u);
+
+        auto payload = padded ? std::vector<std::uint8_t>{1, 'a', 'b', 0} : std::vector<std::uint8_t>{'a', 'b', 'c', 'd'};
+        LT_ASSERT(h2test::feed(engine, h2test::frame(0, padded ? 8 : 0, 1, payload)));
+        LT_CHECK(!engine.failure()); LT_CHECK_EQ(budget.in_use(hs::resource::streams), 1u);
+        // Do not expose queued padding grants: only the four published bytes are available.
+        LT_ASSERT(h2test::feed(engine, h2test::frame(0, 0, 1, {'e'})));
+        LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 3, h2test::encode(encoder, h2test::get()))));
+        auto ping = std::vector<std::uint8_t>(8, 9);
+        LT_ASSERT(h2test::feed(engine, h2test::frame(6, 0, 0, ping))); executor.run_pending();
+
+        auto out = h2test::output(engine); auto resets = h2test::resets(out);
+        LT_ASSERT_EQ(resets.size(), 1u); LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 3u);
+        auto responses = h2test::responses(out); LT_ASSERT_EQ(responses.size(), 1u); LT_CHECK_EQ(responses[0].stream, 3u);
+        unsigned acknowledged = 0;
+        for (const auto& f : h2test::frames(out)) if (f.type == 6) {
+            LT_CHECK_EQ(f.stream, 0u); LT_CHECK_EQ(f.flags, 1u); LT_CHECK(f.payload == ping); ++acknowledged;
+        }
+        LT_CHECK_EQ(acknowledged, 1u); LT_CHECK(!engine.failure()); LT_CHECK_EQ(h2test::count_type(out, 7), 0u);
+    }
+LT_END_AUTO_TEST(stream_receive_boundary_counts_padding_and_resets_only_excess_stream)
+LT_BEGIN_AUTO_TEST(http2_flow_control_suite, aggregate_receive_boundary_fails_connection_with_stream_credit_remaining)
+    auto budget = h2test::budget(); hs::route_registry routes;
+    LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    httpserver::resume_signal pause;
+    LT_ASSERT(routes.route(http::method::known(http::method_id::post), "/hello", [&](exchange& x) -> task<void> {
+        x.admit_body({65535}); co_await pause.wait();
+    }).ok());
+    httpserver::manual_executor executor; hd::http2_request_limits limits; limits.body_buffer_bytes = 65535;
+    hd::http2_request_engine engine(budget, routes, executor, limits); hd::hpack_encoder encoder(budget);
+    LT_ASSERT(h2test::feed(engine, h2test::preface())); h2test::output(engine);
+    LT_ASSERT(h2test::feed(engine, h2test::frame(4, 1)));
+    auto fields = h2test::get(); fields[0].value = "POST";
+    for (auto id : {1u, 3u}) LT_ASSERT(h2test::feed(engine, h2test::frame(1, 4, id, h2test::encode(encoder, fields))));
+    executor.run_pending(); auto grants = h2test::frames(h2test::output(engine)); LT_ASSERT_EQ(grants.size(), 2u);
+    for (const auto& f : grants) {
+        LT_CHECK_EQ(f.type, 8u); LT_CHECK(f.stream == 1u || f.stream == 3u);
+        LT_CHECK_EQ(h2test::read_u32(f.payload.data()), 65535u);
+    }
+    LT_CHECK(grants[0].stream != grants[1].stream);
+
+    // Stage 32,768 + 32,767 unread bytes without granting any connection credit.
+    for (auto id : {1u, 1u, 3u}) LT_ASSERT(h2test::feed(engine, h2test::frame(0, 0, id, std::vector<std::uint8_t>(16384, 'a'))));
+    LT_ASSERT(h2test::feed(engine, h2test::frame(0, 0, 3, std::vector<std::uint8_t>(16383, 'b'))));
+    LT_CHECK(!engine.failure()); LT_CHECK_EQ(budget.in_use(hs::resource::streams), 2u);
+    LT_CHECK_EQ(h2test::output(engine).size(), 0u);
+    LT_CHECK(!h2test::feed(engine, h2test::frame(0, 0, 3, {'c'})));
+
+    LT_ASSERT(engine.failure()); LT_CHECK(engine.failure()->scope == hd::http2_error_scope::connection);
+    LT_CHECK(engine.failure()->wire_code == hd::http2_error_code::flow_control_error);
+    auto out = h2test::output(engine); LT_CHECK_EQ(h2test::resets(out).size(), 0u);
+    auto terminal = h2test::frames(out); LT_ASSERT_EQ(terminal.size(), 1u);
+    LT_CHECK_EQ(terminal[0].type, 7u); LT_CHECK_EQ(terminal[0].stream, 0u);
+    LT_ASSERT(terminal[0].payload.size() >= 8); LT_CHECK_EQ(h2test::read_u32(terminal[0].payload.data() + 4), 3u);
+LT_END_AUTO_TEST(aggregate_receive_boundary_fails_connection_with_stream_credit_remaining)
 LT_BEGIN_AUTO_TEST(http2_flow_control_suite, acknowledged_zero_window_is_granted_on_admission_and_partial_consumption)
     auto budget = h2test::budget(); hs::route_registry routes;
     LT_ASSERT(hs::route_registry::create(budget, routes).ok());

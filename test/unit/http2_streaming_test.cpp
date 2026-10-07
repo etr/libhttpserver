@@ -128,11 +128,13 @@ LT_END_AUTO_TEST(paused_reader_does_not_hold_parser_or_credit)
 LT_BEGIN_AUTO_TEST(http2_streaming_suite, request_and_response_trailers_follow_data_in_hpack_order)
     auto budget = h2test::budget(); hs::route_registry routes;
     LT_ASSERT(hs::route_registry::create(budget, routes).ok());
-    unsigned received = 0;
+    std::string request_body; http::fields request_trailers;
     LT_ASSERT(routes.route(http::method::known(http::method_id::post), "/hello", [&](exchange& x) -> task<void> {
         x.admit_body({8}); LT_CHECK_EQ(x.body().trailers().size(), 0u);
         auto body = co_await x.body().collect(8);
-        if (body.status.ok() && body.data.size() == 3 && x.body().trailers().count("x-last") == 2) ++received;
+        LT_CHECK(body.status.ok());
+        request_body.assign(reinterpret_cast<const char*>(body.data.data()), body.data.size());
+        request_trailers = x.body().trailers();
         x.start_response(http::status::from_code(200), {});
         std::string answer = "reply"; co_await x.writer().write(std::as_bytes(std::span(answer)));
         http::fields trailers; trailers.append("X-End", "one"); trailers.append("X-End", "two");
@@ -144,11 +146,29 @@ LT_BEGIN_AUTO_TEST(http2_streaming_suite, request_and_response_trailers_follow_d
     h2test::append(wire, h2test::frame(1, 4, 1, h2test::encode(encoder, fields)));
     h2test::append(wire, h2test::frame(0, 8, 1, {2, 'a', 'b', 'c', 0, 0}));
     h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, {{"x-last", "one"}, {"x-last", "two"}})));
-    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending(); LT_CHECK_EQ(received, 1u);
+    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
+    LT_CHECK_EQ(request_body, "abc");
+    auto received_trailers = request_trailers.entries(); LT_ASSERT_EQ(received_trailers.size(), 2u);
+    LT_CHECK_EQ(received_trailers[0].name, "x-last"); LT_CHECK_EQ(received_trailers[0].value, "one");
+    LT_CHECK_EQ(received_trailers[1].name, "x-last"); LT_CHECK_EQ(received_trailers[1].value, "two");
     auto output = h2test::output(engine); LT_CHECK_EQ(h2test::resets(output).size(), 0u);
+    std::string response_body; unsigned terminal_headers = 0;
+    for (const auto& f : h2test::frames(output)) {
+        if (f.type == 0) {
+            LT_CHECK_EQ(f.stream, 1u); LT_CHECK_EQ(f.flags & 1, 0u); LT_CHECK_EQ(terminal_headers, 0u);
+            response_body.append(f.payload.begin(), f.payload.end());
+        }
+        if (f.type == 1 && (f.flags & 1)) {
+            LT_CHECK_EQ(f.stream, 1u); LT_CHECK_EQ(response_body, "reply"); ++terminal_headers;
+        }
+    }
+    LT_CHECK_EQ(response_body, "reply"); LT_CHECK_EQ(terminal_headers, 1u);
     auto sections = h2test::responses(output, true); LT_ASSERT_EQ(sections.size(), 2u);
+    LT_CHECK_EQ(sections[0].stream, 1u); LT_CHECK_EQ(sections[1].stream, 1u);
     LT_CHECK(!sections[0].end_stream); LT_CHECK(sections[1].end_stream);
-    LT_ASSERT_EQ(sections[1].fields.size(), 2u); LT_CHECK_EQ(sections[1].fields[1].value, "two");
+    LT_ASSERT_EQ(sections[1].fields.size(), 2u);
+    LT_CHECK_EQ(sections[1].fields[0].name, "x-end"); LT_CHECK_EQ(sections[1].fields[0].value, "one");
+    LT_CHECK_EQ(sections[1].fields[1].name, "x-end"); LT_CHECK_EQ(sections[1].fields[1].value, "two");
 LT_END_AUTO_TEST(request_and_response_trailers_follow_data_in_hpack_order)
 LT_BEGIN_AUTO_TEST(http2_streaming_suite, full_queue_writer_parks_and_peer_reset_releases_resources)
     auto budget = h2test::budget(); hs::route_registry routes;
