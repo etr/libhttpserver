@@ -1782,3 +1782,27 @@ websocket_session_race_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 websocket_upgrade_decision_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 websocket_utf8_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+if NATIVE_V3_TLS
+check_PROGRAMS += tls_io tls_io_race tls_io_loopback
+tls_io_SOURCES = unit/tls_io_test.cpp
+tls_io_race_SOURCES = unit/tls_io_race_test.cpp
+tls_io_loopback_SOURCES = unit/tls_io_loopback_test.cpp
+tls_io_CPPFLAGS = $(AM_CPPFLAGS) -DTLS_TEST_DIR='"$(top_srcdir)/test"'
+tls_io_race_CPPFLAGS = $(tls_io_CPPFLAGS)
+tls_io_loopback_CPPFLAGS = $(V3_TLS_CFLAGS) $(tls_io_CPPFLAGS)
+tls_io_LDADD = $(top_builddir)/src/libhttpserver_v3core.la $(V3_TLS_LIBS)
+tls_io_race_LDADD = $(tls_io_LDADD)
+tls_io_loopback_LDADD = $(tls_io_LDADD)
+tls_io_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+tls_io_race_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+tls_io_loopback_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+endif
+noinst_HEADERS += unit/tls_io_fixture.hpp
+
+check_PROGRAMS += io_tls_control
+io_tls_control_SOURCES = unit/io_tls_control_test.cpp
+io_tls_control_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+io_tls_control_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+EXTRA_DIST += cert.pem key.pem

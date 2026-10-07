@@ -64,7 +64,9 @@ void io_managed_socket_backend::submit(op_state& op) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         op.set_sequence(next_sequence_++);
-        if (closed_) {
+        if (is_tls_control(op.kind())) {
+            finish_locked(state, {http::outcome_code::not_supported}, done);
+        } else if (closed_) {
             finish_locked(state, closed_result(), done);
         } else if (op.kind() == io_op_kind::cancel) {
             const auto target = std::get<cancel_payload>(op.payload()).target;
