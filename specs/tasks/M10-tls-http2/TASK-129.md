@@ -24,7 +24,7 @@ Provide OpenSSL 3.5 LTS build boundary and feature gates for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-002, PRD-V3N-REQ-003, PRD-V3N-REQ-005, PRD-V3N-REQ-007, PRD-V3N-REQ-034, PRD-V3N-REQ-037
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** In Progress
+**Status:** Complete
 
 
 **Implementation evidence (2026-10-06, macOS arm64):**
