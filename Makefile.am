@@ -63,7 +63,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
 	test/headers/consumer_umbrella_no_backend.cpp \
-	LICENSE RELEASE_NOTES.md CONTRIBUTING.md CODE_OF_CONDUCT.md
+	LICENSE RELEASE_NOTES.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md
 
 # ---------------------------------------------------------------------------
 # Header-hygiene checks (TASK-002)

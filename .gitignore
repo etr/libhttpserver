@@ -65,4 +65,5 @@ libtool
 .claude
 CLAUDE.md
 .groundwork-plans/
+.debug/
 .DS_Store
