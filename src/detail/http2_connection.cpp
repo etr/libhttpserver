@@ -4,6 +4,7 @@
      SPDX-License-Identifier: LGPL-2.1-or-later
 */
 #include <algorithm>
+#include <type_traits>
 #include <utility>
 #include <httpserver/detail/http2_connection.hpp>
 namespace httpserver::detail {
@@ -15,9 +16,13 @@ http2_error overload() {
     e.diagnostic = "HTTP/2 connection capacity exhausted";
     return e;
 }
+bool valid_rates(const http2_limits& l) {
+    return l.control_events_per_interval && l.stream_openings_per_interval &&
+        l.control_interval > l.control_interval.zero() && l.stream_interval > l.stream_interval.zero();
+}
 bool valid_limits(http2_limits l) {
     return l.control_frames > 0 && l.control_frames <= 64 && l.control_bytes >= 62 && l.control_bytes <= 4096 &&
-        l.pending_settings > 0 && l.pending_settings <= 16 && l.frames_per_turn > 0 && l.frames_per_turn <= 64 && l.settings_timeout > l.settings_timeout.zero();
+        l.pending_settings > 0 && l.pending_settings <= 16 && l.frames_per_turn > 0 && l.frames_per_turn <= 64 && l.settings_timeout > l.settings_timeout.zero() && valid_rates(l);
 }
 bool valid_settings(const http2_settings& s) {
     return s.enable_push == 1 && s.initial_window_size <= 0x7fffffff && s.max_frame_size >= 16384 && s.max_frame_size <= 0xffffff;
@@ -31,6 +36,22 @@ void tuple(std::uint8_t* p, unsigned id, std::uint32_t n) {
     put32(p + 2, n);
 }
 }  // namespace
+bool http2_connection::rate_window::take(time_point now, std::size_t allowance, std::chrono::steady_clock::duration interval) {
+    // Unsigned subtraction is exact across the signed clock epoch boundary,
+    // avoiding overflow even at time_point::min()/max(). Backward time cannot
+    // refill a window or move its anchor.
+    using ticks = std::make_unsigned_t<std::chrono::steady_clock::duration::rep>;
+    if (!start || (now >= *start && static_cast<ticks>(now.time_since_epoch().count()) -
+        static_cast<ticks>(start->time_since_epoch().count()) >= static_cast<ticks>(interval.count()))) {
+        start = now; used = 0;
+    }
+    if (used >= allowance) return false;
+    ++used; return true;
+}
+std::optional<http2_error> http2_connection::open_stream(time_point now) {
+    if (!failure_ && !stream_rate_.take(now, limits_.stream_openings_per_interval, limits_.stream_interval)) fail(overload());
+    return failure_;
+}
 http2_connection::http2_connection(server::resource_budget budget, http2_limits limits, http2_settings initial, bool reserve_frames)
     : parser_(budget), compression_(budget), limits_(limits) {
     if (!valid_limits(limits_) || !valid_settings(initial)) {
@@ -86,6 +107,22 @@ http::outcome_code http2_connection::queue_window_update(std::uint32_t stream, s
     slot value; value.size = 13; value.bytes[2] = 4; value.bytes[3] = 8;
     put32(value.bytes.data() + 5, stream); put32(value.bytes.data() + 9, increment);
     return enqueue(std::move(value)) ? http::outcome_code::ok : http::outcome_code::limit_exceeded;
+}
+void http2_connection::discard_stream_credit(std::uint32_t stream) {
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < count_; ++i) {
+        const auto source = (head_ + i) % slots_.size();
+        auto& value = slots_[source];
+        const auto id = (std::uint32_t{value.bytes[5]} << 24) | (value.bytes[6] << 16) | (value.bytes[7] << 8) | value.bytes[8];
+        if (!value.exposed && value.bytes[3] == 8 && id == stream) {
+            bytes_ -= value.size; value = {}; continue;
+        }
+        const auto destination = (head_ + kept++) % slots_.size();
+        if (destination != source) {
+            slots_[destination] = std::move(value); value = {};
+        }
+    }
+    count_ = kept;
 }
 void http2_connection::commit(slot& value, time_point now) {
     if (!value.settings) return;
@@ -181,17 +218,24 @@ std::optional<http2_error> http2_connection::check_timeout(time_point now) {
     if (pending_count_ && now >= pending_[pending_head_].deadline) fail(protocol(http2_error_code::settings_timeout));
     return failure_;
 }
+bool http2_connection::charge_frame(const http2_feed_result& result, time_point now) {
+    const bool recoverable = result.error && result.error->scope == http2_error_scope::stream;
+    if (!recoverable && (result.progress != http2_progress::frame_ready || !result.consumed)) return true;
+    ++processed_;
+    const auto type = parser_.header().type;
+    if (type == 0) return true;
+    if (control_rate_.take(now, limits_.control_events_per_interval, limits_.control_interval)) return true;
+    fail(overload()); return false;
+}
 http2_feed_result http2_connection::feed(std::span<const std::uint8_t> bytes, time_point now) {
     if (auto e = check_timeout(now)) return {http2_progress::failed, 0, e};
     if (processed_ >= limits_.frames_per_turn) return {http2_progress::yield, 0, {}};
     auto result = parser_.feed(bytes);
+    if (!charge_frame(result, now)) return {http2_progress::failed, result.consumed, failure_};
     if (result.error) {
-        if (result.error->scope == http2_error_scope::stream) ++processed_;
-        fail(*result.error);
-        return result;
+        fail(*result.error); return result;
     }
     if (result.progress != http2_progress::frame_ready || result.consumed == 0) return result;
-    ++processed_;
     if (parser_.header().type != 4 && parser_.header().type != 6) return result;
     if (auto e = control()) {
         fail(*e);

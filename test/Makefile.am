@@ -1904,3 +1904,11 @@ http2_streaming_LDADD = $(http2_frame_LDADD)
 check_PROGRAMS += http2_flow_control
 http2_flow_control_SOURCES = unit/http2_flow_control_test.cpp
 http2_flow_control_LDADD = $(http2_frame_LDADD)
+
+check_PROGRAMS += http2_fair_output http2_reset http2_rate_budget
+http2_fair_output_SOURCES = unit/http2_fair_output_test.cpp
+http2_reset_SOURCES = unit/http2_reset_test.cpp
+http2_rate_budget_SOURCES = unit/http2_rate_budget_test.cpp
+http2_fair_output_LDADD = $(http2_frame_LDADD)
+http2_reset_LDADD = $(http2_frame_LDADD)
+http2_rate_budget_LDADD = $(http2_frame_LDADD)

@@ -23,10 +23,10 @@ inline std::vector<std::uint8_t> encode(hd::hpack_encoder& encoder, const std::v
     if (!result.status.ok()) throw std::runtime_error("fixture HPACK encode failed");
     return {result.value.begin(), result.value.end()};
 }
-inline bool feed(hd::http2_request_engine& engine, std::span<const std::uint8_t> bytes) {
+inline bool feed(hd::http2_request_engine& engine, std::span<const std::uint8_t> bytes, hd::http2_connection::time_point now = {}) {
     engine.begin_turn();
     while (!bytes.empty()) {
-        auto result = engine.feed(bytes);
+        auto result = engine.feed(bytes, now);
         if (result.error && result.error->scope == hd::http2_error_scope::connection) return false;
         if (result.progress == hd::http2_progress::yield) {
             engine.begin_turn();

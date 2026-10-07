@@ -68,7 +68,7 @@ std::optional<http2_error> http2_request_engine::state::data_frame() {
     if (found == streams.end()) {
         consumed += h.length;
         if (h.stream_id > last_stream) return connection_error(http2_error_code::protocol_error);
-        reset(h.stream_id, http2_error_code::stream_closed); return {};
+        return {};
     }
     auto& value = *found->second; auto& body = value.body;
     if (body.receive_ended()) {
@@ -120,7 +120,7 @@ bool http2_request_engine::state::frame_data(stream& value) {
     const bool end = body.finished() && !body.queued();
     if (end && !body.sent_trailers().empty()) return encode_trailers(value);
     const auto window = std::max<std::int64_t>(0, std::min(send_window.available, body.send_window.available));
-    const auto n = std::min<std::size_t>({body.queued(), connection.peer_settings().max_frame_size, static_cast<std::size_t>(window)});
+    const auto n = std::min<std::size_t>({body.queued(), data_quantum, connection.peer_settings().max_frame_size, static_cast<std::size_t>(window)});
     if (!n && !end) return false;
     if (!reserve(server::resource::response_queue_bytes, 2 * n + 9 + 128, active_charge)) {
         fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded)); return false;
