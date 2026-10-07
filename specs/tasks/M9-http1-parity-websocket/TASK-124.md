@@ -24,7 +24,7 @@ Provide portable external-loop readiness contract for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-015, PRD-V3N-REQ-016
 **Related Decisions:** DR-V3-004
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence (2026-10-06):** The public contract, normative rules,
 consumer/value tests, and packaging/audit wiring are implemented. Local macOS
