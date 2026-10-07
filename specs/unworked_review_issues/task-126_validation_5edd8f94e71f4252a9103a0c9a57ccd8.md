@@ -1,0 +1,15 @@
+# Unworked Review Issues
+
+**Run:** 2026-10-06 19:13:30
+**Task:** TASK-126
+**Total:** 2 (0 critical, 2 major, 0 minor)
+
+## Major
+
+1. [ ] **performance-reviewer** | `src/detail/io_epoll_backend.cpp:369` | algorithmic-complexity
+   collect_event_locked scans every pending operation while holding mu_ for every ready socket (called by dispatch_event at line 388 and the event loop at lines 442-443). With N connections each holding one ready read, completing a single burst visits N + (N-1) + ... + 1 entries, or N(N+1)/2; the 64-event epoll_wait batch does not reduce that aggregate cost. A supported 10,000-connection burst therefore needs 50,005,000 registry visits before accounting for wake/timer operations or the additional full scans in reconcile_locked and sweep_due_timers. Configuration permits up to 1,048,576 connections (server/budgets.hpp:88). The new default Linux managed backend consequently retains quadratic dispatch CPU work and serializes submission/cancellation behind these global scans. Poll has a similar algorithm, so differential semantic parity does not demonstrate that this new implementation scales. This is a concrete cost within the documented supported connection bounds, but the frozen task has no throughput/latency threshold and these static counts do not establish a required acceptance failure; it is therefore major rather than critical.
+   *Recommendation:* Index pending socket operations by registration/connection and collect only that connection's operations in submission order. Keep pending_ as the terminal/cancellation ownership registry if needed, updating both indexes on submit, terminal completion, cancel, release and shutdown without weakening selected-operation cancellation or incarnation-token checks. When addressing this finding, validate mixed cancellation/release across connections; a bounded visit-count check can verify that unrelated pending connections do not add work to each event. This is a repair-validation recommendation, not a new blocking benchmark gate. Scope the improvement to the new epoll backend; rewriting the poll oracle is unnecessary.
+
+2. [ ] **test-quality-reviewer** | `test/unit/io_epoll_backend_test.cpp:40` | private-api-testing
+   The test-only friend-template access hack binds directly to ten private backend fields/methods (lines 50-70), and pause_driver rewrites closed_ and joins thread_ (lines 72-79). Stale-event, selected-batch, fatal-wait, and close tests then depend on these concrete internals. Refactoring driver ownership, registration representation, or event dispatch while preserving operation behavior requires rewriting this seam and can invalidate its artificial state transitions.
+   *Recommendation:* Replace the unrestricted private-member hack with a narrow, supported internal test/event boundary that controls event selection and driver barriers; preserve the deterministic stale-event/cancel/release/error scenarios and their observable byte, terminal-outcome, and quiescence assertions without exposing consumer API or relying on scheduler delays.

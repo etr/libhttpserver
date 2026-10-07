@@ -46,6 +46,7 @@
 namespace httpserver {
 namespace detail {
 namespace {
+constexpr std::uint64_t k_listener_id_base = 1ULL << 62;
 
 // Claims @p state and enqueues @p result to its owner (claim-loser is a
 // no-op) -- fake_io_backend::finish_now parity.
@@ -229,7 +230,8 @@ void io_poll_backend::adopt_socket(std::uint64_t id,
             if (id == std::numeric_limits<std::uint64_t>::max()) {
                 throw std::overflow_error("httpserver::io connection identity exhausted");
             }
-            next_connection_id_ = id + 1;
+            // Native listener identities must not advance the accepted-ID counter.
+            if (id < k_listener_id_base) next_connection_id_ = id + 1;
         }
     }
     notify();
@@ -314,7 +316,7 @@ std::uint64_t io_poll_backend::register_accepted_socket(
         pollsys::close_socket(socket);
         return 0;
     }
-    if (next_connection_id_ == std::numeric_limits<std::uint64_t>::max()) {
+    if (next_connection_id_ >= k_listener_id_base) {
         pollsys::close_socket(socket);
         throw std::overflow_error("httpserver::io connection identity exhausted");
     }

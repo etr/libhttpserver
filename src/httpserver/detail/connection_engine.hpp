@@ -105,7 +105,7 @@
 #include <httpserver/detail/lifecycle_sink.hpp>
 #include <httpserver/detail/request_lifecycle.hpp>
 #include <httpserver/detail/io_operation.hpp>
-#include <httpserver/detail/io_poll_backend.hpp>
+#include <httpserver/detail/io_socket_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
 #include <httpserver/detail/websocket_driver.hpp>
 #include <httpserver/exchange.hpp>
@@ -172,7 +172,7 @@ class connection_engine final
     // @p peer is the transport peer snapshot captured at accept
     // (TASK-119); the default (unspec) serves rigs that build an
     // engine over a fabricated transport.
-    connection_engine(io_poll_backend& backend, worker_pool& pool,
+    connection_engine(io_socket_backend& backend, worker_pool& pool,
                       const server::route_registry& routes,
                       const server::hook_bus& hooks,
                       const server::resource_budget& budget,
@@ -408,7 +408,7 @@ class connection_engine final
     void loop_finished();
     void finalize();
 
-    io_poll_backend& backend_;
+    io_socket_backend& backend_;
     worker_pool& pool_;
     const server::route_registry& routes_;
     const server::hook_bus& hooks_;
