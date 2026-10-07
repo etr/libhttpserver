@@ -24,7 +24,7 @@ Provide HTTP/2 staged GOAWAY and deadline drain for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-032
 **Related Decisions:** DR-V3-008
 
-**Status:** In Progress
+**Status:** Complete
 
 **Prepared implementation (TASK-143):**
 
