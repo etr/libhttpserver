@@ -104,8 +104,7 @@ class route_task {
         frame_ = task.release();
         auto& promise = frame_.promise();
         promise.try_consume();
-        promise.set_affinity(&owner);
-        promise.frame_witness_ptr()->executor_lifetime = owner.shared_from_this();
+        promise.set_affinity(&owner, owner.shared_from_this());
         promise.register_consumer(std::noop_coroutine(), &owner, {});
         owner.post([witness = promise.frame_witness_ptr(), frame = frame_] { guarded_resume(witness, frame); });
     }

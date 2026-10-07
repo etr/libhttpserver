@@ -11,6 +11,7 @@
 #include <thread>
 #include <type_traits>
 #include <string>
+#include <utility>
 #include <vector>
 #include <httpserver/exchange.hpp>
 #include <httpserver/concurrency/resume_signal.hpp>
@@ -471,6 +472,79 @@ LT_BEGIN_AUTO_TEST(http2_drain_suite, retained_resume_witness_keeps_disabled_aff
     // Its target must remain callable until that node releases the witness.
     unsigned calls = 0; target->post([&] { ++calls; }); executor.run_pending(); LT_CHECK_EQ(calls, 0u);
 LT_END_AUTO_TEST(retained_resume_witness_keeps_disabled_affinity_alive_after_engine_destruction)
+LT_BEGIN_AUTO_TEST(http2_drain_suite, precreated_nested_task_retains_disabled_affinity_after_engine_destruction)
+    struct capture_affinity {
+        std::shared_ptr<hd::frame_witness>& witness;
+        httpserver::executor*& target;
+        capture_affinity& bind_frame(hd::task_frame_base* frame) {
+            witness = frame->frame_witness_ptr(); target = frame->frame_executor(); return *this;
+        }
+        bool await_ready() const { return true; }
+        void await_suspend(std::coroutine_handle<>) const {}
+        void await_resume() const {}
+    };
+    auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    std::shared_ptr<hd::frame_witness> witness; httpserver::executor* target = nullptr;
+    httpserver::resume_signal pause; unsigned destroyed = 0, resumed = 0;
+    struct lifetime { unsigned& destroyed; ~lifetime() { ++destroyed; } };
+    auto child = [&]() -> task<void> {
+        lifetime guard{destroyed}; co_await capture_affinity{witness, target}; co_await pause.wait(); ++resumed;
+    };
+    auto parent = [](task<void> nested) -> task<void> { co_await std::move(nested); };
+    // Neither frame is created inside the owned route executor.
+    auto prepared = parent(child());
+    LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange&) {
+        return std::move(prepared);
+    }).ok());
+    httpserver::manual_executor executor;
+    {
+        hd::http2_request_engine engine(budget, routes, executor); hd::hpack_encoder encoder(budget);
+        LT_ASSERT(h2test::feed(engine, h2test::preface())); h2test::output(engine);
+        LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())))); executor.run_pending();
+    }
+    LT_ASSERT(witness); LT_ASSERT(target); LT_CHECK(!witness->valid);
+    LT_CHECK_EQ(destroyed, 1u); LT_CHECK_EQ(resumed, 0u);
+    // A retained completion node may still call its affinity after invalidation.
+    LT_ASSERT(witness->executor_lifetime);
+    unsigned calls = 0; target->post([&] { ++calls; }); pause.signal(); executor.run_pending();
+    LT_CHECK_EQ(calls, 0u); LT_CHECK_EQ(destroyed, 1u); LT_CHECK_EQ(resumed, 0u);
+    LT_CHECK_EQ(budget.in_use(hs::resource::streams), 0u);
+LT_END_AUTO_TEST(precreated_nested_task_retains_disabled_affinity_after_engine_destruction)
+
+LT_BEGIN_AUTO_TEST(http2_drain_suite, final_goaway_retirement_completes_ticket_without_empty_output_poll)
+    auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor);
+    LT_ASSERT(h2test::feed(engine, h2test::preface())); h2test::output(engine);
+    hs::drain_ticket ticket; auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    LT_ASSERT(engine.begin_drain(deadline, ticket).ok()); auto wire = h2test::output(engine);
+    LT_ASSERT(h2test::feed(engine, h2test::frame(6, 1, 0, barrier(wire))));
+    auto final = engine.output(); LT_ASSERT_EQ(final.size(), 17u); LT_ASSERT_EQ(final[3], 7u);
+    LT_ASSERT(std::chrono::steady_clock::now() < deadline); LT_ASSERT(engine.advance_output(final.size()));
+
+    engine.check_drain(deadline); hs::drain_result result; LT_ASSERT(ticket.wait(result).ok());
+    LT_CHECK(result.status == hs::drain_status::completed); LT_CHECK_EQ(result.remaining, 0u);
+LT_END_AUTO_TEST(final_goaway_retirement_completes_ticket_without_empty_output_poll)
+
+LT_BEGIN_AUTO_TEST(http2_drain_suite, final_response_retirement_completes_ticket_without_empty_output_poll)
+    auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    httpserver::resume_signal pause;
+    LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
+        co_await pause.wait(); x.respond(http::status::from_code(204), {});
+    }).ok());
+    httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor); hd::hpack_encoder encoder(budget);
+    LT_ASSERT(h2test::feed(engine, h2test::preface())); h2test::output(engine);
+    LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())))); executor.run_pending();
+    hs::drain_ticket ticket; auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    LT_ASSERT(engine.begin_drain(deadline, ticket).ok()); auto wire = h2test::output(engine);
+    LT_ASSERT(h2test::feed(engine, h2test::frame(6, 1, 0, barrier(wire)))); h2test::output(engine);
+    pause.signal(); executor.run_pending();
+    auto final = engine.output(); LT_ASSERT_EQ(final[3], 1u); LT_ASSERT_EQ(final[4] & 1u, 1u);
+    LT_ASSERT(std::chrono::steady_clock::now() < deadline); LT_ASSERT(engine.advance_output(final.size()));
+
+    engine.check_drain(deadline); hs::drain_result result; LT_ASSERT(ticket.wait(result).ok());
+    LT_CHECK(result.status == hs::drain_status::completed); LT_CHECK_EQ(result.remaining, 0u);
+    LT_CHECK_EQ(budget.in_use(hs::resource::streams), 0u);
+LT_END_AUTO_TEST(final_response_retirement_completes_ticket_without_empty_output_poll)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

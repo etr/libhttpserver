@@ -166,6 +166,7 @@ bool http2_request_engine::advance_output(std::size_t count) {
         auto n = state_->connection.output().size();
         if (!state_->connection.advance_output(count)) return false;
         if (count == n) state_->control_exposed = false;
+        check_drain(std::chrono::steady_clock::now());
         return true;
     }
     if (count > state_->active.size() - state_->active_used) return false;
@@ -179,6 +180,7 @@ bool http2_request_engine::advance_output(std::size_t count) {
         std::vector<std::uint8_t>().swap(state_->active);
         state_->active_used = 0; state_->active_charge.release();
     }
+    check_drain(std::chrono::steady_clock::now());
     return true;
 }
 const std::optional<http2_error>& http2_request_engine::failure() const { return state_->connection.failure(); }
