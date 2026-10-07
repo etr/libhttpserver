@@ -38,6 +38,8 @@ struct connection {
         peer.reset(SSL_new(ctx.get()));
         SSL_set_bio(peer.get(), BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
         SSL_set_connect_state(peer.get());
+        const unsigned char offers[] = {2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
+        SSL_set_alpn_protos(peer.get(), offers, sizeof(offers));
         tls = std::make_unique<hd::tls_io_backend>(raw, ex, 1, std::move(selection), true);
     }
     ~connection() { close(); }
@@ -86,6 +88,12 @@ struct connection {
         drive();
         return handshake.state()->applied() && handshake.state()->stored_result().code == hh::outcome_code::ok && SSL_is_init_finished(peer.get());
     }
+    std::string alpn() const {
+        const unsigned char* value = nullptr;
+        unsigned size = 0;
+        SSL_get0_alpn_selected(peer.get(), &value, &size);
+        return size ? std::string(reinterpret_cast<const char*>(value), size) : std::string{};
+    }
     std::int64_t serial() const { return ASN1_INTEGER_get(X509_get_serialNumber(SSL_get0_peer_certificate(peer.get()))); }
 };
 }  // namespace
@@ -100,11 +108,15 @@ LT_BEGIN_AUTO_TEST(tls_credentials_rotation_suite, wire_rotation_pins_selected_a
     connection established(registry.acquire()->select_default());
     LT_ASSERT(established.connect());
     LT_CHECK_EQ(established.serial(), std::int64_t{101});
+    LT_CHECK_EQ(established.alpn(), "h2");
     auto delayed = registry.acquire()->select_default();
-    LT_ASSERT(registry.replace(tls_test::credentials("b")).ok());
+    auto replacement = tls_test::credentials("b");
+    replacement.hosts[0].alpn = {"http/1.1"};
+    LT_ASSERT(registry.replace(replacement).ok());
     connection selected(std::move(delayed));
     LT_ASSERT(selected.connect());
     LT_CHECK_EQ(selected.serial(), std::int64_t{101});
+    LT_CHECK_EQ(selected.alpn(), "h2");
     LT_CHECK(!retired.expired());
     const std::string message = "old session survives replacement";
     std::array<std::byte, 100> incoming{};
@@ -119,6 +131,7 @@ LT_BEGIN_AUTO_TEST(tls_credentials_rotation_suite, wire_rotation_pins_selected_a
     connection fresh(registry.acquire()->select_default());
     LT_ASSERT(fresh.connect());
     LT_CHECK_EQ(fresh.serial(), std::int64_t{202});
+    LT_CHECK_EQ(fresh.alpn(), "http/1.1");
     auto invalid = tls_test::credentials();
     invalid.hosts[0].private_key_pem = "invalid";
     LT_CHECK(!registry.replace(invalid).ok());
@@ -126,6 +139,7 @@ LT_BEGIN_AUTO_TEST(tls_credentials_rotation_suite, wire_rotation_pins_selected_a
     connection after_invalid(registry.acquire()->select_default());
     LT_ASSERT(after_invalid.connect());
     LT_CHECK_EQ(after_invalid.serial(), std::int64_t{202});
+    LT_CHECK_EQ(after_invalid.alpn(), "http/1.1");
     selected.close();
     LT_CHECK(!retired.expired());
     established.close();
