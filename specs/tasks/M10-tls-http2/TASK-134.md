@@ -9,9 +9,9 @@
 Provide external-PSK lookup and timeout execution contract for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Investigate OpenSSL PSK callback suspension limits.
-- [ ] Choose deadline-safe lookup execution outside the I/O owner.
-- [ ] Document provider-neutral callback, key bounds, cancellation and zeroization.
+- [x] Investigate OpenSSL PSK callback suspension limits.
+- [x] Choose deadline-safe lookup execution outside the I/O owner.
+- [x] Document provider-neutral callback, key bounds, cancellation and zeroization.
 
 **Dependencies:**
 - Blocked by: TASK-129, TASK-131
@@ -24,4 +24,10 @@ Provide external-PSK lookup and timeout execution contract for libhttpserver v3.
 **Related Requirements:** PRD-V3N-REQ-034
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation Evidence:**
+
+- [Provider-neutral contract](../../../docs/external-psk-lookup-contract.md) defines bounded execution lanes, exclusive session handoff, deadlines, cancellation, snapshots and key lifetime.
+- [Local evidence](../../../docs/task-134-psk-contract-evidence.md) records TLS-on/off builds, focused tests and local gates. The selected OpenSSL 3.5.9 session PSK ceiling is 512 bytes, correcting the saved plan's 48-byte assumption.
+- Implementation is prepared for caller-owned validation and runner publication; status remains In Progress until that workflow completes.
