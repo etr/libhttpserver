@@ -26,6 +26,7 @@
 #include <utility>
 #include <vector>
 
+#include <httpserver/detail/hpack_connection.hpp>
 #include <httpserver/detail/hpack_primitives.hpp>
 #include <httpserver/detail/hpack_static_table.hpp>
 #include "../data/hpack/rfc7541.hpp"
@@ -131,6 +132,78 @@ LT_BEGIN_AUTO_TEST(hpack_corpus_suite, deterministic_seeded_malformed_mutations)
         }
     }
 LT_END_AUTO_TEST(deterministic_seeded_malformed_mutations)
+LT_BEGIN_AUTO_TEST(hpack_corpus_suite, complete_rfc_sections_and_table_snapshots)
+    using httpserver::detail::hpack_decoder;
+    using httpserver::detail::hpack_section_limits;
+    const hpack_section_limits limits{4096, 4096, 32};
+    const auto scope = httpserver::server::resource_budget::root({});
+    const auto check = [&](hpack_decoder& decoder, std::size_t block, const auto& fields, const auto& table, std::size_t bytes) {
+        const auto decoded = decoder.decode(octets(unhex(hpack_fixture::blocks[block])), limits);
+        LT_CHECK(decoded.status.ok() && decoded.fields.size() == fields.size());
+        for (std::size_t i = 0; i < fields.size(); ++i) {
+            LT_CHECK(decoded.fields[i].name == fields[i].first && decoded.fields[i].value == fields[i].second);
+        }
+        LT_CHECK(decoder.table().size() == table.size() && decoder.table().bytes() == bytes);
+        for (std::size_t i = 0; i < table.size(); ++i) {
+            const auto entry = decoder.table().lookup(i + 62);
+            LT_CHECK(entry && entry->name == table[i].first && entry->value == table[i].second);
+        }
+    };
+    using list = std::vector<std::pair<std::string_view, std::string_view>>;
+    const list none;
+    const list custom{{"custom-key", "custom-header"}};
+    for (std::size_t block = 0; block < 4; ++block) {
+        hpack_decoder decoder(scope);
+        const list fields = block == 0 ? custom : block == 1 ? list{{":path", "/sample/path"}} :
+            block == 2 ? list{{"password", "secret"}} : list{{":method", "GET"}};
+        check(decoder, block, fields, block == 0 ? custom : none, block == 0 ? 55 : 0);
+    }
+    const list authority{{":authority", "www.example.com"}};
+    const list cache{{"cache-control", "no-cache"}, {":authority", "www.example.com"}};
+    const list added{{"custom-key", "custom-value"}, {"cache-control", "no-cache"}, {":authority", "www.example.com"}};
+    for (std::size_t start : {4, 7}) {
+        hpack_decoder decoder(scope);
+        list fields{{":method", "GET"}, {":scheme", "http"}, {":path", "/"}, {":authority", "www.example.com"}};
+        check(decoder, start, fields, authority, 57);
+        fields.emplace_back("cache-control", "no-cache");
+        check(decoder, start + 1, fields, cache, 110);
+        fields = {{":method", "GET"}, {":scheme", "https"}, {":path", "/index.html"}, {":authority", "www.example.com"}, {"custom-key", "custom-value"}};
+        check(decoder, start + 2, fields, added, 164);
+    }
+    const auto date1 = "Mon, 21 Oct 2013 20:13:21 GMT"sv;
+    const auto date2 = "Mon, 21 Oct 2013 20:13:22 GMT"sv;
+    const auto location = "https://www.example.com"sv;
+    const auto cookie = "foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"sv;
+    for (std::size_t start : {10, 13}) {
+        hpack_decoder decoder(scope);
+        LT_CHECK(decoder.acknowledge_maximum(256).ok());
+        // Establish the examples' negotiated table size before replaying them.
+        LT_CHECK(decoder.decode(octets(unhex("3fe101")), limits).status.ok());
+        list fields{{":status", "302"}, {"cache-control", "private"}, {"date", date1}, {"location", location}};
+        list table{{"location", location}, {"date", date1}, {"cache-control", "private"}, {":status", "302"}};
+        check(decoder, start, fields, table, 222);
+        fields[0].second = "307";
+        table = {{":status", "307"}, {"location", location}, {"date", date1}, {"cache-control", "private"}};
+        check(decoder, start + 1, fields, table, 222);
+        fields = {{":status", "200"}, {"cache-control", "private"}, {"date", date2}, {"location", location}, {"content-encoding", "gzip"}, {"set-cookie", cookie}};
+        table = {{"set-cookie", cookie}, {"content-encoding", "gzip"}, {"date", date2}};
+        check(decoder, start + 2, fields, table, 215);
+    }
+LT_END_AUTO_TEST(complete_rfc_sections_and_table_snapshots)
+LT_BEGIN_AUTO_TEST(hpack_corpus_suite, bounded_stateful_section_mutations)
+    for (const auto fixture : hpack_fixture::blocks) {
+        const auto original = unhex(fixture);
+        hpack_fuzz_sections(octets(original));
+        for (std::size_t i = 0; i < original.size(); ++i) {
+            auto mutation = original;
+            for (const unsigned tag : {0x00, 0x10, 0x20, 0x40, 0x80, 0xff}) {
+                mutation[i] = static_cast<char>(tag);
+                hpack_fuzz_sections(octets(mutation));
+            }
+            hpack_fuzz_sections(octets(original).first(i));
+        }
+    }
+LT_END_AUTO_TEST(bounded_stateful_section_mutations)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

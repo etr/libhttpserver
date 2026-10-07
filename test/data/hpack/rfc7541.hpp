@@ -25,7 +25,7 @@
 #include <string_view>
 
 // Published wire bytes from RFC 7541 Appendix C.2-C.6. These fixtures replay
-// primitives at explicit offsets, not dynamic-table field sections (TASK-138).
+// primitives at explicit offsets and complete connection-owned field sections.
 namespace hpack_fixture {
 inline constexpr std::array<std::string_view, 16> blocks = {
     "400a637573746f6d2d6b65790d637573746f6d2d686561646572",

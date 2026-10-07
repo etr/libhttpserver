@@ -1860,3 +1860,11 @@ hpack_static_table_LDADD =
 hpack_corpus_SOURCES = unit/hpack_corpus_test.cpp fuzz/hpack_fuzz.cpp
 hpack_corpus_LDADD =
 EXTRA_DIST += data/hpack/rfc7541.hpp fuzz/hpack_fuzz.hpp fuzz/README-hpack.md
+
+check_PROGRAMS += hpack_dynamic_table hpack_field_section hpack_connection
+hpack_dynamic_table_SOURCES = unit/hpack_dynamic_table_test.cpp
+hpack_dynamic_table_LDADD =
+hpack_field_section_SOURCES = unit/hpack_field_section_test.cpp
+hpack_field_section_LDADD =
+hpack_connection_SOURCES = unit/hpack_connection_test.cpp
+hpack_connection_LDADD =

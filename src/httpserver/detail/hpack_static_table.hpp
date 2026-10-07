@@ -34,7 +34,7 @@ struct hpack_static_entry {
     std::string_view value;
 };
 // Process-lifetime octet views; one-based indexes above 61 belong to the
-// future connection table, so lookup returns nullptr rather than rejecting.
+// connection table, so static lookup returns nullptr rather than rejecting.
 inline constexpr std::array<hpack_static_entry, 61> hpack_static_entries = {{
     {":authority", ""},
     {":method", "GET"},
