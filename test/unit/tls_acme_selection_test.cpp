@@ -6,7 +6,6 @@
 #include <array>
 #include <memory>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 #include "./tls_acme_peer.hpp"
@@ -177,11 +176,13 @@ LT_BEGIN_AUTO_TEST(tls_acme_selection_suite, snapshotless_sessions_cannot_obtain
     }
 LT_END_AUTO_TEST(snapshotless_sessions_cannot_obtain_challenges_and_challenge_shutdown_remains_usable)
 LT_BEGIN_AUTO_TEST(tls_acme_selection_suite, selected_challenge_remains_pinned_through_hello_retry_even_after_deadline)
-    hd::tls_credentials_registry registry;
-    LT_ASSERT(registry.replace(tls_test::credentials()).ok());
     auto challenge = acme_test::challenge();
-    challenge.expires_at = std::chrono::system_clock::now() + std::chrono::seconds(1);
+    auto selection_time = challenge.expires_at - std::chrono::seconds(1);
+    hd::tls_credentials_registry registry([&] { return selection_time; });
+    LT_ASSERT(registry.replace(tls_test::credentials()).ok());
     LT_ASSERT(registry.publish_acme(challenge).ok());
+    const auto snapshot = registry.acquire();
+    LT_ASSERT(snapshot->select_acme("a.example").has_value());
     acme_test::connection peer(registry.acquire()->select_default(), acme_test::client(TLS1_3_VERSION), "a.example", {"acme-tls/1"});
     // Predict only X25519; the provider's stronger first group requires a retry.
     LT_ASSERT(SSL_set1_groups_list(peer.peer.get(), "X25519MLKEM768:*X25519") == 1);
@@ -195,11 +196,11 @@ LT_BEGIN_AUTO_TEST(tls_acme_selection_suite, selected_challenge_remains_pinned_t
         LT_ASSERT(error == SSL_ERROR_NONE || error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE);
     }
     LT_ASSERT(peer.hello_retries == 1);
-    LT_ASSERT(std::chrono::system_clock::now() < challenge.expires_at);
-    const auto stop = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (std::chrono::system_clock::now() < challenge.expires_at && std::chrono::steady_clock::now() < stop) std::this_thread::yield();
-    LT_ASSERT(std::chrono::system_clock::now() >= challenge.expires_at);
-    LT_CHECK(!registry.acquire()->select_acme("a.example", std::chrono::system_clock::now()));
+    selection_time = challenge.expires_at;
+    LT_CHECK(!snapshot->select_acme("a.example"));
+    acme_test::connection expired(registry.acquire()->select_default(), acme_test::client(TLS1_3_VERSION), "a.example", {"acme-tls/1"});
+    LT_CHECK(!expired.connect());
+    LT_CHECK(SSL_get0_peer_certificate(expired.peer.get()) == nullptr);
     LT_ASSERT(peer.connect());
     LT_CHECK_EQ(peer.serial(), std::int64_t{303});
     LT_CHECK_EQ(peer.alpn(), "acme-tls/1");

@@ -200,7 +200,7 @@ struct tls_session::impl {
     bool select_acme(const std::string& name) {
         if (!selection.snapshot || !sole_acme_offer || name.empty() ||
             handshake_context.transport != tls_transport::tcp || handshake_context.local_port != 443) return false;
-        auto challenge = selection.snapshot->select_acme(name, std::chrono::system_clock::now());
+        auto challenge = selection.snapshot->select_acme(name);
         if (!challenge) return false;
         selection = std::move(*challenge);
         acme = true;

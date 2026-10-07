@@ -19,6 +19,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 #include <httpserver/detail/tls_io_backend.hpp>
 #include <httpserver/detail/tls_psk.hpp>
@@ -71,6 +72,7 @@ class tls_credentials_snapshot final : public std::enable_shared_from_this<tls_c
     tls_credentials_selection select(std::size_t host) const;
     // Exact canonical lookup; expiry also applies to previously acquired snapshots.
     std::optional<tls_credentials_selection> select_acme(std::string_view canonical_host, std::chrono::system_clock::time_point now) const;
+    std::optional<tls_credentials_selection> select_acme(std::string_view canonical_host) const { return select_acme(canonical_host, selection_clock_()); }
     tls_credentials_selection select_default() const { return select(default_host_); }
 
  private:
@@ -80,6 +82,7 @@ class tls_credentials_snapshot final : public std::enable_shared_from_this<tls_c
         std::chrono::system_clock::time_point expires_at;
     };
     std::map<std::string, acme_entry, std::less<>> challenges_;
+    std::function<std::chrono::system_clock::time_point()> selection_clock_ = std::chrono::system_clock::now;
     std::uint64_t generation_ = 0;
     std::size_t default_host_ = 0;
     std::vector<tls_host_metadata> hosts_;
@@ -90,6 +93,9 @@ class tls_credentials_snapshot final : public std::enable_shared_from_this<tls_c
 // shared_ptr atomic operations need not be lock-free. Published data never mutates.
 class tls_credentials_registry final {
  public:
+    // Internal selection-clock seam; publication validation still uses real time.
+    explicit tls_credentials_registry(std::function<std::chrono::system_clock::time_point()> selection_clock = std::chrono::system_clock::now)
+        : selection_clock_(std::move(selection_clock)) {}
     http::outcome replace(const tls_credentials_config& config);
     http::outcome publish_acme(const tls_acme_challenge& input);
     http::outcome remove_acme(std::string_view host);
@@ -99,6 +105,7 @@ class tls_credentials_registry final {
     http::outcome publish_locked(std::shared_ptr<tls_credentials_snapshot> candidate,
         std::shared_ptr<const tls_credentials_snapshot>& retired);
     std::shared_ptr<const tls_credentials_snapshot> active_;
+    std::function<std::chrono::system_clock::time_point()> selection_clock_;
     std::mutex publication_;
     std::uint64_t generation_ = 0;
 };

@@ -81,8 +81,38 @@ unrelated challenges. Retirement tests observe weak snapshot/context ownership,
 a terminal claim that cannot be taken twice, zero pending raw children and zero
 owner completions after executor drain. Established ordinary application data
 still exchanges after publication/removal. The retry-expiry test first observes
-an actual HelloRetryRequest, then yields until its explicit deadline with a
-bounded steady-clock stop; it does not use a scheduling sleep as a race oracle.
+an actual HelloRetryRequest, then advances its private selection clock exactly
+to the challenge deadline. A fresh lookup and fresh ClientHello reject the
+expired challenge while the selected handshake completes with its pinned leaf.
+The internal registry copies its selection clock into each immutable snapshot;
+the default remains `system_clock::now`. Publication and certificate validation
+continue to use real time and the fixture's ten-minute deadline. The test has no
+one-second setup window, wall-clock wait or scheduling sleep as a race oracle.
+
+## Validation repair: deterministic retry expiry
+
+The old test failed publication when an external process paused it with
+`SIGSTOP` for 1.2 seconds during setup. Behavioral RED is recorded in
+`/private/tmp/task136-repair-scheduler-red.log`. The revised test also failed
+the fresh-handshake and no-certificate assertions when ClientHello still used
+real time, despite the lookup clock being advanced; that separate RED is in
+`/private/tmp/task136-repair-clock-red.log`. Routing ClientHello through the
+snapshot's internal clock makes those assertions pass without changing the
+pinned-handshake certificate, digest, ALPN or certificate-message checks.
+
+The same 1.2-second scheduler pause now passes at setup offsets 0.6 ms and 1 ms
+(each confirmed by more than 1.2 seconds elapsed inside the retry test), recorded
+in `/private/tmp/task136-repair-scheduler-green.log`. The focused six-executable
+TLS selection, credentials, rotation and ACME lifetime run passes **28 tests /
+1,051 checks** in `/private/tmp/task136-repair-focused-green.log`, with per-suite
+receipts in `build-on/test/*.log`. Changed-file cpplint, changed-source CCN <= 10,
+source file-size and `git diff --check` also pass; receipts are
+`/private/tmp/task136-repair-{lint,complexity,size}.log`.
+The existing sanitizer script rebuilt the full affected native object closure;
+all nine focused executables pass with **56 tests / 1,816 checks** under each of
+ASan/UBSan and TSan, with no diagnostics. The receipt is
+`/private/tmp/task136-repair-sanitizers.log`; provider and system libraries remain
+uninstrumented as described below.
 
 ## Reproduction
 

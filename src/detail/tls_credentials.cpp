@@ -302,6 +302,7 @@ http::outcome tls_credentials_registry::remove_acme(std::string_view host) {
 }
 http::outcome tls_credentials_registry::replace(const tls_credentials_config& config) {
     auto candidate = std::make_shared<tls_credentials_snapshot>();
+    candidate->selection_clock_ = selection_clock_;
     try {
         require(!config.hosts.empty() && config.default_host < config.hosts.size());
         candidate->default_host_ = config.default_host;
