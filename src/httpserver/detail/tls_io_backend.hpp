@@ -19,6 +19,7 @@
 #include <httpserver/server/tls_peer_metadata.hpp>
 namespace httpserver::detail {
 // Contexts are immutable after construction. No provider types escape this seam.
+enum class tls_negotiated_protocol { unknown, none, http1, h2, other };
 enum class tls_transport { unknown, tcp, quic };
 // Trusted listener metadata; unknown transport/port cannot serve challenges.
 struct tls_handshake_context {
@@ -68,6 +69,8 @@ class tls_io_backend final : public io_backend {
     // Thread-safe immutable publication, visible before handshake completion.
     // A retained value survives adapter teardown and credential replacement.
     std::shared_ptr<const server::tls_peer_metadata> peer_metadata() const;
+    // Published before successful completion; unknown on a failed handshake.
+    tls_negotiated_protocol negotiated_protocol() const;
 
  private:
     struct core;

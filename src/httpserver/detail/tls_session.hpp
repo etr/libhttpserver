@@ -31,6 +31,8 @@ class tls_session final {
     ~tls_session();
     // Serialized pump access only. Null before success or after failed auth.
     std::shared_ptr<const server::tls_peer_metadata> peer_metadata() const;
+    // Unknown until a successful authenticated handshake; owned protocol value.
+    tls_negotiated_protocol negotiated_protocol() const;
     result handshake();
     std::shared_ptr<tls_psk_runtime> handshake_runtime() const;
     void handshake_limits(std::chrono::steady_clock::time_point deadline, std::stop_token cancellation);

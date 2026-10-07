@@ -9,9 +9,9 @@
 Provide HTTP/2 preface, frame and SETTINGS machine for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Parse preface and frame headers under size limits.
-- [ ] Implement SETTINGS/ACK, PING and unknown-frame behavior.
-- [ ] Map malformed frame sequences to typed stream/connection errors.
+- [x] Parse preface and frame headers under size limits.
+- [x] Implement SETTINGS/ACK, PING and unknown-frame behavior.
+- [x] Map malformed frame sequences to typed stream/connection errors.
 
 **Dependencies:**
 - Blocked by: TASK-130, TASK-132, TASK-137
@@ -24,4 +24,6 @@ Provide HTTP/2 preface, frame and SETTINGS machine for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-005, PRD-V3N-REQ-014, PRD-V3N-REQ-016
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** [HTTP/2 evidence](../../../docs/task-139-http2-evidence.md). Private bounded framing/control implementation and local implementation checks complete; runner-owned validation and finalization pending.

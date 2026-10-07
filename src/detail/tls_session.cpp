@@ -90,6 +90,18 @@ std::shared_ptr<const server::tls_peer_metadata> copy_peer(SSL* ssl, bool server
     return result;
 }
 }  // namespace
+namespace {
+tls_negotiated_protocol selected_protocol(SSL* ssl) {
+    const unsigned char* bytes = nullptr;
+    unsigned size = 0;
+    SSL_get0_alpn_selected(ssl, &bytes, &size);
+    if (!size) return tls_negotiated_protocol::none;
+    const std::string_view selected(reinterpret_cast<const char*>(bytes), size);
+    if (selected == "h2") return tls_negotiated_protocol::h2;
+    if (selected == "http/1.1") return tls_negotiated_protocol::http1;
+    return tls_negotiated_protocol::other;
+}
+}  // namespace
 struct tls_session::impl {
     tls_credentials_selection selection;
     SSL* ssl = nullptr;
@@ -100,6 +112,7 @@ struct tls_session::impl {
     tls_handshake_context handshake_context;
     bool server_side = false;
     bool metadata_failed = false;
+    tls_negotiated_protocol protocol = tls_negotiated_protocol::unknown;
     std::shared_ptr<const server::tls_peer_metadata> peer;
     std::size_t selected_host = 0;
     std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max();
@@ -414,6 +427,7 @@ void tls_session::handshake_limits(std::chrono::steady_clock::time_point deadlin
     impl_->cancellation = cancellation;
 }
 std::shared_ptr<const server::tls_peer_metadata> tls_session::peer_metadata() const { return impl_->peer; }
+tls_negotiated_protocol tls_session::negotiated_protocol() const { return impl_->protocol; }
 tls_session::result tls_session::handshake() {
     ERR_clear_error();
     if (impl_->metadata_failed) return {progress::failed};
@@ -421,6 +435,7 @@ tls_session::result tls_session::handshake() {
     if (result.state == progress::complete && !impl_->peer) {
         try {
             impl_->peer = copy_peer(impl_->ssl, impl_->server_side);
+            impl_->protocol = selected_protocol(impl_->ssl);
         } catch (...) {
             impl_->metadata_failed = true;
             ERR_clear_error();
