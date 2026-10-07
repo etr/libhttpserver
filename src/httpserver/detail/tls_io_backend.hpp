@@ -19,14 +19,17 @@
 namespace httpserver::detail {
 // Contexts are immutable after construction. No provider types escape this seam.
 struct tls_credentials_selection;
+struct tls_psk_config;
 class tls_context {
  public:
     static std::shared_ptr<tls_context> client();
+    static std::shared_ptr<tls_context> server_psk(const tls_psk_config& config);
     static std::shared_ptr<tls_context> server_pem(std::string_view certificate, std::string_view key, std::string_view roots = {},
         server::tls_client_certificate_mode mode = server::tls_client_certificate_mode::none);
 
  private:
     friend class tls_session;
+    std::shared_ptr<const tls_psk_config> psk_;
     void configure_server();
     std::array<unsigned char, 32> session_namespace_{};
     std::shared_ptr<void> native_;

@@ -1,11 +1,13 @@
 # External-PSK lookup and timeout execution contract
 
-This is the provider-neutral design contract for TASK-135 and subsequent TLS
-adapter work. TASK-134 installs no credential callback API, PSK profile, execution
-lane, or timeout implementation. The current registry still accepts only
-certificate and mutual-TLS profiles and rejects external PSK. Certificate/mTLS
-and external PSK remain separate profiles; 0-RTT application data stays disabled.
-Transport/ALPN combinations must be validated before advertising PSK support.
+TASK-135 installs this contract at the internal credential/session seams. A
+`tls_host_credentials` external-PSK profile owns a `tls_psk_config`: application
+lookup, shared bounded runtime, and finite identity/key/attempt policy. Immutable
+snapshots pin this configuration through SNI and credential replacement.
+Certificate/mTLS and external PSK remain separate profiles. External PSK supports
+TLS 1.2/1.3 over HTTP/1 only, with `http/1.1` ALPN or the existing HTTP/1 fallback;
+0-RTT application data stays disabled. Publication rejects incompatible material,
+client-auth policy, ALPN, missing lookup/runtime and invalid finite bounds.
 
 ## Provider constraints and current seams
 
@@ -23,7 +25,7 @@ not present at this stage, so ClientHello prefetch cannot solve both versions.
 requires cooperative suspension and resumption on the originating thread and
 is unavailable on some platforms. It is not the portable execution contract.
 
-Current library seams, inspected at TASK-134's base `d1349b59`:
+Historical seams characterized at TASK-134's base `d1349b59`, before TASK-135:
 
 - `src/httpserver/detail/tls_credentials.hpp` pins the selected context and
   immutable snapshot in `tls_credentials_selection`.
@@ -40,30 +42,32 @@ Current library seams, inspected at TASK-134's base `d1349b59`:
 
 ## Callback shape
 
-The following is typed pseudocode defining obligations, **not installed C++
-declarations**. Names such as `owned_host_selection`, `result`, and `secure_bytes`
-stand for future library-owned value types.
+The installed provider-neutral types are in `detail/tls_psk.hpp` (internal,
+excluded from installed public headers). The callback shape is:
 
 ```cpp
 enum class psk_tls_version { tls12, tls13 };
 
-struct handshake_context {
+struct psk_handshake_context {
     psk_tls_version version;
     uint64_t credential_generation;
-    owned_host_selection selected_host;
+    std::string selected_host;
     steady_clock::time_point deadline;
     stop_token cancellation;
     size_t maximum_key_bytes;
 };
 
-using psk_lookup =
-    callable<result<secure_bytes>(
-        span<const byte> identity,
-        const handshake_context&)>;
+struct psk_lookup_result {
+    psk_lookup_status status;
+    secure_bytes key;
+};
+
+using psk_lookup = std::function<psk_lookup_result(
+    span<const byte> identity, const psk_handshake_context&)>;
 ```
 
 The immutable selected credential generation captures callback and lookup
-runtime ownership. `selected_host` owns the selected host/profile metadata;
+runtime ownership. `selected_host` owns the canonical selected host name;
 no mutable registry reference is exposed. `deadline` is the absolute monotonic
 handshake deadline. `maximum_key_bytes` is the smaller of the selected provider
 capacity and the validated profile policy. Callback arguments remain valid
@@ -140,7 +144,9 @@ Rotation affects new acquisitions only. An attempt retains the same selected
 immutable generation, callback/runtime and deadline across repeated provider
 callbacks. Independent handshakes can invoke the same callback concurrently;
 applications synchronize mutable state. Within an attempt, coalesce duplicate
-concurrent lookup for the same identity and bound total attempts. Any retained
+lookup for the same TLS version/identity, including concurrent callers. A mutex
+serializes that attempt's bounded waits; independent attempts remain concurrent.
+Bound the number of distinct version/identity lookups. Any retained
 per-attempt key is owned secure storage wiped at retirement; do not introduce a
 global plaintext-key cache.
 
@@ -192,8 +198,63 @@ library zeroization alone cannot prove all copies disappeared.
 `test/unit/tls_psk_contract_test.cpp` observes ClientHello retry/resumption, the
 TLS 1.2 callback's calling thread, blocking interval and actual key buffer, and
 the selected provider's session-key capacity using memory BIOs and synthetic
-test credentials. It does not test a future libhttpserver PSK adapter, lookup
-lane, or timeout implementation. TASK-135 must implement and test admission,
-exclusive handoff, cancellation/deadline races, late-result wiping and retirement
-against this contract. Local acceptance is recorded in
+test credentials. It remains distinct provider-characterization evidence. The TASK-135 adapter and
+runtime tests now cover admission, exclusive handoff, cancellation/deadline races,
+late-result wiping and retirement against this contract. Local acceptance is recorded in
 [the TASK-134 evidence report](task-134-psk-contract-evidence.md).
+
+## Installed runtime policy and evidence
+
+`tls_psk_runtime_options` defaults to two handshake workers and two lookup
+workers, with sixteen additional outstanding slots on each lane and a five
+second handshake timeout. Validation permits 1–64 workers per lane, 0–65536
+additional slots and a timeout greater than zero and at most ten minutes.
+Admission counts running and queued jobs together (`workers + queue`); a reserved
+worker slot may still be queued while its worker wakes. Running callbacks never
+exceed the worker count. Queued and running jobs share one absolute deadline.
+The adapter uses the earlier of the operation deadline and the scheduling
+runtime's finite handshake deadline, including when the operation supplied no
+explicit deadline. A mixed snapshot uses its default PSK runtime, or the first
+PSK host's runtime, for handshake scheduling; the selected host owns its lookup
+runtime. Runtime admission does not execute inline.
+
+`stop()` rejects new work and signals cancellation. Call `stop()` before
+`drain(deadline)`: true means both lanes have retired all jobs and workers;
+false reports incomplete retirement. Destruction signals stop without joining.
+Detached workers retain their own lane/job storage until return, and held
+application code continues to consume capacity. Applications must release held
+callbacks and keep captured resources valid until retirement. Callback stop
+handlers must themselves be nonblocking, as for ordinary `std::stop_token` use.
+Lookup completion retains copied identity/context, callback and independently
+owned result storage; its cancellation token combines connection stop, runtime
+stop and logical lookup retirement. A late key is cleansed before release.
+
+`tls_psk_attempt` retains at most the configured number of distinct lookup
+results. Accepted keys may remain in its secure per-attempt cache for duplicate
+provider callbacks; a temporary secure copy transfers each key to OpenSSL.
+The cache is wiped at handshake success/failure or session retirement, never
+shared across connections or credential generations. Defaults are a 256-byte
+identity policy, a 512-byte key policy and four distinct lookups. Valid policies
+permit 1–65535 identity bytes, 1–512 key bytes and 1–65535 distinct lookups; the
+TLS 1.2 provider bound still limits textual identities to 256 bytes.
+
+The TLS 1.2 profile uses `PSK-AES128-GCM-SHA256` (PSK authentication, AEAD;
+no forward-secrecy claim for this TLS 1.2 suite). TLS 1.3 uses
+`TLS_AES_128_GCM_SHA256` with SHA-256 external-PSK sessions. Both callbacks are
+installed; TLS 1.3 rejection cannot use the legacy callback. PSK contexts disable
+session caching, tickets, renegotiation and early data. SNI explicitly reapplies
+callbacks/ciphers and binds the selected session namespace. OpenSSL receives
+owned TLS 1.3 sessions with protocol/cipher/master key and zero early-data limit.
+
+The adapter moves its session and owned input/output batches to a handshake
+worker. Its owner cannot access SSL/BIO while outstanding. A weak completion
+owner plus a close gate prevents provider retirement from posting to a retired
+adapter/executor. Raw child completions retain the existing transport/executor
+lifetime contract. Deadline/terminal checks run when accepting a worker result
+and again before publishing success after the ciphertext flush.
+
+[TASK-135 evidence](task-135-psk-evidence.md) records independent OpenSSL client
+authentication, binary TLS 1.3 identities, SNI/mixed profiles, replacement,
+0-RTT rejection, admission, timeouts, cancellation/destruction, late-key wiping,
+local TLS-on/off gates and fully instrumented local sanitizer runs. BSD, Windows
+and other nonlocal checks remain assigned to CI and the v3 PR.

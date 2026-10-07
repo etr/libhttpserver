@@ -4,6 +4,7 @@
      SPDX-License-Identifier: LGPL-2.1-or-later
 */
 #include <httpserver/detail/tls_credentials.hpp>
+#include <httpserver/detail/tls_psk_runtime.hpp>
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
@@ -112,8 +113,21 @@ std::vector<unsigned char> encode_alpn(const std::vector<std::string>& protocols
     }
     return wire;
 }
+void valid_psk_bounds(const tls_psk_config& psk) {
+    require(psk.maximum_identity_bytes > 0 && psk.maximum_identity_bytes <= 65535);
+    require(psk.maximum_key_bytes > 0 && psk.maximum_key_bytes <= 512);
+    require(psk.maximum_attempts > 0 && psk.maximum_attempts <= 65535);
+}
 void valid_profile(const tls_host_credentials& host) {
-    require(host.profile == server::tls_profile::certificates || host.profile == server::tls_profile::mutual_tls);
+    if (host.profile != server::tls_profile::external_psk) {
+        require(host.profile == server::tls_profile::certificates || host.profile == server::tls_profile::mutual_tls);
+        require(!host.psk);
+        return;
+    }
+    require(host.certificate_chain_pem.empty() && host.private_key_pem.empty() && host.trust_roots_pem.empty());
+    require(host.psk && host.psk->lookup && host.psk->runtime && host.psk->runtime->accepting());
+    valid_psk_bounds(*host.psk);
+    for (const auto& protocol : host.alpn) require(protocol == "http/1.1");
 }
 }  // namespace
 std::string canonical_tls_host(std::string host) {
@@ -166,6 +180,19 @@ std::shared_ptr<tls_context> tls_context::server_pem(std::string_view chain, std
     context->configure_server();
     return context;
 }
+std::shared_ptr<tls_context> tls_context::server_psk(const tls_psk_config& config) {
+    auto context = client();
+    auto* ctx = static_cast<SSL_CTX*>(context->native_.get());
+    require(SSL_CTX_set_max_proto_version(ctx, TLS1_3_VERSION) == 1);
+    require(SSL_CTX_set_cipher_list(ctx, "PSK-AES128-GCM-SHA256") == 1);
+    require(SSL_CTX_set_ciphersuites(ctx, "TLS_AES_128_GCM_SHA256") == 1);
+    SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
+    SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
+    require(SSL_CTX_set_num_tickets(ctx, 0) == 1);
+    context->psk_ = std::make_shared<const tls_psk_config>(config);
+    context->configure_server();
+    return context;
+}
 tls_credentials_selection tls_credentials_snapshot::select(std::size_t host) const {
     return {shared_from_this(), contexts_.at(host)};
 }
@@ -185,7 +212,8 @@ http::outcome tls_credentials_registry::replace(const tls_credentials_config& co
             auto name = canonical_tls_host(host.host);
             require(names.insert(name).second);
             auto wire = encode_alpn(host.alpn);
-            candidate->contexts_.push_back(tls_context::server_pem(host.certificate_chain_pem, host.private_key_pem, host.trust_roots_pem, mode));
+            candidate->contexts_.push_back(host.psk ? tls_context::server_psk(*host.psk) :
+                tls_context::server_pem(host.certificate_chain_pem, host.private_key_pem, host.trust_roots_pem, mode));
             candidate->hosts_.push_back({std::move(name), host.alpn, std::move(wire), host.profile, mode});
         }
     } catch (const std::invalid_argument&) {

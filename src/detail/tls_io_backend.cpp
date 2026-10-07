@@ -26,12 +26,23 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         std::shared_ptr<op_state> timer;
         bool complete = false;
         io_result result;
+        std::chrono::steady_clock::time_point deadline;
     };
     io_backend& raw;
     executor& ex;
     const std::uint64_t connection;
     io_connection_owner child_owner;
-    tls_session session;
+    std::unique_ptr<tls_session> session;
+    std::shared_ptr<tls_psk_runtime> handshake_runtime;
+    std::stop_source handshake_stop;
+    struct delivery_gate {
+        std::recursive_mutex mutex;
+        bool open = true;
+    };
+    std::shared_ptr<delivery_gate> gate = std::make_shared<delivery_gate>();
+    bool handshake_outstanding = false;
+    bool handshake_needs_input = false;
+    std::shared_ptr<std::vector<std::byte>> handshake_input;
     std::mutex mu;
     std::deque<executor::handler> events;
     std::unordered_set<op_state*> registered;
@@ -44,7 +55,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
     std::shared_ptr<request> control, reader, writer;
     std::shared_ptr<op_state> raw_read, raw_write;
     explicit core(io_backend& transport, executor& executor, std::uint64_t id, tls_credentials_selection selection, bool server)
-        : raw(transport), ex(executor), connection(id), child_owner(executor), session(std::move(selection), server) {}
+        : raw(transport), ex(executor), connection(id), child_owner(executor), session(std::make_unique<tls_session>(std::move(selection), server)), handshake_runtime(session->handshake_runtime()) {}
     void enqueue(executor::handler event, const std::shared_ptr<op_state>& tracked = nullptr) {
         bool schedule = false;
         {
@@ -103,6 +114,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
             return;
         }
         dead = true;
+        handshake_stop.request_stop();
         close_requested.store(true, std::memory_order_release);
         for (auto* slot : {&control, &reader, &writer}) {
             if (*slot) {
@@ -125,7 +137,13 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
             }
             if (result.code != outcome_code::ok || result.transferred == 0) {
                 self->abort(result.code == outcome_code::connection_closed || result.code == outcome_code::ok ? outcome_code::protocol_error : outcome_code::connection_closed);
-            } else if (result.transferred > bytes->size() || !self->session.feed(std::span(*bytes).first(result.transferred))) {
+            } else if (result.transferred > bytes->size()) {
+                self->abort(outcome_code::protocol_error);
+            } else if (self->handshake_runtime && !self->established) {
+                bytes->resize(result.transferred);
+                self->handshake_input = bytes;
+                self->handshake_needs_input = false;
+            } else if (!self->session->feed(std::span(*bytes).first(result.transferred))) {
                 self->abort(outcome_code::protocol_error);
             }
         });
@@ -166,7 +184,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         spawn(ex, write_child(shared_from_this(), std::move(op), bytes, offset), [](task_result<void>) {});
     }
     void receive() {
-        const auto capacity = session.input_capacity();
+        const auto capacity = session->input_capacity();
         if (raw_read || capacity == 0 || dead) {
             return;
         }
@@ -221,7 +239,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         }
     }
     void start_timer(request& req) {
-        const auto deadline = deadline_for(*req.op);
+        const auto deadline = req.deadline;
         if (deadline == std::chrono::steady_clock::time_point::max()) {
             return;
         }
@@ -255,18 +273,23 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         }
         *slot = std::make_shared<request>();
         (*slot)->op = op;
+        (*slot)->deadline = deadline_for(*op);
+        if (op->kind() == io_op_kind::tls_handshake && handshake_runtime) {
+            (*slot)->deadline = std::min((*slot)->deadline, std::chrono::steady_clock::now() + handshake_runtime->handshake_timeout());
+            session->handshake_limits((*slot)->deadline, handshake_stop.get_token());
+        }
         start_timer(**slot);
     }
     tls_session::result invoke(const op_state& op) {
         switch (op.kind()) {
             case io_op_kind::tls_handshake:
-                return session.handshake();
+                return session->handshake();
             case io_op_kind::tls_shutdown:
-                return session.shutdown();
+                return session->shutdown();
             case io_op_kind::read:
-                return session.read(std::get<read_payload>(op.payload()).buffer);
+                return session->read(std::get<read_payload>(op.payload()).buffer);
             case io_op_kind::write:
-                return session.write(std::get<write_payload>(op.payload()).bytes);
+                return session->write(std::get<write_payload>(op.payload()).bytes);
             default:
                 return {tls_session::progress::failed};
         }
@@ -291,7 +314,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
             case tls_session::progress::output:
                 break;
             case tls_session::progress::failed:
-                abort(outcome_code::protocol_error);
+                abort(result.failure);
                 break;
         }
     }
@@ -301,28 +324,102 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         }
         apply_step(req, invoke(*req->op), input);
     }
-    void finish_flushed() {
-        if (raw_write || session.output_pending()) {
+    struct handshake_step {
+        std::unique_ptr<tls_session> session;
+        std::shared_ptr<std::vector<std::byte>> input;
+        std::shared_ptr<std::vector<std::byte>> output = std::make_shared<std::vector<std::byte>>(16384);
+        tls_session::result result{tls_session::progress::failed};
+    };
+    void dispatch_handshake() {
+        auto step = std::make_shared<handshake_step>();
+        step->session = std::move(session);
+        step->input = std::exchange(handshake_input, nullptr);
+        const auto request = control;
+        const auto stop = handshake_stop.get_token();
+        const auto weak = weak_from_this();
+        const auto delivery = gate;
+        handshake_outstanding = true;
+        const auto admitted = handshake_runtime->submit_handshake([step, request, stop] {
+            if (stop.stop_requested()) {
+                step->result.failure = outcome_code::cancelled;
+            } else if (std::chrono::steady_clock::now() >= request->deadline) {
+                step->result.failure = outcome_code::timeout;
+            } else if (!step->input || step->session->feed(*step->input)) {
+                try {
+                    step->result = step->session->handshake();
+                    step->output->resize(step->session->drain(*step->output));
+                } catch (...) { step->result = {tls_session::progress::failed}; }
+            }
+        }, [step, request, weak, delivery] {
+            std::lock_guard lock(delivery->mutex);
+            if (!delivery->open) return;
+            if (auto self = weak.lock()) {
+                self->enqueue([self, step, request] { self->accept_handshake(step, request); });
+            }
+        });
+        if (admitted != outcome_code::ok) {
+            session = std::move(step->session);
+            handshake_outstanding = false;
+            abort(admitted);
+        }
+    }
+    void accept_handshake(const std::shared_ptr<handshake_step>& step, const std::shared_ptr<request>& request) {
+        handshake_outstanding = false;
+        if (dead || control != request) return;
+        if (close_requested.load(std::memory_order_acquire) || handshake_stop.stop_requested()) {
+            abort();
             return;
         }
-        if (control && control->complete) {
-            const bool shutdown = control->op->kind() == io_op_kind::tls_shutdown;
-            established = !shutdown;
-            if (!shutdown) std::atomic_store_explicit(&peer, session.peer_metadata(), std::memory_order_release);
-            finish(control, control->result);
-            if (shutdown) {
-                abort();
-                return;
-            }
+        if (std::chrono::steady_clock::now() >= request->deadline) {
+            abort(outcome_code::timeout);
+            return;
         }
+        session = std::move(step->session);
+        bool input = false;
+        apply_step(control, step->result, input);
+        if (dead) return;
+        handshake_needs_input = input;
+        if (!step->output->empty()) send(step->output);
+    }
+    void finish_control_flushed() {
+        if (std::chrono::steady_clock::now() >= control->deadline || close_requested.load(std::memory_order_acquire)) {
+            abort(close_requested.load(std::memory_order_acquire) ? outcome_code::connection_closed : outcome_code::timeout);
+            return;
+        }
+        const bool shutdown = control->op->kind() == io_op_kind::tls_shutdown;
+        established = !shutdown;
+        if (!shutdown) std::atomic_store_explicit(&peer, session->peer_metadata(), std::memory_order_release);
+        finish(control, control->result);
+        if (shutdown) {
+            abort();
+            return;
+        }
+    }
+    void finish_flushed() {
+        if (raw_write || session->output_pending()) {
+            return;
+        }
+        if (control && control->complete) finish_control_flushed();
+        if (dead) return;
         if (writer && writer->complete) {
             finish(writer, writer->result);
         }
+    }
+    bool pump_handshake() {
+        if (!handshake_runtime || !control || control->op->kind() != io_op_kind::tls_handshake || control->complete) return false;
+        if (handshake_needs_input) {
+            receive();
+        } else if (!raw_write) {
+            dispatch_handshake();
+        }
+        return true;
     }
     void pump() {
         if (dead) {
             return;
         }
+        if (handshake_outstanding) return;
+        if (pump_handshake()) return;
         bool input = false;
         step(control, input);
         step(writer, input);
@@ -330,9 +427,9 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         if (dead) {
             return;
         }
-        if (!raw_write && session.output_pending()) {
+        if (!raw_write && session->output_pending()) {
             auto bytes = std::make_shared<std::vector<std::byte>>(16384);
-            bytes->resize(session.drain(*bytes));
+            bytes->resize(session->drain(*bytes));
             send(bytes);
         }
         finish_flushed();
@@ -384,7 +481,13 @@ outcome_code tls_io_backend::request_cancel(op_state& op) {
 std::shared_ptr<const server::tls_peer_metadata> tls_io_backend::peer_metadata() const { return std::atomic_load_explicit(&core_->peer, std::memory_order_acquire); }
 void tls_io_backend::close() {
     auto self = core_;
-    if (self && !self->close_requested.exchange(true, std::memory_order_acq_rel)) {
+    if (!self) return;
+    {
+        std::lock_guard lock(self->gate->mutex);
+        self->gate->open = false;
+    }
+    self->handshake_stop.request_stop();
+    if (!self->close_requested.exchange(true, std::memory_order_acq_rel)) {
         self->enqueue([self] { self->abort(); });
     }
 }

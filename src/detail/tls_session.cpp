@@ -6,6 +6,7 @@
 
 #include <httpserver/detail/tls_session.hpp>
 #include <httpserver/detail/tls_credentials.hpp>
+#include <httpserver/detail/tls_psk_attempt.hpp>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
@@ -14,6 +15,7 @@
 #include <chrono>
 #include <cstdint>
 #include <ctime>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <stdexcept>
@@ -96,6 +98,73 @@ struct tls_session::impl {
     bool metadata_failed = false;
     std::shared_ptr<const server::tls_peer_metadata> peer;
     std::size_t selected_host = 0;
+    std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max();
+    std::stop_token cancellation;
+    http::outcome_code psk_failure = http::outcome_code::protocol_error;
+    std::unique_ptr<tls_psk_attempt> attempt;
+    psk_lookup_result lookup(psk_tls_version version, std::span<const std::byte> identity, std::size_t capacity) {
+        const auto config = selection.context->psk_;
+        if (!config || identity.empty() || identity.size() > config->maximum_identity_bytes) return {};
+        psk_handshake_context context{version, selection.snapshot ? selection.snapshot->generation() : 0,
+            selection.snapshot ? metadata().host : std::string{}, deadline, cancellation, std::min(capacity, config->maximum_key_bytes)};
+        if (!attempt) attempt = std::make_unique<tls_psk_attempt>(*config, std::move(context));
+        auto result = attempt->lookup(version, identity, capacity);
+        switch (result.status) {
+            case psk_lookup_status::timeout: psk_failure = http::outcome_code::timeout; break;
+            case psk_lookup_status::cancelled: psk_failure = http::outcome_code::cancelled; break;
+            case psk_lookup_status::limit_exceeded: psk_failure = http::outcome_code::limit_exceeded; break;
+            default: break;
+        }
+        return result;
+    }
+    static unsigned psk12(SSL* ssl, const char* identity, unsigned char* key, unsigned capacity) noexcept {
+        try {
+            auto* self = state(ssl);
+            if (!self || !self->selection.context->psk_ || SSL_version(ssl) >= TLS1_3_VERSION || !identity) return 0;
+            const auto maximum = std::min<std::size_t>(256, self->selection.context->psk_->maximum_identity_bytes);
+            std::size_t size = 0;
+            while (size <= maximum && identity[size] != 0) ++size;
+            if (size > maximum) return 0;
+            auto result = self->lookup(psk_tls_version::tls12, {reinterpret_cast<const std::byte*>(identity), size}, std::min<unsigned>(capacity, 512));
+            if (result.status != psk_lookup_status::accepted) return 0;
+            std::memcpy(key, result.key.bytes().data(), result.key.bytes().size());
+            return static_cast<unsigned>(result.key.bytes().size());
+        } catch (...) { return 0; }
+    }
+    static SSL_SESSION* external_session(SSL* ssl, const secure_bytes& key) {
+        std::unique_ptr<SSL_SESSION, decltype(&SSL_SESSION_free)> owned(SSL_SESSION_new(), SSL_SESSION_free);
+        const unsigned char cipher_id[] = {0x13, 0x01};
+        const auto* cipher = SSL_CIPHER_find(ssl, cipher_id);
+        if (!owned || !cipher || SSL_SESSION_set1_master_key(owned.get(), reinterpret_cast<const unsigned char*>(key.bytes().data()), key.bytes().size()) != 1 ||
+            SSL_SESSION_set_cipher(owned.get(), cipher) != 1 || SSL_SESSION_set_protocol_version(owned.get(), TLS1_3_VERSION) != 1 ||
+            SSL_SESSION_set_max_early_data(owned.get(), 0) != 1) return nullptr;
+        return owned.release();
+    }
+    static int psk13(SSL* ssl, const unsigned char* identity, std::size_t size, SSL_SESSION** session) noexcept {
+        *session = nullptr;
+        try {
+            auto* self = state(ssl);
+            if (!self || !self->selection.context->psk_) return 0;
+            auto result = self->lookup(psk_tls_version::tls13, {reinterpret_cast<const std::byte*>(identity), size}, 512);
+            if (result.status != psk_lookup_status::accepted) return 0;
+            *session = external_session(ssl, result.key);
+            return *session != nullptr;
+        } catch (...) { return 0; }
+    }
+    void apply_profile() {
+        const bool psk = static_cast<bool>(selection.context->psk_);
+        SSL_set_psk_server_callback(ssl, psk ? psk12 : nullptr);
+        SSL_set_psk_find_session_callback(ssl, psk ? psk13 : nullptr);
+        if (SSL_set_cipher_list(ssl, psk ? "PSK-AES128-GCM-SHA256" : "DEFAULT") != 1 ||
+            SSL_set_ciphersuites(ssl, psk ? "TLS_AES_128_GCM_SHA256" : "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256") != 1) {
+            throw std::runtime_error("TLS profile unavailable");
+        }
+        SSL_set_max_early_data(ssl, 0);
+        if (psk) {
+            SSL_set_options(ssl, SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
+            SSL_set_num_tickets(ssl, 0);
+        }
+    }
     static int index() {
         static const int value = SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
         return value;
@@ -139,6 +208,7 @@ struct tls_session::impl {
             throw std::runtime_error("TLS selection unavailable");
         }
         apply_verification();
+        apply_profile();
         // SSL_set_SSL_CTX does not replace the initial ticket/cache owner.
         // Bind lookup to the selected immutable host before resumption runs.
         const auto& id = selection.context->session_namespace_;
@@ -225,7 +295,7 @@ struct tls_session::impl {
                 return {progress::eof};
             default:
                 ERR_clear_error();
-                return {progress::failed};
+                return {progress::failed, 0, psk_failure};
         }
     }
 };
@@ -235,6 +305,8 @@ void tls_context::configure_server() {
         SSL_CTX_set_session_id_context(ctx, session_namespace_.data(), session_namespace_.size()) != 1) {
         throw std::invalid_argument("TLS credentials invalid");
     }
+    SSL_CTX_set_psk_server_callback(ctx, psk_ ? tls_session::impl::psk12 : nullptr);
+    SSL_CTX_set_psk_find_session_callback(ctx, psk_ ? tls_session::impl::psk13 : nullptr);
     SSL_CTX_set_alpn_select_cb(ctx, tls_session::impl::alpn, nullptr);
     SSL_CTX_set_client_hello_cb(ctx, tls_session::impl::client_hello, nullptr);
     SSL_CTX_set_tlsext_servername_callback(ctx, tls_session::impl::server_name);
@@ -257,12 +329,27 @@ tls_session::tls_session(tls_credentials_selection selection, bool server) : imp
     if (server) {
         impl_->server_side = true;
         impl_->apply_verification();
+        impl_->apply_profile();
         SSL_set_accept_state(impl_->ssl);
     } else {
         SSL_set_connect_state(impl_->ssl);
     }
 }
 tls_session::~tls_session() = default;
+std::shared_ptr<tls_psk_runtime> tls_session::handshake_runtime() const {
+    if (impl_->selection.context->psk_) return impl_->selection.context->psk_->runtime;
+    if (impl_->selection.snapshot) {
+        for (std::size_t i = 0; i < impl_->selection.snapshot->hosts().size(); ++i) {
+            const auto context = impl_->selection.snapshot->select(i).context;
+            if (context->psk_) return context->psk_->runtime;
+        }
+    }
+    return nullptr;
+}
+void tls_session::handshake_limits(std::chrono::steady_clock::time_point deadline, std::stop_token cancellation) {
+    impl_->deadline = deadline;
+    impl_->cancellation = cancellation;
+}
 std::shared_ptr<const server::tls_peer_metadata> tls_session::peer_metadata() const { return impl_->peer; }
 tls_session::result tls_session::handshake() {
     ERR_clear_error();
@@ -277,6 +364,7 @@ tls_session::result tls_session::handshake() {
             return {progress::failed};
         }
     }
+    if (result.state == progress::complete || result.state == progress::failed || result.state == progress::eof) impl_->attempt.reset();
     return result;
 }
 tls_session::result tls_session::read(std::span<std::byte> buffer) {

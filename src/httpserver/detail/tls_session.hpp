@@ -12,15 +12,19 @@
 #include <cstddef>
 #include <memory>
 #include <span>
+#include <stop_token>
 #include <httpserver/detail/tls_io_backend.hpp>
+#include <httpserver/detail/tls_psk_runtime.hpp>
 namespace httpserver::detail {
-// Bounded BIO pair; only the adapter's serialized pump may call these methods.
+// Bounded BIO pair. The pump transfers exclusive access to a handshake worker;
+// no SSL/BIO access is permitted on the owner until that step retires.
 class tls_session final {
  public:
     enum class progress { complete, input, output, eof, failed };
     struct result {
         progress state;
         std::size_t bytes = 0;
+        http::outcome_code failure = http::outcome_code::protocol_error;
     };
     tls_session(std::shared_ptr<const tls_context> context, bool server);
     tls_session(tls_credentials_selection selection, bool server);
@@ -28,6 +32,8 @@ class tls_session final {
     // Serialized pump access only. Null before success or after failed auth.
     std::shared_ptr<const server::tls_peer_metadata> peer_metadata() const;
     result handshake();
+    std::shared_ptr<tls_psk_runtime> handshake_runtime() const;
+    void handshake_limits(std::chrono::steady_clock::time_point deadline, std::stop_token cancellation);
     result read(std::span<std::byte> buffer);
     result write(std::span<const std::byte> bytes);
     result shutdown();
