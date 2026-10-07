@@ -273,7 +273,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-125 | [Implement external-loop readiness adapter](M9-http1-parity-websocket/TASK-125.md) | M9 | Complete | TASK-100, TASK-124 |
 | TASK-126 | [Implement Linux epoll managed I/O backend](M9-http1-parity-websocket/TASK-126.md) | M9 | Complete | TASK-099, TASK-100 |
 | TASK-127 | [Implement BSD/macOS kqueue managed I/O backend](M9-http1-parity-websocket/TASK-127.md) | M9 | Complete | TASK-099, TASK-100 |
-| TASK-128 | [Gate HTTP/1 and WebSocket conformance, fuzzing and parity](M9-http1-parity-websocket/TASK-128.md) | M9 | In Progress | TASK-113, TASK-115, TASK-117, TASK-118, TASK-120, TASK-122, TASK-123 |
+| TASK-128 | [Gate HTTP/1 and WebSocket conformance, fuzzing and parity](M9-http1-parity-websocket/TASK-128.md) | M9 | Complete | TASK-113, TASK-115, TASK-117, TASK-118, TASK-120, TASK-122, TASK-123 |
 | TASK-129 | [Establish OpenSSL 3.5 LTS build boundary and feature gates](M10-tls-http2/TASK-129.md) | M10 | Not Started | TASK-108 |
 | TASK-130 | [Drive nonblocking TCP TLS through private I/O operations](M10-tls-http2/TASK-130.md) | M10 | Not Started | TASK-099, TASK-129 |
 | TASK-131 | [Build and atomically publish immutable TLS credential snapshots](M10-tls-http2/TASK-131.md) | M10 | Not Started | TASK-129, TASK-130 |
