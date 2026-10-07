@@ -24,7 +24,7 @@ Provide connection-owned HPACK dynamic tables for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-005, PRD-V3N-REQ-017, PRD-V3N-REQ-018
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation notes:**
 - Private, noncopyable `hpack_connection` owns separate encoder and decoder
