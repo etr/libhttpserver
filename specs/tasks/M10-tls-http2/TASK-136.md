@@ -9,9 +9,9 @@
 Provide ACME TLS-ALPN-01 publication and removal for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Validate RFC 8737 challenge SAN, OID, digest and key match.
-- [ ] Publish/remove short-lived challenge snapshots.
-- [ ] Select only exact TCP 443 SNI with sole acme-tls/1 ALPN.
+- [x] Validate RFC 8737 challenge SAN, OID, digest and key match.
+- [x] Publish/remove short-lived challenge snapshots.
+- [x] Select only exact TCP 443 SNI with sole acme-tls/1 ALPN.
 
 **Dependencies:**
 - Blocked by: TASK-131, TASK-132
@@ -24,4 +24,4 @@ Provide ACME TLS-ALPN-01 publication and removal for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-036
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** Not Started
+**Status:** Complete

@@ -94,6 +94,10 @@ struct tls_session::impl {
     tls_credentials_selection selection;
     SSL* ssl = nullptr;
     bool accepted_name = false;
+    bool acme = false;
+    bool sole_acme_offer = false;
+    std::string challenge_name;
+    tls_handshake_context handshake_context;
     bool server_side = false;
     bool metadata_failed = false;
     std::shared_ptr<const server::tls_peer_metadata> peer;
@@ -180,6 +184,54 @@ struct tls_session::impl {
         }
         return canonical_tls_host(std::string(reinterpret_cast<const char*>(data + 5), size - 5));
     }
+    static bool hello_acme_offer(SSL* ssl) {
+        const unsigned char* data = nullptr;
+        std::size_t size = 0;
+        if (!SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_application_layer_protocol_negotiation, &data, &size)) return false;
+        if (size < 3 || u16(data) != size - 2) throw std::invalid_argument("TLS ALPN invalid");
+        std::size_t pos = 2;
+        while (pos < size) {
+            const auto length = data[pos++];
+            if (!length || length > size - pos) throw std::invalid_argument("TLS ALPN invalid");
+            pos += length;
+        }
+        return size == 13 && data[2] == 10 && std::memcmp(data + 3, "acme-tls/1", 10) == 0;
+    }
+    bool select_acme(const std::string& name) {
+        if (!selection.snapshot || !sole_acme_offer || name.empty() ||
+            handshake_context.transport != tls_transport::tcp || handshake_context.local_port != 443) return false;
+        auto challenge = selection.snapshot->select_acme(name);
+        if (!challenge) return false;
+        selection = std::move(*challenge);
+        acme = true;
+        challenge_name = name;
+        accepted_name = true;
+        return true;
+    }
+    void apply_acme_isolation() {
+        std::array<unsigned char, 32> id{};
+        if (RAND_bytes(id.data(), id.size()) != 1 || SSL_set_session_id_context(ssl, id.data(), id.size()) != 1 ||
+            SSL_set_num_tickets(ssl, 0) != 1) throw std::runtime_error("TLS challenge unavailable");
+        SSL_set_options(ssl, SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
+        SSL_set_not_resumable_session_callback(ssl, [](SSL*, int) { return 1; });
+    }
+    void install_selected_context() {
+        if (!SSL_set_SSL_CTX(ssl, static_cast<SSL_CTX*>(selection.context->native_.get()))) {
+            throw std::runtime_error("TLS selection unavailable");
+        }
+        apply_verification();
+        apply_profile();
+        if (acme) {
+            apply_acme_isolation();
+            return;
+        }
+        // SSL_set_SSL_CTX does not replace the initial ticket/cache owner.
+        // Bind lookup to the selected immutable host before resumption runs.
+        const auto& id = selection.context->session_namespace_;
+        if (SSL_set_session_id_context(ssl, id.data(), id.size()) != 1) {
+            throw std::runtime_error("TLS selection unavailable");
+        }
+    }
     void apply_verification() {
         auto* ctx = static_cast<SSL_CTX*>(selection.context->native_.get());
         SSL_set_verify(ssl, SSL_CTX_get_verify_mode(ctx), nullptr);
@@ -190,8 +242,18 @@ struct tls_session::impl {
         }
     }
     int select_hello() {
-        if (!selection.snapshot) return SSL_CLIENT_HELLO_SUCCESS;
         const auto name = hello_name(ssl);
+        sole_acme_offer = hello_acme_offer(ssl);
+        // A HelloRetryRequest continues the same already-selected handshake.
+        if (acme) {
+            if (name != challenge_name || !sole_acme_offer) throw std::invalid_argument("TLS challenge changed");
+            return SSL_CLIENT_HELLO_SUCCESS;
+        }
+        if (select_acme(name)) {
+            install_selected_context();
+            return SSL_CLIENT_HELLO_SUCCESS;
+        }
+        if (!selection.snapshot) return SSL_CLIENT_HELLO_SUCCESS;
         auto host = selection.snapshot->default_host();
         accepted_name = false;
         const auto& hosts = selection.snapshot->hosts();
@@ -204,17 +266,7 @@ struct tls_session::impl {
         }
         selected_host = host;
         selection = selection.snapshot->select(host);
-        if (!SSL_set_SSL_CTX(ssl, static_cast<SSL_CTX*>(selection.context->native_.get()))) {
-            throw std::runtime_error("TLS selection unavailable");
-        }
-        apply_verification();
-        apply_profile();
-        // SSL_set_SSL_CTX does not replace the initial ticket/cache owner.
-        // Bind lookup to the selected immutable host before resumption runs.
-        const auto& id = selection.context->session_namespace_;
-        if (SSL_set_session_id_context(ssl, id.data(), id.size()) != 1) {
-            throw std::runtime_error("TLS selection unavailable");
-        }
+        install_selected_context();
         return SSL_CLIENT_HELLO_SUCCESS;
     }
     static int client_hello(SSL* ssl, int* alert, void*) noexcept {
@@ -240,6 +292,7 @@ struct tls_session::impl {
     }
     const tls_host_metadata& metadata() const { return selection.snapshot->hosts()[selected_host]; }
     bool allows_absent_alpn() const {
+        if (sole_acme_offer) return acme;
         if (!selection.snapshot || metadata().alpn.empty()) return true;
         const unsigned char* data = nullptr;
         std::size_t size = 0;
@@ -258,10 +311,17 @@ struct tls_session::impl {
         }
         return nullptr;
     }
+    static int acme_alpn(const unsigned char** out, unsigned char* length, const unsigned char* input, unsigned size) {
+        if (size != 11 || input[0] != 10 || std::memcmp(input + 1, "acme-tls/1", 10) != 0) return SSL_TLSEXT_ERR_ALERT_FATAL;
+        *out = input + 1;
+        *length = 10;
+        return SSL_TLSEXT_ERR_OK;
+    }
     static int alpn(SSL* ssl, const unsigned char** out, unsigned char* length, const unsigned char* input, unsigned size, void*) noexcept {
         try {
             const auto* self = state(ssl);
             if (!self) return SSL_TLSEXT_ERR_ALERT_FATAL;
+            if (self->acme) return acme_alpn(out, length, input, size);
             if (!self->selection.snapshot || self->metadata().alpn.empty()) return SSL_TLSEXT_ERR_NOACK;
             for (const auto& token : self->metadata().alpn) {
                 if (!http_protocol(token)) continue;
@@ -311,11 +371,14 @@ void tls_context::configure_server() {
     SSL_CTX_set_client_hello_cb(ctx, tls_session::impl::client_hello, nullptr);
     SSL_CTX_set_tlsext_servername_callback(ctx, tls_session::impl::server_name);
 }
-tls_session::tls_session(std::shared_ptr<const tls_context> context, bool server) : tls_session(tls_credentials_selection{nullptr, std::move(context)}, server) {}
-tls_session::tls_session(tls_credentials_selection selection, bool server) : impl_(std::make_unique<impl>()) {
+tls_session::tls_session(std::shared_ptr<const tls_context> context, bool server, tls_handshake_context handshake)
+    : tls_session(tls_credentials_selection{nullptr, std::move(context)}, server, handshake) {
+}
+tls_session::tls_session(tls_credentials_selection selection, bool server, tls_handshake_context handshake) : impl_(std::make_unique<impl>()) {
     if (!selection.context || !selection.context->native_) {
         throw std::invalid_argument("TLS context missing");
     }
+    impl_->handshake_context = handshake;
     impl_->selection = std::move(selection);
     impl_->ssl = SSL_new(static_cast<SSL_CTX*>(impl_->selection.context->native_.get()));
     BIO* local = nullptr;
@@ -368,12 +431,14 @@ tls_session::result tls_session::handshake() {
     return result;
 }
 tls_session::result tls_session::read(std::span<std::byte> buffer) {
+    if (impl_->acme) return {progress::failed};
     std::size_t bytes = 0;
     ERR_clear_error();
     const int rc = SSL_read_ex(impl_->ssl, buffer.data(), buffer.size(), &bytes);
     return impl_->classify(rc, bytes);
 }
 tls_session::result tls_session::write(std::span<const std::byte> buffer) {
+    if (impl_->acme) return {progress::failed};
     std::size_t bytes = 0;
     ERR_clear_error();
     const int rc = SSL_write_ex(impl_->ssl, buffer.data(), buffer.size(), &bytes);

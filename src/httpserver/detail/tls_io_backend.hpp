@@ -11,6 +11,7 @@
 #define SRC_HTTPSERVER_DETAIL_TLS_IO_BACKEND_HPP_
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string_view>
 #include <httpserver/detail/io_operation.hpp>
@@ -18,11 +19,19 @@
 #include <httpserver/server/tls_peer_metadata.hpp>
 namespace httpserver::detail {
 // Contexts are immutable after construction. No provider types escape this seam.
+enum class tls_transport { unknown, tcp, quic };
+// Trusted listener metadata; unknown transport/port cannot serve challenges.
+struct tls_handshake_context {
+    tls_transport transport = tls_transport::unknown;
+    std::uint16_t local_port = 0;
+};
 struct tls_credentials_selection;
 struct tls_psk_config;
+struct tls_acme_challenge;
 class tls_context {
  public:
     static std::shared_ptr<tls_context> client();
+    static std::shared_ptr<tls_context> server_acme(const tls_acme_challenge& input);
     static std::shared_ptr<tls_context> server_psk(const tls_psk_config& config);
     static std::shared_ptr<tls_context> server_pem(std::string_view certificate, std::string_view key, std::string_view roots = {},
         server::tls_client_certificate_mode mode = server::tls_client_certificate_mode::none);
@@ -48,8 +57,8 @@ class tls_shutdown_operation final : public op_handle {
 // One adapter owns one connection. Cancellation/timeout abort the entire session.
 class tls_io_backend final : public io_backend {
  public:
-    tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, std::shared_ptr<const tls_context> context, bool server);
-    tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, tls_credentials_selection selection, bool server);
+    tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, std::shared_ptr<const tls_context> context, bool server, tls_handshake_context handshake = {});
+    tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, tls_credentials_selection selection, bool server, tls_handshake_context handshake = {});
     ~tls_io_backend() override;
     void submit(op_state& op) override;
     // ok accepts a cancellation event; the operation result decides races.

@@ -54,8 +54,9 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
     std::atomic<std::uint64_t> sequence{1};
     std::shared_ptr<request> control, reader, writer;
     std::shared_ptr<op_state> raw_read, raw_write;
-    explicit core(io_backend& transport, executor& executor, std::uint64_t id, tls_credentials_selection selection, bool server)
-        : raw(transport), ex(executor), connection(id), child_owner(executor), session(std::make_unique<tls_session>(std::move(selection), server)), handshake_runtime(session->handshake_runtime()) {}
+    explicit core(io_backend& transport, executor& executor, std::uint64_t id, tls_credentials_selection selection, bool server, tls_handshake_context handshake)
+        : raw(transport), ex(executor), connection(id), child_owner(executor), session(std::make_unique<tls_session>(std::move(selection), server, handshake)),
+          handshake_runtime(session->handshake_runtime()) {}
     void enqueue(executor::handler event, const std::shared_ptr<op_state>& tracked = nullptr) {
         bool schedule = false;
         {
@@ -442,12 +443,12 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
     }
 };
 tls_io_backend::tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection,
-                               std::shared_ptr<const tls_context> context, bool server) {
-    core_ = std::make_shared<core>(raw, ex, connection, tls_credentials_selection{nullptr, std::move(context)}, server);
+                               std::shared_ptr<const tls_context> context, bool server, tls_handshake_context handshake) {
+    core_ = std::make_shared<core>(raw, ex, connection, tls_credentials_selection{nullptr, std::move(context)}, server, handshake);
 }
 
-tls_io_backend::tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, tls_credentials_selection selection, bool server)
-    : core_(std::make_shared<core>(raw, ex, connection, std::move(selection), server)) {}
+tls_io_backend::tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, tls_credentials_selection selection, bool server, tls_handshake_context handshake)
+    : core_(std::make_shared<core>(raw, ex, connection, std::move(selection), server, handshake)) {}
 tls_io_backend::~tls_io_backend() {
     close();
 }
