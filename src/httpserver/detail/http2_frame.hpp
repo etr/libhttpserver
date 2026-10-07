@@ -21,7 +21,7 @@ inline constexpr std::string_view http2_magic = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\
 enum class http2_error_scope { stream, connection };
 enum class http2_error_code : std::uint32_t {
     protocol_error = 1, internal_error = 2, flow_control_error = 3,
-    settings_timeout = 4, frame_size_error = 6, enhance_your_calm = 11
+    settings_timeout = 4, stream_closed = 5, frame_size_error = 6, refused_stream = 7, cancel = 8, compression_error = 9, enhance_your_calm = 11
 };
 enum class http2_progress { input, frame_ready, control_ready, yield, failed };
 struct http2_error {

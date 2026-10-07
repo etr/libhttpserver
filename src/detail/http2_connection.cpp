@@ -131,6 +131,7 @@ void http2_connection::fail(http2_error e) {
     terminal_.fill(0);
     terminal_[2] = 8;
     terminal_[3] = 7;
+    put32(terminal_.data() + 9, last_processed_stream_);
     put32(terminal_.data() + 13, static_cast<std::uint32_t>(e.wire_code));
     terminal_used_ = control_charge_.owns() ? 0 : terminal_.size();
 }

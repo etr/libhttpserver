@@ -285,7 +285,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-137 | [Implement bounded HPACK primitives and static tables](M10-tls-http2/TASK-137.md) | M10 | Complete | TASK-097 |
 | TASK-138 | [Implement connection-owned HPACK dynamic tables](M10-tls-http2/TASK-138.md) | M10 | Complete | TASK-137 |
 | TASK-139 | [Implement HTTP/2 preface, frame and SETTINGS machine](M10-tls-http2/TASK-139.md) | M10 | Complete | TASK-130, TASK-132, TASK-137 |
-| TASK-140 | [Route HTTP/2 headers-only streams through the exchange](M10-tls-http2/TASK-140.md) | M10 | Not Started | TASK-102, TASK-138, TASK-139 |
+| TASK-140 | [Route HTTP/2 headers-only streams through the exchange](M10-tls-http2/TASK-140.md) | M10 | Complete | TASK-102, TASK-138, TASK-139 |
 | TASK-141 | [Implement HTTP/2 streaming bodies and two-level flow control](M10-tls-http2/TASK-141.md) | M10 | Not Started | TASK-103, TASK-104, TASK-140 |
 | TASK-142 | [Implement HTTP/2 fair output, resets and rate budgets](M10-tls-http2/TASK-142.md) | M10 | Not Started | TASK-141 |
 | TASK-143 | [Implement HTTP/2 staged GOAWAY and deadline drain](M10-tls-http2/TASK-143.md) | M10 | Not Started | TASK-110, TASK-142 |

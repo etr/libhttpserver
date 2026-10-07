@@ -109,3 +109,8 @@ noinst_HEADERS += httpserver/detail/hpack_dynamic_table.hpp httpserver/detail/hp
 
 noinst_HEADERS += httpserver/detail/http2_frame.hpp httpserver/detail/http2_connection.hpp
 libhttpserver_v3core_la_SOURCES += detail/http2_frame.cpp detail/http2_connection.cpp
+
+noinst_HEADERS += httpserver/detail/http2_request_engine.hpp
+libhttpserver_v3core_la_SOURCES += detail/http2_request_engine.cpp
+noinst_HEADERS += httpserver/detail/http2_request_head.hpp
+libhttpserver_v3core_la_SOURCES += detail/http2_request_head.cpp
