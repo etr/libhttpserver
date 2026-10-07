@@ -1890,3 +1890,10 @@ http2_conformance_SOURCES = unit/http2_conformance_test.cpp
 http2_conformance_CPPFLAGS = $(AM_CPPFLAGS) -DHTTP2_CORPUS_DIR='"$(top_srcdir)/test/conformance/http2"'
 http2_conformance_LDADD = $(http2_frame_LDADD)
 EXTRA_DIST += conformance/http2/README.md conformance/http2/ack-payload.wire conformance/http2/bad-magic.wire conformance/http2/bad-ping-length.wire conformance/http2/bad-settings-length.wire conformance/http2/cases.tsv conformance/http2/continuation.wire conformance/http2/control-flood.wire conformance/http2/empty-settings.wire conformance/http2/interleaved.wire conformance/http2/invalid-then-valid.wire conformance/http2/local-ack.wire conformance/http2/orphan-continuation.wire conformance/http2/oversized.wire conformance/http2/ping-ack.wire conformance/http2/ping-stream.wire conformance/http2/ping.wire conformance/http2/priority-stream.wire conformance/http2/push.wire conformance/http2/settings-order.wire conformance/http2/settings-stream.wire conformance/http2/truncated-header.wire conformance/http2/truncated-magic.wire conformance/http2/truncated-payload.wire conformance/http2/unfinished-block.wire conformance/http2/unknown.wire conformance/http2/window-overflow.wire conformance/http2/wrong-first.wire conformance/http2/zero-connection-window.wire conformance/http2/zero-stream-window.wire
+
+check_PROGRAMS += http2_headers http2_exchange
+http2_headers_SOURCES = unit/http2_headers_test.cpp
+http2_exchange_SOURCES = unit/http2_exchange_test.cpp
+http2_headers_LDADD = $(http2_frame_LDADD)
+http2_exchange_LDADD = $(http2_frame_LDADD)
+noinst_HEADERS += unit/http2_request_fixture.hpp

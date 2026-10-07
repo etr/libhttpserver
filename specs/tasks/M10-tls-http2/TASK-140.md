@@ -9,9 +9,9 @@
 Provide HTTP/2 headers-only streams through the exchange for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Assemble HEADERS/CONTINUATION in connection wire order.
-- [ ] Validate pseudo-header order, duplication and forbidden fields.
-- [ ] Bridge decoded heads to the shared route exchange.
+- [x] Assemble HEADERS/CONTINUATION in connection wire order.
+- [x] Validate pseudo-header order, duplication and forbidden fields.
+- [x] Bridge decoded heads to the shared route exchange.
 
 **Dependencies:**
 - Blocked by: TASK-102, TASK-138, TASK-139
@@ -24,4 +24,6 @@ Provide HTTP/2 headers-only streams through the exchange for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-005, PRD-V3N-REQ-009, PRD-V3N-REQ-017, PRD-V3N-REQ-020
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** [TASK-140 local evidence](../../../docs/task-140-http2-evidence.md).

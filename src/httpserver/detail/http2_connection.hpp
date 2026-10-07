@@ -31,6 +31,12 @@ class http2_connection {
     http2_feed_result feed(std::span<const std::uint8_t> bytes, time_point now = {});
     http2_feed_result eof();
     void begin_turn() { processed_ = 0; }
+    // Highest stream the exchange owner may have dispatched. GOAWAY must
+    // not promise that a routed request was unprocessed.
+    void processed_stream(std::uint32_t id) { last_processed_stream_ = id; }
+    // Stream engines escalate compression/admission failures through the same
+    // terminal path as framing failures.
+    void terminate(http2_error error) { fail(error); }
     void release_frame() { parser_.release_frame(); }
     const http2_frame_header& header() const { return parser_.header(); }
     std::span<const std::uint8_t> payload() const { return parser_.payload(); }
@@ -66,6 +72,7 @@ class http2_connection {
     std::array<std::uint8_t, 17> terminal_{};
     std::size_t head_ = 0, count_ = 0, bytes_ = 0, queued_settings_ = 0;
     std::size_t pending_head_ = 0, pending_count_ = 0, terminal_used_ = 17, processed_ = 0;
+    std::uint32_t last_processed_stream_ = 0;
     http2_settings peer_, local_, advertised_;
     std::optional<http2_error> failure_;
 };
