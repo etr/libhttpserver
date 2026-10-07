@@ -9,9 +9,9 @@
 Build and atomically publish immutable TLS credential snapshots for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Validate certificate/key, trust roots, ALPN and host profiles off path.
-- [ ] Publish immutable SSL_CTX registry generations atomically.
-- [ ] Retain old generations for selected handshakes and established sessions.
+- [x] Validate certificate/key, trust roots, ALPN and host profiles off path.
+- [x] Publish immutable SSL_CTX registry generations atomically.
+- [x] Retain old generations for selected handshakes and established sessions.
 
 **Dependencies:**
 - Blocked by: TASK-129, TASK-130
@@ -24,4 +24,4 @@ Build and atomically publish immutable TLS credential snapshots for libhttpserve
 **Related Requirements:** PRD-V3N-REQ-034, PRD-V3N-REQ-035
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** Not Started
+**Status:** In Progress
