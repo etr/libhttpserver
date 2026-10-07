@@ -42,6 +42,9 @@ namespace httpserver {
 
 namespace server {
 
+// Ownership of network readiness and timer advancement; workers are independent.
+enum class loop_mode : std::uint8_t { managed, external };
+
 // Selection of the sole optional TLS/crypto provider linked into the
 // build (DR-V3-002). `none` is the TLS-off configuration; TLS, HTTP/2,
 // and HTTP/3 are then unavailable. `system_default` selects the
@@ -521,11 +524,30 @@ inline http::outcome check_peer_policy(
     return http::outcome::okay();
 }
 
+inline http::outcome check_loop_mode(loop_mode loop, const tls_options& tls,
+        const protocol_set& protocols, const std::vector<listener_options>& listeners) {
+    if (loop != loop_mode::managed && loop != loop_mode::external) {
+        return {http::outcome_code::invalid_argument, "server_options: invalid loop mode"};
+    }
+    if (loop == loop_mode::managed) return http::outcome::okay();
+    if (tls.provider != tls_provider::none || multi_version_enabled(protocols)) {
+        return {http::outcome_code::not_supported, "external loop supports plaintext HTTP/1 only"};
+    }
+    for (const auto& listener : listeners) {
+        if (listener.tls) {
+            return {http::outcome_code::not_supported, "external loop does not support TLS listeners"};
+        }
+    }
+    return http::outcome::okay();
+}
+
 // V7-V11: provider, profile, protocol, and per-listener TLS flags must
 // combine into a servable configuration.
 inline http::outcome check_tls_protocol_combination(
         const tls_options& tls, const protocol_set& protocols,
-        const std::vector<listener_options>& listeners) {
+        const std::vector<listener_options>& listeners, loop_mode loop) {
+    if (const auto result = check_loop_mode(loop, tls, protocols, listeners);
+        !result.ok()) return result;
     if (const http::outcome result = check_tls_off(tls, protocols, listeners);
         !result.ok()) {
         return result;
@@ -574,6 +596,9 @@ class server_options {
     const listener_options& listener(std::size_t i) const noexcept {
         return listeners_[i];
     }
+
+    loop_mode& loop() noexcept { return loop_; }
+    const loop_mode& loop() const noexcept { return loop_; }
 
     concurrency_options& concurrency() noexcept { return concurrency_; }
     const concurrency_options& concurrency() const noexcept {
@@ -661,7 +686,7 @@ class server_options {
             return result;
         }
         if (const http::outcome result = detail::check_tls_protocol_combination(
-                tls_, protocols_, listeners_);
+                tls_, protocols_, listeners_, loop_);
             !result.ok()) {
             return result;
         }
@@ -687,6 +712,7 @@ class server_options {
 
  private:
     std::vector<listener_options> listeners_;
+    loop_mode loop_ = loop_mode::managed;
     concurrency_options concurrency_;
     timeout_options timeouts_;
     tls_options tls_;

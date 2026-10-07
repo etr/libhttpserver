@@ -33,6 +33,7 @@
 #include "httpserver/detail/io_poll_backend.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
@@ -66,65 +67,47 @@ bool sequence_before(const std::shared_ptr<op_state>& lhs,
 
 }  // namespace
 
-io_poll_backend::io_poll_backend() {
-    thread_ = std::thread([this] { run_loop(); });
+io_poll_backend::io_poll_backend(server::loop_mode mode) : mode_(mode) {
+    if (mode_ == server::loop_mode::managed && wake_.valid()) {
+        thread_ = std::thread([this] { run_loop(); });
+    }
 }
 
 io_poll_backend::~io_poll_backend() {
     close();
     stop_.store(true, std::memory_order_release);
-    wake_.signal();
+    notify();
     if (thread_.joinable()) {
         thread_.join();
     }
     // Sockets are the backend's to close: release_connection may have
     // taken some out already (its record then holds k_invalid_socket).
     std::lock_guard<std::mutex> lock(mu_);
-    for (auto& entry : connections_) {
-        pollsys::close_socket(entry.second.socket);
-    }
     connections_.clear();
 }
 
 void io_poll_backend::submit(op_state& op) {
-    std::shared_ptr<op_state> state = op.shared_from_this();
+    const auto state = op.shared_from_this();
     bool registered = false;
+    bool rejected = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
         op.set_sequence(next_sequence_++);
-        if (closed_) {
-            // Post-close submits complete immediately -- no silent drops.
-            finish_now(state,
-                       io_result{http::outcome_code::connection_closed});
-            return;
-        }
-        if (op.kind() != io_op_kind::cancel) {
-            const auto cit = connections_.find(op.connection());
-            // Nonzero ids require a live registration, including after a
-            // released record was pruned. Zero remains the backend-wide
-            // timer/wake lane and does not require a socket registration.
-            const bool unavailable = cit == connections_.end()
-                ? op.connection() != 0 : cit->second.dead;
-            if (unavailable) {
-                finish_now(state,
-                           io_result{http::outcome_code::connection_closed});
-                return;
-            }
-            if (!pending_.emplace(&op, state).second) {
-                throw std::logic_error(
-                    "httpserver::io operation submitted twice to backend");
-            }
+        rejected = closed_ || (op.kind() != io_op_kind::cancel
+                               && unavailable_locked(op));
+        if (!rejected && op.kind() != io_op_kind::cancel) {
+            register_pending_locked(state);
             registered = true;
         }
     }
-    if (registered) {
-        // Doorbell: the loop rebuilds readiness from the registry.
-        wake_.signal();
+    if (rejected) {
+        finish_now(state, closed_result());
         return;
     }
-
-    // A cancel op resolves at submit time from its target's state
-    // (fake_io_backend parity). Cancel ops never occupy the registry.
+    if (registered) {
+        notify();
+        return;
+    }
     const auto target = std::get<cancel_payload>(op.payload()).target;
     if (try_cancel(target)) {
         finish_now(state, io_result{http::outcome_code::ok});
@@ -135,9 +118,33 @@ void io_poll_backend::submit(op_state& op) {
         std::lock_guard<std::mutex> lock(mu_);
         closed = closed_;
     }
-    finish_now(state, io_result{closed
-                                    ? http::outcome_code::connection_closed
-                                    : http::outcome_code::invalid_state});
+    finish_now(state, io_result{closed ? http::outcome_code::connection_closed
+                                      : http::outcome_code::invalid_state});
+}
+
+void io_poll_backend::register_pending_locked(const std::shared_ptr<op_state>& state) {
+    op_state& op = *state;
+    if (!pending_.emplace(&op, state).second) {
+        throw std::logic_error(
+            "httpserver::io operation submitted twice to backend");
+    }
+    const auto cit = connections_.find(op.connection());
+    if (cit != connections_.end()
+            && (op.kind() == io_op_kind::read || op.kind() == io_op_kind::write
+                || op.kind() == io_op_kind::accept)) {
+        bindings_[&op] = cit->second.lifetime;
+    }
+}
+
+bool io_poll_backend::unavailable_locked(const op_state& state) const {
+    const auto cit = connections_.find(state.connection());
+    return cit == connections_.end() ? state.connection() != 0
+                                     : cit->second.dead;
+}
+
+void io_poll_backend::forget_binding(const std::shared_ptr<op_state>& state) {
+    std::lock_guard<std::mutex> lock(mu_);
+    bindings_.erase(state.get());
 }
 
 http::outcome_code io_poll_backend::request_cancel(op_state& target) {
@@ -161,9 +168,10 @@ bool io_poll_backend::try_cancel(const std::shared_ptr<op_state>& target) {
             return false;
         }
         pending_.erase(it);
+        bindings_.erase(target.get());
     }
     // The loop may hold a stale interest projection for this op.
-    wake_.signal();
+    notify();
     if (!target->claim_terminal()) {
         // A concurrent dispatch/close won the claim; the cancel attempt
         // lost and the caller reports invalid_state.
@@ -184,47 +192,59 @@ void io_poll_backend::adopt_listener(std::uint64_t id,
     adopt_socket(id, socket, true);
 }
 
+std::shared_ptr<io_poll_backend::registration_lifetime>
+io_poll_backend::make_lifetime_locked(pollsys::native_socket_t socket) {
+    try {
+        if (next_identity_ == std::numeric_limits<std::uint64_t>::max()) {
+            throw std::overflow_error("httpserver::io registration identity exhausted");
+        }
+        return std::make_shared<registration_lifetime>(
+            socket, server::socket_key{next_identity_++});
+    } catch (...) {
+        // No record owns the handle if registration allocation failed.
+        pollsys::close_socket(socket);
+        throw;
+    }
+}
+
 void io_poll_backend::adopt_socket(std::uint64_t id,
                                    pollsys::native_socket_t socket,
                                    bool listener) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         const auto it = connections_.find(id);
-        if (it != connections_.end()
-            && it->second.socket != pollsys::k_invalid_socket) {
-            throw std::logic_error(
-                "httpserver::io connection id already adopted");
+        if (it != connections_.end() && !it->second.dead) {
+            throw std::logic_error("httpserver::io connection id already adopted");
         }
-        connection_record& record = connections_[id];
+        if (closed_) {
+            pollsys::close_socket(socket);
+            return;
+        }
+        connection_record record;
         record.socket = socket;
         record.listener = listener;
-        record.dead = false;
+        record.lifetime = make_lifetime_locked(socket);
+        connections_[id] = std::move(record);
         if (id >= next_connection_id_) {
+            if (id == std::numeric_limits<std::uint64_t>::max()) {
+                throw std::overflow_error("httpserver::io connection identity exhausted");
+            }
             next_connection_id_ = id + 1;
         }
     }
-    wake_.signal();
+    notify();
 }
 
 pollsys::native_socket_t io_poll_backend::native_handle(
     std::uint64_t id) const {
     std::lock_guard<std::mutex> lock(mu_);
     const auto it = connections_.find(id);
-    return it == connections_.end() ? pollsys::k_invalid_socket
-                                    : it->second.socket;
+    return it == connections_.end() || it->second.dead
+        ? pollsys::k_invalid_socket : it->second.socket;
 }
 
 void io_poll_backend::release_connection(std::uint64_t id) {
     hangup_connection(id);
-    {
-        std::lock_guard<std::mutex> lock(mu_);
-        const auto it = connections_.find(id);
-        if (it == connections_.end()) {
-            return;
-        }
-        pollsys::close_socket(it->second.socket);
-    }
-    wake_.signal();
 }
 
 void io_poll_backend::rearm_after_would_block(
@@ -235,11 +255,13 @@ void io_poll_backend::rearm_after_would_block(
         std::lock_guard<std::mutex> lock(mu_);
         for (std::size_t i = from; i < batch.size(); ++i) {
             const auto cit = connections_.find(batch[i]->connection());
-            // Release may sweep while this operation is detached. Apply
-            // the same live-registration rule as submit before rearming.
-            const bool unavailable = cit == connections_.end()
-                ? batch[i]->connection() != 0 : cit->second.dead;
-            if (closed_ || unavailable) {
+            const auto binding = bindings_.find(batch[i].get());
+            const auto lifetime = binding == bindings_.end()
+                ? nullptr : binding->second.lock();
+            const bool changed = batch[i]->connection() != 0
+                && (cit == connections_.end() || lifetime != cit->second.lifetime);
+            if (closed_ || unavailable_locked(*batch[i]) || changed) {
+                bindings_.erase(batch[i].get());
                 raced_closed.push_back(batch[i]);
                 continue;
             }
@@ -252,23 +274,31 @@ void io_poll_backend::rearm_after_would_block(
     }
 }
 
-void io_poll_backend::hangup_connection(std::uint64_t id) {
+void io_poll_backend::hangup_connection(std::uint64_t id,
+    const std::shared_ptr<registration_lifetime>& expected) {
     std::vector<std::shared_ptr<op_state>> swept;
     {
         std::lock_guard<std::mutex> lock(mu_);
         const auto cit = connections_.find(id);
-        if (cit != connections_.end()) {
+        if (expected && (cit == connections_.end()
+                         || cit->second.lifetime != expected)) return;
+        if (cit != connections_.end() && cit->second.lifetime) {
             cit->second.dead = true;
+            cit->second.lifetime->retired.store(true, std::memory_order_release);
+            cit->second.lifetime.reset();
+            cit->second.socket = pollsys::k_invalid_socket;
         }
         for (auto it = pending_.begin(); it != pending_.end();) {
             if (it->second->connection() == id) {
                 swept.push_back(it->second);
+                bindings_.erase(it->first);
                 it = pending_.erase(it);
             } else {
                 ++it;
             }
         }
     }
+    notify();
     for (const auto& state : swept) {
         finish_now(state,
                    io_result{http::outcome_code::connection_closed});
@@ -276,16 +306,23 @@ void io_poll_backend::hangup_connection(std::uint64_t id) {
 }
 
 std::uint64_t io_poll_backend::register_accepted_socket(
-    pollsys::native_socket_t socket) {
+    pollsys::native_socket_t socket, const std::shared_ptr<op_state>& accepting) {
     std::lock_guard<std::mutex> lock(mu_);
-    while (connections_.count(next_connection_id_) != 0) {
-        ++next_connection_id_;
+    const auto binding = bindings_.find(accepting.get());
+    const auto parent = binding == bindings_.end() ? nullptr : binding->second.lock();
+    if (closed_ || !parent || parent->retired.load(std::memory_order_acquire)) {
+        pollsys::close_socket(socket);
+        return 0;
     }
-    const std::uint64_t id = next_connection_id_++;
-    connection_record& record = connections_[id];
+    if (next_connection_id_ == std::numeric_limits<std::uint64_t>::max()) {
+        pollsys::close_socket(socket);
+        throw std::overflow_error("httpserver::io connection identity exhausted");
+    }
+    const auto id = next_connection_id_++;
+    connection_record record;
     record.socket = socket;
-    record.listener = false;
-    record.dead = false;
+    record.lifetime = make_lifetime_locked(socket);
+    connections_[id] = std::move(record);
     return id;
 }
 
@@ -296,12 +333,14 @@ std::size_t io_poll_backend::wake() {
         for (auto it = pending_.begin(); it != pending_.end();) {
             if (it->second->kind() == io_op_kind::wake) {
                 wakes.push_back(it->second);
+                bindings_.erase(it->first);
                 it = pending_.erase(it);
             } else {
                 ++it;
             }
         }
     }
+    notify();
     std::size_t fired = 0;
     for (const auto& state : wakes) {
         if (state->claim_terminal()) {
@@ -320,13 +359,20 @@ std::size_t io_poll_backend::close() {
             return 0;
         }
         closed_ = true;
+        active_ = false;
+        for (auto& entry : connections_) {
+            if (entry.second.lifetime) {
+                entry.second.lifetime->retired.store(true, std::memory_order_release);
+            }
+        }
         swept.reserve(pending_.size());
         for (const auto& entry : pending_) {
             swept.push_back(entry.second);
         }
         pending_.clear();
+        bindings_.clear();
     }
-    wake_.signal();
+    notify();
     std::size_t completed = 0;
     for (const auto& state : swept) {
         if (state->claim_terminal()) {
@@ -357,7 +403,7 @@ void io_poll_backend::expire_due_timers(
 
 std::optional<std::chrono::steady_clock::time_point>
 io_poll_backend::scan_interest_locked(
-    std::unordered_map<std::uint64_t, pollsys::event_mask>& interest) {
+    std::unordered_map<std::uint64_t, pollsys::event_mask>& interest) const {
     std::optional<std::chrono::steady_clock::time_point> next_deadline;
     for (const auto& entry : pending_) {
         const op_state& op = *entry.second;
@@ -403,7 +449,6 @@ void io_poll_backend::project_connections_locked(
     }
     for (const std::uint64_t id : prunable) {
         auto it = connections_.find(id);
-        pollsys::close_socket(it->second.socket);
         connections_.erase(it);
     }
 }
@@ -468,7 +513,10 @@ void io_poll_backend::run_loop() {
             std::lock_guard<std::mutex> lock(mu_);
             ++poll_iterations_;
         }
-        wake_.drain();
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            acknowledge_wake();
+        }
         if (ready >= 0) {
             dispatch_revents(fds, ids);  // EINTR and friends: just re-arm
         }
@@ -501,6 +549,7 @@ void io_poll_backend::finish_batch_from(
     const std::vector<std::shared_ptr<op_state>>& batch, std::size_t from,
     io_result result) {
     for (std::size_t i = from; i < batch.size(); ++i) {
+        forget_binding(batch[i]);
         finish_now(batch[i], result);
     }
 }
@@ -513,9 +562,9 @@ step_outcome io_poll_backend::accept_step(
     const pollsys::sys_result r =
         pollsys::accept_one(socket, &fresh, &peer);
     if (r.status == pollsys::sys_status::ok) {
-        finish_now(state, io_result{http::outcome_code::ok, 0,
-                                    register_accepted_socket(fresh),
-                                    peer});
+        const auto id = register_accepted_socket(fresh, state);
+        finish_now(state, id == 0 ? closed_result()
+            : io_result{http::outcome_code::ok, 0, id, peer});
         return step_outcome::completed;
     }
     if (r.status == pollsys::sys_status::would_block) {
@@ -591,63 +640,66 @@ step_outcome io_poll_backend::write_step(
     return step_outcome::completed;
 }
 
+step_outcome io_poll_backend::socket_step(pollsys::native_socket_t socket,
+    const std::shared_ptr<op_state>& state) {
+    if (state->kind() == io_op_kind::accept) return accept_step(socket, state);
+    if (state->kind() == io_op_kind::read) return read_step(socket, state);
+    return write_step(socket, state);
+}
+
 void io_poll_backend::dispatch_batch(
     std::uint64_t id, std::vector<std::shared_ptr<op_state>>& batch,
-    bool readable) {
-    if (batch.empty()) {
-        return;
-    }
+    const std::shared_ptr<registration_lifetime>& expected) {
+    if (batch.empty()) return;
     std::sort(batch.begin(), batch.end(), sequence_before);
-
-    pollsys::native_socket_t socket = pollsys::k_invalid_socket;
-    {
+    std::shared_ptr<registration_lifetime> lease = expected;
+    if (!lease) {
         std::lock_guard<std::mutex> lock(mu_);
-        const auto cit = connections_.find(id);
-        if (cit == connections_.end() || cit->second.dead) {
-            // Released underneath us: the batch cannot make progress.
-            finish_batch_from(batch, 0, closed_result());
+        const auto binding = bindings_.find(batch.front().get());
+        if (binding != bindings_.end()) lease = binding->second.lock();
+    }
+    for (std::size_t i = 0; i < batch.size(); ++i) {
+        if (!lease || lease->retired.load(std::memory_order_acquire)) {
+            finish_batch_from(batch, i, closed_result());
             return;
         }
-        socket = cit->second.socket;
-    }
-
-    for (std::size_t i = 0; i < batch.size(); ++i) {
-        const step_outcome outcome =
-            !readable ? write_step(socket, batch[i])
-                      : (batch[i]->kind() == io_op_kind::accept
-                             ? accept_step(socket, batch[i])
-                             : read_step(socket, batch[i]));
-        if (outcome == step_outcome::completed) {
-            continue;
-        }
+        const step_outcome outcome = socket_step(lease->socket, batch[i]);
         if (outcome == step_outcome::pending_again) {
             rearm_after_would_block(batch, i);
             return;
         }
-        // Hangup: the step completed the op; the rest of the batch and
-        // everything else pending on the connection follows it.
+        forget_binding(batch[i]);
+        if (outcome == step_outcome::completed) continue;
         finish_batch_from(batch, i + 1, closed_result());
-        hangup_connection(id);
+        hangup_connection(id, lease);
         return;
     }
 }
 
 void io_poll_backend::dispatch_readable(std::uint64_t id) {
     std::vector<std::shared_ptr<op_state>> batch;
+    std::shared_ptr<registration_lifetime> lease;
     {
         std::lock_guard<std::mutex> lock(mu_);
+        const auto cit = connections_.find(id);
+        if (cit == connections_.end() || cit->second.dead) return;
+        lease = cit->second.lifetime;
         take_direction_locked(id, true, batch);
     }
-    dispatch_batch(id, batch, true);
+    dispatch_batch(id, batch, lease);
 }
 
 void io_poll_backend::dispatch_writable(std::uint64_t id) {
     std::vector<std::shared_ptr<op_state>> batch;
+    std::shared_ptr<registration_lifetime> lease;
     {
         std::lock_guard<std::mutex> lock(mu_);
+        const auto cit = connections_.find(id);
+        if (cit == connections_.end() || cit->second.dead) return;
+        lease = cit->second.lifetime;
         take_direction_locked(id, false, batch);
     }
-    dispatch_batch(id, batch, false);
+    dispatch_batch(id, batch, lease);
 }
 
 }  // namespace detail

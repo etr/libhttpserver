@@ -26,10 +26,18 @@
 // destructor stops a still-running server. Wire behavior (requests
 // through the listener) is the step-9 end-to-end suite's subject.
 
+#if !defined(_WIN32)
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <csignal>
+#endif
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <thread>
 #include <utility>
 
 #include <httpserver/exchange.hpp>
@@ -305,6 +313,77 @@ LT_BEGIN_AUTO_TEST(native_server_suite, wait_on_default_ticket_moves)
     LT_CHECK(target.wait(after_move).ok());
     LT_CHECK(after_move.status == srv::drain_status::completed);
 LT_END_AUTO_TEST(wait_on_default_ticket_moves)
+
+LT_BEGIN_AUTO_TEST(native_server_suite, external_driver_lifetime_and_stop_without_host)
+    auto options = loopback_options();
+    options.loop() = srv::loop_mode::external;
+    options.concurrency().workers = 2;
+    srv::native_server server(options);
+    auto* driver = server.readiness();
+    LT_ASSERT(driver != nullptr);
+    LT_CHECK(driver->interests().sockets.empty());
+    LT_CHECK(!driver->interests().wake.has_value());
+    LT_CHECK(driver->dispatch({}, std::chrono::steady_clock::now()).code()
+             == http::outcome_code::invalid_state);
+    LT_CHECK(server.listen().ok());
+    LT_CHECK(driver->interests().wake.has_value());
+    LT_CHECK(server.get_bound_port(0) != 0);
+    server.stop();
+    LT_CHECK(server.readiness() == driver);
+    LT_CHECK(driver->interests().sockets.empty());
+    LT_CHECK(!driver->interests().wake.has_value());
+    LT_CHECK(driver->dispatch({}, std::chrono::steady_clock::now()).code()
+             == http::outcome_code::invalid_state);
+LT_END_AUTO_TEST(external_driver_lifetime_and_stop_without_host)
+
+LT_BEGIN_AUTO_TEST(native_server_suite, managed_has_no_driver_and_external_validation_precedes_bind)
+    srv::native_server managed(loopback_options());
+    LT_CHECK(managed.readiness() == nullptr);
+    auto options = loopback_options();
+    options.loop() = srv::loop_mode::external;
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::certificates;
+    srv::native_server external(options);
+    LT_CHECK(external.listen().code() == http::outcome_code::not_supported);
+    LT_CHECK_EQ(external.get_bound_port(0), 0);
+    LT_CHECK(!external.readiness()->interests().wake.has_value());
+LT_END_AUTO_TEST(managed_has_no_driver_and_external_validation_precedes_bind)
+
+#if !defined(_WIN32)
+LT_BEGIN_AUTO_TEST(native_server_suite, unavailable_wake_fails_listen_before_bind)
+    const pid_t child = ::fork();
+    LT_ASSERT(child >= 0);
+    if (child == 0) {
+        rlimit limit{};
+        if (::getrlimit(RLIMIT_NOFILE, &limit) != 0) ::_exit(2);
+        limit.rlim_cur = 0;
+        if (::setrlimit(RLIMIT_NOFILE, &limit) != 0) ::_exit(3);
+        auto options = loopback_options();
+        options.loop() = srv::loop_mode::external;
+        options.concurrency().workers = 1;
+        srv::native_server server(options);
+        const auto outcome = server.listen();
+        const bool correct = outcome.code() == http::outcome_code::connection_closed
+            && server.get_bound_port(0) == 0 && !server.is_running()
+            && !server.readiness()->interests().wake;
+        server.stop();
+        ::_exit(correct ? 0 : 4);
+    }
+    int status = 0;
+    pid_t exited = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (exited == 0 && std::chrono::steady_clock::now() < deadline) {
+        exited = ::waitpid(child, &status, WNOHANG);
+        std::this_thread::yield();
+    }
+    if (exited == 0) {
+        ::kill(child, SIGKILL);
+        ::waitpid(child, &status, 0);
+    }
+    LT_CHECK(exited == child);
+    LT_CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+LT_END_AUTO_TEST(unavailable_wake_fails_listen_before_bind)
+#endif
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

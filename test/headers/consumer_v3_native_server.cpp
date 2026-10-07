@@ -64,6 +64,12 @@ int shape_of_native_server() {
     const http::method get = http::method::known(http::method_id::get);
 
     using server_ref = srv::native_server&;
+    static_assert(std::is_same_v<decltype(std::declval<server_ref>().readiness()),
+                                 srv::readiness_driver*>);
+    static_assert(noexcept(std::declval<server_ref>().readiness()));
+    options.loop() = srv::loop_mode::external;
+    static_assert(std::is_same_v<decltype(std::declval<const srv::server_options&>().loop()),
+                                 const srv::loop_mode&>);
     static_assert(
         std::is_same<decltype(std::declval<server_ref>().route(
                           get, "/health", std::move(handler))),
