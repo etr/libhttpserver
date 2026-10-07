@@ -91,3 +91,7 @@ noinst_PROGRAMS += websocket_echo
 websocket_echo_SOURCES = websocket_echo.cpp
 websocket_echo_LDADD = $(LDADD) -lmicrohttpd_ws
 endif
+
+noinst_PROGRAMS += v3_external_event_loop
+v3_external_event_loop_SOURCES = v3_external_event_loop.cpp v3_host_poll.hpp
+v3_external_event_loop_LDADD = $(top_builddir)/src/libhttpserver_v3core.la

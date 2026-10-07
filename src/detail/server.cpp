@@ -56,7 +56,8 @@ class native_server::impl {
         : scope_(std::make_shared<engine::drain_scope>()),
           options_(std::move(options)),
           budget_(resource_budget::root(options_.budgets())),
-          pool_(options_.concurrency().workers) {
+          pool_(options_.concurrency().workers),
+          backend_(options_.loop()) {
         registry_state_ = route_registry::create(budget_, registry_);
     }
 
@@ -119,6 +120,14 @@ class native_server::impl {
             method, pattern, make_sync_route(std::move(handler), body_cap));
     }
 
+    http::outcome prelisten_ready() const {
+        if (const auto valid = options_.validate(); !valid.ok()) {
+            return valid;
+        }
+        if (!registry_state_.ok()) return registry_state_;
+        return backend_.ready();
+    }
+
     http::outcome listen() {
         if (stop_requested_.load(std::memory_order_acquire)) {
             return http::outcome(
@@ -131,9 +140,9 @@ class native_server::impl {
                 "native_server: listen() ran twice");
         }
         // REQ-016: the validate() gate runs before any bind.
-        const http::outcome valid = options_.validate();
-        if (!valid.ok()) return valid;
-        if (!registry_state_.ok()) return registry_state_;
+        if (const auto ready = prelisten_ready(); !ready.ok()) {
+            return ready;
+        }
 
         engine::connection_engine_config config =
             engine::connection_engine_config::from_budget_limits(options_.budgets());
@@ -173,6 +182,7 @@ class native_server::impl {
                 return bound;
             }
         }
+        backend_.activate_external();
         running_.store(true, std::memory_order_release);
         return http::outcome::okay();
     }
@@ -258,6 +268,10 @@ class native_server::impl {
     std::uint16_t get_bound_port(std::size_t listener_index) const noexcept {
         if (listener_index >= listeners_.size()) return 0;
         return listeners_[listener_index]->bound_port();
+    }
+
+    readiness_driver* readiness() noexcept {
+        return options_.loop() == loop_mode::external ? &backend_ : nullptr;
     }
 
     hook_bus& hooks() const noexcept { return hooks_; }
@@ -382,6 +396,10 @@ bool native_server::is_running() const noexcept {
 std::uint16_t native_server::get_bound_port(
         std::size_t listener_index) const noexcept {
     return impl_->get_bound_port(listener_index);
+}
+
+readiness_driver* native_server::readiness() noexcept {
+    return impl_->readiness();
 }
 
 hook_bus& native_server::hooks() const noexcept {

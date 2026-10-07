@@ -53,6 +53,7 @@
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
+#include <httpserver/server/readiness.hpp>
 #include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/routes.hpp>
 
@@ -182,6 +183,10 @@ class native_server {
     // True from a successful listen() until request_stop() (or the
     // destructor) runs.
     bool is_running() const noexcept;
+
+    // Borrowed, server-owned until destruction; nullptr in managed mode.
+    // Before listen and after stop the stable adapter is inactive.
+    readiness_driver* readiness() noexcept;
 
     // TASK-118: the server-wide lifecycle hook bus (server/hooks.hpp
     // for the phase contract). Registration is runtime-safe before and

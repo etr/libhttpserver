@@ -20,8 +20,8 @@
 */
 
 // Platform shims for the poll / WSAPoll socket backend (TASK-100,
-// architecture §3.4, DR-V3-004). This header is the ONLY place where
-// the driver's platform divergence lives: socket handle type, poll
+// architecture §3.4, DR-V3-004). This header and io_wake_source.cpp hold
+// the driver's platform divergence: socket handle type, poll
 // entry shape, readiness bits, nonblocking toggles, stream read/write/
 // accept with a unified result vocabulary, loopback pair/listener
 // construction, and the wake source. The driver logic that consumes
@@ -43,9 +43,9 @@
 //   - error codes map WSAEWOULDBLOCK -> would_block and the
 //     WSAECONNRESET family -> closed_reset.
 //
-// The 1000 ms idle cap the driver polls with when it has no nearer
-// deadline is deliberate: it bounds how long a lost wake byte can delay
-// work to one idle iteration per second instead of a hang.
+// Managed polling retains its 1000 ms idle cap when no deadline is nearer.
+// External dispatch relies on the mutex-coordinated notification latch;
+// it requires no idle timeout to recover missed wake notifications.
 
 #if !defined(HTTPSERVER_COMPILATION)
 #error "io_poll_sys.hpp is internal; only reachable when compiling libhttpserver."
@@ -679,71 +679,37 @@ inline bool make_loopback_pair(native_socket_t (&ends)[2]) {
 
 // ---- wake source ----------------------------------------------------------
 
-// Local wake doorbell for the driver thread: the read end sits in the
-// poll projection; signal() drops one byte, drain() empties the pipe.
-// Byte granularity makes signals coalesce (a full pipe still means a
-// wake is due) and the driver's idle cap bounds a lost byte to a one
-// second delay instead of a hang. POSIX wakes over an AF_UNIX pair;
-// Windows over the standard loopback TCP pair with TCP_NODELAY.
+// Local wake doorbell for managed and host-driven loops. The backend
+// coalesces signal/acknowledge under its registry mutex; a full buffer
+// already contains a notification. Construction failure leaves valid()
+// false for the typed pre-bind gate. POSIX uses an AF_UNIX pair; Windows
+// uses loopback TCP with TCP_NODELAY.
 class wake_source {
  public:
-    wake_source() {
-#if defined(_WIN32)
-        if (!ensure_winsock()) {
-            throw std::runtime_error(
-                "httpserver::io wake source: WSAStartup failed");
-        }
-        winsock_held_ = true;
-#endif
-        native_socket_t ends[2] = {k_invalid_socket, k_invalid_socket};
-        if (!make_loopback_pair(ends)) {
-#if defined(_WIN32)
-            release_winsock();
-            winsock_held_ = false;
-#endif
-            throw std::runtime_error(
-                "httpserver::io wake source: pipe creation failed");
-        }
-        read_end_ = ends[0];
-        write_end_ = ends[1];
-        set_nonblocking(read_end_, true);
-        set_nonblocking(write_end_, true);
-        prepare_stream_socket(write_end_);
-    }
+    wake_source();
 
     wake_source(const wake_source&) = delete;
     wake_source& operator=(const wake_source&) = delete;
 
-    ~wake_source() {
-        close_socket(read_end_);
-        close_socket(write_end_);
-#if defined(_WIN32)
-        if (winsock_held_) {
-            release_winsock();
-        }
-#endif
-    }
+    ~wake_source();
 
     // The end registered in the driver's poll projection.
     native_socket_t read_handle() const noexcept { return read_end_; }
 
-    // Never blocks; a would-block result means a wake is already due.
-    void signal() noexcept {
-        const std::byte token{0};
-        (void)write_some(write_end_, &token, 1);
+    bool valid() const noexcept {
+        return read_end_ != k_invalid_socket && write_end_ != k_invalid_socket;
     }
 
+    // Retry interruptions; only a full buffer proves notification is pending.
+    // ENOBUFS/WSAEINPROGRESS are not evidence of a readable doorbell.
+    bool signal() noexcept;
+
+    // Coalesced external notifications contain at most one byte. No
+    // producer may signal during this read (the registry mutex serializes it).
+    bool acknowledge() noexcept;
+
     // Empties every queued token so the next signal interrupts poll.
-    void drain() noexcept {
-        std::byte scratch[64];
-        for (;;) {
-            const sys_result r =
-                read_some(read_end_, scratch, sizeof(scratch));
-            if (r.status != sys_status::ok || r.transferred == 0) {
-                return;
-            }
-        }
-    }
+    void drain() noexcept;
 
  private:
     native_socket_t read_end_ = k_invalid_socket;

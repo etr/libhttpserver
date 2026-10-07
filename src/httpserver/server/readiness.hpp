@@ -89,7 +89,7 @@ struct interest_snapshot {
 
 // Library-owned consumer port; there is no replacement-backend registration.
 // The normative lifecycle/threading rules are in docs/external-loop-contract.md.
-// TASK-125 supplies the server-owned adapter and enforces the runtime contract.
+// native_server::readiness() supplies the stable, server-owned adapter.
 class readiness_driver {
  public:
     virtual ~readiness_driver() = default;

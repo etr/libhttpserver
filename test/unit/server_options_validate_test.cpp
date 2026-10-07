@@ -432,6 +432,23 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, peer_policy_patterns_validated
     }
 LT_END_AUTO_TEST(peer_policy_patterns_validated)
 
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, loop_selection_is_semantic_and_validated)
+    srv::server_options options;
+    options.add_listener({"127.0.0.1", 0, false});
+    LT_CHECK(options.loop() == srv::loop_mode::managed);
+    options.loop() = srv::loop_mode::external;
+    LT_CHECK(options.validate().ok());
+    options.loop() = static_cast<srv::loop_mode>(99);
+    LT_CHECK(options.validate().code() == outcome_code::invalid_argument);
+    options.loop() = srv::loop_mode::external;
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::certificates;
+    LT_CHECK(options.validate().code() == outcome_code::not_supported);
+    options.tls() = {};
+    options.protocols().enable(http::protocol::http_2);
+    LT_CHECK(options.validate().code() == outcome_code::not_supported);
+LT_END_AUTO_TEST(loop_selection_is_semantic_and_validated)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

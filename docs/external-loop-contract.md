@@ -6,10 +6,59 @@ headers only, plus public `http/outcome.hpp`. Include it directly without
 `httpserver.hpp`, generated configuration, or `HTTPSERVER_COMPILATION`.
 
 This document is normative for implementations of the port. TASK-124 supplies
-the vocabulary and abstract declaration. TASK-125 supplies the concrete,
+the vocabulary and abstract declaration. TASK-125 implements the concrete,
 server-owned adapter, its access path, and runtime enforcement. There is no
 public registration mechanism for replacing the production transport backend.
 Private operation handles, connection owners, and protocol state stay private.
+
+## Configuration and server lifetime
+
+Select `server_options::loop() = loop_mode::external` before constructing a
+`native_server`. The default is `loop_mode::managed`. External mode supports
+plaintext HTTP/1; `validate()` returns `not_supported` for TLS, HTTP/2, or HTTP/3.
+An invalid loop enum returns `invalid_argument`. Worker concurrency (including
+workers zero for automatic selection) continues to apply. External mode starts
+route workers but no internal network polling thread.
+
+```cpp
+httpserver::server::server_options options;
+options.loop() = httpserver::server::loop_mode::external;
+options.add_listener({"127.0.0.1", 0, false});
+httpserver::server::native_server server(options);
+auto* driver = server.readiness();
+auto listened = server.listen();
+// If listened.ok(), acquire/reconcile the initial driver->interests().
+```
+
+`native_server::readiness()` returns a borrowed, server-owned pointer, or
+`nullptr` in managed mode. Its address stays stable through `stop()` and until
+server destruction. Before successful `listen()` and after `stop()`, snapshots
+are empty (including wake and deadline) and dispatch returns `invalid_state`.
+Wake construction or nonblocking setup failure returns a typed listen failure
+before any listener binds. Hard notification failures terminate pending work;
+failed dispatch requires host unregistration and server shutdown.
+
+`request_stop()` initiates cancellation and wakes the host. `begin_drain()`
+removes listeners and publishes remaining connections/deadlines: continue host
+dispatch while responses drain. `stop()` cancels outstanding operations and
+joins workers without further host dispatch. Unregister host handles and
+quiesce callbacks before server destruction; destruction cannot overlap host
+calls. Snapshot copies never retain socket ownership.
+
+The public-header-only `examples/v3_external_event_loop.cpp` uses POSIX `poll`
+or Windows `WSAPoll`, retains each key/generation pair, and rebuilds its complete
+registration set after dispatch. It waits indefinitely when the library has no
+deadline. An optional positive seconds argument bounds the whole demonstration
+invocation; it is not a periodic wake fallback.
+
+With an examples-enabled Autotools build:
+
+```sh
+make -C _build/task-125/examples v3_external_event_loop
+_build/task-125/examples/v3_external_event_loop 10
+# Use the PORT printed by the example in a second terminal:
+curl --fail http://127.0.0.1:PORT/hello
+```
 
 ## Registration identity and ownership
 
@@ -86,8 +135,8 @@ host loop, unregister, and arrange owner shutdown. Operational dispatch failures
 use `http::outcome`; any allocation exception escaping dispatch has the same
 stop-and-shutdown posture. The interface is not `noexcept`.
 
-The driver is owned by its server; the adapter access path will define the
-borrowed-reference lifetime. No host call may overlap driver destruction.
+The driver is owned by its server; `native_server::readiness()` defines the
+borrowed-pointer lifetime above. No host call may overlap driver destruction.
 Unregister host interests and coordinate callback quiescence before teardown;
 never dispatch queued callbacks to a destroyed driver.
 
@@ -113,8 +162,8 @@ fallback is not part of this contract.
 
 Existing `server_options::validate` remains the pre-listen configuration
 boundary for PRD-V3N-REQ-016. The concrete adapter must reject incompatible
-loop/configuration combinations there; this contract adds no external-mode
-toggle and does not claim that TASK-125's validation already exists.
+loop/configuration combinations there; the `loop()` option selects external mode and rejects combinations whose
+engines do not support host readiness dispatch.
 
 ## Host-loop sketch
 

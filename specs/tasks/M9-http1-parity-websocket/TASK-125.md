@@ -9,9 +9,9 @@
 Provide external-loop readiness adapter for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Translate host readiness and timer events into private operations.
-- [ ] Ignore stale generations and handle close/reopen reuse.
-- [ ] Run an external-loop HTTP/1 host example.
+- [x] Translate host readiness and timer events into private operations.
+- [x] Ignore stale generations and handle close/reopen reuse.
+- [x] Run an external-loop HTTP/1 host example.
 
 **Dependencies:**
 - Blocked by: TASK-100, TASK-124
@@ -24,4 +24,8 @@ Provide external-loop readiness adapter for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-015
 **Related Decisions:** DR-V3-004
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** [Local adapter, HTTP/1 host, and verification receipts](../../architecture/v3/TASK-125-implementation-evidence.md).
+
+**Workflow disposition:** Implementation prepared for Groundwork validation and runner-owned finalization. Nonlocal platform checks belong to CI and the v3 PR under AGENTS.md.

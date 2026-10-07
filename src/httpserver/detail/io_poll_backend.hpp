@@ -35,18 +35,12 @@
 // hold unchanged.
 //
 // Threading: submit / request_cancel / wake / close / adopt / release
-// are thread-safe and may be called from any thread. One mutex guards
-// the pending registry, the connection registry and the counters; the
-// mutex is never held across poll() or a stream read/write/accept
-// syscall. The one socket operation that may run under the mutex is
-// close(): it is synchronous and non-blocking by contract (no
-// SO_LINGER is ever set), so it cannot stall a competing thread.
-// Readiness is level-triggered and the pollfd projection is rebuilt
-// from the registry at the top of every loop iteration (the registry
-// IS the mailbox; the wake byte is the doorbell), so a missed wake
-// byte can delay work at most to the next state change or the idle
-// cap -- never indefinitely. Timers expire in (deadline, sequence)
-// order, byte-equal to fake_io_backend::expire_timers semantics.
+// are thread-safe. The registry mutex never crosses a stream syscall or
+// owner enqueue. A shared registration lease keeps the native socket open
+// through detached dispatch; retirement blocks later steps and stale rearm.
+// Notifications coalesce under the registry mutex with acknowledgement, so
+// external mode requires no idle polling fallback. Managed mode retains its
+// dedicated polling thread and bounded idle timeout.
 //
 // Readiness dispatch drains each signalled direction to would-block and
 // re-arms the rest (§3.4): reads complete {ok, transferred} or, on
@@ -72,11 +66,14 @@
 #include <optional>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <httpserver/detail/io_operation.hpp>
 #include <httpserver/detail/io_poll_sys.hpp>
 #include <httpserver/http/outcome.hpp>
+#include <httpserver/server/options.hpp>
+#include <httpserver/server/readiness.hpp>
 
 namespace httpserver {
 namespace detail {
@@ -121,10 +118,17 @@ inline int poll_timeout_ms(
     return static_cast<int>(gap.count());
 }
 
-class io_poll_backend final : public io_backend {
+class io_poll_backend final : public io_backend, public server::readiness_driver {
  public:
-    // Starts the driver thread.
-    io_poll_backend();
+    // Managed mode starts the driver thread; external mode is host-driven.
+    explicit io_poll_backend(server::loop_mode mode = server::loop_mode::managed);
+
+    // External mode has no polling thread. Activation occurs after listen.
+    http::outcome ready() const;
+    void activate_external();
+    server::interest_snapshot interests() const override;
+    http::outcome dispatch(std::span<const server::readiness_event> events,
+                           std::chrono::steady_clock::time_point now) override;
 
     // close() + stop + join + closes every still-adopted socket.
     ~io_poll_backend() override;
@@ -177,10 +181,23 @@ class io_poll_backend final : public io_backend {
     std::uint64_t poll_iterations() const;
 
  private:
+    struct registration_lifetime {
+        explicit registration_lifetime(pollsys::native_socket_t handle,
+                                        server::socket_key identity)
+            : socket(handle), key(identity) { }
+        ~registration_lifetime() { pollsys::close_socket(socket); }
+        pollsys::native_socket_t socket;
+        server::socket_key key;
+        server::registration_generation generation = 1;
+        std::atomic_bool retired{false};
+        bool published = false;  // guarded by mu_
+    };
+
     struct connection_record {
         pollsys::native_socket_t socket = pollsys::k_invalid_socket;
         bool listener = false;
         bool dead = false;  // hangup/released: submits reject
+        std::shared_ptr<registration_lifetime> lifetime;
     };
 
     void adopt_socket(std::uint64_t id, pollsys::native_socket_t socket,
@@ -193,7 +210,7 @@ class io_poll_backend final : public io_backend {
     std::optional<std::chrono::steady_clock::time_point> build_projection(
         std::vector<pollsys::poll_slot>& fds, std::vector<std::uint64_t>& ids);
     std::optional<std::chrono::steady_clock::time_point> scan_interest_locked(
-        std::unordered_map<std::uint64_t, pollsys::event_mask>& interest);
+        std::unordered_map<std::uint64_t, pollsys::event_mask>& interest) const;
     void project_connections_locked(
         const std::unordered_map<std::uint64_t, pollsys::event_mask>&
             interest,
@@ -209,7 +226,7 @@ class io_poll_backend final : public io_backend {
     // sequence, one syscall per op until would-block or hangup.
     void dispatch_batch(std::uint64_t id,
                         std::vector<std::shared_ptr<op_state>>& batch,
-                        bool readable);
+                        const std::shared_ptr<registration_lifetime>& lease = {});
     // One syscall for one op; completes it (or returns pending_again
     // for spurious readiness with nothing drained).
     step_outcome accept_step(pollsys::native_socket_t socket,
@@ -218,6 +235,13 @@ class io_poll_backend final : public io_backend {
                            const std::shared_ptr<op_state>& state);
     step_outcome write_step(pollsys::native_socket_t socket,
                             const std::shared_ptr<op_state>& state);
+    // Collect without detaching so allocation failure leaves pending ownership.
+    // Caller holds mu_; collection may throw.
+    void collect_direction_locked(std::uint64_t id, bool reads_and_accepts,
+                                  std::vector<std::shared_ptr<op_state>>& batch) const;
+    // Erasure cannot allocate. Caller holds mu_ and finishes every related
+    // collection before detaching any batch.
+    void detach_batch_locked(const std::vector<std::shared_ptr<op_state>>& batch);
     // Takes every pending op of @p id in the requested direction out of
     // the registry. Caller holds mu_.
     void take_direction_locked(std::uint64_t id, bool reads_and_accepts,
@@ -234,16 +258,40 @@ class io_poll_backend final : public io_backend {
         std::size_t from);
     // Marks the connection dead and completes every pending op on it
     // with connection_closed.
-    void hangup_connection(std::uint64_t id);
+    void hangup_connection(std::uint64_t id,
+        const std::shared_ptr<registration_lifetime>& expected = {});
     // Registers an accepted socket under a fresh fabricated id.
-    std::uint64_t register_accepted_socket(pollsys::native_socket_t socket);
+    std::uint64_t register_accepted_socket(pollsys::native_socket_t socket,
+        const std::shared_ptr<op_state>& accepting);
+    std::shared_ptr<registration_lifetime> make_lifetime_locked(
+        pollsys::native_socket_t socket);
+    void register_pending_locked(const std::shared_ptr<op_state>& state);
+    step_outcome socket_step(pollsys::native_socket_t socket,
+                             const std::shared_ptr<op_state>& state);
+    std::pair<std::uint64_t, std::shared_ptr<registration_lifetime>>
+        find_registration_locked(const server::readiness_event& event) const;
+    http::outcome begin_dispatch(std::span<const server::readiness_event> events,
+                                 std::chrono::steady_clock::time_point now);
+    void notify();
+    void acknowledge_wake();  // caller holds mu_; bounded coalesced drain
+    void dispatch_event(const server::readiness_event& event);
+    void forget_binding(const std::shared_ptr<op_state>& state);
+    bool unavailable_locked(const op_state& state) const;
     // Fake-parity primitives.
     bool try_cancel(const std::shared_ptr<op_state>& target);
     void expire_due_timers(std::chrono::steady_clock::time_point now);
 
     mutable std::mutex mu_;
     std::unordered_map<op_state*, std::shared_ptr<op_state>> pending_;
-    std::unordered_map<std::uint64_t, connection_record> connections_;
+    mutable std::unordered_map<std::uint64_t, connection_record> connections_;
+    std::unordered_map<op_state*, std::weak_ptr<registration_lifetime>> bindings_;
+    std::uint64_t next_identity_ = 2;  // 1 is reserved for the wake source
+    server::loop_mode mode_;
+    bool active_ = false;
+    bool wake_pending_ = false;
+    bool wake_failed_ = false;
+    std::atomic_bool dispatching_{false};
+    std::optional<std::chrono::steady_clock::time_point> last_now_;
     std::uint64_t next_sequence_ = 1;        // guarded by mu_
     std::uint64_t next_connection_id_ = 1;   // guarded by mu_
     bool closed_ = false;                    // guarded by mu_
