@@ -24,4 +24,4 @@ Provide HTTP/2 fair output, resets and rate budgets for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-006, PRD-V3N-REQ-025, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
