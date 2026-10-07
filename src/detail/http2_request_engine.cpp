@@ -73,10 +73,12 @@ std::span<const std::uint8_t> http2_request_engine::state::borrowed_output(http2
     return {};
 }
 std::span<const std::uint8_t> http2_request_engine::state::control_output(http2_connection::time_point now) {
+    if (control_burst >= max_non_data_burst && !pending.empty()) return {};
     auto control = connection.output(now);
     if (control.empty()) return control;
     expose_credit(control); control_exposed = true;
     non_data_burst = std::min<std::size_t>(max_non_data_burst, non_data_burst + 1);
+    control_burst = std::min<std::size_t>(max_non_data_burst, control_burst + 1);
     return control;
 }
 std::span<const std::uint8_t> http2_request_engine::output(http2_connection::time_point now) {
@@ -87,12 +89,15 @@ std::span<const std::uint8_t> http2_request_engine::output(http2_connection::tim
         state_->publish_credit();
         // Finish each exposed item (including a whole field block) before
         // rotating. Eight other items may precede an eligible DATA turn.
-        // Initial SETTINGS is necessarily among the first eight items.
+        // After eight controls, service the pending semantic queue as well.
+        // DATA does not erase its claim, so at most one DATA turn intervenes.
+        // Initial SETTINGS is necessarily among the first eight controls.
         if (state_->non_data_burst >= max_non_data_burst && state_->select_data()) return state_->active;
         auto control = state_->control_output(now);
         if (!control.empty()) return control;
         if (!state_->pending.empty()) {
             if (state_->encode_next()) {
+                state_->control_burst = 0;
                 state_->non_data_burst = std::min<std::size_t>(max_non_data_burst, state_->non_data_burst + 1); return state_->active;
             }
             continue;

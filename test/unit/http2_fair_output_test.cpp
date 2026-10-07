@@ -77,6 +77,58 @@ LT_BEGIN_AUTO_TEST(http2_fair_output_suite, replenished_controls_and_headers_can
         LT_CHECK(data >= 2u); LT_CHECK(other > 0u); LT_CHECK(!engine.failure());
     }
 LT_END_AUTO_TEST(replenished_controls_and_headers_cannot_starve_ready_data)
+LT_BEGIN_AUTO_TEST(http2_fair_output_suite, sustained_controls_allow_bounded_semantic_output_across_rate_refills)
+    using namespace std::chrono_literals;  // NOLINT(build/namespaces)
+    for (bool reset : {false, true}) {
+        auto budget = h2test::budget(); hs::route_registry routes;
+        LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+        LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/empty", [reset](exchange& x) -> task<void> {
+            if (reset) {
+                x.abort();
+            } else {
+                x.respond(http::status::from_code(204), {});
+            }
+            co_return;
+        }).ok());
+        httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor); hd::hpack_encoder encoder(budget);
+        LT_ASSERT(h2test::feed(engine, h2test::preface()));
+        LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get("/empty"))))); executor.run_pending();
+        auto initial = engine.output(); LT_ASSERT(!initial.empty()); LT_CHECK_EQ(initial[3], 4u); LT_CHECK_EQ(initial[4], 0u);
+        LT_ASSERT(engine.advance_output(initial.size()));
+        LT_ASSERT(h2test::feed(engine, h2test::frame(4, 1)));  // retire the initial SETTINGS deadline
+        unsigned semantic = 0, controls = 0;
+        std::vector<std::uint8_t> wire;
+        for (unsigned i = 0; i < 300; ++i) {
+            const auto now = hd::http2_connection::time_point {} + 10ms * i;
+            if (i == 100 || i == 200) {
+                const auto id = 1 + 2 * (i / 100);
+                LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, id, h2test::encode(encoder, h2test::get("/empty"))), now));
+                executor.run_pending();
+            }
+            LT_ASSERT(h2test::feed(engine, h2test::frame(6, 0, 0, std::vector<std::uint8_t>(8)), now));
+            auto item = engine.output(now); LT_ASSERT(!item.empty());
+            if (item[3] == (reset ? 3 : 1)) ++semantic;
+            if (item[3] == 6) ++controls;
+            std::vector<std::uint8_t> saved(item.begin(), item.end()); h2test::append(wire, saved);
+            LT_ASSERT(engine.advance_output(1));
+            auto rest = engine.output(now); LT_CHECK(std::equal(rest.begin(), rest.end(), saved.begin() + 1)); LT_ASSERT(engine.advance_output(rest.size()));
+            if (i % 100 == 9) LT_CHECK_EQ(semantic, i / 100 + 1);
+        }
+        LT_CHECK_EQ(semantic, 3u); LT_CHECK(controls > 280u); LT_CHECK(!engine.failure());
+        LT_CHECK_EQ(budget.in_use(hs::resource::streams), 0u);
+        if (reset) {
+            const auto resets = h2test::resets(wire); LT_CHECK_EQ(resets.size(), 3u);
+            for (unsigned i = 0; i < resets.size(); ++i) {
+                LT_CHECK_EQ(resets[i].stream, 1 + 2 * i); LT_CHECK_EQ(resets[i].code, 2u);
+            }
+        } else {
+            const auto responses = h2test::responses(wire); LT_CHECK_EQ(responses.size(), 3u);
+            for (unsigned i = 0; i < responses.size(); ++i) {
+                LT_CHECK_EQ(responses[i].stream, 1 + 2 * i); LT_CHECK_EQ(responses[i].fields[0].value, "204");
+            }
+        }
+    }
+LT_END_AUTO_TEST(sustained_controls_allow_bounded_semantic_output_across_rate_refills)
 LT_BEGIN_AUTO_TEST(http2_fair_output_suite, quantum_storage_remains_charged_until_retirement_and_reset_returns_to_baseline)
     auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
     LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [](exchange& x) -> task<void> {

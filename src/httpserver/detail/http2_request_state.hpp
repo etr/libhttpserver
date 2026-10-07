@@ -137,7 +137,7 @@ struct http2_request_engine::state {
     std::vector<std::uint8_t> block, active;
     server::reservation block_charge, active_charge;
     std::uint32_t assembling = 0, last_stream = 0;
-    std::size_t active_used = 0, non_data_burst = 0;
+    std::size_t active_used = 0, non_data_burst = 0, control_burst = 0;
     http2_window send_window, receive_window;
     std::uint64_t consumed = 0, connection_credit_queued = 0;
     std::uint32_t peer_initial = 65535, local_initial = 65535, selected = 0, active_stream = 0;

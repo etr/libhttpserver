@@ -171,3 +171,28 @@ BSD, Windows and other nonlocal platform checks are CI/v3 PR owned under
 AGENTS.md and were not executed. This proves private-engine and local TLS-adapter
 composition, not public-listener HTTP/2 dispatch, deployment or external-client
 interoperability. No later task was started.
+
+## Validation repair iteration 1
+
+`performance-reviewer-iter1-1` identified that replenished controls could delay
+pending semantic response HEADERS and local reset items indefinitely. A separate
+saturating control-burst counter now bounds that delay: after eight exposed
+controls, the next pending semantic item receives a turn. The existing DATA
+priority may insert one DATA turn before that semantic turn; selecting DATA does
+not reset the control counter. A semantic selection resets the control counter
+and still counts toward the existing eight-item DATA allowance. Queue/storage
+bounds, initial SETTINGS ordering, complete borrowed-item retirement and HPACK
+wire-order encoding retain their existing paths.
+
+The new deterministic fairness regression runs 100 PINGs per second for three
+seconds with one output item consumed per event. It queues a new 204 response or
+local abort in each one-second rate window and checks semantic output by the
+tenth output opportunity, correct stream/status/reset-code order, partial-span
+immutability, continued controls, no terminal failure and stream-budget cleanup.
+The RED run emitted none of the three response HEADERS or three reset items and
+failed 10 assertions. The GREEN fairness suite passes all four cases and 3,318
+checks. Receipts are `/private/tmp/task142-repair1-{red,green}-suite.log` and the
+corresponding build/check logs. Changed-file cpplint, HTTP/2 complexity, file-size
+and whitespace checks pass. The validation coordinator owns the final TLS-off,
+TLS-on, sanitizer, local-linkage gate barrier and closure review; the preceding
+full-gate receipts above describe the pre-repair implementation.
