@@ -108,6 +108,10 @@ class exchange_sink {
     virtual void on_respond(const http::status& s,
                             const http::fields& f) = 0;
 
+    // Default delegation preserves existing protocol sinks. Streaming engines
+    // override this to leave the response head open for DATA.
+    virtual void on_start_response(const http::status& s, const http::fields& f) { on_respond(s, f); }
+
     // Connection ownership transferred to the upgrade session.
     virtual websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) = 0;
 
@@ -139,7 +143,7 @@ class exchange_sink {
 // respond() is the one-shot response: the whole body is known and the
 // writer stays inactive. start_response() is the streaming action: the
 // head commits the same way and exchange::writer() streams the body
-// afterwards. Both reach the engine's on_respond exactly once.
+// afterwards. Both reach one engine head callback exactly once.
 //
 // Threading contract: decisions run on the handler's executor thread.
 // disconnect() is engine-facing and may run on any thread while the
@@ -250,8 +254,8 @@ class exchange {
     // Streaming response decision (head-time or after admission):
     // commits the response head exactly like respond(), then activates
     // the writer, so the handler streams the body through writer()
-    // with backpressure (architecture §3.1). The engine's on_respond
-    // still fires exactly once: afterwards the state is responded, so
+    // with backpressure (architecture §3.1). The engine's on_start_response
+    // fires exactly once: afterwards the state is responded, so
     // any second terminal decision fails invalid_state.
     http::outcome start_response(const http::status& s, const http::fields& f) {
         if (disconnected_) return closed_failure();
@@ -264,7 +268,7 @@ class exchange {
         state_ = exchange_state::responded;
         suspended_ = false;
         body_.close();
-        if (sink_ != nullptr) sink_->on_respond(s, f);
+        if (sink_ != nullptr) sink_->on_start_response(s, f);
         writer_.activate(response_sink_);
         return http::outcome::okay();
     }

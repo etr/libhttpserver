@@ -5,6 +5,7 @@
 */
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <httpserver/detail/http2_request_head.hpp>
@@ -19,10 +20,6 @@ bool valid_value(std::string_view value) {
 bool forbidden(std::string_view name) {
     constexpr std::array<std::string_view, 5> names{"connection", "proxy-connection", "keep-alive", "transfer-encoding", "upgrade"};
     return std::find(names.begin(), names.end(), name) != names.end();
-}
-bool empty_length(std::string_view value) {
-    if (value.empty()) return false;
-    return std::all_of(value.begin(), value.end(), [](char c) { return c == '0'; });
 }
 struct pseudo_fields {
     std::array<std::optional<std::string_view>, 4> values;
@@ -101,6 +98,24 @@ bool http2_regular_field(std::string_view name, std::string_view value) {
     if (!valid_value(value)) return false;
     return name != "te" || value == "trailers";
 }
+bool http2_content_length(const http::fields& fields, std::optional<std::uint64_t>& length) {
+    for (const auto& value : fields.all("content-length")) {
+        if (value.empty()) return false;
+        std::uint64_t n = 0;
+        for (char c : value) {
+            if (c < '0' || c > '9') return false;
+            const auto digit = static_cast<unsigned>(c - '0');
+            if (n > (std::numeric_limits<std::uint64_t>::max() - digit) / 10) return false;
+            n = n * 10 + digit;
+        }
+        if (length && *length != n) return false;
+        length = n;
+    }
+    return true;
+}
+bool http2_trailer_field(std::string_view name, std::string_view value) {
+    return http2_regular_field(name, value) && name != "content-length" && name != "host" && name != "te" && name != "trailer";
+}
 bool http2_convert_request(std::span<const hpack_field> fields, http::request_head& head) {
     pseudo_fields pseudo;
     for (const auto& field : fields) {
@@ -109,11 +124,12 @@ bool http2_convert_request(std::span<const hpack_field> fields, http::request_he
         } else {
             pseudo.regular = true;
             if (!http2_regular_field(field.name, field.value)) return false;
-            if (field.name == "content-length" && !empty_length(field.value)) return false;
+
             head.head_fields.append(field.name, field.value);
         }
     }
     head.request_protocol = http::protocol::http_2;
-    return set_target(pseudo, head) && set_authority(pseudo, head);
+    std::optional<std::uint64_t> length;
+    return set_target(pseudo, head) && set_authority(pseudo, head) && http2_content_length(head.head_fields, length);
 }
 }  // namespace httpserver::detail

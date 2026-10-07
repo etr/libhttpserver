@@ -1897,3 +1897,10 @@ http2_exchange_SOURCES = unit/http2_exchange_test.cpp
 http2_headers_LDADD = $(http2_frame_LDADD)
 http2_exchange_LDADD = $(http2_frame_LDADD)
 noinst_HEADERS += unit/http2_request_fixture.hpp
+
+check_PROGRAMS += http2_streaming
+http2_streaming_SOURCES = unit/http2_streaming_test.cpp
+http2_streaming_LDADD = $(http2_frame_LDADD)
+check_PROGRAMS += http2_flow_control
+http2_flow_control_SOURCES = unit/http2_flow_control_test.cpp
+http2_flow_control_LDADD = $(http2_frame_LDADD)

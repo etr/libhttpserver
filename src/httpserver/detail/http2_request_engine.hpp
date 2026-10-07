@@ -17,13 +17,14 @@ struct http2_request_limits {
     hpack_section_limits headers{65536, 65536, 256};
     // Bounds live streams and pending output items, including reset-only items.
     std::size_t max_streams = 128;
+    std::size_t body_buffer_bytes = 16384, response_buffer_bytes = 16384;
 };
-// Internal headers-only composition seam. The supplied executor must serialize
+// Internal streaming composition seam. The supplied executor must serialize
 // handlers with all engine calls in the connection owner's execution domain.
 // Routes and executor outlive the engine. Engine destruction invalidates queued
 // and parked handler frames; no detached task borrows exchange storage.
 // feed() consumes one frame/control event and owns its release. Non-END_STREAM
-// heads, CONNECT, DATA responses and upgrades are unsupported at this boundary.
+// heads dispatch immediately. CONNECT and upgrades are unsupported here.
 // The public listener still dispatches HTTP/1; negotiated h2 wiring is separate.
 class http2_request_engine {
  public:

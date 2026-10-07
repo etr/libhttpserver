@@ -114,3 +114,8 @@ noinst_HEADERS += httpserver/detail/http2_request_engine.hpp
 libhttpserver_v3core_la_SOURCES += detail/http2_request_engine.cpp
 noinst_HEADERS += httpserver/detail/http2_request_head.hpp
 libhttpserver_v3core_la_SOURCES += detail/http2_request_head.cpp
+
+noinst_HEADERS += httpserver/detail/http2_flow_control.hpp httpserver/detail/http2_body_stream.hpp
+libhttpserver_v3core_la_SOURCES += detail/http2_body_stream.cpp
+noinst_HEADERS += httpserver/detail/http2_request_state.hpp
+libhttpserver_v3core_la_SOURCES += detail/http2_response_stream.cpp detail/http2_stream_flow.cpp
