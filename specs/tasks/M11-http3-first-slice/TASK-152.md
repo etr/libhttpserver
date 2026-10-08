@@ -24,6 +24,6 @@ Provide QUIC packet protection and key lifecycle with OpenSSL EVP for libhttpser
 **Related Requirements:** PRD-V3N-REQ-003, PRD-V3N-REQ-007
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [QUIC protection and local receipts](../../../docs/task-152-quic-protection.md). Implementation prepared for coordinator validation; status remains In Progress.
