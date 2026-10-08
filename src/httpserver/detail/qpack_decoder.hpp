@@ -38,21 +38,26 @@ namespace httpserver::detail {
 class qpack_decoder {
  public:
     qpack_section_result decode(std::span<const std::uint8_t> input, qpack_section_limits limits) const {
-        if (input.size() > limits.max_compressed_bytes) return {{qpack_state::limit_exceeded}, {}};
         try {
-            std::size_t count = 0;
-            auto status = process(input, limits, nullptr, count);
-            if (!status.ok()) return {complete(status), {}};
-            qpack_section_result result;
-            result.fields.reserve(count);
-            status = process(input, limits, &result.fields, count);
-            if (!status.ok()) return {complete(status), {}};
-            return result;
+            return decode_allocated(input, limits);
         } catch (const std::bad_alloc&) {
             return {{qpack_state::limit_exceeded}, {}};
         } catch (const std::length_error&) {
             return {{qpack_state::limit_exceeded}, {}};
         }
+    }
+    // Owners with precharged storage distinguish allocation failure from peer
+    // limits. Wire validation remains the same allocation-free first pass.
+    qpack_section_result decode_allocated(std::span<const std::uint8_t> input, qpack_section_limits limits) const {
+        if (input.size() > limits.max_compressed_bytes) return {{qpack_state::limit_exceeded}, {}};
+        std::size_t count = 0;
+        auto status = process(input, limits, nullptr, count);
+        if (!status.ok()) return {complete(status), {}};
+        qpack_section_result result;
+        result.fields.reserve(count);
+        status = process(input, limits, &result.fields, count);
+        if (!status.ok()) return {complete(status), {}};
+        return result;
     }
 
  private:
