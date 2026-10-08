@@ -24,7 +24,7 @@ Provide Windows IOCP managed I/O backend for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-014
 **Related Decisions:** DR-V3-004
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence (2026-10-07):**
 - Added a private managed Windows IOCP backend with provider-compatible AcceptEx,
