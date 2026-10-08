@@ -297,7 +297,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-149 | [Add owned UDP send/receive operations and CID dispatch seam](M11-http3-first-slice/TASK-149.md) | M11 | Complete | TASK-099, TASK-100 |
 | TASK-150 | [Add deterministic QUIC network, clock and fuzz harness](M11-http3-first-slice/TASK-150.md) | M11 | Complete | TASK-149 |
 | TASK-151 | [Implement strict QUIC v1 packet, frame and parameter codecs](M11-http3-first-slice/TASK-151.md) | M11 | Complete | TASK-150 |
-| TASK-152 | [Implement QUIC packet protection and key lifecycle with OpenSSL EVP](M11-http3-first-slice/TASK-152.md) | M11 | Not Started | TASK-129, TASK-151 |
+| TASK-152 | [Implement QUIC packet protection and key lifecycle with OpenSSL EVP](M11-http3-first-slice/TASK-152.md) | M11 | In Progress | TASK-129, TASK-151 |
 | TASK-153 | [Implement server CID admission, Retry and amplification limits](M11-http3-first-slice/TASK-153.md) | M11 | Not Started | TASK-149, TASK-151, TASK-152 |
 | TASK-154 | [Implement QUIC stream state and bounded reassembly](M11-http3-first-slice/TASK-154.md) | M11 | Not Started | TASK-151 |
 | TASK-155 | [Bridge OpenSSL QUIC TLS callbacks to owned CRYPTO streams](M11-http3-first-slice/TASK-155.md) | M11 | Not Started | TASK-131, TASK-132, TASK-152, TASK-153 |

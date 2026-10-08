@@ -2114,3 +2114,20 @@ EXTRA_DIST += data/quic/parser/codec-ack-underflow.seed
 EXTRA_DIST += data/quic/parser/codec-duplicate-parameters.seed
 EXTRA_DIST += data/quic/parser/codec-nonminimal-frame.seed
 EXTRA_DIST += data/quic/parser/codec-scalar-truncation.seed
+
+if NATIVE_V3_TLS
+check_PROGRAMS += quic_crypto
+quic_crypto_SOURCES = unit/quic_crypto_test.cpp
+quic_crypto_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+quic_crypto_LDADD = $(tls_io_LDADD)
+quic_crypto_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+EXTRA_DIST += unit/quic_crypto_test_support.hpp
+
+if NATIVE_V3_TLS
+check_PROGRAMS += quic_key_state
+quic_key_state_SOURCES = unit/quic_key_state_test.cpp
+quic_key_state_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+quic_key_state_LDADD = $(tls_io_LDADD)
+quic_key_state_LDFLAGS = $(tls_io_LDFLAGS)
+endif

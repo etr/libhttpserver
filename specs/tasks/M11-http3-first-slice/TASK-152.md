@@ -9,9 +9,9 @@
 Provide QUIC packet protection and key lifecycle with OpenSSL EVP for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Use OpenSSL EVP/HKDF/AEAD for Initial and later packet protection.
-- [ ] Implement header protection, nonce and Retry integrity.
-- [ ] Replay RFC 9001 packet/key vectors and zero retired secrets.
+- [x] Use OpenSSL EVP/HKDF/AEAD for Initial and later packet protection.
+- [x] Implement header protection, nonce and Retry integrity.
+- [x] Replay RFC 9001 packet/key vectors and zero retired secrets.
 
 **Dependencies:**
 - Blocked by: TASK-129, TASK-151
@@ -24,4 +24,6 @@ Provide QUIC packet protection and key lifecycle with OpenSSL EVP for libhttpser
 **Related Requirements:** PRD-V3N-REQ-003, PRD-V3N-REQ-007
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** [QUIC protection and local receipts](../../../docs/task-152-quic-protection.md). Implementation prepared for coordinator validation; status remains In Progress.
