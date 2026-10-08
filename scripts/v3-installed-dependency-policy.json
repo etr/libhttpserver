@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "description": "Explicit transitional edges. This is not a dependency-free v3 release declaration. Curl has no installed-package allowance.",
+  "provenance": {
+    "microhttpd": [
+      "configure.ac: AC_CHECK_LIB microhttpd",
+      "src/Makefile.am: libhttpserver_la_LIBADD -lmicrohttpd",
+      "libhttpserver.pc.in: Requires libmicrohttpd"
+    ],
+    "microhttpd_ws": [
+      "configure.ac: HAVE_WEBSOCKET",
+      "src/Makefile.am: -lmicrohttpd_ws",
+      "configure.ac: LHT_LIBDEPS"
+    ],
+    "gnutls": [
+      "configure.ac: HAVE_GNUTLS",
+      "src/Makefile.am: -lgnutls",
+      "libmicrohttpd.pc: Requires.private gnutls (retained pkg-config --static link evidence)"
+    ],
+    "provider_closure": [
+      "Recursive platform inspector edges from the selected legacy provider; no global library-name exception"
+    ],
+    "static_consumer": [
+      "Installed pkg-config --libs --static materializes the explicitly declared GnuTLS Requires.private/Libs.private closure as direct consumer edges; retained metadata and link commands must account for these."
+    ]
+  },
+  "legacy_edges": {
+    "consumer": [
+      "microhttpd",
+      "microhttpd_ws",
+      "gnutls"
+    ],
+    "httpserver": [
+      "microhttpd",
+      "microhttpd_ws",
+      "gnutls"
+    ],
+    "microhttpd": [
+      "gnutls"
+    ],
+    "microhttpd_ws": [
+      "microhttpd",
+      "gnutls"
+    ],
+    "gnutls": [
+      "nettle",
+      "hogweed",
+      "gmp",
+      "p11-kit",
+      "idn2",
+      "unistring",
+      "tasn1",
+      "intl",
+      "z",
+      "Security",
+      "CoreFoundation",
+      "CoreServices"
+    ],
+    "hogweed": [
+      "nettle",
+      "gmp"
+    ],
+    "nettle": [
+      "gmp"
+    ],
+    "p11-kit": [
+      "ffi",
+      "intl",
+      "tasn1"
+    ],
+    "idn2": [
+      "unistring",
+      "intl",
+      "CoreFoundation"
+    ],
+    "intl": [
+      "iconv",
+      "CoreFoundation",
+      "CoreServices"
+    ],
+    "tasn1": [],
+    "gmp": [],
+    "unistring": [
+      "iconv",
+      "CoreFoundation",
+      "CoreServices"
+    ],
+    "ffi": [],
+    "z": [],
+    "iconv": [],
+    "static_consumer": [
+      "microhttpd",
+      "microhttpd_ws",
+      "gnutls",
+      "nettle",
+      "hogweed",
+      "gmp",
+      "p11-kit",
+      "idn2",
+      "unistring",
+      "tasn1",
+      "intl",
+      "z",
+      "Security",
+      "CoreFoundation",
+      "CoreServices",
+      "iconv",
+      "ffi"
+    ]
+  }
+}

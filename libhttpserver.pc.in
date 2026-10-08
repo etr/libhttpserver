@@ -9,5 +9,5 @@ Version: @VERSION@
 Requires: libmicrohttpd >= 1.0.0
 Conflicts:
 Libs: -L${libdir} -lhttpserver
-Libs.private: @LHT_LIBDEPS@
+Libs.private: @LHT_LIBDEPS@ @V3_TLS_LIBS@
 Cflags: -I${includedir} -I${includedir}/httpserver
