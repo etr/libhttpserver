@@ -2131,3 +2131,21 @@ quic_key_state_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 quic_key_state_LDADD = $(tls_io_LDADD)
 quic_key_state_LDFLAGS = $(tls_io_LDFLAGS)
 endif
+
+check_PROGRAMS += quic_amplification
+quic_amplification_SOURCES = unit/quic_amplification_test.cpp
+quic_amplification_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_amplification_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+if NATIVE_V3_TLS
+check_PROGRAMS += quic_address_token
+quic_address_token_SOURCES = unit/quic_address_token_test.cpp
+quic_address_token_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+quic_address_token_LDADD = $(tls_io_LDADD)
+quic_address_token_LDFLAGS = $(tls_io_LDFLAGS)
+check_PROGRAMS += quic_server_admission
+quic_server_admission_SOURCES = unit/quic_server_admission_test.cpp
+quic_server_admission_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+quic_server_admission_LDADD = $(tls_io_LDADD)
+quic_server_admission_LDFLAGS = $(tls_io_LDFLAGS)
+endif

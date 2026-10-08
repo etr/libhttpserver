@@ -134,3 +134,11 @@ noinst_HEADERS += httpserver/detail/quic_packet.hpp httpserver/detail/quic_frame
 noinst_HEADERS += httpserver/detail/quic_crypto.hpp
 noinst_HEADERS += detail/quic_crypto_provider.hpp
 noinst_HEADERS += httpserver/detail/quic_key_state.hpp
+
+libhttpserver_v3core_la_SOURCES += detail/quic_amplification.cpp
+noinst_HEADERS += httpserver/detail/quic_amplification.hpp
+
+if NATIVE_V3_TLS
+libhttpserver_v3tls_la_SOURCES += detail/quic_address_token.cpp detail/quic_server_admission.cpp
+endif
+noinst_HEADERS += httpserver/detail/quic_address_token.hpp httpserver/detail/quic_server_admission.hpp
