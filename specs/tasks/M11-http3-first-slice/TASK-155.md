@@ -24,6 +24,6 @@ Provide OpenSSL QUIC TLS callbacks to owned CRYPTO streams for libhttpserver v3.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-034
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [QUIC TLS bridge and local checks](../../../docs/task-155-quic-tls.md). Validation and integration remain pending.
