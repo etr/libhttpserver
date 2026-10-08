@@ -126,6 +126,95 @@ LT_BEGIN_AUTO_TEST(flow_suite, send_limits_grow_monotonically_and_retransmission
     LT_CHECK(f.record_reset_sent(1, 7).code == hd::quic_flow_code::final_size_error);
     LT_ASSERT(f.record_reset_sent(1, 8));
 LT_END_AUTO_TEST(send_limits_grow_monotonically_and_retransmission_is_free)
+LT_BEGIN_AUTO_TEST(flow_suite, exact_initial_quic_limits_allow_sparse_streams_and_maximum_offsets)
+    auto p = parameters(hd::k_quic_max_integer, hd::k_quic_max_integer);
+    p.initial_max_streams_bidi = p.initial_max_streams_uni = std::uint64_t{1} << 60;
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, p, p, 4, budget());
+    LT_ASSERT(f.observe_peer(hd::k_quic_max_integer - 3));
+    LT_ASSERT(f.observe_peer(hd::k_quic_max_integer - 1));
+    LT_CHECK(f.ids().opened_count(0) == (std::uint64_t{1} << 60));
+    LT_CHECK(f.ids().opened_count(2) == (std::uint64_t{1} << 60));
+    auto bidi = f.open_local(false), uni = f.open_local(true);
+    LT_ASSERT(bidi && uni);
+    LT_CHECK(f.send_allowance(bidi.id, hd::k_quic_max_integer - 1, 1).bytes == 1);
+    LT_CHECK(f.send_allowance(uni.id, hd::k_quic_max_integer - 1, 1).bytes == 1);
+    LT_ASSERT(f.record_stream_sent(bidi.id, hd::k_quic_max_integer - 1, 1, false));
+    LT_CHECK(f.sent() == hd::k_quic_max_integer);
+    hd::quic_stream_state s(hd::k_quic_max_integer - 3, hd::quic_endpoint_role::server, f.ids(), {}, budget());
+    LT_ASSERT(f.receive(s, hd::quic_reset_stream_frame{s.id(), 1, hd::k_quic_max_integer}));
+    LT_CHECK(f.received() == hd::k_quic_max_integer);
+LT_END_AUTO_TEST(exact_initial_quic_limits_allow_sparse_streams_and_maximum_offsets)
+LT_BEGIN_AUTO_TEST(flow_suite, initial_limits_one_above_each_ceiling_reject_before_reserving_storage)
+    struct boundary {
+        std::uint64_t hd::quic_transport_parameters::* field;
+        std::uint64_t ceiling;
+    };
+    const std::array boundaries{
+        boundary{&hd::quic_transport_parameters::initial_max_data, hd::k_quic_max_integer},
+        boundary{&hd::quic_transport_parameters::initial_max_stream_data_bidi_local, hd::k_quic_max_integer},
+        boundary{&hd::quic_transport_parameters::initial_max_stream_data_bidi_remote, hd::k_quic_max_integer},
+        boundary{&hd::quic_transport_parameters::initial_max_stream_data_uni, hd::k_quic_max_integer},
+        boundary{&hd::quic_transport_parameters::initial_max_streams_bidi, std::uint64_t{1} << 60},
+        boundary{&hd::quic_transport_parameters::initial_max_streams_uni, std::uint64_t{1} << 60}
+    };
+    for (const auto& limit : boundaries) {
+        for (bool invalid_local : {false, true}) {
+            auto local = parameters(), peer = parameters();
+            (invalid_local ? local : peer).*limit.field = limit.ceiling + 1;
+            auto b = budget();
+            LT_CHECK_THROW(hd::quic_flow_control(hd::quic_endpoint_role::server, local, peer, 4, b));
+            LT_CHECK(b.in_use(httpserver::server::resource::quic_reassembly_bytes) == 0);
+        }
+    }
+LT_END_AUTO_TEST(initial_limits_one_above_each_ceiling_reject_before_reserving_storage)
+LT_BEGIN_AUTO_TEST(flow_suite, max_updates_reject_above_ceiling_without_granting_credit_or_opening_streams)
+    auto p = parameters();
+    p.initial_max_streams_bidi = p.initial_max_streams_uni = 1;
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, p, p, 8, budget());
+    LT_ASSERT(f.open_local(false));
+    LT_ASSERT(f.open_local(true));
+    LT_CHECK(f.apply({hd::quic_flow_kind::max_data, hd::k_quic_max_integer + 1}).code == hd::quic_flow_code::frame_encoding_error);
+    LT_CHECK(f.apply({hd::quic_flow_kind::max_stream_data, hd::k_quic_max_integer + 1, 1}).code == hd::quic_flow_code::frame_encoding_error);
+    LT_CHECK(f.apply({hd::quic_flow_kind::max_stream_data, hd::k_quic_max_integer + 1, 0}).code == hd::quic_flow_code::frame_encoding_error);
+    LT_CHECK(!f.ids().opened(0));
+    LT_CHECK(f.send_allowance(1, 8, 1).code == hd::quic_flow_code::blocked);
+    LT_CHECK(f.sent() == 0 && f.received() == 0 && !f.pending_credit());
+    LT_ASSERT(f.record_stream_sent(1, 0, 8, false));
+    LT_CHECK(f.send_allowance(3, 0, 8).bytes == 4);
+    LT_CHECK(f.apply({hd::quic_flow_kind::max_streams_bidi, (std::uint64_t{1} << 60) + 1}).code == hd::quic_flow_code::frame_encoding_error);
+    LT_CHECK(f.apply({hd::quic_flow_kind::max_streams_uni, (std::uint64_t{1} << 60) + 1}).code == hd::quic_flow_code::frame_encoding_error);
+    LT_CHECK(f.open_local(false).code == hd::quic_flow_code::blocked);
+    LT_CHECK(f.open_local(true).code == hd::quic_flow_code::blocked);
+    LT_CHECK(!f.ids().opened(5) && !f.ids().opened(7));
+    LT_ASSERT(f.apply({hd::quic_flow_kind::max_streams_bidi, std::uint64_t{1} << 60}));
+    LT_ASSERT(f.apply({hd::quic_flow_kind::max_streams_uni, std::uint64_t{1} << 60}));
+    LT_ASSERT(f.open_local(false));
+    LT_ASSERT(f.open_local(true));
+    LT_ASSERT(f.apply({hd::quic_flow_kind::max_data, hd::k_quic_max_integer}));
+    LT_ASSERT(f.apply({hd::quic_flow_kind::max_stream_data, hd::k_quic_max_integer, 1}));
+    LT_CHECK(f.send_allowance(1, hd::k_quic_max_integer - 1, 1).bytes == 1);
+LT_END_AUTO_TEST(max_updates_reject_above_ceiling_without_granting_credit_or_opening_streams)
+LT_BEGIN_AUTO_TEST(flow_suite, semantic_consumption_saturates_connection_and_stream_credit)
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, parameters(hd::k_quic_max_integer - 2, hd::k_quic_max_integer - 2), parameters(), 4, budget());
+    LT_ASSERT(f.observe_peer(0));
+    hd::quic_stream_state s(0, hd::quic_endpoint_role::server, f.ids(), {}, budget());
+    LT_ASSERT(f.receive(s, hd::quic_stream_frame{0, 0, std::span(data).first(4)}));
+    std::array<std::byte, 4> parser{};
+    LT_CHECK(s.read(parser).bytes == 4);
+    LT_CHECK(!f.pending_credit());
+    LT_ASSERT(f.consume_body(s, 4));
+    const auto connection = f.pending_credit(hd::quic_flow_kind::max_data);
+    const auto stream = f.pending_credit(hd::quic_flow_kind::max_stream_data, 0);
+    LT_ASSERT(connection && stream);
+    LT_CHECK(connection->limit == hd::k_quic_max_integer);
+    LT_CHECK(stream->stream == 0 && stream->limit == hd::k_quic_max_integer);
+    f.credit_acknowledged(*connection);
+    f.credit_acknowledged(*stream);
+    LT_ASSERT(f.receive(s, hd::quic_stream_frame{0, 4, std::span(data).first(1)}));
+    LT_CHECK(s.read(parser).bytes == 1);
+    LT_ASSERT(f.consume_body(s, 5));
+    LT_CHECK(!f.pending_credit());
+LT_END_AUTO_TEST(semantic_consumption_saturates_connection_and_stream_credit)
 LT_BEGIN_AUTO_TEST(flow_suite, asymmetric_parameters_choose_limits_from_each_advertisers_perspective)
     auto local = parameters(100), peer = parameters(100);
     local.initial_max_stream_data_bidi_local = 3;
@@ -229,6 +318,66 @@ LT_BEGIN_AUTO_TEST(flow_suite, retirement_rejects_recreated_objects_and_fin_boun
     LT_CHECK(f.send_allowance(1, 4, 1).code == hd::quic_flow_code::blocked);
     LT_CHECK(f.send_allowance(1, 0, 8).bytes == 4);
 LT_END_AUTO_TEST(retirement_rejects_recreated_objects_and_fin_bounds_send_eligibility)
+LT_BEGIN_AUTO_TEST(flow_suite, bidi_receive_fin_consumption_waits_for_acknowledged_send_fin_before_retirement)
+    auto p = parameters();
+    p.initial_max_streams_bidi = 1;
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, p, p, 4, budget());
+    LT_ASSERT(f.observe_peer(0));
+    hd::quic_stream_state s(0, hd::quic_endpoint_role::server, f.ids(), {}, budget());
+    LT_ASSERT(f.receive(s, hd::quic_stream_frame{0, 0, std::span(data).first(4), true}));
+    std::array<std::byte, 4> body{};
+    LT_CHECK(s.read(body).bytes == 4);
+    LT_ASSERT(f.consume_body(s, 4));
+    LT_CHECK(s.receive_state() == hd::quic_receive_state::data_consumed);
+    LT_CHECK(f.retire(s).code == hd::quic_flow_code::stream_state_error);
+    LT_CHECK(!f.pending_credit(hd::quic_flow_kind::max_streams_bidi));
+    LT_CHECK(f.observe_peer(4).code == hd::quic_flow_code::stream_limit_error);
+    LT_ASSERT(f.record_stream_sent(0, 0, 1, true));
+    LT_ASSERT(s.record_stream_sent(0, 1, true));
+    LT_CHECK(f.retire(s).code == hd::quic_flow_code::stream_state_error);
+    LT_CHECK(!f.pending_credit(hd::quic_flow_kind::max_streams_bidi));
+    LT_ASSERT(s.acknowledge_all_stream_data());
+    LT_ASSERT(f.retire(s));
+    LT_ASSERT(f.retire(s));
+    const auto credit = f.pending_credit(hd::quic_flow_kind::max_streams_bidi);
+    LT_ASSERT(credit);
+    LT_CHECK(credit->limit == 2);
+    f.credit_acknowledged(*credit);
+    LT_ASSERT(f.retire(s));
+    LT_CHECK(!f.pending_credit(hd::quic_flow_kind::max_streams_bidi));
+    LT_ASSERT(f.observe_peer(4));
+    LT_CHECK(f.observe_peer(8).code == hd::quic_flow_code::stream_limit_error);
+LT_END_AUTO_TEST(bidi_receive_fin_consumption_waits_for_acknowledged_send_fin_before_retirement)
+LT_BEGIN_AUTO_TEST(flow_suite, bidi_acknowledged_send_reset_waits_for_receive_fin_semantic_consumption_before_retirement)
+    auto p = parameters();
+    p.initial_max_streams_bidi = 1;
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, p, p, 4, budget());
+    LT_ASSERT(f.observe_peer(0));
+    hd::quic_stream_state s(0, hd::quic_endpoint_role::server, f.ids(), {}, budget());
+    LT_ASSERT(f.record_reset_sent(0, 0));
+    LT_ASSERT(s.record_reset_sent({0, 1, 0}));
+    LT_ASSERT(s.acknowledge_reset());
+    LT_CHECK(f.retire(s).code == hd::quic_flow_code::stream_state_error);
+    LT_CHECK(!f.pending_credit(hd::quic_flow_kind::max_streams_bidi));
+    LT_CHECK(f.observe_peer(4).code == hd::quic_flow_code::stream_limit_error);
+    LT_ASSERT(f.receive(s, hd::quic_stream_frame{0, 0, std::span(data).first(4), true}));
+    LT_CHECK(f.retire(s).code == hd::quic_flow_code::stream_state_error);
+    std::array<std::byte, 4> body{};
+    LT_CHECK(s.read(body).bytes == 4);
+    LT_CHECK(f.retire(s).code == hd::quic_flow_code::stream_state_error);
+    LT_CHECK(!f.pending_credit(hd::quic_flow_kind::max_streams_bidi));
+    LT_ASSERT(f.consume_body(s, 4));
+    LT_ASSERT(f.retire(s));
+    LT_ASSERT(f.retire(s));
+    const auto credit = f.pending_credit(hd::quic_flow_kind::max_streams_bidi);
+    LT_ASSERT(credit);
+    LT_CHECK(credit->limit == 2);
+    f.credit_acknowledged(*credit);
+    LT_ASSERT(f.retire(s));
+    LT_CHECK(!f.pending_credit(hd::quic_flow_kind::max_streams_bidi));
+    LT_ASSERT(f.observe_peer(4));
+    LT_CHECK(f.observe_peer(8).code == hd::quic_flow_code::stream_limit_error);
+LT_END_AUTO_TEST(bidi_acknowledged_send_reset_waits_for_receive_fin_semantic_consumption_before_retirement)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
