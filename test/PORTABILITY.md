@@ -216,3 +216,11 @@ blocks.
    **Restoration plan**.
 3. Run `./scripts/check-skip-rationales.sh` locally — it must exit 0
    before the change is committed.
+
+## Native IOCP unit suite
+
+`unit/io_iocp_backend_test.cpp` returns Automake skip status 77 outside native
+Windows (`_WIN32`). IOCP operations and packet/cancellation traces run on the
+MINGW64 CI lane alongside the WSAPoll oracle; the MSYS POSIX lane is not native
+Windows evidence. `io_completion_storage` exercises the production staging and
+terminal-claim lifetime rules on every platform.

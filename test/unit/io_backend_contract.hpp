@@ -188,6 +188,7 @@ struct backend_fixture {
     virtual void fire_wake() = 0;
     virtual std::size_t close_backend() = 0;
     virtual std::size_t pending_count() = 0;
+    virtual std::uint64_t accept_connection() const { return 1; }
 };
 
 // Deadline-bounded wait for one delivery. Returns true as soon as the
@@ -481,7 +482,7 @@ void close_sweeps_every_pending_once(littletest::test_runner* __lt_tr__,
     contract_rig& r = fx.rig;
     const auto far_deadline = std::chrono::steady_clock::now()
                               + std::chrono::hours(1);
-    hd::accept_operation accept_op(r.owner, 1);
+    hd::accept_operation accept_op(r.owner, fx.accept_connection());
     hd::read_operation read_op(r.owner, 1, std::span<std::byte>(r.buffer));
     hd::write_operation write_op(r.owner, 1,
                                  std::span<const std::byte>(r.cbuffer));
