@@ -65,6 +65,7 @@ struct quic_recovery_environment {
     bool handshake_confirmed = false, peer_validated_endpoint = true, send_permitted = true;
 };
 using quic_information_id = std::uint64_t;
+enum class quic_stream_retention { ordinary, critical };
 enum class quic_information_kind { crypto, stream, reset_stream, flow };
 struct quic_information_result : quic_recovery_result {
     quic_information_id id = 0;
@@ -113,7 +114,8 @@ class quic_recovery final {
     std::optional<quic_recovery_timer> next_deadline() const;
     unsigned pto_count() const;
     quic_information_result retain_crypto(quic_pn_space space, std::uint64_t offset, std::span<const std::byte> data);
-    quic_information_result retain_stream(const quic_stream_frame& frame);
+    // Owner marks local protocol-control STREAM data for reserved retention.
+    quic_information_result retain_stream(const quic_stream_frame& frame, quic_stream_retention retention = quic_stream_retention::ordinary);
     quic_information_result retain_flow(const quic_flow_frame& frame);
     quic_information_result retain_reset(const quic_reset_stream_frame& frame);
     quic_recovery_result cancel_information(quic_information_id id);

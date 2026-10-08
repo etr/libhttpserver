@@ -2232,3 +2232,21 @@ http3_connection_SOURCES = unit/http3_connection_test.cpp
 http3_connection_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 http3_connection_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 EXTRA_DIST += unit/http3_fixture.hpp
+
+check_PROGRAMS += http3_headers
+http3_headers_SOURCES = unit/http3_headers_test.cpp
+http3_headers_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+http3_headers_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+check_PROGRAMS += http3_exchange http3_streaming http3_cancellation
+http3_exchange_SOURCES = unit/http3_exchange_test.cpp parity/response_frame.cpp
+http3_exchange_LDADD = $(http3_headers_LDADD)
+http3_exchange_LDFLAGS = $(http3_headers_LDFLAGS)
+http3_streaming_SOURCES = unit/http3_streaming_test.cpp
+http3_streaming_LDADD = $(http3_headers_LDADD)
+http3_streaming_LDFLAGS = $(http3_headers_LDFLAGS)
+http3_cancellation_SOURCES = unit/http3_cancellation_test.cpp parity/response_frame.cpp
+http3_cancellation_LDADD = $(http3_headers_LDADD)
+http3_cancellation_LDFLAGS = $(http3_headers_LDFLAGS)
+EXTRA_DIST += unit/http3_request_fixture.hpp
+
+EXTRA_DIST += unit/http3_route_parity_fixture.hpp

@@ -9,9 +9,9 @@
 Provide HTTP/3 request streams to semantic exchanges for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Validate H3 pseudo-headers and map DATA/trailers to exchange.
-- [ ] Serialize responses through QUIC stream credit.
-- [ ] Test equivalent HTTP/1, HTTP/2 and H3 route behavior under cancellation.
+- [x] Validate H3 pseudo-headers and map DATA/trailers to exchange.
+- [x] Serialize responses through QUIC stream credit.
+- [x] Test equivalent HTTP/1, HTTP/2 and H3 route behavior under cancellation.
 
 **Dependencies:**
 - Blocked by: TASK-102, TASK-103, TASK-104, TASK-158, TASK-160
@@ -24,4 +24,4 @@ Provide HTTP/3 request streams to semantic exchanges for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-009, PRD-V3N-REQ-021, PRD-V3N-REQ-026
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** Complete

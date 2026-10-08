@@ -5,7 +5,7 @@ namespace httpserver::detail {
 void quic_recovery::implementation::register_stream(std::uint64_t stream) {
     std::erase_if(streams, [&](auto entry) {
         return std::none_of(information_records.begin(), information_records.end(), [&](const auto& i) {
-            return i.kind == quic_information_kind::stream && i.stream == entry.stream && !i.cancelled && !i.completed;
+            return !i.critical && i.stream == entry.stream && !i.cancelled && !i.completed;
         });
     });
     auto found = std::find_if(streams.begin(), streams.end(), [stream](auto entry) { return entry.stream == stream; });
@@ -22,7 +22,7 @@ std::optional<quic_recovery::implementation::slice> quic_recovery::implementatio
 }
 std::optional<quic_recovery::implementation::slice> quic_recovery::implementation::stream_slice(const stream_schedule& entry, bool probe, const quic_flow_control* flow) const {
     for (const auto& value : information_records) {
-        if (value.kind != quic_information_kind::stream || value.stream != entry.stream) continue;
+        if (value.critical || value.stream != entry.stream) continue;
         if (value.completed || value.cancelled) continue;
         auto content = eligible_slice(value, probe, flow);
         if (!content) continue;
@@ -54,7 +54,7 @@ std::optional<quic_recovery::implementation::slice> quic_recovery::implementatio
     auto data = space == quic_pn_space::application ? select_stream(probe, flow) : std::nullopt;
     if (data && prefer_data(space, *data, output)) return data;
     for (const auto& value : information_records) {
-        if (value.kind == quic_information_kind::stream || value.space != space || value.completed || value.cancelled) continue;
+        if (!value.critical || value.space != space || value.completed || value.cancelled) continue;
         if (auto content = eligible_slice(value, probe, flow)) return content;
     }
     return data;
@@ -127,7 +127,7 @@ void quic_recovery::implementation::commit_schedule() {
         if (packet.ack_eliciting && p.request.probe) --probe_grants[static_cast<unsigned>(p.space)];
         send_due.reset();
     }
-    if (p.stream) commit_stream_turn();
+    if (p.stream && !p.critical) commit_stream_turn();
     else if (p.ack_eliciting || p.ack_generation) consecutive_controls = std::min(consecutive_controls + 1, 2U);
 }
 void quic_recovery::implementation::commit_stream_turn() {

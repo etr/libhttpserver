@@ -167,3 +167,10 @@ noinst_HEADERS += httpserver/detail/qpack_static_table.hpp httpserver/detail/qpa
 
 libhttpserver_v3core_la_SOURCES += detail/http3_frame.cpp detail/http3_connection.cpp detail/http3_settings.cpp
 noinst_HEADERS += httpserver/detail/http3_frame.hpp httpserver/detail/http3_connection.hpp
+
+# TASK-161: private HTTP/3 semantic request bridge.
+libhttpserver_v3core_la_SOURCES += detail/http3_request_head.cpp
+noinst_HEADERS += httpserver/detail/http3_request_head.hpp
+libhttpserver_v3core_la_SOURCES += detail/http3_request_engine.cpp detail/http3_body_stream.cpp detail/http3_response_stream.cpp
+noinst_HEADERS += httpserver/detail/http3_request_engine.hpp httpserver/detail/http3_request_state.hpp httpserver/detail/http3_body_stream.hpp
+noinst_HEADERS += httpserver/detail/request_handler_frames.hpp httpserver/detail/multiplexed_request_head.hpp
