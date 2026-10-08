@@ -160,11 +160,11 @@ LT_END_AUTO_TEST(invalid_policy_fails_before_dispatch_and_extreme_clocks_do_not_
 LT_BEGIN_AUTO_TEST(http2_rate_budget_suite, ignored_closed_headers_and_continuations_cannot_bypass_control_work_limit)
     for (bool continuation : {false, true}) {
         auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
-        httpserver::manual_executor executor; hd::http2_request_limits limits; limits.connection.control_events_per_interval = 4;
+        httpserver::manual_executor executor; hd::http2_request_limits limits; limits.connection.control_events_per_interval = 3;
         hd::http2_request_engine engine(budget, routes, executor, limits); hd::hpack_encoder encoder(budget);
         LT_ASSERT(h2test::feed(engine, h2test::preface()));
-        LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get()))));
-        LT_ASSERT(h2test::feed(engine, h2test::frame(3, 0, 1, h2test::increment(8)))); h2test::output(engine);
+        auto opening = h2test::get(); opening.push_back({":method", "GET"});
+        LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 1, h2test::encode(encoder, opening)))); h2test::output(engine);
         auto headers = h2test::encode(encoder, h2test::get());
         LT_ASSERT(h2test::feed(engine, h2test::frame(1, continuation ? 1 : 5, 1, headers)));
         const auto excess = continuation ? h2test::frame(9, 4, 1) : h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get()));

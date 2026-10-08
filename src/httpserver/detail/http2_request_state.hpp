@@ -176,6 +176,29 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         server::reservation charge;
         std::size_t wire_limit = 0, framed_limit = 13;
     };
+    enum class closed_kind { local_reset, peer_reset, complete };
+    struct closed_stream { std::uint32_t id = 0; closed_kind kind = closed_kind::complete; };
+    // Fixed history distinguishes recent peer closure from our own reset, whose
+    // in-flight field sections must still update the shared compression table.
+    std::array<closed_stream, 128> closed{};
+    std::size_t closed_next = 0;
+    std::optional<closed_kind> closed_reason(std::uint32_t id) const {
+        for (const auto& entry : closed) if (entry.id == id) return entry.kind;
+        return {};
+    }
+    void remember_closed(std::uint32_t id, closed_kind kind) {
+        for (auto& entry : closed) if (entry.id == id) {
+            entry.kind = kind; return;
+        }
+        for (std::size_t offset = 0; offset < closed.size(); ++offset) {
+            const auto slot = (closed_next + offset) % closed.size();
+            // Never forget a local reset: late HEADERS must still decode, and
+            // DATA must still debit connection credit without a duplicate reset.
+            if (closed[slot].id && closed[slot].kind == closed_kind::local_reset) continue;
+            closed[slot] = {id, kind}; closed_next = (slot + 1) % closed.size(); return;
+        }
+        fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded));
+    }
     server::resource_budget budget;
     const server::route_registry& routes;
     executor& owner;
@@ -204,7 +227,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     bool connect_eligible = false, end_stream = false, control_exposed = false, closed_headers = false;
     std::optional<http2_error_code> rejected;
     state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l)
-        : budget(b), routes(r), owner(e), handlers(std::make_shared<route_executor>(e)), limits(l), connection(b, l.connection, receive_settings(), true) { scope->enter(); }
+        : budget(b), routes(r), owner(e), handlers(std::make_shared<route_executor>(e)), limits(l), connection(b, l.connection, receive_settings(l.max_streams), true) { scope->enter(); }
     ~state() {
         handlers->disable();
         for (auto& [id, value] : streams) cancel_websocket(*value, {http::outcome_code::connection_closed, "HTTP/2 engine destroyed"});
@@ -225,7 +248,11 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
             streams.clear(); leave_connection();
         }
     }
-    static http2_settings receive_settings() { http2_settings settings; settings.initial_window_size = 0; settings.enable_connect_protocol = 1; return settings; }
+    static http2_settings receive_settings(std::size_t max_streams) {
+        http2_settings settings; settings.initial_window_size = 0; settings.enable_connect_protocol = 1;
+        settings.max_concurrent_streams = static_cast<std::uint32_t>(std::min<std::size_t>(max_streams, 0xffffffff));
+        return settings;
+    }
     void discard(stream& value) {
         value.reset_pending = true;
         cancel_websocket(value, {http::outcome_code::cancelled, "HTTP/2 stream reset"});
@@ -259,6 +286,8 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
             }
             if (retired(value)) {
                 consumed += value.body.unread() + value.body.consumed;
+                if (!value.reset_pending) remember_closed(value.id, closed_kind::complete);
+                if (connection.failure()) return;
                 it = streams.erase(it);
             } else {
                 ++it;
@@ -324,6 +353,8 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     }
     void reset(std::uint32_t id, http2_error_code code) {
         if (connection.failure()) return;
+        remember_closed(id, closed_kind::local_reset);
+        if (connection.failure()) return;
         if (auto found = streams.find(id); found != streams.end() && !found->second->reset_pending) {
             discard(*found->second);
         }
@@ -340,6 +371,12 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     std::optional<std::size_t> response_size(std::uint16_t status, const http::fields& fields) const;
     bool response_fields(response& value, std::uint16_t status, const http::fields& fields);
     void respond(std::uint32_t id, std::uint16_t status, const http::fields& fields, bool streaming);
+    std::optional<http2_error> field_block_error(bool decoded) const {
+        // RFC 9113 section 4.3 requires decompression even for discarded fields.
+        if (!decoded) return connection_error(http2_error_code::compression_error);
+        if (!closed_headers || closed_reason(assembling) == closed_kind::local_reset) return {};
+        return connection_error(closed_reason(assembling) ? http2_error_code::stream_closed : http2_error_code::protocol_error);
+    }
     std::optional<http2_error> assemble() {
         const auto h = connection.header();
         auto fragment = connection.payload();
@@ -384,8 +421,9 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         }
         auto decoded = connection.compression().decoder().decode(block, decode_limits);
         const auto id = assembling; const auto ended = end_stream;
+        const auto error = field_block_error(decoded.status.ok());
         clear_block();
-        if (!decoded.status.ok()) return connection_error(http2_error_code::compression_error);
+        if (error) return error;
         if (discard_headers(id)) return {};
         if (streams.contains(id)) {
             temporary_bytes.release(); temporary_fields.release();

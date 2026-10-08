@@ -77,3 +77,7 @@ CLAUDE.md
 build-off/
 build-on/
 build-red-on/
+
+!scripts/run-v3-http2-gates.py
+!test/integ/http2_client_h2.py
+!test/integ/http2_gate_runner_test.py

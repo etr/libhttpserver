@@ -132,6 +132,8 @@ http2_feed_result http2_request_engine::eof() {
 }
 std::optional<http2_error> http2_request_engine::state::peer_reset(std::uint32_t id) {
     if (!(id & 1) || id > last_stream) return connection_error(http2_error_code::protocol_error);
+    remember_closed(id, closed_kind::peer_reset);
+    if (connection.failure()) return connection.failure();
     std::erase_if(pending, [id](const response& r) { return r.stream == id; });
     if (auto found = streams.find(id); found != streams.end()) {
         discard(*found->second);

@@ -118,28 +118,27 @@ LT_BEGIN_AUTO_TEST(http2_headers_suite, continuation_and_compression_errors_are_
         LT_CHECK_EQ(h2test::count_type(h2test::output(engine), 7), 1u);
     }
 LT_END_AUTO_TEST(continuation_and_compression_errors_are_terminal)
-LT_BEGIN_AUTO_TEST(http2_headers_suite, priority_stream_error_still_decodes_the_complete_block_in_wire_order)
+LT_BEGIN_AUTO_TEST(http2_headers_suite, deprecated_priority_still_decodes_the_complete_block_in_wire_order)
     for (bool continuation : {false, true}) {
         auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
         unsigned calls = 0;
         LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
-            ++calls; LT_CHECK_EQ(x.head().head_fields.first("x-inserted").value_or(""), "priority-invalid");
+            ++calls; LT_CHECK_EQ(x.head().head_fields.first("x-inserted").value_or(""), "priority-ignored");
             x.respond(http::status::from_code(204), {}); co_return;
         }).ok());
         httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor);
-        hd::hpack_encoder encoder(budget); auto fields = h2test::get(); fields.push_back({"x-inserted", "priority-invalid"});
+        hd::hpack_encoder encoder(budget); auto fields = h2test::get(); fields.push_back({"x-inserted", "priority-ignored"});
         auto block = h2test::encode(encoder, fields); std::vector<std::uint8_t> priority{0, 0, 0, 1, 20};
         priority.insert(priority.end(), block.begin(), continuation ? block.begin() + 2 : block.end());
         auto wire = h2test::preface(); h2test::append(wire, h2test::frame(1, continuation ? 33 : 37, 1, priority));
         if (continuation) h2test::append(wire, h2test::frame(9, 4, 1, {block.begin() + 2, block.end()}));
         h2test::append(wire, h2test::frame(1, 5, 3, h2test::encode(encoder, fields)));
         LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
-        LT_CHECK_EQ(calls, 1u); LT_CHECK(!engine.failure());
-        auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
-        LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 1u);
-        auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 1u); LT_CHECK_EQ(replies[0].stream, 3u);
+        LT_CHECK_EQ(calls, 2u); LT_CHECK(!engine.failure());
+        auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_CHECK(resets.empty());
+        auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 2u); LT_CHECK_EQ(replies[0].stream, 1u); LT_CHECK_EQ(replies[1].stream, 3u);
     }
-LT_END_AUTO_TEST(priority_stream_error_still_decodes_the_complete_block_in_wire_order)
+LT_END_AUTO_TEST(deprecated_priority_still_decodes_the_complete_block_in_wire_order)
 LT_BEGIN_AUTO_TEST(http2_headers_suite, valid_uri_schemes_and_empty_body_fields_reach_the_route)
     for (const auto& scheme : {"https", "HTTPS", "web+demo", "urn"}) {
         auto budget = h2test::budget(); hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());

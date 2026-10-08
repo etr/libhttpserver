@@ -20,6 +20,8 @@
 */
 
 #include <cstdint>
+#include <filesystem>  // NOLINT(build/c++17) -- native v3 requires C++20.
+#include <fstream>
 #include <span>
 #include <string>
 #include <string_view>
@@ -204,6 +206,28 @@ LT_BEGIN_AUTO_TEST(hpack_corpus_suite, bounded_stateful_section_mutations)
         }
     }
 LT_END_AUTO_TEST(bounded_stateful_section_mutations)
+LT_BEGIN_AUTO_TEST(hpack_corpus_suite, committed_seed_replay)
+    std::size_t count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(HPACK_SEED_DIR)) {
+        if (entry.path().extension() != ".seed") continue;
+        std::ifstream file(entry.path(), std::ios::binary);
+        const std::string bytes(std::istreambuf_iterator<char>(file), {});
+        LT_CHECK(bytes.size() >= 8 && bytes.size() <= 512);
+        hpack_fuzz_input(octets(bytes)); ++count;
+    }
+    LT_CHECK(count >= 12);
+LT_END_AUTO_TEST(committed_seed_replay)
+LT_BEGIN_AUTO_TEST(hpack_corpus_suite, minimum_and_final_table_updates_after_settings)
+    for (const auto bytes : {"82"sv, "3fe10182"sv, "203fe10182"sv, "203f6182"sv}) {
+        httpserver::detail::hpack_decoder decoder(httpserver::server::resource_budget::root({}));
+        LT_ASSERT(decoder.acknowledge_maximum(0).ok());
+        LT_ASSERT(decoder.acknowledge_maximum(256).ok());
+        auto result = decoder.decode(octets(unhex(bytes)), {1024, 1024, 16});
+        // The acknowledged minimum is mandatory. The subsequent final update
+        // must not exceed the latest advertised limit; it need not equal it.
+        LT_CHECK(result.status.ok() == (bytes == "203fe10182"sv || bytes == "203f6182"sv));
+    }
+LT_END_AUTO_TEST(minimum_and_final_table_updates_after_settings)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
