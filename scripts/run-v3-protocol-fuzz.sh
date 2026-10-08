@@ -17,9 +17,17 @@ done
 [ -n "$build" ] || { echo 'required: --build-dir' >&2; exit 2; }
 [ -n "${targets//[[:space:]]/}" ] || { echo 'empty fuzz target selection' >&2; exit 2; }
 for target in $targets; do
-    case "$target" in http1_head|http1_body|websocket_codec|hpack|http2_engine) ;; *) echo "unknown fuzz target: $target" >&2; exit 2 ;; esac
+    case "$target" in http1_head|http1_body|websocket_codec|hpack|http2_engine|quic_parser|quic_state) ;; *) echo "unknown fuzz target: $target" >&2; exit 2 ;; esac
 done
 command -v "$compiler" >/dev/null || { echo 'libFuzzer compiler unavailable' >&2; exit 1; }
+for target in $targets; do
+    if [ "$target" = quic_state ]; then
+        [ -f "$native_config/config.h" ] || { echo 'QUIC state fuzz requires --native-config-dir with a configured TLS-off build' >&2; exit 1; }
+        if grep -q '^#define NATIVE_V3_TLS' "$native_config/config.h"; then
+            echo 'QUIC state fuzz requires a TLS-off native configuration' >&2; exit 1
+        fi
+    fi
+done
 case "$runs:$seconds" in *[!0-9:]*) echo 'invalid fuzz bounds' >&2; exit 2 ;; esac
 [ "$runs" -gt 0 ] && [ "$seconds" -gt 0 ] || exit 2
 mkdir -p "$build"
@@ -34,6 +42,8 @@ for target in $targets; do
     # Only copies are writable by libFuzzer; source fixtures remain immutable.
     max_len=65536
     case "$target" in
+        quic_parser) cp "$root"/test/data/quic/parser/*.seed "$build/$target/seeds/"; max_len=4096 ;;
+        quic_state) cp "$root"/test/data/quic/state/*.seed "$build/$target/seeds/"; max_len=4096 ;;
         hpack) cp "$root"/test/data/hpack/seeds/*.seed "$build/$target/seeds/"; max_len=512 ;;
         http2_engine) cp "$root"/test/conformance/http2-engine/*.wire "$build/$target/seeds/" ;;
         websocket_codec) cp "$root"/test/conformance/websocket/*.wire "$build/$target/seeds/" ;;
@@ -51,7 +61,11 @@ PY
     sources=("$root/test/fuzz/${target}_fuzz.cpp")
     if [ "$target" = http1_head ]; then sources+=("$root/src/detail/net_address.cpp"); fi
     if [ "$target" = websocket_codec ]; then sources+=("$root/src/detail/websocket_codec.cpp"); fi
+    if [ "$target" = quic_parser ]; then sources+=("$root/src/detail/quic_invariant_header.cpp"); fi
+    if [ "$target" = quic_state ]; then sources+=("$root/test/support/quic_network_harness.cpp"); fi
     target_flags=()
+    if [ "$target" = quic_parser ]; then target_flags+=(-DQUIC_PARSER_LIBFUZZER -I"$root/test"); fi
+    if [ "$target" = quic_state ]; then target_flags+=(-DQUIC_STATE_LIBFUZZER -I"$root/test" -I"$native_config"); fi
     if [ "$target" = hpack ]; then target_flags+=(-DHPACK_LIBFUZZER -I"$root/test"); fi
     if [ "$target" = http2_engine ]; then
         [ -f "$native_config/config.h" ] || { echo 'HTTP/2 fuzz requires --native-config-dir with a configured TLS-off build' >&2; exit 1; }
@@ -59,6 +73,8 @@ PY
             echo 'HTTP/2 fuzz requires a TLS-off native configuration' >&2; exit 1
         fi
         target_flags+=(-DHTTP2_ENGINE_LIBFUZZER -I"$root/test" -I"$native_config")
+    fi
+    if [ "$target" = http2_engine ] || [ "$target" = quic_state ]; then
         # Compile the native TLS-off sources with the same instrumentation;
         # linking an ordinary library would leave the engine uninstrumented.
         while IFS= read -r source; do sources+=("$root/src/$source"); done < <(
