@@ -494,4 +494,5 @@ void http3_request_engine::begin_turn() {
 const std::optional<http3_error>& http3_request_engine::failure() const {
     return state_->error;
 }
+void http3_request_engine::set_peer_for_future_requests(net::peer_address peer) { state_->peer = peer; }
 }  // namespace httpserver::detail

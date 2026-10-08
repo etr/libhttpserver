@@ -37,8 +37,7 @@ inline recovery_duration recovery_sum(recovery_duration a, recovery_duration b) 
 }
 inline recovery_duration recovery_average(recovery_duration old, recovery_duration sample, std::uint64_t denominator) {
     auto a = old.count(), b = sample.count();
-    return recovery_duration((a / denominator) * (denominator - 1) + b / denominator +
-        ((a % denominator) * (denominator - 1) + b % denominator) / denominator);
+    return recovery_duration((a / denominator) * (denominator - 1) + b / denominator + ((a % denominator) * (denominator - 1) + b % denominator) / denominator);
 }
 enum class information_status : std::uint8_t { pending, sent, delivered };
 struct quic_recovery::implementation {
@@ -48,6 +47,8 @@ struct quic_recovery::implementation {
         quic_pn_space space = quic_pn_space::initial;
         std::uint64_t stream = 0, offset = 0, error = 0;
         quic_flow_frame flow;
+        std::array<std::byte, 36> cid_bytes{};
+        std::size_t cid_size = 0;
         std::size_t length = 0, delivered_bytes = 0;
         std::vector<std::byte> data;
         std::vector<information_status> status;
@@ -61,7 +62,7 @@ struct quic_recovery::implementation {
         bool terminal = false;
     };
     struct packet {
-        std::uint64_t number = 0, key_generation = 0, sequence = 0;
+        std::uint64_t number = 0, key_generation = 0, sequence = 0, path_epoch = 0;
         slice content{};
         std::optional<std::uint64_t> receive_watermark, ack_generation;
         time_point sent_at{};
@@ -95,6 +96,7 @@ struct quic_recovery::implementation {
         bool prepared = false, ack_eliciting = false, critical = false;
         quic_send_request request{};
         bool scheduled = false;
+        std::optional<std::uint64_t> path_epoch;
         quic_flow_control* flow = nullptr;
         std::optional<quic_stream_frame> stream{};
         std::optional<quic_reset_stream_frame> reset{};
@@ -126,7 +128,10 @@ struct quic_recovery::implementation {
     void retire_acknowledged_receive(space_state& s, const packet& p);
     void retire_received(space_state& s, std::uint64_t watermark);
     bool can_collect(const packet& p) const;
-    struct stream_schedule { std::uint64_t stream; std::size_t deficit = 0; };
+    struct stream_schedule {
+        std::uint64_t stream;
+        std::size_t deficit = 0;
+    };
     std::vector<stream_schedule> streams;
     std::optional<std::uint64_t> next_stream;
     unsigned consecutive_controls = 0;
@@ -165,6 +170,7 @@ struct quic_recovery::implementation {
     void record_emission(time_point now, std::size_t bytes, bool eliciting, bool flight, std::uint64_t generation);
     void finish_loss(std::optional<time_point> newest, time_point now);
     void register_stream(std::uint64_t stream);
+    std::uint64_t path_epoch = 0;
     std::size_t in_flight = 0;
     quic_rtt_state rtt;
     quic_recovery_environment environment;

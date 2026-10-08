@@ -9,6 +9,7 @@
 #include <vector>
 #include "test/support/quic_interop_files.hpp"
 #include <httpserver/detail/http3_request_engine.hpp>
+#include <httpserver/detail/quic_connection_identity.hpp>
 #include <httpserver/detail/quic_server_admission.hpp>
 #include <httpserver/detail/quic_tls_session.hpp>
 namespace h3net {
@@ -25,9 +26,10 @@ struct transmission {
 // Test-only, bounded owner; all methods run in the fixture's serialization domain.
 class connection final : public hd::datagram_sink {
  public:
-    connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes,
-               httpserver::manual_executor& executor, std::uint64_t id, const std::string& file_root = {});
+    connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes, httpserver::manual_executor& executor, std::uint64_t id,
+               const hs::peer_policy& policy, const std::string& file_root = {});
     ~connection();
+    void adopt_routes(hd::quic_datagram_dispatch& routes, hd::io_connection_owner::datagram_port owner, hd::quic_datagram_dispatch::cid_registration initial, std::weak_ptr<connection> self);
     void on_datagram(std::shared_ptr<const hd::io_datagram> packet) noexcept override;
     void tick(clock_type::time_point now);
     std::optional<transmission> prepare(clock_type::time_point now);
@@ -40,7 +42,7 @@ class connection final : public hd::datagram_sink {
     std::uint64_t current_stream() const { return current_stream_; }
 
  private:
-    void receive_packet(std::span<const std::byte> packet, clock_type::time_point now);
+    void receive_packet(std::span<const std::byte> packet, const hd::quic_path_identity& path, std::size_t credit, bool& accounted, clock_type::time_point now);
     void apply(const hd::quic_frame& frame, hd::quic_pn_space space, clock_type::time_point now);
     void drive_tls();
     void admit_h3();
@@ -53,6 +55,7 @@ class connection final : public hd::datagram_sink {
     hd::quic_storage_pool pool_;
     hd::quic_key_state keys_;
     hd::quic_recovery recovery_;
+    std::unique_ptr<hd::quic_connection_identity> identity_;
     std::unique_ptr<hd::quic_tls_session> tls_;
     std::unique_ptr<hd::quic_flow_control> flow_;
     std::map<std::uint64_t, std::unique_ptr<hd::quic_stream_state>> streams_;
@@ -73,6 +76,8 @@ class connection final : public hd::datagram_sink {
     std::array<std::uint64_t, 3> retired_{};
     std::array<unsigned, 3> probes_{};
     std::optional<hd::quic_send_plan> pending_;
+    std::optional<hd::quic_identity_control> pending_control_;
+    std::shared_ptr<hd::quic_amplification_budget> pending_budget_;
     hd::quic_pn_space pending_space_ = hd::quic_pn_space::initial;
     std::optional<hd::quic_amplification_budget::reservation> debit_;
     std::size_t pending_bytes_ = 0;

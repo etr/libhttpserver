@@ -40,6 +40,7 @@ void quic_recovery::implementation::record_emission(time_point now, std::size_t 
     packet.receive_watermark = pending.receive_watermark;
     packet.ack_generation = pending.ack_generation;
     packet.key_generation = generation;
+    packet.path_epoch = pending.path_epoch.value_or(path_epoch);
     packet.sent_at = now;
     packet.wire_bytes = wire_bytes;
     packet.ack_eliciting = eliciting;
@@ -60,5 +61,31 @@ void quic_recovery::implementation::finish_loss(std::optional<time_point> newest
     bool persistent = persistent_congestion();
     congestion.lose(*newest, now, persistent);
     if (persistent) persistent_through = congestion_runs.back().last;
+}
+quic_recovery_result quic_recovery::activate_path() {
+    if (impl_->pending) return {quic_recovery_code::busy};
+    ++impl_->path_epoch;
+    for (auto& s : impl_->spaces) {
+        for (auto& p : s.sent) {
+            if (!p.in_flight) continue;
+            impl_->update_information(p.content, information_status::pending);
+            p.in_flight = false;
+            p.lost = true;
+        }
+        s.loss_due.reset();
+        s.last_eliciting.reset();
+    }
+    impl_->in_flight = 0;
+    impl_->congestion = quic_congestion(impl_->config.max_datagram_size);
+    impl_->pacing = quic_pacing(impl_->config.max_datagram_size);
+    impl_->rtt = {};
+    impl_->congestion_runs.clear();
+    impl_->persistent_through.reset();
+    impl_->probe_grants.fill(0);
+    impl_->pto_count = 0;
+    impl_->last_pto.reset();
+    impl_->idle_pto_anchor.reset();
+    impl_->send_due.reset();
+    return {};
 }
 }  // namespace httpserver::detail

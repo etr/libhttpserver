@@ -91,6 +91,7 @@ struct fixture {
     hd::tls_credentials_registry credentials;
     h::server::resource_budget root = h::server::resource_budget::root({});
     h::server::route_registry routes;
+    h::server::peer_policy policy;
     std::map<std::uint64_t, std::shared_ptr<h3net::connection>> connections;
     std::vector<hd::quic_datagram_dispatch::cid_registration> registrations;
     h::resume_signal hold;
@@ -225,12 +226,13 @@ struct fixture {
                 if (!facts)
                     throw std::runtime_error("admission facts missing");
                 const auto id = connections.size() + 1;
-                auto connection = std::make_shared<h3net::connection>(credentials.acquire()->select_default(), *facts, routes, executor, id);
+                auto connection = std::make_shared<h3net::connection>(credentials.acquire()->select_default(), *facts, routes, executor, id, policy);
                 connections.emplace(id, connection);
                 auto promoted = admission.promote(outcome.pending, listener.datagrams(), connection,
                                                   std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count());
                 if (!promoted)
                     throw std::runtime_error("CID promotion refused");
+                connection->adopt_routes(admission.routes(), listener.datagrams(), promoted->registration, connection);
                 registrations.push_back(promoted->registration);
             }
             arm_receive();

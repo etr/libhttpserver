@@ -213,3 +213,15 @@ compact application migration example is in `http1-migration.md`.
 Recording provenance, retained observations, passing replay results and the
 nonzero record-mode accounting defect are documented in
 [TASK-120-parity-evidence.md](TASK-120-parity-evidence.md).
+
+## QUIC peer identity after rebinding (TASK-164)
+
+HTTP/3's transport peer may change only after validated rebinding and explicit
+live IP-policy reevaluation. Each exchange snapshots the validated peer and
+port at construction of its complete initial request head. Already suspended
+requests and bodies retain their prior snapshot; a stream opened or partially
+headed before activation uses the new peer if its complete head arrives later.
+Forwarded headers do not change this transport identity. The task-local native
+owner verifies two parked streams and a partially headed sibling across real
+protected-packet rebinding. Public HTTP/3 listener availability remains gated
+by subsequent milestones. See [TASK-164 evidence](../../../docs/task-164-quic-rebinding.md).

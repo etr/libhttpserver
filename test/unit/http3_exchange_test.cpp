@@ -16,6 +16,43 @@ LT_BEGIN_SUITE(http3_exchange_suite)
     void tear_down() {
     }
 LT_END_SUITE(http3_exchange_suite)
+LT_BEGIN_AUTO_TEST(http3_exchange_suite, complete_head_snapshots_validated_peer_without_mutating_parked_exchange)
+    h3test::request_fixture f;
+    httpserver::resume_signal pause;
+    httpserver::net::peer_address old_peer{*httpserver::net::parse_address("127.0.0.1"), 4000};
+    httpserver::net::peer_address new_peer{*httpserver::net::parse_address("127.0.0.2"), 5000};
+    std::vector<httpserver::net::peer_address> seen;
+    f.engine->set_peer_for_future_requests(old_peer);
+    LT_ASSERT(f.routes
+                  .route(http::method::known(http::method_id::get), "/hello",
+                         [&](exchange& x) -> task<void> {
+                             auto before = x.peer();
+                             seen.push_back(before);
+                             if (x.head().head_fields.first("x-park")) co_await pause.wait();
+                             LT_CHECK(x.peer() == before);
+                             x.respond(http::status::from_code(204), {});
+                         })
+                  .ok());
+    f.open(0);
+    f.open(4);
+    auto fields = h3test::get();
+    fields.push_back({"x-park", "yes"});
+    LT_ASSERT(f.feed(0, h3test::headers(fields), true));
+    f.executor.run_pending();
+    auto wire = h3test::headers(h3test::get());
+    LT_ASSERT(f.feed(4, std::span(wire).first(wire.size() - 1)));
+    f.engine->set_peer_for_future_requests(new_peer);
+    LT_ASSERT(f.feed(4, std::span(wire).last(1), true));
+    f.executor.run_pending();
+    LT_ASSERT_EQ(seen.size(), 2u);
+    LT_CHECK(seen[0] == old_peer);
+    LT_CHECK(seen[1] == new_peer);
+    pause.signal();
+    f.executor.run_pending();
+    f.drain();
+    LT_CHECK_EQ(f.fins[0], 1u);
+    LT_CHECK_EQ(f.fins[4], 1u);
+LT_END_AUTO_TEST(complete_head_snapshots_validated_peer_without_mutating_parked_exchange)
 LT_BEGIN_AUTO_TEST(http3_exchange_suite, routes_at_initial_headers_before_fin_and_preserves_peer_identity)
     h3test::request_fixture f;
     unsigned calls = 0;

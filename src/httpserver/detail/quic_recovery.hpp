@@ -66,7 +66,7 @@ struct quic_recovery_environment {
 };
 using quic_information_id = std::uint64_t;
 enum class quic_stream_retention { ordinary, critical };
-enum class quic_information_kind { crypto, stream, reset_stream, flow, handshake_done, stop_sending };
+enum class quic_information_kind { crypto, stream, reset_stream, flow, handshake_done, stop_sending, new_connection_id, retire_connection_id };
 struct quic_information_result : quic_recovery_result {
     quic_information_id id = 0;
 };
@@ -104,8 +104,8 @@ class quic_recovery final {
     // One outstanding preparation per owner; no allocation on successful commit.
     quic_send_plan reserve_packet(quic_pn_space space);
     quic_recovery_result abandon_packet(std::uint64_t token);
-    quic_recovery_result commit_sent(std::uint64_t token, time_point now, std::size_t wire_bytes,
-                                    bool ack_eliciting, bool in_flight, std::uint64_t key_generation = 0);
+    bool preparation_pending() const;
+    quic_recovery_result commit_sent(std::uint64_t token, time_point now, std::size_t wire_bytes, bool ack_eliciting, bool in_flight, std::uint64_t key_generation = 0);
     quic_recovery_events receive_ack(quic_pn_space space, const quic_ack_frame& ack, time_point now);
     std::size_t bytes_in_flight() const;
     quic_rtt_state rtt() const;
@@ -113,12 +113,19 @@ class quic_recovery final {
     quic_recovery_events expire(time_point now);
     std::optional<quic_recovery_timer> next_deadline() const;
     unsigned pto_count() const;
+    std::chrono::steady_clock::duration path_probe_interval() const;
     quic_information_result retain_crypto(quic_pn_space space, std::uint64_t offset, std::span<const std::byte> data);
     // Owner marks local protocol-control STREAM data for reserved retention.
     quic_information_result retain_stream(const quic_stream_frame& frame, quic_stream_retention retention = quic_stream_retention::ordinary);
     quic_information_result retain_flow(const quic_flow_frame& frame);
     quic_information_result retain_handshake_done();
     quic_information_result retain_stop_sending(const quic_stop_sending_frame& frame);
+    quic_information_result retain_new_connection_id(const quic_new_connection_id_frame& frame);
+    quic_information_result retain_retire_connection_id(const quic_retire_connection_id_frame& frame);
+    // Ephemeral path frames share PN allocation, congestion admission and receipts.
+    quic_send_plan prepare_path_packet(const quic_path_frame& frame, std::span<std::byte> output, time_point now, quic_send_request request, bool on_active_path);
+    // Pending sends must finish or be abandoned before the target changes.
+    quic_recovery_result activate_path();
     quic_information_result retain_reset(const quic_reset_stream_frame& frame);
     quic_recovery_result cancel_information(quic_information_id id);
     std::optional<std::uint64_t> delivered_prefix(quic_information_id id) const;
@@ -128,10 +135,8 @@ class quic_recovery final {
     quic_send_plan prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, bool probe = false);
     quic_send_plan prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control& flow, bool probe = false);
     // Check immediately before serialized transport emission; commit records that emission.
-    quic_send_plan prepare_scheduled_packet(quic_pn_space space, std::span<std::byte> output, time_point now,
-                                           quic_send_request request, quic_flow_control& flow);
-    quic_send_permission check_scheduled_emission(std::uint64_t token, time_point now, std::size_t wire_bytes,
-                                                 bool ack_eliciting, bool in_flight) const;
+    quic_send_plan prepare_scheduled_packet(quic_pn_space space, std::span<std::byte> output, time_point now, quic_send_request request, quic_flow_control& flow);
+    quic_send_permission check_scheduled_emission(std::uint64_t token, time_point now, std::size_t wire_bytes, bool ack_eliciting, bool in_flight) const;
     quic_congestion_snapshot congestion() const;
     std::optional<time_point> next_send_deadline() const;
     quic_recovery_events discard_space(quic_pn_space space);

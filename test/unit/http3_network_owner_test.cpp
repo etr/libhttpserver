@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <vector>
 #include <memory>
+#include <string>
 #include <httpserver/detail/quic_crypto.hpp>
 #include "../support/http3_network_owner.hpp"
 #include "./quic_tls_peer.hpp"
+#include "./quic_owner_peer.hpp"
 #include "./littletest.hpp"
 namespace {
 std::shared_ptr<hd::io_datagram> initial(quic_test::peer& peer, std::uint64_t number = 0, std::size_t offset = 0) {
@@ -53,9 +55,10 @@ auto facts = admission.inspect(pending.pending);
 LT_ASSERT(facts);
 httpserver::manual_executor executor;
 httpserver::server::route_registry routes;
+httpserver::server::peer_policy policy;
 auto root = httpserver::server::resource_budget::root({});
 LT_ASSERT(httpserver::server::route_registry::create(root, routes).ok());
-h3net::connection owner(registry.acquire()->select_default(), *facts, routes, executor, 1);
+h3net::connection owner(registry.acquire()->select_default(), *facts, routes, executor, 1, policy);
 owner.on_datagram(packet);
 LT_CHECK_EQ(owner.stats().authenticated, 1u);
 LT_CHECK_EQ(facts->budget->received(), packet->bytes.size());
@@ -78,9 +81,10 @@ auto facts = admission.inspect(pending.pending);
 LT_ASSERT(facts);
 httpserver::manual_executor executor;
 httpserver::server::route_registry routes;
+httpserver::server::peer_policy policy;
 auto root = httpserver::server::resource_budget::root({});
 LT_ASSERT(httpserver::server::route_registry::create(root, routes).ok());
-h3net::connection owner(registry.acquire()->select_default(), *facts, routes, executor, 1);
+h3net::connection owner(registry.acquire()->select_default(), *facts, routes, executor, 1, policy);
 owner.on_datagram(packet);
 for (std::size_t offset = 900; offset < peer.output[0].size(); offset += 900)
     owner.on_datagram(initial(peer, offset / 900, offset));
@@ -124,9 +128,10 @@ auto facts = admission.inspect(pending.pending);
 LT_ASSERT(facts);
 httpserver::manual_executor executor;
 httpserver::server::route_registry routes;
+httpserver::server::peer_policy policy;
 auto root = httpserver::server::resource_budget::root({});
 LT_ASSERT(httpserver::server::route_registry::create(root, routes).ok());
-auto owner = std::make_unique<h3net::connection>(registry.acquire()->select_default(), *facts, routes, executor, 1);
+auto owner = std::make_unique<h3net::connection>(registry.acquire()->select_default(), *facts, routes, executor, 1, policy);
 auto storage = owner->storage_budget();
 owner->on_datagram(packet);
 LT_CHECK(storage.in_use(httpserver::server::resource::quic_reassembly_bytes) > 0);
@@ -134,6 +139,220 @@ owner.reset();
 executor.run_pending();
 LT_CHECK_EQ(storage.in_use(httpserver::server::resource::quic_reassembly_bytes), 0u);
 LT_END_AUTO_TEST(teardown_releases_storage_after_a_partially_received_handshake)
+LT_BEGIN_AUTO_TEST(network_owner_suite, protected_rebinding_keeps_two_parked_streams_and_complete_head_peer_snapshots)
+    owner_test::peer f;
+    httpserver::resume_signal pause;
+    std::vector<httpserver::net::peer_address> peers;
+    LT_ASSERT(f.routes
+                  .route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+                         [&](httpserver::exchange& x) -> httpserver::task<void> {
+                             const auto snapshot = x.peer();
+                             peers.push_back(snapshot);
+                             if (x.head().head_fields.first("x-park")) co_await pause.wait();
+                             LT_CHECK(x.peer() == snapshot);
+                             x.start_response(httpserver::http::status::from_code(200), {});
+                             const std::string body = "retained";
+                             co_await x.writer().write(std::as_bytes(std::span(body)));
+                             co_await x.writer().finish();
+                         })
+                  .ok());
+    f.connect();
+    auto parked = h3test::get();
+    parked.push_back({"x-park", "yes"});
+    auto head = h3test::headers(parked);
+    for (auto id : {0u, 4u}) {
+        const std::array<hd::quic_frame, 1> frames{hd::quic_stream_frame{id, 0, head, false}};
+        f.send(frames, f.address);
+    }
+    auto third = h3test::headers(h3test::get());
+    const auto prefix = third.size() - 1;
+    const std::array<hd::quic_frame, 1> partial{hd::quic_stream_frame{8, 0, std::span(third).first(prefix), false}};
+    f.send(partial, f.address);
+    f.drain(10);
+    LT_ASSERT_EQ(peers.size(), 2u);
+    auto candidate = f.address;
+    candidate.peer.port = 5000;
+    const std::array<hd::quic_frame, 2> tail{hd::quic_stream_frame{8, prefix, std::span(third).last(1), true, true, true}, hd::quic_padding_frame{1100}};
+    f.withheld_numbers.push_back(f.numbers[2]);
+    f.send(tail, candidate);
+    LT_CHECK_EQ(peers.size(), 2u);
+    LT_ASSERT(f.server->failure().empty());
+    bool validated = false;
+    for (unsigned turn = 0; turn < 20 && !validated; ++turn)
+        if (auto sent = f.prepare()) {
+            f.server->emitted(true, f.now);
+            std::array<std::byte, 1600> plain{};
+            unsigned level = 0;
+            std::uint64_t number = 0;
+            auto frames = f.decode(*sent, plain, level, number);
+            if (sent->peer == candidate) {
+                LT_CHECK_EQ(sent->bytes.size(), 1200u);
+                for (const auto& frame : frames) {
+                    LT_CHECK(!std::holds_alternative<hd::quic_stream_frame>(frame));
+                    LT_CHECK(!std::holds_alternative<hd::quic_ack_frame>(frame));
+                    if (auto* challenge = std::get_if<hd::quic_path_frame>(&frame); challenge && !challenge->response) {
+                        const std::array<hd::quic_frame, 2> answer{hd::quic_path_frame{true, challenge->data}, tail[0]};
+                        f.send(answer, candidate);
+                        validated = true;
+                    }
+                }
+            } else {
+                // Old-path probing may precede the candidate; accepting it must not supersede migration intent.
+                f.accept(*sent, false);
+            }
+        }
+    LT_ASSERT(validated);
+    LT_ASSERT(f.server->failure().empty());
+    LT_ASSERT_EQ(peers.size(), 3u);
+    LT_CHECK(peers[0] == f.address.peer && peers[1] == f.address.peer);
+    LT_CHECK(peers[2] == candidate.peer);
+    f.address = candidate;
+    pause.signal();
+    f.executor.run_pending();
+    f.drain();
+    LT_ASSERT(f.server->failure().empty());
+    for (auto id : {0u, 4u, 8u}) {
+        LT_CHECK(f.fins[id]);
+        LT_CHECK_EQ(h3test::decode_response(f.output[id]).body, "retained");
+    }
+LT_END_AUTO_TEST(protected_rebinding_keeps_two_parked_streams_and_complete_head_peer_snapshots)
+LT_BEGIN_AUTO_TEST(network_owner_suite, unauthenticated_and_replayed_changed_paths_never_redirect_application_packets)
+    owner_test::peer f;
+    f.connect();
+    f.drain(10);
+    auto candidate = f.address;
+    candidate.peer.port = 6000;
+    const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+    auto packet = f.packet(ping, f.address);
+    f.server->on_datagram(packet);
+    auto forwarded = std::make_shared<hd::io_datagram>(*packet);
+    forwarded->peer = candidate;
+    f.server->on_datagram(forwarded);
+    auto spoof = f.packet(ping, candidate);
+    spoof->bytes.back() ^= std::byte{1};
+    f.server->on_datagram(spoof);
+    LT_ASSERT(f.server->failure().empty());
+    for (unsigned turn = 0; turn < 10; ++turn)
+        if (auto sent = f.prepare()) {
+            LT_CHECK(sent->peer == f.address);
+            f.server->emitted(true, f.now);
+            f.accept(*sent);
+        }
+LT_END_AUTO_TEST(unauthenticated_and_replayed_changed_paths_never_redirect_application_packets)
+LT_BEGIN_AUTO_TEST(network_owner_suite, live_policy_discovery_and_activation_denial_withholds_handlers_and_candidate_acks)
+    for (bool deny_at_discovery : {false, true}) {
+        owner_test::peer f;
+        unsigned calls = 0;
+        LT_ASSERT(f.routes
+                      .route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+                             [&](httpserver::exchange& x) -> httpserver::task<void> {
+                                 ++calls;
+                                 x.respond(httpserver::http::status::from_code(204), {});
+                                 co_return;
+                             })
+                      .ok());
+        f.connect();
+        f.drain(10);
+        auto candidate = f.address;
+        candidate.peer.address = *httpserver::net::parse_address("127.0.0.2");
+        candidate.peer.port = 7000;
+        if (deny_at_discovery) {
+            LT_ASSERT(f.policy.deny("127.0.0.2").ok());
+        }
+        auto head = h3test::headers(h3test::get());
+        const std::array<hd::quic_frame, 2> data{hd::quic_stream_frame{0, 0, head, true}, hd::quic_padding_frame{1000}};
+        f.withheld_numbers.push_back(f.numbers[2]);
+        f.send(data, candidate);
+        LT_CHECK_EQ(calls, 0u);
+        LT_ASSERT(f.server->failure().empty());
+        bool saw_probe = false;
+        for (unsigned turn = 0; turn < 10; ++turn)
+            if (auto sent = f.prepare()) {
+                f.server->emitted(true, f.now);
+                if (sent->peer == candidate) {
+                    LT_CHECK(!deny_at_discovery);
+                    saw_probe = true;
+                    std::array<std::byte, 1600> plain{};
+                    unsigned level;
+                    std::uint64_t number;
+                    auto frames = f.decode(*sent, plain, level, number);
+                    LT_ASSERT(f.policy.deny("127.0.0.2").ok());
+                    for (const auto& frame : frames) {
+                        LT_CHECK(!std::holds_alternative<hd::quic_stream_frame>(frame) && !std::holds_alternative<hd::quic_ack_frame>(frame));
+                        if (auto* challenge = std::get_if<hd::quic_path_frame>(&frame); challenge && !challenge->response) {
+                            const std::array<hd::quic_frame, 2> answer{hd::quic_path_frame{true, challenge->data}, data[0]};
+                            f.send(answer, candidate);
+                        }
+                    }
+                } else {
+                f.accept(*sent, false);
+            }
+            }
+        LT_CHECK(saw_probe != deny_at_discovery);
+        LT_CHECK_EQ(calls, 0u);
+        LT_ASSERT(f.server->failure().empty());
+        f.send(data, f.address);
+        f.drain();
+        LT_CHECK_EQ(calls, 1u);
+        LT_CHECK(f.fins[0]);
+    }
+LT_END_AUTO_TEST(live_policy_discovery_and_activation_denial_withholds_handlers_and_candidate_acks)
+LT_BEGIN_AUTO_TEST(network_owner_suite, advertised_aliases_dispatch_to_same_owner_retire_and_do_not_create_ownership_cycles)
+    owner_test::peer f;
+    f.connect();
+    f.drain(20);
+    LT_ASSERT(f.issued.contains(1));
+    LT_ASSERT_EQ(f.issued[1].size(), f.server_cid.size());
+    std::copy(f.issued[1].begin(), f.issued[1].end(), f.server_cid.begin());
+    const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+    auto alias_packet = f.packet(ping, f.address);
+    const auto before = f.server->stats().authenticated;
+    LT_CHECK(f.admission->routes().dispatch(alias_packet).code == hd::datagram_dispatch_code::routed);
+    f.executor.run_pending();
+    LT_CHECK_EQ(f.server->stats().authenticated, before + 1);
+    f.server_cid.fill({});
+    f.server_cid[0] = std::byte{1};
+    const std::array<hd::quic_frame, 1> retire{hd::quic_retire_connection_id_frame{1}};
+    f.send(retire, f.address);
+    LT_ASSERT(f.server->failure().empty());
+    LT_CHECK(f.admission->routes().dispatch(alias_packet).code == hd::datagram_dispatch_code::retired);
+    auto storage = f.server->storage_budget();
+    std::weak_ptr<h3net::connection> weak = f.server;
+    LT_CHECK(f.admission->routes().remove(*f.registration));
+    f.server.reset();
+    f.executor.run_pending();
+    LT_CHECK(weak.expired());
+    LT_CHECK_EQ(storage.in_use(httpserver::server::resource::quic_reassembly_bytes), 0u);
+LT_END_AUTO_TEST(advertised_aliases_dispatch_to_same_owner_retire_and_do_not_create_ownership_cycles)
+LT_BEGIN_AUTO_TEST(network_owner_suite, forwarded_fresh_packet_before_original_keeps_old_path_stream_progress)
+    owner_test::peer f;
+    unsigned calls = 0;
+    LT_ASSERT(f.routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello", [&](httpserver::exchange& x) -> httpserver::task<void> {
+        ++calls; x.respond(httpserver::http::status::from_code(204), {}); co_return;
+    }).ok());
+    f.connect(); f.drain(10);
+    auto head = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 2> data{hd::quic_stream_frame{0, 0, head, true}, hd::quic_padding_frame{1000}};
+    auto original = f.packet(data, f.address);
+    auto forwarded = std::make_shared<hd::io_datagram>(*original); forwarded->peer.peer.port = 6500;
+    f.server->on_datagram(forwarded); LT_CHECK_EQ(calls, 0u);
+    f.server->on_datagram(original); LT_CHECK_EQ(calls, 1u);
+    const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+    f.send(ping, f.address);
+    for (unsigned turn = 0; turn < 30; ++turn) if (auto sent = f.prepare()) {
+        f.server->emitted(true, f.now);
+        if (sent->peer == f.address) {
+            f.accept(*sent);
+        } else {
+            std::array<std::byte, 1600> plain{}; unsigned level; std::uint64_t number;
+            auto frames = f.decode(*sent, plain, level, number);
+            for (const auto& frame : frames) {
+                LT_CHECK(!std::holds_alternative<hd::quic_stream_frame>(frame));
+            }
+        }
+    }
+    LT_ASSERT(f.server->failure().empty()); LT_CHECK(f.fins[0]); LT_CHECK_EQ(calls, 1u);
+LT_END_AUTO_TEST(forwarded_fresh_packet_before_original_keeps_old_path_stream_progress)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

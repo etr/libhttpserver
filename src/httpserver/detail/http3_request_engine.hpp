@@ -40,6 +40,8 @@ class http3_request_engine final {
     void information_completed(const quic_information_completion& completion);
     std::optional<http3_request_action> take_action();
     void disconnect(http::outcome reason);
+    // Existing exchanges keep their by-value peer snapshot.
+    void set_peer_for_future_requests(net::peer_address peer);
     void begin_turn();
     const std::optional<http3_error>& failure() const;
 
