@@ -24,6 +24,6 @@ Provide QUIC congestion control, pacing and fair send scheduling for libhttpserv
 **Related Requirements:** PRD-V3N-REQ-008, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [QUIC scheduling contract and local checks](../../../docs/task-158-quic-scheduling.md). Caller-owned validation and finalization remain pending.
