@@ -107,9 +107,9 @@ struct request_fixture {
         engine->begin_turn();
         engine->pump_receive(id);
     }
-    void drain(std::size_t packet_size = 1200) {
+    void drain(std::size_t packet_size = 1200, unsigned turns = 4096) {
         std::vector<std::byte> packet(packet_size);
-        for (unsigned i = 0; i < 4096; ++i) {
+        for (unsigned i = 0; i < turns; ++i) {
             engine->begin_turn();
             engine->pump_output();
             now += std::chrono::seconds(1);

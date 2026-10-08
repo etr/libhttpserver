@@ -24,8 +24,9 @@ connection error scope.
 
 The body adapter reuses the existing fixed-capacity semantic rings. Their HTTP/2
 window members do not participate in QUIC accounting. Admission clamps to the
-configured H3 cap; bounded scratch holds borrowed DATA events through partial
-copies. A fixed ordered receipt ledger records protocol extents and exact DATA
+configured H3 cap. DATA stays borrowed by the framing core before application
+admission, then the smaller application ring cap applies backpressure; bounded
+scratch holds the event through partial copies. A fixed ordered receipt ledger records protocol extents and exact DATA
 chunk extents. Application pulls alone advance body receipts, and protocol bytes
 behind unread DATA remain uncredited. Trailers become visible only after a clean
 QUIC FIN, successful parser completion and an application EOF observation.
@@ -37,8 +38,11 @@ records actual stream emission. The owner must prepare a scheduled packet,
 recheck scheduled emission, emit or abandon it, record the transport stream's
 actual sent offsets, and commit recovery's flow accounting. Completion callbacks
 remove only adapter-owned information IDs; the adapter never drains the shared
-recovery completion queue. Local critical prefixes retain TASK-160 classification
-and priority and are forwarded without FIN.
+recovery completion queue. Ordinary response retention rotates after successful admission, including under
+a one-record cap. Local critical prefixes use three reserved adapter records
+and carry explicit critical retention classification through recovery storage,
+information/byte admission and control scheduling. They remain STREAM information
+for flow accounting, ACK/loss replay and completions, and are forwarded without FIN.
 
 Owner actions expose STOP_SENDING and RESET_STREAM frames. RESET final size comes
 from the QUIC stream's actual emitted high-water mark, never the response retention
@@ -81,7 +85,7 @@ Behavioral RED/GREEN cycles also caught and repaired:
   receive reset settlement on a local send-only stream:
   `/tmp/task161-red-local-critical.log`.
 
-The final focused suite has 29 scenarios and 433 checks across `http3_headers`,
+The final focused suite has 34 scenarios and 577 checks across `http3_headers`,
 `http3_exchange`, `http3_streaming` and `http3_cancellation`. All pass. Scenarios
 cover shared real HTTP/1 poll/worker, HTTP/2 framing and H3/QUIC GET/POST handlers,
 normalized/raw targets, repeated fields, incremental reads, collection, request
@@ -90,6 +94,43 @@ and response trailers, body/application/writer cancellation, sibling progress,
 wraparound, receipt saturation, zero DATA, 100-continue, response credit splitting,
 recovery refusal, abandoned preparation, pre-ACK writer capacity, 62-bit SETTINGS,
 critical prefix progress, inline destruction and reservation release.
+
+## Validation repair evidence
+
+Iteration 1 fixes the seven authorized findings in the coordinator's repair
+contract. Tests were added before the behavioral repair: coalesced POST admission,
+one-slot response fairness, and independently saturated ordinary adapter records,
+recovery information, retained bytes and data storage all failed against the
+original production implementation. RED evidence is in
+`/tmp/task161-repair-red-final-streaming.log`.
+
+Isolated ordinary CONNECT and properly ordered Extended CONNECT cases fail when
+H3 conversion is temporarily allowed to use shared CONNECT metadata (two checks).
+Malformed trailer cases now send a matching Content-Length; both fail when the
+engine's trailer converter is bypassed. A valid trailer control completes, and
+separate underflow/overflow cases remain. Mutation evidence is in
+`/tmp/task161-repair-mutant-connect.log` and
+`/tmp/task161-repair-mutant-trailers.log`; mutations were restored before GREEN.
+
+All four focused suites, 25 affected protocol regression programs and 11
+ASan/UBSan programs pass. The latter includes the four H3 and four H2 suites plus
+QUIC flow/recovery, repacketization and scheduled send. Final build/test receipts
+are `/tmp/task161-repair-final-build.log`,
+`/tmp/task161-repair-final-focused.log`,
+`/tmp/task161-repair-regression-tests.log`,
+`/tmp/task161-repair-final-san-build.log` and
+`/tmp/task161-repair-final-san-tests.log`.
+
+Changed C++ files pass cpplint; changed production files pass CCN 10. Whole-source
+complexity and CPD gates still report exactly the fresh read-only HEAD archive's
+19 warnings and three duplicated runs, with identical normalized findings.
+Receipts are `/tmp/task161-repair-lint.log`,
+`/tmp/task161-repair-changed-complexity.log`,
+`/tmp/task161-repair-full-complexity.log`,
+`/tmp/task161-repair-baseline-complexity.log`,
+`/tmp/task161-repair-full-duplication.log` and
+`/tmp/task161-repair-baseline-duplication.log`. No unrelated baseline violation was
+changed. Nonlocal platforms remain assigned to CI and the v3 PR.
 
 ## Reproducible local checks
 

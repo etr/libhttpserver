@@ -23,30 +23,30 @@ quic_information_result quic_recovery::implementation::retain(information value,
     if (!valid_information(value, data)) return {{quic_recovery_code::invalid}};
     if (s->discarded) return {{quic_recovery_code::discarded}};
     if (admission != quic_recovery_code::ok) return {{admission}};
-    if (!payload_capacity(value.kind, data.size())) return {{quic_recovery_code::capacity}};
+    if (!payload_capacity(value.critical, data.size())) return {{quic_recovery_code::capacity}};
     std::erase_if(information_records, [](const auto& i) {
         if (i.cancelled) return true;
         return i.kind != quic_information_kind::flow && i.completed && !i.completion_pending;
     });
-    if (!information_capacity(value.kind)) return {{quic_recovery_code::capacity}};
+    if (!information_capacity(value.critical)) return {{quic_recovery_code::capacity}};
     return store_information(std::move(value), data);
 }
-bool quic_recovery::implementation::payload_capacity(quic_information_kind kind, std::size_t bytes) const {
+bool quic_recovery::implementation::payload_capacity(bool critical, std::size_t bytes) const {
     if (bytes > config.max_retained_bytes - retained_bytes) return false;
-    return kind != quic_information_kind::stream || bytes <= config.max_retained_bytes - config.critical_retained_bytes - data_retained_bytes;
+    return critical || bytes <= config.max_retained_bytes - config.critical_retained_bytes - data_retained_bytes;
 }
 bool quic_recovery::implementation::valid_information(const information& value, std::span<const std::byte> data) const {
     return value.offset <= k_quic_max_integer && data.size() <= k_quic_max_integer - value.offset;
 }
-bool quic_recovery::implementation::information_capacity(quic_information_kind kind) const {
+bool quic_recovery::implementation::information_capacity(bool critical) const {
     if (information_records.size() >= config.max_information || next_information == 0) return false;
-    if (kind != quic_information_kind::stream) return true;
-    const auto data_count = std::count_if(information_records.begin(), information_records.end(), [](const auto& i) { return i.kind == quic_information_kind::stream; });
+    if (critical) return true;
+    const auto data_count = std::count_if(information_records.begin(), information_records.end(), [](const auto& i) { return !i.critical; });
     return static_cast<std::size_t>(data_count) < config.max_information - config.critical_information;
 }
 quic_information_result quic_recovery::implementation::store_information(information value, std::span<const std::byte> data) {
     try {
-        auto& payload_budget = value.kind == quic_information_kind::stream ? budget : critical_budget;
+        auto& payload_budget = value.critical ? critical_budget : budget;
         if (!data.empty() && !payload_budget.reserve(server::resource::quic_reassembly_bytes, 2 * data.size(), value.storage).ok())
             return {{quic_recovery_code::no_memory}};
         value.data.assign(data.begin(), data.end());
@@ -55,8 +55,8 @@ quic_information_result quic_recovery::implementation::store_information(informa
         value.id = next_information;
         information_records.push_back(std::move(value));
         retained_bytes += data.size();
-        if (information_records.back().kind == quic_information_kind::stream) data_retained_bytes += data.size();
-        if (information_records.back().kind == quic_information_kind::stream) register_stream(information_records.back().stream);
+        if (!information_records.back().critical) data_retained_bytes += data.size();
+        if (!information_records.back().critical) register_stream(information_records.back().stream);
         return {{}, next_information++};
     } catch (const std::bad_alloc&) {
         return {{quic_recovery_code::no_memory}};
@@ -69,11 +69,12 @@ quic_information_result quic_recovery::retain_crypto(quic_pn_space space, std::u
     value.offset = offset;
     return impl_->retain(std::move(value), data);
 }
-quic_information_result quic_recovery::retain_stream(const quic_stream_frame& frame) {
+quic_information_result quic_recovery::retain_stream(const quic_stream_frame& frame, quic_stream_retention retention) {
     if (frame.stream > k_quic_max_integer || (!frame.fin && frame.data.empty()) ||
         !quic_stream_sender_allowed(frame.stream, true, impl_->config.role)) return {{quic_recovery_code::invalid}};
     implementation::information value;
     value.kind = quic_information_kind::stream;
+    value.critical = retention == quic_stream_retention::critical;
     value.space = quic_pn_space::application;
     value.stream = frame.stream;
     value.offset = frame.offset;
@@ -95,7 +96,7 @@ quic_information_result quic_recovery::retain_reset(const quic_reset_stream_fram
 }
 void quic_recovery::implementation::release_storage(information& value) {
     retained_bytes -= value.data.size();
-    if (value.kind == quic_information_kind::stream) data_retained_bytes -= value.data.size();
+    if (!value.critical) data_retained_bytes -= value.data.size();
     std::vector<std::byte>().swap(value.data);
     std::vector<information_status>().swap(value.status);
     value.storage.release();
@@ -194,8 +195,8 @@ std::optional<quic_recovery::implementation::slice> quic_recovery::implementatio
     auto content = select_information(space, false, flow, output);
     if (!content && probe) content = select_information(space, true, flow, output);
     // ACK-only packets get critical record admission even when ordinary sent
-    // records or output are full. A STREAM cannot consume that reserved slot.
-    if (content && ack && find_information(content->id)->kind == quic_information_kind::stream && !prefer_data(space, *content, output)) content.reset();
+    // records or output are full. Ordinary STREAM data cannot use that slot.
+    if (content && ack && !find_information(content->id)->critical && !prefer_data(space, *content, output)) content.reset();
     return content;
 }
 quic_send_plan quic_recovery::prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, bool probe) {
@@ -206,7 +207,7 @@ quic_send_plan quic_recovery::prepare_packet(quic_pn_space space, std::span<std:
 }
 quic_send_plan quic_recovery::prepare(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control* flow, bool probe, bool ack_only) {
     auto content = ack_only ? std::nullopt : impl_->select_packet_information(space, probe, flow, ack_deadline(space).has_value(), output);
-    const bool critical = !content || impl_->find_information(content->id)->kind != quic_information_kind::stream;
+    const bool critical = !content || impl_->find_information(content->id)->critical;
     auto plan = reserve(space, critical);
     if (!plan) return plan;
     if (content || (probe && !ack_only)) {

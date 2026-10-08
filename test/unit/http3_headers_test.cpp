@@ -29,10 +29,7 @@ LT_BEGIN_AUTO_TEST(http3_headers_suite, preserves_semantic_head_and_checked_leng
     LT_CHECK_EQ(*n, 4u);
 LT_END_AUTO_TEST(preserves_semantic_head_and_checked_lengths)
 LT_BEGIN_AUTO_TEST(http3_headers_suite, rejects_malformed_pseudo_fields_and_regular_fields)
-    for (const auto& field : std::vector<hd::qpack_field>{{":method", "GET"},
-                                                          {":unknown", "x"},
-                                                          {":protocol", "websocket"},
-                                                          {"X-UPPER", "x"},
+    for (const auto& field : std::vector<hd::qpack_field>{{"X-UPPER", "x"},
                                                           {"connection", "close"},
                                                           {"transfer-encoding", "chunked"},
                                                           {"te", "gzip"},
@@ -52,11 +49,27 @@ LT_BEGIN_AUTO_TEST(http3_headers_suite, rejects_malformed_pseudo_fields_and_regu
         http::request_head head;
         LT_CHECK(!hd::http3_convert_request(fields, head));
     }
+LT_END_AUTO_TEST(rejects_malformed_pseudo_fields_and_regular_fields)
+LT_BEGIN_AUTO_TEST(http3_headers_suite, rejects_connect_with_otherwise_valid_pseudo_fields)
+    for (const auto& fields : std::vector<std::vector<hd::qpack_field>>{
+             {{":method", "CONNECT"}, {":authority", "example.test:443"}},
+             {{":method", "CONNECT"}, {":protocol", "websocket"}, {":scheme", "https"}, {":authority", "example.test"}, {":path", "/hello"}, {"x-regular", "yes"}}}) {
+        http::request_head head;
+        LT_CHECK(!hd::http3_convert_request(fields, head));
+    }
+LT_END_AUTO_TEST(rejects_connect_with_otherwise_valid_pseudo_fields)
+LT_BEGIN_AUTO_TEST(http3_headers_suite, rejects_duplicate_unknown_and_late_pseudo_fields)
+    for (const auto& field : std::vector<hd::qpack_field>{{":method", "POST"}, {":unknown", "x"}, {":protocol", "websocket"}}) {
+        auto fields = head_fields();
+        fields.insert(fields.begin() + 4, field);
+        http::request_head head;
+        LT_CHECK(!hd::http3_convert_request(fields, head));
+    }
     auto fields = head_fields();
-    fields[0].value = "CONNECT";
+    fields.push_back({":path", "/late"});
     http::request_head head;
     LT_CHECK(!hd::http3_convert_request(fields, head));
-LT_END_AUTO_TEST(rejects_malformed_pseudo_fields_and_regular_fields)
+LT_END_AUTO_TEST(rejects_duplicate_unknown_and_late_pseudo_fields)
 LT_BEGIN_AUTO_TEST(http3_headers_suite, trailers_preserve_order_and_reject_framing_and_routing)
     http::fields trailers;
     LT_ASSERT(hd::http3_convert_trailers(std::vector<hd::qpack_field>{{"x-end", "a"}, {"x-end", "b"}}, trailers));

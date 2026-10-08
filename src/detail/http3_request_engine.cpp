@@ -104,7 +104,7 @@ void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
     r.cancelled = true;
     for (auto id : r.information) {
         recovery.cancel_information(id);
-        --retained;
+        --(r.local ? retained_critical : retained);
     }
     r.information.clear();
     r.sections.clear();
@@ -168,8 +168,9 @@ bool http3_request_engine::state::attach(quic_stream_state& transport, std::opti
     auto& storage = role || (id & 2) ? critical : data;
     server::reservation charge;
     const auto scratch = std::min<std::size_t>(16384, std::max<std::size_t>(1, limits.framing.data_chunk));
+    const auto output_records = role ? critical_output_records : limits.max_pending_output_records;
     const auto bytes =
-        sizeof(record) + 1024 + scratch + limits.max_receipt_records * sizeof(http3_request_helpers::receipt) + limits.max_pending_output_records * sizeof(quic_information_id);
+        sizeof(record) + 1024 + scratch + limits.max_receipt_records * sizeof(http3_request_helpers::receipt) + output_records * sizeof(quic_information_id);
     if (!storage.budget.reserve(server::resource::quic_reassembly_bytes, bytes, charge).ok()) {
         fail(h3_error(0x107, "Bridge record storage exhausted", id));
         return false;
@@ -181,7 +182,7 @@ bool http3_request_engine::state::attach(quic_stream_state& transport, std::opti
     r->charge = std::move(charge);
     r->scratch.resize(scratch);
     r->receipts.resize(limits.max_receipt_records);
-    r->information.reserve(limits.max_pending_output_records);
+    r->information.reserve(output_records);
     records.emplace(id, std::move(r));
     return true;
 }

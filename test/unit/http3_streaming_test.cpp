@@ -152,7 +152,7 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, send_credit_splits_frames_and_retentio
     LT_CHECK_EQ(f.fins[0], 1u);
 LT_END_AUTO_TEST(send_credit_splits_frames_and_retention_does_not_charge_emission)
 LT_BEGIN_AUTO_TEST(http3_streaming_suite, content_length_and_malformed_trailers_are_stream_errors)
-    for (unsigned mode : {0u, 1u, 2u, 3u}) {
+    for (unsigned mode : {0u, 1u, 2u, 3u, 4u}) {
         h3test::request_fixture f;
         LT_ASSERT(f.routes
                       .route(http::method::known(http::method_id::post), "/hello",
@@ -164,20 +164,34 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, content_length_and_malformed_trailers_
                       .ok());
         f.open(0);
         auto fields = h3test::get("POST");
-        fields.push_back({"content-length", mode == 0 ? "1" : "3"});
+        fields.push_back({"content-length", mode == 0 ? "1" : mode == 1 ? "3" : "2"});
         LT_ASSERT(f.feed(0, h3test::headers(fields)));
         f.executor.run_pending();
         auto wire = h3test::data("ab");
         if (mode >= 2) {
-            auto trailers = h3test::headers({{mode == 2 ? ":path" : "content-length", "3"}});
+            auto trailers = h3test::headers({{mode == 2 ? ":path" : mode == 3 ? "content-length" : "x-end", "3"}});
             wire.insert(wire.end(), trailers.begin(), trailers.end());
         }
         LT_ASSERT(f.feed(0, wire, true));
         auto a = f.engine->take_action();
-        LT_ASSERT(a);
-        LT_ASSERT(a->reset);
-        LT_CHECK_EQ(a->reset->error, 0x10eu);
+        if (mode == 4) {
+            LT_CHECK(!a);
+            f.executor.run_pending();
+            f.drain();
+            LT_CHECK_EQ(f.fins[0], 1u);
+        } else {
+            LT_CHECK(a && a->reset);
+            if (a && a->reset) {
+                LT_CHECK_EQ(a->reset->stream, 0u);
+                LT_CHECK_EQ(a->reset->error, 0x10eu);
+            }
+        }
         LT_CHECK(!f.engine->failure());
+        f.open(4);
+        LT_ASSERT(f.feed(4, h3test::headers(h3test::get()), true));
+        f.executor.run_pending();
+        f.drain();
+        LT_CHECK_EQ(f.fins[4], 1u);
     }
 LT_END_AUTO_TEST(content_length_and_malformed_trailers_are_stream_errors)
 LT_BEGIN_AUTO_TEST(http3_streaming_suite, recovery_refusal_and_abandoned_preparation_preserve_response_and_capacity)
@@ -289,6 +303,152 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, receipt_limit_and_tiny_admission_backp
     LT_CHECK_EQ(received, "abcdef");
     LT_CHECK_EQ(f.fins[0], 1u);
 LT_END_AUTO_TEST(receipt_limit_and_tiny_admission_backpressure_one_stream)
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, coalesced_post_uses_admission_backpressure_before_handler_runs)
+    hd::http3_request_limits limits;
+    limits.body_buffer_bytes = 8;
+    h3test::request_fixture f(limits);
+    httpserver::resume_signal pause;
+    std::string received;
+    unsigned ended = 0;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::post), "/hello", [&](exchange& x) -> task<void> {
+        x.admit_body({2});
+        co_await pause.wait();
+        std::array<std::byte, 1> into;
+        for (;;) {
+            auto part = co_await x.body().read_some(into);
+            LT_CHECK(part.status.ok());
+            if (!part.status.ok() || part.end_of_body) break;
+            received.append(reinterpret_cast<const char*>(part.data.data()), part.data.size());
+            LT_CHECK(x.body().trailers().empty());
+        }
+        if (x.body().trailers().first("x-end") == "yes") ++ended;
+        x.respond(http::status::from_code(204), {});
+    }).ok());
+    f.open(0);
+    auto fields = h3test::get("POST");
+    fields.push_back({"content-length", "6"});
+    auto head = h3test::headers(fields);
+    auto wire = head;
+    auto body = h3test::data("abcdef");
+    wire.insert(wire.end(), body.begin(), body.end());
+    auto trailers = h3test::headers({{"x-end", "yes"}});
+    wire.insert(wire.end(), trailers.begin(), trailers.end());
+    LT_ASSERT(f.feed(0, wire, true));
+    LT_CHECK_EQ(f.credit(0), 65536u + head.size() + 2u);
+    f.executor.run_pending();
+    f.pump(0);
+    LT_CHECK(!f.engine->take_action());
+    LT_CHECK_EQ(f.credit(0), 65536u + head.size() + 2u);
+    f.open(4);
+    LT_ASSERT(f.feed(4, h3test::headers(h3test::get()), true));
+    f.executor.run_pending();
+    f.drain();
+    LT_CHECK_EQ(f.fins[4], 1u);
+    LT_CHECK_EQ(ended, 0u);
+    pause.signal();
+    for (unsigned i = 0; i < 12; ++i) {
+        f.executor.run_pending();
+        f.pump(0);
+    }
+    f.executor.run_pending();
+    f.drain();
+    LT_CHECK_EQ(received, "abcdef");
+    LT_CHECK_EQ(ended, 1u);
+    LT_CHECK_EQ(f.credit(0), 65536u + wire.size());
+    LT_CHECK_EQ(f.fins[0], 1u);
+LT_END_AUTO_TEST(coalesced_post_uses_admission_backpressure_before_handler_runs)
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, single_retention_slot_rotates_to_ready_sibling)
+    hd::http3_request_limits limits;
+    limits.response_buffer_bytes = 2;
+    limits.max_pending_output_records = 1;
+    h3test::request_fixture f(limits);
+    unsigned written = 0;
+    bool finished = false;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
+        x.start_response(http::status::from_code(200), {});
+        std::string chunk = "ab";
+        for (unsigned i = 0; i < 32; ++i) {
+            co_await x.writer().write(std::as_bytes(std::span(chunk)));
+            ++written;
+        }
+        co_await x.writer().finish();
+        finished = true;
+    }).ok());
+    f.open(0);
+    f.open(4);
+    LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true));
+    LT_ASSERT(f.feed(4, h3test::headers(h3test::get("GET", "/missing")), true));
+    f.executor.run_pending();
+    f.drain(32, 4);
+    LT_CHECK_EQ(f.fins[4], 1u);
+    LT_CHECK(!finished);
+    LT_CHECK(written < 32u);
+    f.drain(32);
+    LT_CHECK_EQ(h3test::decode_response(f.output[0]).body, "abababababababababababababababababababababababababababababababab");
+    LT_CHECK_EQ(f.fins[0], 1u);
+LT_END_AUTO_TEST(single_retention_slot_rotates_to_ready_sibling)
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, critical_prefix_uses_reserved_capacity_under_ordinary_saturation)
+    for (unsigned saturation : {0u, 1u, 2u, 3u}) {
+        hd::http3_request_limits limits;
+        hd::quic_recovery_config config;
+        if (saturation == 0) limits.max_pending_output_records = 1;
+        if (saturation == 1) {
+            config.max_information = 4;
+            config.critical_information = 3;
+        }
+        if (saturation == 2) {
+            config.max_retained_bytes = 11;
+            config.critical_retained_bytes = 9;
+        }
+        h3test::request_fixture f(limits, 65536, config);
+        f.open(0);
+        if (saturation == 2) {
+            LT_ASSERT(f.recovery.retain_stream({0, 0, h3test::bytes({1, 2}), false}));
+        } else {
+            LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true));
+            f.executor.run_pending();
+            f.engine->pump_output();
+        }
+        std::vector<std::uint64_t> ids;
+        for (auto role : {hd::http3_role::control, hd::http3_role::qpack_encoder, hd::http3_role::qpack_decoder}) {
+            auto local = f.flow.open_local(true);
+            LT_ASSERT(local);
+            auto stream = std::make_unique<hd::quic_stream_state>(local.id, hd::quic_endpoint_role::server, f.flow.ids(), hd::quic_stream_limits{}, f.pool.critical());
+            LT_ASSERT(!f.engine->attach_local(role, *stream));
+            f.streams.emplace(local.id, std::move(stream));
+            ids.push_back(local.id);
+        }
+        auto data_budget = f.pool.data().budget;
+        auto critical_budget = f.pool.critical().budget;
+        auto resource = httpserver::server::resource::quic_reassembly_bytes;
+        httpserver::server::reservation fill;
+        if (saturation == 3) LT_ASSERT(data_budget.reserve(resource, data_budget.capacity(resource) - data_budget.in_use(resource), fill).ok());
+        const auto ordinary_before = data_budget.in_use(resource), critical_before = critical_budget.in_use(resource);
+        f.engine->pump_output();
+        LT_CHECK_EQ(data_budget.in_use(resource), ordinary_before);
+        LT_CHECK_EQ(critical_budget.in_use(resource), critical_before + 18u);
+        std::array<std::byte, 64> packet;
+        hd::quic_send_request request;
+        request.protection_overhead = 0;
+        f.now += std::chrono::seconds(1);
+        auto plan = f.recovery.prepare_scheduled_packet(hd::quic_pn_space::application, packet, f.now, request, f.flow);
+        LT_CHECK(plan && plan.stream);
+        if (!plan || !plan.stream) continue;
+        LT_CHECK_EQ(plan.stream->stream, ids[0]);
+        LT_ASSERT(f.recovery.check_scheduled_emission(plan.token, f.now, plan.bytes, true, true));
+        LT_ASSERT(f.recovery.abandon_packet(plan.token));
+        LT_CHECK_EQ(f.flow.sent(), 0u);
+        f.drain(64);
+        LT_CHECK(f.output[ids[0]] == h3test::bytes({0, 4, 4, 1, 0, 7, 0}));
+        LT_CHECK(f.output[ids[1]] == h3test::bytes({2}));
+        LT_CHECK(f.output[ids[2]] == h3test::bytes({3}));
+        for (auto id : ids) LT_CHECK_EQ(f.fins[id], 0u);
+        LT_CHECK_EQ(f.flow.sent(), f.output[0].size() + 9u);
+        LT_CHECK_EQ(critical_budget.in_use(resource), critical_before);
+        f.engine->pump_output();
+        LT_CHECK_EQ(critical_budget.in_use(resource), critical_before);
+    }
+LT_END_AUTO_TEST(critical_prefix_uses_reserved_capacity_under_ordinary_saturation)
 LT_BEGIN_AUTO_TEST(http3_streaming_suite, continue_is_sent_only_after_admission_and_zero_data_does_not_end_body)
     for (bool admit : {false, true}) {
         h3test::request_fixture f;

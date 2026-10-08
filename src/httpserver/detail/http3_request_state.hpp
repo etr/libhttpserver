@@ -85,7 +85,10 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     net::peer_address peer;
     std::map<std::uint64_t, std::unique_ptr<record>> records;
     std::optional<http3_error> error;
-    std::size_t active = 0, retained = 0, pumps = 0;
+    // Three local roles share reserved retention slots, separate from data.
+    static constexpr std::size_t critical_output_records = 3;
+    std::size_t active = 0, retained = 0, retained_critical = 0, pumps = 0;
+    std::optional<std::uint64_t> ordinary_after;
     bool disconnected = false;
     state(quic_storage_lease d, quic_storage_lease c, quic_flow_control& f, quic_recovery& q, const server::route_registry& r, executor& e, http3_request_limits l,
           std::uint64_t id, net::peer_address p)
@@ -139,6 +142,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     bool reserve_trailers(stream& s, const http::fields& fields);
     bool submit(record& r, std::span<const std::byte> bytes, bool fin);
     bool output(record& r);
+    void ordinary_output();
     void complete(const quic_information_completion& completion);
 };
 }  // namespace httpserver::detail

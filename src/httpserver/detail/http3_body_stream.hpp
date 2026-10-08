@@ -16,7 +16,9 @@ class http3_body_stream final : public body_source, public body_sink {
     explicit http3_body_stream(server::resource_budget budget) : rings_(budget) {}
     bool prepare_receive(std::size_t capacity, std::optional<std::uint64_t> length) { return rings_.prepare_receive(capacity, false, length); }
     bool admit(std::size_t capacity) { return rings_.admit(capacity); }
-    std::size_t room() const { return rings_.receive_capacity() - rings_.unread(); }
+    // Keep DATA borrowed by the framing core until application admission;
+    // the selected ring cap then applies backpressure without staged overflow.
+    std::size_t room() const { return rings_.admitted() ? rings_.receive_capacity() - rings_.unread() : 0; }
     bool receive(std::span<const std::byte> bytes);
     bool end_receive(http::fields trailers) { return rings_.end_receive(std::move(trailers)); }
     bool receive_ended() const { return rings_.receive_ended(); }

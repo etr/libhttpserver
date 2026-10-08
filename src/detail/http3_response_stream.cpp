@@ -139,15 +139,18 @@ bool http3_request_engine::state::prepare_output(record& r) {
     return true;
 }
 bool http3_request_engine::state::submit(record& r, std::span<const std::byte> bytes, bool fin) {
-    if (retained == limits.max_pending_output_records) return false;
+    auto& count = r.local ? retained_critical : retained;
+    const auto cap = r.local ? critical_output_records : limits.max_pending_output_records;
+    if (count == cap) return false;
     auto allowance = flow.send_allowance(r.transport->id(), r.retained_offset, bytes.size());
     if (!allowance || (!allowance.bytes && !bytes.empty())) return false;
     auto candidate = bytes.first(allowance.bytes);
     fin = fin && candidate.size() == bytes.size();
-    auto result = recovery.retain_stream({r.transport->id(), r.retained_offset, candidate, fin});
+    const auto retention = r.local ? quic_stream_retention::critical : quic_stream_retention::ordinary;
+    auto result = recovery.retain_stream({r.transport->id(), r.retained_offset, candidate, fin}, retention);
     if (!result) return false;
     r.information.push_back(result.id);
-    ++retained;
+    ++count;
     r.retained_offset += candidate.size();
     r.fin_retained = fin;
     return true;
@@ -185,6 +188,15 @@ bool http3_request_engine::state::output(record& r) {
     return true;
 }
 
+void http3_request_engine::state::ordinary_output() {
+    auto it = ordinary_after ? records.upper_bound(*ordinary_after) : records.begin();
+    for (std::size_t n = 0; n < records.size(); ++n) {
+        if (it == records.end()) it = records.begin();
+        auto& [id, r] = *it++;
+        if (!r->local && output(*r)) ordinary_after = id;
+    }
+}
+
 http3_progress http3_request_engine::pump_output() {
     auto s = state_;
     state::pump_guard guard(*s);
@@ -192,8 +204,7 @@ http3_progress http3_request_engine::pump_output() {
     try {
         for (auto& [id, r] : s->records)
             if (r->local) s->output(*r);
-        for (auto& [id, r] : s->records)
-            if (!r->local) s->output(*r);
+        s->ordinary_output();
     } catch (const std::bad_alloc&) {
         s->fail(h3_error(0x107, "Response allocation failed"));
     }
@@ -206,7 +217,7 @@ void http3_request_engine::state::complete(const quic_information_completion& co
     const auto found = std::find(ids.begin(), ids.end(), completion.id);
     if (found != ids.end()) {
         ids.erase(found);
-        --retained;
+        --(it->second->local ? retained_critical : retained);
     }
 }
 void http3_request_engine::information_completed(const quic_information_completion& completion) {

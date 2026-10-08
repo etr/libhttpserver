@@ -53,7 +53,7 @@ struct quic_recovery::implementation {
         std::vector<information_status> status;
         server::reservation storage;
         information_status terminal = information_status::delivered;
-        bool fin = false, completed = false, cancelled = false, completion_pending = false;
+        bool critical = true, fin = false, completed = false, cancelled = false, completion_pending = false;
     };
     struct slice {
         quic_information_id id = 0;
@@ -107,8 +107,8 @@ struct quic_recovery::implementation {
     information* find_information(quic_information_id id);
     const information* find_information(quic_information_id id) const;
     quic_information_result retain(information value, std::span<const std::byte> data);
-    bool information_capacity(quic_information_kind kind) const;
-    bool payload_capacity(quic_information_kind kind, std::size_t bytes) const;
+    bool information_capacity(bool critical) const;
+    bool payload_capacity(bool critical, std::size_t bytes) const;
     bool valid_information(const information& value, std::span<const std::byte> data) const;
     quic_recovery_result stage_plan(quic_send_plan& plan, std::optional<slice> content, std::span<std::byte> output, quic_flow_control* flow);
     quic_encode_result encode_content(std::optional<slice>& content, std::span<std::byte> output);
