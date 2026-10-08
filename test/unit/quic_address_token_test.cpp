@@ -47,6 +47,35 @@ LT_BEGIN_AUTO_TEST(token_suite, roundtrip_is_bound_to_original_retry_and_full_pa
         LT_CHECK(!tokens.verify(*token, changed, 7, claims.retry_source, 100));
     }
 LT_END_AUTO_TEST(roundtrip_is_bound_to_original_retry_and_full_path)
+LT_BEGIN_AUTO_TEST(token_suite, present_local_endpoint_and_interface_values_are_authenticated)
+    std::array<std::byte, 32> key{};
+    hd::quic_address_token tokens(key);
+    hd::quic_token_claims claims{token_cid(1), token_cid(2)};
+    auto path = token_path();
+    path.local = path.peer;
+    path.local->peer.address = *httpserver::net::parse_address("fe80::2");
+    path.local->peer.port = 443;
+    path.interface_index = 3;
+    auto token = tokens.issue(claims, path, 7, 100);
+    LT_ASSERT(token);
+    auto verified = tokens.verify(*token, path, 7, claims.retry_source, 100);
+    LT_ASSERT(verified);
+    LT_CHECK(verified->original_destination == claims.original_destination);
+    LT_CHECK(verified->retry_source == claims.retry_source);
+
+    auto changed_address = path;
+    changed_address.local->peer.address = *httpserver::net::parse_address("fe80::3");
+    LT_CHECK(!tokens.verify(*token, changed_address, 7, claims.retry_source, 100));
+    auto changed_port = path;
+    changed_port.local->peer.port++;
+    LT_CHECK(!tokens.verify(*token, changed_port, 7, claims.retry_source, 100));
+    auto changed_scope = path;
+    changed_scope.local->scope++;
+    LT_CHECK(!tokens.verify(*token, changed_scope, 7, claims.retry_source, 100));
+    auto changed_interface = path;
+    (*changed_interface.interface_index)++;
+    LT_CHECK(!tokens.verify(*token, changed_interface, 7, claims.retry_source, 100));
+LT_END_AUTO_TEST(present_local_endpoint_and_interface_values_are_authenticated)
 LT_BEGIN_AUTO_TEST(token_suite, every_truncation_and_mutation_fails_closed)
     hd::quic_address_token tokens;
     hd::quic_token_claims claims{token_cid(1), token_cid(2)};

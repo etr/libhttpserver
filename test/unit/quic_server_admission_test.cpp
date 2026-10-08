@@ -178,6 +178,52 @@ LT_BEGIN_AUTO_TEST(admission_suite, expiry_cancellation_and_stale_promotion_rele
     LT_CHECK(!admission.cancel(fresh.pending));
     LT_CHECK_EQ(admission.retained_bytes(), std::size_t{0});
 LT_END_AUTO_TEST(expiry_cancellation_and_stale_promotion_release_owned_capacity)
+LT_BEGIN_AUTO_TEST(admission_suite, duplicate_does_not_extend_original_expiry_or_hold_capacity)
+    auto packet = admission_initial();
+    auto limits = direct_limits();
+    limits.max_pending = 1;
+    limits.max_retained_bytes = packet->bytes.capacity();
+    hd::quic_server_admission admission(limits);
+    auto original = admission.receive(packet, 100);
+    LT_ASSERT(original.code == hd::quic_admission_code::pending);
+    auto facts = admission.inspect(original.pending);
+    LT_ASSERT(facts);
+
+    auto duplicate = admission.receive(admission_initial(), 109);
+    LT_ASSERT(duplicate.code == hd::quic_admission_code::pending);
+    auto duplicate_facts = admission.inspect(duplicate.pending);
+    LT_ASSERT(duplicate_facts);
+    LT_CHECK(duplicate_facts->initial == packet);
+    LT_CHECK(duplicate_facts->budget == facts->budget);
+    LT_CHECK_EQ(facts->budget->received(), static_cast<std::uint64_t>(packet->bytes.size() * 2));
+    LT_CHECK_EQ(admission.pending_count(), std::size_t{1});
+    LT_CHECK_EQ(admission.retained_bytes(), packet->bytes.capacity());
+    LT_CHECK(admission.receive(admission_initial(2), 109).code == hd::quic_admission_code::capacity_exhausted);
+
+    admission.expire(110);
+    LT_CHECK_EQ(admission.pending_count(), std::size_t{0});
+    LT_CHECK_EQ(admission.retained_bytes(), std::size_t{0});
+    LT_CHECK(!admission.inspect(original.pending));
+    LT_CHECK(!admission.inspect(duplicate.pending));
+    auto replacement = admission.receive(packet, 110);
+    LT_ASSERT(replacement.code == hd::quic_admission_code::pending);
+    auto replacement_facts = admission.inspect(replacement.pending);
+    LT_ASSERT(replacement_facts);
+    LT_CHECK(replacement_facts->budget != facts->budget);
+    LT_CHECK_EQ(replacement_facts->budget->received(), static_cast<std::uint64_t>(packet->bytes.size()));
+    LT_CHECK(!admission.cancel(original.pending));
+    LT_CHECK(!admission.cancel(duplicate.pending));
+    httpserver::manual_executor executor;
+    hd::io_connection_owner owner(executor);
+    auto sink = std::make_shared<admission_sink>();
+    LT_CHECK(!admission.promote(original.pending, owner.datagrams(), sink, 110));
+    LT_CHECK(!admission.promote(duplicate.pending, owner.datagrams(), sink, 110));
+    LT_CHECK_EQ(admission.pending_count(), std::size_t{1});
+    LT_CHECK_EQ(admission.retained_bytes(), packet->bytes.capacity());
+    LT_CHECK(admission.cancel(replacement.pending));
+    LT_CHECK_EQ(admission.pending_count(), std::size_t{0});
+    LT_CHECK_EQ(admission.retained_bytes(), std::size_t{0});
+LT_END_AUTO_TEST(duplicate_does_not_extend_original_expiry_or_hold_capacity)
 LT_BEGIN_AUTO_TEST(admission_suite, promotion_preserves_debits_and_owner_affinity_with_queue_retirement)
     hd::quic_server_admission admission(direct_limits());
     auto packet = admission_initial();
