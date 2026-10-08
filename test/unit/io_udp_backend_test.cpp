@@ -7,6 +7,13 @@ namespace ps = hd::pollsys;
 namespace hh = httpserver::http;
 using io_udp_contract::udp_socket;
 using io_udp_contract::udp_contract;
+#if defined(__APPLE__) || defined(__FreeBSD__)
+using native_udp_backend = hd::io_kqueue_backend;
+#elif defined(__linux__)
+using native_udp_backend = hd::io_epoll_backend;
+#elif defined(_WIN32)
+using native_udp_backend = hd::io_iocp_backend;
+#endif
 LT_BEGIN_SUITE(udp_suite)
     void set_up() { }
     void tear_down() { }
@@ -27,6 +34,20 @@ LT_BEGIN_AUTO_TEST(udp_suite, native_message_metadata_and_lifecycle)
     LT_CHECK(udp_contract<hd::io_iocp_backend>(AF_INET6));
 #endif
 LT_END_AUTO_TEST(native_message_metadata_and_lifecycle)
+LT_BEGIN_AUTO_TEST(udp_suite, poll_ipv4_wildcard_captures_destination_and_interface)
+    LT_CHECK(io_udp_contract::wildcard_destination_contract<hd::io_poll_backend>(AF_INET));
+LT_END_AUTO_TEST(poll_ipv4_wildcard_captures_destination_and_interface)
+LT_BEGIN_AUTO_TEST(udp_suite, poll_ipv6_wildcard_captures_destination_and_interface)
+    LT_CHECK(io_udp_contract::wildcard_destination_contract<hd::io_poll_backend>(AF_INET6));
+LT_END_AUTO_TEST(poll_ipv6_wildcard_captures_destination_and_interface)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__linux__) || defined(_WIN32)
+LT_BEGIN_AUTO_TEST(udp_suite, native_ipv4_wildcard_captures_destination_and_interface)
+    LT_CHECK(io_udp_contract::wildcard_destination_contract<native_udp_backend>(AF_INET));
+LT_END_AUTO_TEST(native_ipv4_wildcard_captures_destination_and_interface)
+LT_BEGIN_AUTO_TEST(udp_suite, native_ipv6_wildcard_captures_destination_and_interface)
+    LT_CHECK(io_udp_contract::wildcard_destination_contract<native_udp_backend>(AF_INET6));
+LT_END_AUTO_TEST(native_ipv6_wildcard_captures_destination_and_interface)
+#endif
 LT_BEGIN_AUTO_TEST(udp_suite, external_budget_rearm_and_stale_generation)
     httpserver::manual_executor ex;
     hd::io_connection_owner owner(ex);

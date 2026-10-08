@@ -4,6 +4,7 @@
      SPDX-License-Identifier: LGPL-2.1-or-later
 */
 #include <iostream>
+#include <algorithm>
 #include <string>
 #include <condition_variable>
 #include <mutex>
@@ -796,6 +797,130 @@ LT_BEGIN_AUTO_TEST(iocp_suite, udp_cancelled_packet_keeps_native_storage_and_reu
     LT_CHECK_EQ(native_access::outstanding(backend), std::size_t{0});
     pollsys::close_socket(peer);
 LT_END_AUTO_TEST(udp_cancelled_packet_keeps_native_storage_and_reuse_generation)
+LT_BEGIN_AUTO_TEST(iocp_suite, udp_count_budget_includes_cancelled_native_packet_until_retirement)
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    hd::io_iocp_backend backend;
+    auto local = io_udp_contract::udp_socket(), peer = io_udp_contract::udp_socket();
+    LT_ASSERT(local != pollsys::k_invalid_socket && peer != pollsys::k_invalid_socket);
+    const auto endpoint = io_udp_contract::endpoint(local);
+    backend.adopt_datagram(1, local);
+    packet_gate gate(backend);
+    hd::udp_receive_operation cancelled(owner, 1, 1);
+    cancelled.submit(backend);
+    LT_ASSERT(until([&] { return native_access::posted(backend, cancelled.state().get()); }));
+    sockaddr_storage destination{};
+    int length = 0;
+    LT_ASSERT(hd::encode_datagram_endpoint(endpoint, destination, length));
+    LT_ASSERT_EQ(::sendto(peer, "x", 1, 0, reinterpret_cast<sockaddr*>(&destination), length), 1);
+    LT_ASSERT(gate.captured());
+    LT_ASSERT(backend.request_cancel(*cancelled.state()) == hh::outcome_code::ok);
+    ex.run_pending();
+    LT_CHECK(cancelled.state()->stored_result().code == hh::outcome_code::cancelled);
+
+    // The driver is held: one cancelled native receive plus unposted receives
+    // must fill the count budget, even though only the latter remain pending.
+    std::vector<std::shared_ptr<hd::op_state>> pending;
+    for (std::size_t i = 1; i < hd::k_udp_pending_operations; ++i) {
+        hd::udp_receive_operation receive(owner, 1, 1);
+        pending.push_back(receive.state());
+        receive.submit(backend);
+        LT_CHECK(!receive.is_terminal());
+        LT_CHECK(!native_access::posted(backend, receive.state().get()));
+    }
+    LT_CHECK_EQ(backend.pending_count(), hd::k_udp_pending_operations - 1);
+    hd::udp_receive_operation excess(owner, 1, 1);
+    excess.submit(backend);
+    ex.run_pending();
+    LT_CHECK(excess.state()->applied());
+    LT_CHECK(excess.state()->stored_result().code == hh::outcome_code::limit_exceeded);
+
+    gate.release();
+    LT_ASSERT(until([&] {
+        return std::all_of(pending.begin(), pending.end(), [&](const auto& state) {
+            return native_access::posted(backend, state.get());
+        });
+    }));
+    LT_CHECK_EQ(native_access::outstanding(backend), hd::k_udp_pending_operations - 1);
+    // The physical packet retired and every pending receive became posted.
+    // Exactly one slot must be available, without charging posted work twice.
+    hd::udp_receive_operation replacement(owner, 1, 1);
+    replacement.submit(backend);
+    LT_ASSERT(until([&] { return native_access::posted(backend, replacement.state().get()); }));
+    LT_CHECK(!replacement.is_terminal());
+    hd::udp_receive_operation posted_excess(owner, 1, 1);
+    posted_excess.submit(backend);
+    ex.run_pending();
+    LT_CHECK(posted_excess.state()->applied());
+    LT_CHECK(posted_excess.state()->stored_result().code == hh::outcome_code::limit_exceeded);
+    backend.close();
+    ex.run_pending();
+    LT_CHECK_EQ(native_access::outstanding(backend), std::size_t{0});
+    pollsys::close_socket(peer);
+LT_END_AUTO_TEST(udp_count_budget_includes_cancelled_native_packet_until_retirement)
+LT_BEGIN_AUTO_TEST(iocp_suite, udp_byte_budget_includes_cancelled_native_packet_until_retirement)
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    hd::io_iocp_backend backend;
+    auto local = io_udp_contract::udp_socket(), peer = io_udp_contract::udp_socket();
+    LT_ASSERT(local != pollsys::k_invalid_socket && peer != pollsys::k_invalid_socket);
+    const auto endpoint = io_udp_contract::endpoint(local);
+    backend.adopt_datagram(1, local);
+    packet_gate gate(backend);
+    hd::udp_receive_operation cancelled(owner, 1, hd::k_max_datagram_bytes);
+    cancelled.submit(backend);
+    LT_ASSERT(until([&] { return native_access::posted(backend, cancelled.state().get()); }));
+    sockaddr_storage destination{};
+    int length = 0;
+    LT_ASSERT(hd::encode_datagram_endpoint(endpoint, destination, length));
+    LT_ASSERT_EQ(::sendto(peer, "x", 1, 0, reinterpret_cast<sockaddr*>(&destination), length), 1);
+    LT_ASSERT(gate.captured());
+    LT_ASSERT(backend.request_cancel(*cancelled.state()) == hh::outcome_code::ok);
+    ex.run_pending();
+    LT_CHECK(cancelled.state()->stored_result().code == hh::outcome_code::cancelled);
+
+    // Fill the byte boundary exactly with valid receive capacities, keeping
+    // the number of operations below the independent count limit.
+    std::vector<std::shared_ptr<hd::op_state>> pending;
+    for (std::size_t remaining = hd::k_udp_pending_bytes - hd::k_max_datagram_bytes; remaining != 0;) {
+        const auto capacity = std::min(remaining, hd::k_max_datagram_bytes);
+        hd::udp_receive_operation receive(owner, 1, capacity);
+        pending.push_back(receive.state());
+        receive.submit(backend);
+        LT_CHECK(!receive.is_terminal());
+        LT_CHECK(!native_access::posted(backend, receive.state().get()));
+        remaining -= capacity;
+    }
+    LT_CHECK_LT(pending.size() + 1, hd::k_udp_pending_operations);
+    hd::udp_receive_operation excess(owner, 1, 1);
+    excess.submit(backend);
+    ex.run_pending();
+    LT_CHECK(excess.state()->applied());
+    LT_CHECK(excess.state()->stored_result().code == hh::outcome_code::limit_exceeded);
+
+    gate.release();
+    LT_ASSERT(until([&] {
+        return std::all_of(pending.begin(), pending.end(), [&](const auto& state) {
+            return native_access::posted(backend, state.get());
+        });
+    }));
+    LT_CHECK_EQ(native_access::outstanding(backend), pending.size());
+    // All remaining storage is now posted. The retired capacity is reusable,
+    // and admitting it restores the exact byte boundary rather than exceeding it.
+    hd::udp_receive_operation replacement(owner, 1, hd::k_max_datagram_bytes);
+    replacement.submit(backend);
+    LT_ASSERT(until([&] { return native_access::posted(backend, replacement.state().get()); }));
+    LT_CHECK(!replacement.is_terminal());
+    hd::udp_receive_operation posted_excess(owner, 1, 1);
+    posted_excess.submit(backend);
+    ex.run_pending();
+    LT_CHECK(posted_excess.state()->applied());
+    LT_CHECK(posted_excess.state()->stored_result().code == hh::outcome_code::limit_exceeded);
+    backend.close();
+    ex.run_pending();
+    LT_CHECK_EQ(native_access::outstanding(backend), std::size_t{0});
+    pollsys::close_socket(peer);
+LT_END_AUTO_TEST(udp_byte_budget_includes_cancelled_native_packet_until_retirement)
 LT_BEGIN_AUTO_TEST(iocp_suite, udp_wildcard_receive_captures_destination_and_interface)
     httpserver::manual_executor ex;
     hd::io_connection_owner owner(ex);

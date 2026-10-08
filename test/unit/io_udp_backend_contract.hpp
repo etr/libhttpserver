@@ -44,6 +44,41 @@ inline hd::datagram_endpoint endpoint(ps::native_socket_t socket) {
     return result;
 }
 template<class Backend>
+bool wildcard_destination_contract(int family) {
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    Backend backend;
+    auto listener = udp_socket(family, true), sender = udp_socket(family);
+    if (listener == ps::k_invalid_socket || sender == ps::k_invalid_socket) {
+        ps::close_socket(listener);
+        ps::close_socket(sender);
+        return false;
+    }
+    auto destination = endpoint(listener);
+    destination.peer.address = *httpserver::net::parse_address(family == AF_INET ? "127.0.0.1" : "::1");
+    backend.adopt_datagram(1, listener);
+    backend.adopt_datagram(2, sender);
+    const std::byte payload[]{std::byte{42}};
+    hd::udp_receive_operation receive(owner, 1, sizeof(payload));
+    hd::udp_send_operation send(owner, 2, payload, destination);
+    receive.submit(backend);
+    send.submit(backend);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while ((!receive.state()->applied() || !send.state()->applied()) && std::chrono::steady_clock::now() < deadline) {
+        ex.run_pending();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    const auto result = receive.state()->stored_result();
+    const bool okay = receive.state()->applied() && send.state()->applied()
+        && send.state()->stored_result().code == hh::outcome_code::ok
+        && result.code == hh::outcome_code::ok && result.datagram
+        && result.datagram->local && result.datagram->local->peer == destination.peer
+        && result.datagram->interface_index && *result.datagram->interface_index != 0;
+    backend.close();
+    ex.run_pending();
+    return okay;
+}
+template<class Backend>
 bool udp_contract(int family = AF_INET) {
     httpserver::manual_executor ex;
     hd::io_connection_owner owner(ex);
