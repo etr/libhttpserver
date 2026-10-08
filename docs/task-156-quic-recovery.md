@@ -94,7 +94,10 @@ blocked. Application PTO is ineligible before confirmation. PTO initially uses
 maximum ACK delay. Backoff doubles and saturates safely. `expire` reports due
 ACK spaces, loss bytes, or one/two probe requests without declaring PTO packets
 lost. Late expiry rearming uses the expiry time to avoid repeated immediate
-probe requests. Eligible new ack-eliciting acknowledgements reset backoff.
+probe requests. Any newly acknowledged packet resets backoff once the peer
+has validated this endpoint, including ACK-only and PADDING packets. This
+reset is independent of RTT sampling; duplicate ACKs and unvalidated-client
+Initial ACKs preserve backoff. A new Handshake ACK establishes peer validation.
 Space discard reports discarded bytes separately from loss, cancels its
 information/preparation/history and resets backoff.
 

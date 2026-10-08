@@ -108,13 +108,13 @@ quic_recovery_events quic_recovery::receive_ack(quic_pn_space space, const quic_
     if (!decode_ranges(ack, storage)) return {{quic_recovery_code::invalid}};
     auto ranges = std::span(storage).first(ack.range_count + 1);
     if (!acknowledges_sent(*s, ranges, now)) return {{quic_recovery_code::invalid}};
-    bool newly_eliciting = impl_->sample_ack(*s, ranges, ack, now, space);
+    impl_->sample_ack(*s, ranges, ack, now, space);
     auto result = impl_->acknowledge_packets(*s, ranges, space);
     if (!result.acknowledged_packets) return result;
     s->largest_acked = std::max(s->largest_acked.value_or(0), ack.largest);
     result.lost_bytes = impl_->detect_loss(*s, now);
     if (space == quic_pn_space::handshake) impl_->environment.peer_validated_endpoint = true;
-    if (newly_eliciting && impl_->environment.peer_validated_endpoint) {
+    if (impl_->environment.peer_validated_endpoint) {
         impl_->pto_count = 0;
         impl_->last_pto.reset();
         impl_->idle_pto_anchor.reset();

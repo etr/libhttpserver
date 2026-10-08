@@ -153,6 +153,70 @@ LT_BEGIN_AUTO_TEST(recovery_suite, initial_pto_backoff_probe_emission_and_ack_re
     LT_ASSERT(r.receive_ack(space::initial, ack(2), time_point() + 3000ms));
     LT_CHECK(r.pto_count() == 0);
 LT_END_AUTO_TEST(initial_pto_backoff_probe_emission_and_ack_reset)
+LT_BEGIN_AUTO_TEST(recovery_suite, non_eliciting_ack_progress_resets_pto_without_sampling_rtt)
+    // ACK-only packets are not in flight; PADDING packets are in flight.
+    for (bool in_flight : {false, true}) {
+        hd::quic_recovery r({}, budget());
+        send(r, space::initial);
+        LT_CHECK(r.expire(time_point() + 999ms).probes == 2 && r.pto_count() == 1);
+        auto packet = r.reserve_packet(space::handshake);
+        LT_ASSERT(packet);
+        LT_ASSERT(r.commit_sent(packet.token, time_point() + 1000ms, 100, false, in_flight));
+        auto before = r.rtt();
+        auto event = r.receive_ack(space::handshake, ack(packet.packet_number), time_point() + 1001ms);
+        LT_ASSERT(event);
+        LT_CHECK(event.acknowledged_packets == 1 && event.acknowledged_bytes == (in_flight ? 100 : 0));
+        LT_CHECK(r.pto_count() == 0);
+        auto after = r.rtt();
+        LT_CHECK(after.sampled == before.sampled && after.latest == before.latest && after.minimum == before.minimum);
+        LT_CHECK(after.smoothed == before.smoothed && after.variation == before.variation);
+        LT_ASSERT(r.next_deadline());
+        LT_CHECK(r.next_deadline()->deadline == time_point() + 999ms);
+        LT_CHECK(r.expire(time_point() + 1001ms).probes == 2 && r.pto_count() == 1);
+        event = r.receive_ack(space::handshake, ack(packet.packet_number), time_point() + 1002ms);
+        LT_CHECK(event && event.acknowledged_packets == 0 && r.pto_count() == 1);
+        LT_ASSERT(r.next_deadline());
+        LT_CHECK(r.next_deadline()->deadline == time_point() + 2999ms);
+    }
+LT_END_AUTO_TEST(non_eliciting_ack_progress_resets_pto_without_sampling_rtt)
+LT_BEGIN_AUTO_TEST(recovery_suite, non_eliciting_initial_ack_preserves_unvalidated_client_backoff)
+    hd::quic_recovery_config config;
+    config.role = hd::quic_endpoint_role::client;
+    hd::quic_recovery r(config, budget());
+    hd::quic_recovery_environment env;
+    env.peer_validated_endpoint = false;
+    r.set_environment(env, {});
+    send(r, space::initial);
+    LT_CHECK(r.expire(time_point() + 999ms).probes == 2 && r.pto_count() == 1);
+    send(r, space::initial, time_point() + 1000ms, 100, false);
+    auto event = r.receive_ack(space::initial, ack(1), time_point() + 1001ms);
+    LT_CHECK(event && event.acknowledged_packets == 1 && r.pto_count() == 1);
+    LT_CHECK(!r.rtt().sampled);
+    LT_ASSERT(r.next_deadline());
+    LT_CHECK(r.next_deadline()->deadline == time_point() + 2997ms);
+    env.peer_validated_endpoint = true;
+    r.set_environment(env, time_point() + 1002ms);
+    send(r, space::initial, time_point() + 1002ms, 100, false);
+    event = r.receive_ack(space::initial, ack(2), time_point() + 1003ms);
+    LT_CHECK(event && event.acknowledged_packets == 1 && r.pto_count() == 0);
+    LT_CHECK(!r.rtt().sampled);
+    LT_CHECK(!r.next_deadline());
+LT_END_AUTO_TEST(non_eliciting_initial_ack_preserves_unvalidated_client_backoff)
+LT_BEGIN_AUTO_TEST(recovery_suite, non_eliciting_handshake_ack_validates_client_and_resets_pto)
+    hd::quic_recovery_config config;
+    config.role = hd::quic_endpoint_role::client;
+    hd::quic_recovery r(config, budget());
+    hd::quic_recovery_environment env;
+    env.peer_validated_endpoint = false;
+    r.set_environment(env, {});
+    LT_CHECK(r.expire(time_point() + 999ms).probes == 1 && r.pto_count() == 1);
+    auto packet = r.reserve_packet(space::handshake);
+    LT_ASSERT(packet);
+    LT_ASSERT(r.commit_sent(packet.token, time_point() + 1000ms, 100, false, false));
+    auto event = r.receive_ack(space::handshake, ack(packet.packet_number), time_point() + 1001ms);
+    LT_CHECK(event && event.acknowledged_packets == 1 && r.pto_count() == 0);
+    LT_CHECK(!r.rtt().sampled && !r.next_deadline());
+LT_END_AUTO_TEST(non_eliciting_handshake_ack_validates_client_and_resets_pto)
 LT_BEGIN_AUTO_TEST(recovery_suite, application_pto_confirmation_keys_and_amplification)
     hd::quic_recovery r({}, budget());
     send(r, space::application);
