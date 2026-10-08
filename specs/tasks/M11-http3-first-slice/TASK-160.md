@@ -9,9 +9,9 @@
 Provide HTTP/3 control streams, SETTINGS and frame roles for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Classify H3 request and unidirectional stream roles.
-- [ ] Enforce one critical control stream and SETTINGS-first.
-- [ ] Parse DATA/HEADERS frames with bounded lengths and typed errors.
+- [x] Classify H3 request and unidirectional stream roles.
+- [x] Enforce one critical control stream and SETTINGS-first.
+- [x] Parse DATA/HEADERS frames with bounded lengths and typed errors.
 
 **Dependencies:**
 - Blocked by: TASK-155, TASK-157, TASK-159
@@ -24,4 +24,4 @@ Provide HTTP/3 control streams, SETTINGS and frame roles for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** Complete

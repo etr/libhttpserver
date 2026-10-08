@@ -2220,3 +2220,15 @@ qpack_primitives_LDADD =
 qpack_field_section_SOURCES = unit/qpack_field_section_test.cpp
 qpack_field_section_LDADD =
 EXTRA_DIST += data/qpack/rfc9204.hpp
+
+check_PROGRAMS += http3_frame http3_settings http3_connection
+http3_frame_SOURCES = unit/http3_frame_test.cpp
+http3_frame_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+http3_frame_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+http3_settings_SOURCES = unit/http3_settings_test.cpp
+http3_settings_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+http3_settings_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+http3_connection_SOURCES = unit/http3_connection_test.cpp
+http3_connection_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+http3_connection_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+EXTRA_DIST += unit/http3_fixture.hpp
