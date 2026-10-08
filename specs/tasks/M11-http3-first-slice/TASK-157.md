@@ -24,6 +24,6 @@ Provide QUIC stream/connection flow control for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-008, PRD-V3N-REQ-021, PRD-V3N-REQ-025, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [QUIC flow-control ownership, bounds and local checks](../../../docs/task-157-quic-flow-control.md)
