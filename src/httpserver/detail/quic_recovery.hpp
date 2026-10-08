@@ -133,7 +133,9 @@ class quic_recovery final {
     quic_recovery_events discard_space(quic_pn_space space);
 
  private:
-    quic_send_plan prepare(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control* flow, bool probe);
+    quic_send_plan prepare(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control* flow, bool probe, bool ack_only = false);
+    quic_send_plan finish_preparation(quic_send_plan plan, quic_pn_space space, std::span<std::byte> output, time_point now);
+    quic_send_plan admit_scheduled(quic_send_plan plan, time_point now, quic_send_request request);
     quic_send_plan reserve(quic_pn_space space, bool critical);
     quic_recovery_code empty_plan_code(quic_pn_space space) const;
     void append_ack(quic_send_plan& plan, quic_pn_space space, std::span<std::byte> output, time_point now);

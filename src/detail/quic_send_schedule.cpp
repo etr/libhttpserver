@@ -40,17 +40,19 @@ bool quic_recovery::implementation::data_window_available(std::size_t bytes) con
     auto available = window - std::min(config.control_reserve, window / 2);
     return in_flight <= available && bytes <= available - in_flight;
 }
-bool quic_recovery::implementation::prefer_data(quic_pn_space space) const {
+bool quic_recovery::implementation::prefer_data(quic_pn_space space, slice content, std::span<std::byte> output) {
+    if (consecutive_controls < 2) return false;
     const auto& s = *state(space);
     auto data_packets = std::count_if(s.sent.begin(), s.sent.end(), [](const auto& p) { return !p.critical; });
     if (static_cast<std::size_t>(data_packets) >= config.max_sent_packets - config.critical_sent_packets) return false;
-    if (scheduled_wire && !data_window_available(scheduled_wire)) return false;
-    if (scheduled_now && pacing.deadline(*scheduled_now, scheduled_wire, congestion.snapshot().window, rtt.smoothed)) return false;
-    return consecutive_controls >= 2;
+    if (!scheduled_now) return true;
+    auto encoded = encode_information(content, output);
+    if (encoded.code != quic_codec_code::ok) return false;
+    return static_cast<bool>(permission(*scheduled_now, encoded.consumed + scheduled_overhead, true, false, false, space));
 }
-std::optional<quic_recovery::implementation::slice> quic_recovery::implementation::select_information(quic_pn_space space, bool probe, const quic_flow_control* flow) const {
+std::optional<quic_recovery::implementation::slice> quic_recovery::implementation::select_information(quic_pn_space space, bool probe, const quic_flow_control* flow, std::span<std::byte> output) {
     auto data = space == quic_pn_space::application ? select_stream(probe, flow) : std::nullopt;
-    if (data && prefer_data(space)) return data;
+    if (data && prefer_data(space, *data, output)) return data;
     for (const auto& value : information_records) {
         if (value.kind == quic_information_kind::stream || value.space != space || value.completed || value.cancelled) continue;
         if (auto content = eligible_slice(value, probe, flow)) return content;
@@ -79,11 +81,19 @@ quic_send_plan quic_recovery::prepare_scheduled_packet(quic_pn_space space, std:
                                                        quic_send_request request, quic_flow_control& flow) {
     if (!impl_->state(space) || !request.max_wire_bytes || request.max_wire_bytes > impl_->config.max_datagram_size ||
         request.protection_overhead >= request.max_wire_bytes) return {{quic_recovery_code::invalid}};
-    impl_->scheduled_wire = request.max_wire_bytes;
+    if (impl_->pending) return {{quic_recovery_code::busy}};
+    auto payload = output.first(std::min(output.size(), request.max_wire_bytes - request.protection_overhead));
+    impl_->scheduled_overhead = request.protection_overhead;
     impl_->scheduled_now = now;
-    auto plan = prepare(space, output.first(std::min(output.size(), request.max_wire_bytes - request.protection_overhead)), now, &flow, request.probe);
-    impl_->scheduled_wire = 0;
+    auto plan = prepare(space, payload, now, &flow, request.probe);
+    impl_->scheduled_overhead = 0;
     impl_->scheduled_now.reset();
+    plan = admit_scheduled(plan, now, request);
+    const bool blocked = plan.code == quic_recovery_code::congestion_blocked || plan.code == quic_recovery_code::pacing_blocked;
+    if (blocked && ack_deadline(space)) return admit_scheduled(prepare(space, payload, now, &flow, request.probe, true), now, request);
+    return plan;
+}
+quic_send_plan quic_recovery::admit_scheduled(quic_send_plan plan, time_point now, quic_send_request request) {
     if (!plan) return plan;
     impl_->pending->scheduled = true;
     impl_->pending->request = request;

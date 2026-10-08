@@ -159,3 +159,30 @@ private ownership to DR-V3-001. BSD, Windows and other nonlocal checks remain
 assigned to CI/the v3 PR. UDP/HTTP3 interoperability, amplification enforcement
 at the transport, coalesced datagram sizing, PMTU, migration and ECN activation
 remain future transport work; no such proof is claimed here.
+
+## Validation repair, iteration 1
+
+The two authorized architecture findings are repaired. Scheduled fairness now
+encodes the bounded STREAM candidate into the available frame output and checks
+its encoded size plus protection overhead, rather than the request's maximum
+wire allowance. The final scheduled emission check still admits the actual
+protected/padded packet. An outstanding preparation returns `busy` before the
+candidate encoder can alter its output.
+
+If an information packet is rejected by congestion or pacing while an ACK is
+pending, preparation abandons that packet and retries protected ACK-only work.
+The retained information remains pending, with no completion, flow charge,
+probe consumption, or fairness turn from the abandoned preparation. ACK-only
+plans still use the normal scheduled checks for keys, send permission and final
+wire/padding admission.
+
+Four deterministic scheduling regressions reproduced the original window and
+pacing failures before repair (`build/task158-off/repair-iter1-red-tests.log`).
+A fifth regression reproduced output corruption from a busy retry while the
+new candidate encoder was active, then passed after the early busy check
+(`repair-iter1-busy-red-tests.log`). The repaired focused TLS-off scheduling
+suite passes 24 tests / 365 checks (`repair-iter1-green-tests.log`). Changed-file
+cpplint and production CCN <= 10 pass (`repair-iter1-cpplint.log` and
+`repair-iter1-complexity.log`). The coordinator owns the final TLS-off/on,
+sanitizer, linkage and check-local gate barrier; these repair receipts alone
+do not claim that barrier was rerun.

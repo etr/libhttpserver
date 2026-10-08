@@ -393,6 +393,104 @@ LT_BEGIN_AUTO_TEST(schedule_suite, continuously_replenished_ack_work_has_bounded
         LT_ASSERT(r.commit_sent(p.token, {}, 100, p.ack_eliciting, p.ack_eliciting));
     }
 LT_END_AUTO_TEST(continuously_replenished_ack_work_has_bounded_data_preference)
+LT_BEGIN_AUTO_TEST(schedule_suite, small_stream_precedes_third_ack_near_ordinary_window_limit)
+    hd::quic_recovery r({}, budget());
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, parameters(), parameters(), 16, budget());
+    LT_ASSERT(f.open_local(false));
+    std::array<std::byte, 1200> out{};
+    sent(r, space::initial, {}, 10494);
+    LT_ASSERT(r.retain_stream({1, 0, std::span(out).first(1)}));
+    const auto now = hd::quic_recovery::time_point {} + 1s;
+
+    for (unsigned i = 0; i < 3; ++i) {
+        LT_ASSERT(r.receive_packet(space::application, i, true, now));
+        auto p = r.prepare_scheduled_packet(space::application, out, now, {1200, 40}, f);
+        LT_ASSERT(p);
+        LT_CHECK(p.stream.has_value() == (i == 2));
+        LT_ASSERT(r.commit_sent(p.token, now, p.bytes + 40, p.ack_eliciting, p.ack_eliciting));
+    }
+    LT_CHECK(f.sent() == 1 && r.bytes_in_flight() < 10800);
+LT_END_AUTO_TEST(small_stream_precedes_third_ack_near_ordinary_window_limit)
+LT_BEGIN_AUTO_TEST(schedule_suite, small_stream_precedes_third_ack_with_partial_pacing_credit)
+    hd::quic_recovery r({}, budget());
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, parameters(), parameters(), 16, budget());
+    LT_ASSERT(f.open_local(false));
+    std::array<std::byte, 1200> out{};
+    sent(r, space::initial, {}, 2200);
+    LT_ASSERT(r.retain_stream({1, 0, std::span(out).first(1)}));
+
+    for (unsigned i = 0; i < 3; ++i) {
+        LT_ASSERT(r.receive_packet(space::application, i, true, {}));
+        auto p = r.prepare_scheduled_packet(space::application, out, {}, {1200, 40}, f);
+        LT_ASSERT(p);
+        LT_CHECK(p.stream.has_value() == (i == 2));
+        if (p.stream) LT_CHECK(r.check_scheduled_emission(p.token, {}, 1200, true, true).code == hd::quic_recovery_code::pacing_blocked);
+        LT_ASSERT(r.commit_sent(p.token, {}, p.bytes + 40, p.ack_eliciting, p.ack_eliciting));
+    }
+    LT_CHECK(f.sent() == 1 && r.bytes_in_flight() < 2400);
+LT_END_AUTO_TEST(small_stream_precedes_third_ack_with_partial_pacing_credit)
+LT_BEGIN_AUTO_TEST(schedule_suite, busy_scheduled_retry_preserves_prepared_output)
+    hd::quic_recovery r({}, budget());
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, parameters(), parameters(), 16, budget());
+    LT_ASSERT(f.open_local(false));
+    std::array<std::byte, 1200> out{};
+    for (unsigned i = 0; i < 2; ++i) {
+        LT_ASSERT(r.receive_packet(space::application, i, true, {}));
+        auto p = r.prepare_scheduled_packet(space::application, out, {}, {1200, 40}, f);
+        LT_ASSERT(p && !p.ack_eliciting);
+        LT_ASSERT(r.commit_sent(p.token, {}, p.bytes + 40, false, false));
+    }
+    LT_ASSERT(r.retain_stream({1, 0, std::span(out).first(20)}));
+    auto p = r.prepare_scheduled_packet(space::application, out, {}, {1200, 40}, f);
+    LT_ASSERT(p && p.stream);
+    const auto prepared = out;
+
+    LT_CHECK(r.prepare_scheduled_packet(space::application, std::span(out).first(10), {}, {1200, 40}, f).code == hd::quic_recovery_code::busy);
+    LT_CHECK(out == prepared && f.sent() == 0);
+    LT_ASSERT(r.abandon_packet(p.token));
+LT_END_AUTO_TEST(busy_scheduled_retry_preserves_prepared_output)
+LT_BEGIN_AUTO_TEST(schedule_suite, pending_ack_bypasses_control_blocked_by_exhausted_window)
+    hd::quic_recovery r({}, budget());
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, parameters(), parameters(), 16, budget());
+    std::array<std::byte, 1200> out{};
+    sent(r, space::initial, {}, 12000);
+    LT_ASSERT(r.retain_flow({hd::quic_flow_kind::max_data, 200000}));
+    LT_ASSERT(r.receive_packet(space::application, 0, true, {}));
+    const auto now = hd::quic_recovery::time_point {} + 1s;
+
+    auto p = r.prepare_scheduled_packet(space::application, out, now, {1200, 40}, f);
+    LT_ASSERT(p && !p.ack_eliciting && !p.flow);
+    LT_CHECK(r.check_scheduled_emission(p.token, now, 1200, false, true).code == hd::quic_recovery_code::congestion_blocked);
+    LT_ASSERT(r.abandon_packet(p.token));
+    LT_ASSERT(r.ack_deadline(space::application));
+    p = r.prepare_scheduled_packet(space::application, out, now, {1200, 40}, f);
+    LT_ASSERT(p && !p.ack_eliciting && !p.flow);
+    LT_ASSERT(r.commit_sent(p.token, now, p.bytes + 40, false, false));
+    LT_CHECK(!r.ack_deadline(space::application) && r.bytes_in_flight() == 12000);
+    LT_CHECK(!r.take_completion());
+    LT_ASSERT(r.discard_space(space::initial));
+    p = r.prepare_scheduled_packet(space::application, out, now, {1200, 40}, f);
+    LT_ASSERT(p && p.flow && p.flow->limit == 200000);
+    LT_ASSERT(r.abandon_packet(p.token));
+LT_END_AUTO_TEST(pending_ack_bypasses_control_blocked_by_exhausted_window)
+LT_BEGIN_AUTO_TEST(schedule_suite, pending_ack_bypasses_control_blocked_by_pacing)
+    hd::quic_recovery r({}, budget());
+    hd::quic_flow_control f(hd::quic_endpoint_role::server, parameters(), parameters(), 16, budget());
+    std::array<std::byte, 1200> out{};
+    sent(r, space::initial, {}, 2400);
+    LT_ASSERT(r.retain_flow({hd::quic_flow_kind::max_data, 200000}));
+    LT_ASSERT(r.receive_packet(space::application, 0, true, {}));
+
+    auto p = r.prepare_scheduled_packet(space::application, out, {}, {1200, 40}, f);
+    LT_ASSERT(p && !p.ack_eliciting && !p.flow);
+    LT_CHECK(r.check_scheduled_emission(p.token, {}, 1200, false, true).code == hd::quic_recovery_code::pacing_blocked);
+    LT_ASSERT(r.commit_sent(p.token, {}, p.bytes + 40, false, false));
+    LT_CHECK(!r.ack_deadline(space::application) && r.bytes_in_flight() == 2400);
+    LT_CHECK(!r.take_completion());
+    p = r.prepare_scheduled_packet(space::application, out, hd::quic_recovery::time_point {} + 1s, {1200, 40}, f);
+    LT_ASSERT(p && p.flow && p.flow->limit == 200000);
+    LT_ASSERT(r.abandon_packet(p.token));
+LT_END_AUTO_TEST(pending_ack_bypasses_control_blocked_by_pacing)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

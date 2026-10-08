@@ -189,12 +189,13 @@ quic_encode_result quic_recovery::implementation::encode_information(slice& cont
     content.terminal = original.terminal && lower == original.length;
     return encode_quic_frame(information_frame(value, content), output, context);
 }
-std::optional<quic_recovery::implementation::slice> quic_recovery::implementation::select_packet_information(quic_pn_space space, bool probe, const quic_flow_control* flow, bool ack) const {
-    auto content = select_information(space, false, flow);
-    if (!content && probe) content = select_information(space, true, flow);
+std::optional<quic_recovery::implementation::slice> quic_recovery::implementation::select_packet_information(
+    quic_pn_space space, bool probe, const quic_flow_control* flow, bool ack, std::span<std::byte> output) {
+    auto content = select_information(space, false, flow, output);
+    if (!content && probe) content = select_information(space, true, flow, output);
     // ACK-only packets get critical record admission even when ordinary sent
     // records or output are full. A STREAM cannot consume that reserved slot.
-    if (content && ack && find_information(content->id)->kind == quic_information_kind::stream && !prefer_data(space)) content.reset();
+    if (content && ack && find_information(content->id)->kind == quic_information_kind::stream && !prefer_data(space, *content, output)) content.reset();
     return content;
 }
 quic_send_plan quic_recovery::prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, bool probe) {
@@ -203,12 +204,12 @@ quic_send_plan quic_recovery::prepare_packet(quic_pn_space space, std::span<std:
 quic_send_plan quic_recovery::prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control& flow, bool probe) {
     return prepare(space, output, now, &flow, probe);
 }
-quic_send_plan quic_recovery::prepare(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control* flow, bool probe) {
-    auto content = impl_->select_packet_information(space, probe, flow, ack_deadline(space).has_value());
+quic_send_plan quic_recovery::prepare(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control* flow, bool probe, bool ack_only) {
+    auto content = ack_only ? std::nullopt : impl_->select_packet_information(space, probe, flow, ack_deadline(space).has_value(), output);
     const bool critical = !content || impl_->find_information(content->id)->kind != quic_information_kind::stream;
     auto plan = reserve(space, critical);
     if (!plan) return plan;
-    if (content || probe) {
+    if (content || (probe && !ack_only)) {
         auto staged = impl_->stage_plan(plan, content, output, flow);
         if (!staged) {
             abandon_packet(plan.token);
@@ -217,6 +218,9 @@ quic_send_plan quic_recovery::prepare(quic_pn_space space, std::span<std::byte> 
             if (!plan) return plan;
         }
     }
+    return finish_preparation(plan, space, output, now);
+}
+quic_send_plan quic_recovery::finish_preparation(quic_send_plan plan, quic_pn_space space, std::span<std::byte> output, time_point now) {
     if (ack_deadline(space)) append_ack(plan, space, output, now);
     if (!plan.bytes) {
         abandon_packet(plan.token);

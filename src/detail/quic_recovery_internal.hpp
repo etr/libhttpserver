@@ -117,10 +117,10 @@ struct quic_recovery::implementation {
     void update_information(slice content, information_status status);
     void complete_information(information& value);
     void release_storage(information& value);
-    std::optional<slice> select_packet_information(quic_pn_space space, bool probe, const quic_flow_control* flow, bool ack) const;
+    std::optional<slice> select_packet_information(quic_pn_space space, bool probe, const quic_flow_control* flow, bool ack, std::span<std::byte> output);
     bool constrain_slice(slice& content, const information& value, const quic_flow_control* flow) const;
     std::optional<slice> eligible_slice(const information& value, bool probe, const quic_flow_control* flow) const;
-    std::optional<slice> select_information(quic_pn_space space, bool probe, const quic_flow_control* flow) const;
+    std::optional<slice> select_information(quic_pn_space space, bool probe, const quic_flow_control* flow, std::span<std::byte> output);
     quic_frame information_frame(const information& value, slice content) const;
     quic_encode_result encode_information(slice& content, std::span<std::byte> output);
     void retire_acknowledged_receive(space_state& s, const packet& p);
@@ -154,10 +154,10 @@ struct quic_recovery::implementation {
     std::optional<slice> select_stream(bool probe, const quic_flow_control* flow) const;
     void commit_schedule();
     void commit_stream_turn();
-    bool prefer_data(quic_pn_space space) const;
+    bool prefer_data(quic_pn_space space, slice content, std::span<std::byte> output);
     bool data_window_available(std::size_t bytes) const;
     std::optional<slice> stream_slice(const stream_schedule& entry, bool probe, const quic_flow_control* flow) const;
-    std::size_t scheduled_wire = 0;
+    std::size_t scheduled_overhead = 0;
     std::optional<time_point> scheduled_now;
     quic_recovery_code charge_flow();
     quic_recovery_code check_flow() const;
