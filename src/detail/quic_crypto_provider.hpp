@@ -48,6 +48,11 @@ struct quic_authenticated_check {
     quic_crypto_code (*function)(const quic_clear_header&, void*) noexcept = nullptr;
     void* argument = nullptr;
 };
+// Missing generations use real AEAD work with random material. Even successful
+// authentication with that material must never publish plaintext.
+inline quic_crypto_code quic_reject_unavailable(const quic_clear_header&, void*) noexcept {
+    return quic_crypto_code::authentication_failed;
+}
 // Apply connection-owned transition checks after authentication, before any
 // plaintext is committed to output. The callback cannot retain borrowed views.
 quic_crypto_result quic_open_checked(const quic_packet_keys& keys, std::span<const std::byte> datagram,

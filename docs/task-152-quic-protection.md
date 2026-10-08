@@ -39,7 +39,7 @@ scratch until all checks pass. EVP objects use RAII; owned secrets use existing
 
 `quic_key_state` is serialized on its owner thread. It owns directional Initial,
 Handshake and application keys, one next write generation, and bounded
-current/next/previous read generations. Initial replacement and Handshake
+current/next/previous read generations plus one fixed dummy read key. Initial replacement and Handshake
 replacement are transactional. Application installation is one-time per direction;
 discarded levels cannot be reinstalled. A cleared owner cannot resurrect keys.
 
@@ -49,7 +49,18 @@ them. Initial replacement retains this boundary. Write updates retire old materi
 immediately, toggle the phase, derive `quic ku`, and retain the directional HP key.
 Read promotion requires successful authentication. Selection uses authenticated
 current-generation packet-number boundaries; key-transition error reporting also
-waits for authentication, before publishing plaintext.
+waits for authentication, before publishing plaintext. Authenticated reordered
+previous-generation packets advance the previous maximum, so later current
+packets cannot cross that boundary.
+
+Application read installation transactionally prepares random dummy AEAD key/IV
+material with OpenSSL private randomness and retains the real directional HP key.
+An unavailable previous or next generation performs the same bounded packet
+authentication path with this material and returns `authentication_failed`; even
+successful dummy authentication is rejected before plaintext publication or
+promotion. No random material or generation is allocated/derived per rejected
+packet. The dummy key is cleansed on application discard/owner clear. Provider
+failures and caller buffer/format errors retain their existing codes.
 
 After a peer read update, sending is blocked until `respond_to_peer_update`
 advances write keys to that generation. The transport must call this before
@@ -90,8 +101,16 @@ Development followed assertion-level RED/GREEN slices:
 - Incorrect Initial cipher acceptance: 1 failure, then fixed-v1-suite rejection
   passed.
 
-The final crypto executable has 9 tests / 180 checks; lifecycle has 6 tests /
-96 checks. Additional assertions cover every PN width, full PN boundaries,
+The crypto executable has 9 tests / 180 checks; lifecycle now has 10 tests /
+221 checks after the focused validation repair. The reordered-generation
+regression first failed three checks, then passed after authenticated boundary
+recording was repaired. Missing previous/next generation regressions first
+failed six checks, then passed after dummy authentication was introduced.
+Coverage includes unavailable slots for all three suites, deterministic rejection
+of successfully authenticated plaintext, provider failures, installed-key
+usability after installation failure, and cleansing. The retirement rejection
+now counts as an authentication failure. These checks do not claim exact timing
+equality or exercise injected RNG/allocation failures. Additional assertions cover every PN width, full PN boundaries,
 coalescing/sample truncation, overlap, short buffers, oversized input, wrong
 keys/directions, header/ciphertext/tag corruption, provider fetch failures,
 transactional installation, cleansing observed before allocation release,

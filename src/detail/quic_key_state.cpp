@@ -1,4 +1,5 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
+#include <openssl/rand.h>
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -11,6 +12,24 @@ bool valid_direction(quic_key_direction direction) noexcept { return direction =
 std::size_t index_of(quic_key_level level) noexcept { return static_cast<std::size_t>(level); }
 std::uint64_t confidentiality_limit(quic_cipher_suite suite) noexcept {
     return suite == quic_cipher_suite::chacha20_poly1305_sha256 ? k_quic_max_integer : std::uint64_t{1} << 23;
+}
+quic_crypto_code make_dummy_keys(const quic_packet_keys& current, quic_packet_keys& output,
+                                 quic_key_observer observer, void* argument) noexcept {
+    const auto spec = quic_suite(current.suite);
+    quic_temporary<44> random;
+    auto material = std::span(random.bytes).first(spec->key_size + 12);
+    if (RAND_priv_bytes_ex(nullptr, quic_data(material), material.size(), 0) != 1) return quic_crypto_code::provider_failure;
+    try {
+        quic_packet_keys staged;
+        staged.suite = current.suite;
+        staged.key = secure_bytes(material.first(spec->key_size), observer, argument);
+        staged.iv = secure_bytes(material.last(12), observer, argument);
+        staged.hp = secure_bytes(current.hp.bytes(), observer, argument);
+        output = std::move(staged);
+        return quic_crypto_code::ok;
+    } catch (...) {
+        return quic_crypto_code::provider_failure;
+    }
 }
 // These fields remain untrusted until unprotect_quic_packet authenticates them.
 quic_crypto_result inspect_header(const quic_packet_keys& keys, std::span<const std::byte> datagram,
@@ -67,14 +86,17 @@ quic_crypto_code quic_key_state::install_traffic_secret(quic_key_level level, qu
     if (code != quic_crypto_code::ok) return code;
     auto& state = levels_[index_of(level)];
     auto& destination = direction == quic_key_direction::read ? state.read : state.write;
-    quic_packet_keys staged, next;
+    quic_packet_keys staged, next, dummy;
     code = derive_quic_packet_keys(suite, secret, staged, observer_, argument_);
     if (code != quic_crypto_code::ok) return code;
     staged.level = level;
     if (level == quic_key_level::application && direction == quic_key_direction::read) {
         code = derive_quic_next_keys(staged, next, observer_, argument_);
         if (code != quic_crypto_code::ok) return code;
+        code = make_dummy_keys(staged, dummy, observer_, argument_);
+        if (code != quic_crypto_code::ok) return code;
         application_.next_read = std::move(next);
+        application_.dummy_read = std::move(dummy);
     }
     destination = std::move(staged);
     if (direction == quic_key_direction::write) state.encrypted = 0;
@@ -195,6 +217,8 @@ void quic_key_state::record_application_open(const quic_clear_header& header, bo
     } else if (header.key_phase == ((application_.read_generation & 1) != 0)) {
         application_.minimum_received = std::min(number, application_.minimum_received.value_or(number));
         application_.maximum_received = std::max(number, application_.maximum_received.value_or(number));
+    } else {
+        application_.previous_maximum = std::max(number, application_.previous_maximum.value_or(number));
     }
 }
 quic_crypto_result quic_key_state::open_application(std::span<const std::byte> datagram, std::optional<std::size_t> cid_length,
@@ -205,7 +229,7 @@ quic_crypto_result quic_key_state::open_application(std::span<const std::byte> d
     const quic_packet_keys* selected = nullptr;
     auto code = select_application_keys(inspected.header, selected, promoting);
     if (code != quic_crypto_code::ok) return {code};
-    if (!selected) return {quic_crypto_code::keys_unavailable};
+    if (!selected) return quic_open_checked(*application_.dummy_read, datagram, cid_length, largest, output, scratch, {quic_reject_unavailable, nullptr});
     if (promoting && application_.read_generation == std::numeric_limits<std::uint64_t>::max()) return {quic_crypto_code::limit_reached};
     auto result = quic_open_checked(*selected, datagram, cid_length, largest, output, scratch, {check_application_header, this});
     if (result.code == quic_crypto_code::ok) record_application_open(result.header, promoting);
@@ -222,6 +246,7 @@ void quic_key_state::discard_level(quic_key_level level) noexcept {
         application_.next_read.reset();
         application_.previous_read.reset();
         application_.next_write.reset();
+        application_.dummy_read.reset();
     }
 }
 void quic_key_state::clear() noexcept {

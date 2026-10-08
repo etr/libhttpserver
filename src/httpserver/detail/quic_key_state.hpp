@@ -42,7 +42,7 @@ class quic_key_state final {
         bool discarded = false;
     };
     struct application_state {
-        std::optional<quic_packet_keys> next_read, previous_read, next_write;
+        std::optional<quic_packet_keys> next_read, previous_read, next_write, dummy_read;
         std::optional<std::uint64_t> minimum_received, maximum_received, previous_maximum;
         std::uint64_t read_generation = 0, write_generation = 0;
     };

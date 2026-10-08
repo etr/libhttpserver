@@ -2,6 +2,7 @@
 #include <vector>
 #include <type_traits>
 #include <httpserver/detail/quic_key_state.hpp>
+#include "../../src/detail/quic_crypto_provider.hpp"
 #include "./quic_crypto_test_support.hpp"
 using level = hd::quic_key_level;
 using direction = hd::quic_key_direction;
@@ -94,7 +95,8 @@ LT_BEGIN_AUTO_TEST(state_suite, authenticated_update_reordering_retirement_and_p
     LT_ASSERT(receiver.open_packet(level::application, wrapped, 0, 7, true, clear, scratch).code == code::ok);
     LT_CHECK_EQ(receiver.generation(direction::read), std::uint64_t{2});
     LT_CHECK(receiver.open_packet(level::application, old, 0, 8, true, clear, scratch).code != code::ok);
-    LT_CHECK_EQ(receiver.authentication_failures(), std::uint64_t{2});
+    // The retired-generation rejection now performs and counts authentication.
+    LT_CHECK_EQ(receiver.authentication_failures(), std::uint64_t{3});
 LT_END_AUTO_TEST(authenticated_update_reordering_retirement_and_phase_wrap)
 LT_BEGIN_AUTO_TEST(state_suite, usage_limits_are_bounded_and_failures_survive_updates)
     hd::quic_key_state sender({2, 2}), receiver({2, 2});
@@ -207,6 +209,129 @@ LT_BEGIN_AUTO_TEST(state_suite, packet_number_transition_errors_require_authenti
     LT_CHECK(std::all_of(clear.begin(), clear.end(), [](auto b) { return b == std::byte{0x55}; }));
     LT_CHECK_EQ(receiver.generation(direction::read), std::uint64_t{1});
 LT_END_AUTO_TEST(packet_number_transition_errors_require_authentication)
+LT_BEGIN_AUTO_TEST(state_suite, reordered_previous_packets_advance_authenticated_generation_boundary)
+    hd::quic_key_state sender, receiver;
+    auto secret = traffic_secret(), payload = hex("01000000");
+    LT_ASSERT(sender.install_traffic_secret(level::application, direction::write, cipher_suite, secret) == code::ok);
+    LT_ASSERT(receiver.install_traffic_secret(level::application, direction::read, cipher_suite, secret) == code::ok);
+    auto old10 = seal(sender, 10), old19 = seal(sender, 19);
+    std::array<std::byte, 128> clear{}, scratch{}, output{};
+    LT_ASSERT(receiver.open_packet(level::application, old10, 0, {}, true, clear, scratch).code == code::ok);
+    LT_ASSERT(sender.advance_write_keys(true, true) == code::ok);
+    auto new20 = seal(sender, 20);
+    LT_ASSERT(receiver.open_packet(level::application, new20, 0, 10, true, clear, scratch).code == code::ok);
+    LT_ASSERT(receiver.open_packet(level::application, old19, 0, 20, true, clear, scratch).code == code::ok);
+    hd::quic_packet_write packet;
+    packet.kind = hd::quic_packet_kind::one_rtt;
+    packet.packet_number = 15;
+    packet.key_phase = true;
+    packet.payload = payload;
+    auto sealed = hd::protect_quic_packet(*sender.keys(level::application, direction::write), packet, output, scratch);
+    LT_ASSERT(sealed.code == code::ok);
+    auto wire = std::span(output).first(sealed.consumed);
+    clear.fill(std::byte{0x55});
+    LT_CHECK(receiver.open_packet(level::application, wire, 0, 20, true, clear, scratch).code == code::invalid_key_transition);
+    LT_CHECK(std::all_of(clear.begin(), clear.end(), [](auto b) { return b == std::byte{0x55}; }));
+    wire.back() ^= std::byte{1};
+    LT_CHECK(receiver.open_packet(level::application, wire, 0, 20, true, clear, scratch).code == code::authentication_failed);
+    LT_CHECK(std::all_of(clear.begin(), clear.end(), [](auto b) { return b == std::byte{0x55}; }));
+    LT_CHECK_EQ(receiver.generation(direction::read), std::uint64_t{1});
+    auto new21 = seal(sender, 21);
+    LT_CHECK(receiver.open_packet(level::application, new21, 0, 20, true, clear, scratch).code == code::ok);
+    LT_CHECK(equals(std::span(clear).first(payload.size()), "01000000"));
+LT_END_AUTO_TEST(reordered_previous_packets_advance_authenticated_generation_boundary)
+LT_BEGIN_AUTO_TEST(state_suite, absent_generations_authenticate_and_reject_without_key_derivation)
+    for (auto suite : {hd::quic_cipher_suite::aes_128_gcm_sha256, hd::quic_cipher_suite::aes_256_gcm_sha384, hd::quic_cipher_suite::chacha20_poly1305_sha256}) {
+        cleanse_receipt receipt;
+        hd::quic_key_state sender, receiver({}, cleanse_receipt::observe, &receipt);
+        std::array<std::byte, 48> material{};
+        auto secret = std::span(material).first(suite == hd::quic_cipher_suite::aes_256_gcm_sha384 ? 48 : 32);
+        LT_ASSERT(sender.install_traffic_secret(level::application, direction::write, suite, secret) == code::ok);
+        LT_ASSERT(receiver.install_traffic_secret(level::application, direction::read, suite, secret) == code::ok);
+        auto old = seal(sender, 10);
+        std::array<std::byte, 128> clear{}, scratch{};
+        LT_ASSERT(receiver.open_packet(level::application, old, 0, {}, true, clear, scratch).code == code::ok);
+        LT_ASSERT(sender.advance_write_keys(true, true) == code::ok);
+        auto current = seal(sender, 20);
+        LT_ASSERT(receiver.open_packet(level::application, current, 0, 10, true, clear, scratch).code == code::ok);
+        receiver.retire_previous_read_keys();
+        auto releases = receipt.releases;
+        clear.fill(std::byte{0x55});
+        scratch.fill(std::byte{0x66});
+        LT_CHECK(receiver.open_packet(level::application, old, 0, 20, true, clear, scratch).code == code::authentication_failed);
+        LT_CHECK(zeros(std::span(scratch).first(old.size())));
+        LT_CHECK(std::all_of(clear.begin(), clear.end(), [](auto b) { return b == std::byte{0x55}; }));
+        LT_CHECK_EQ(receiver.authentication_failures(), std::uint64_t{1});
+        LT_ASSERT(sender.advance_write_keys(true, true) == code::ok);
+        auto next = seal(sender, 30);
+        scratch.fill(std::byte{0x66});
+        LT_CHECK(receiver.open_packet(level::application, next, 0, 20, true, clear, scratch).code == code::authentication_failed);
+        LT_CHECK(zeros(std::span(scratch).first(next.size())));
+        LT_CHECK(std::all_of(clear.begin(), clear.end(), [](auto b) { return b == std::byte{0x55}; }));
+        LT_CHECK_EQ(receiver.authentication_failures(), std::uint64_t{2});
+        LT_CHECK_EQ(receiver.generation(direction::read), std::uint64_t{1});
+        LT_CHECK_EQ(receipt.releases, releases);
+        LT_ASSERT(receiver.open_packet(level::application, current, 0, 20, true, clear, scratch).code == code::ok);
+        LT_ASSERT(receiver.prepare_next_application_keys(direction::read) == code::ok);
+        LT_CHECK(receiver.open_packet(level::application, next, 0, 20, true, clear, scratch).code == code::ok);
+        LT_CHECK_EQ(receiver.generation(direction::read), std::uint64_t{2});
+        receiver.clear();
+        LT_CHECK(receipt.clean);
+    }
+LT_END_AUTO_TEST(absent_generations_authenticate_and_reject_without_key_derivation)
+LT_BEGIN_AUTO_TEST(state_suite, unavailable_generation_never_publishes_even_authenticated_plaintext)
+    for (auto suite : {hd::quic_cipher_suite::aes_128_gcm_sha256, hd::quic_cipher_suite::aes_256_gcm_sha384, hd::quic_cipher_suite::chacha20_poly1305_sha256}) {
+        std::array<std::byte, 48> secret{};
+        auto bytes = std::span(secret).first(suite == hd::quic_cipher_suite::aes_256_gcm_sha384 ? 48 : 32);
+        hd::quic_packet_keys keys;
+        LT_ASSERT(hd::derive_quic_packet_keys(suite, bytes, keys) == code::ok);
+        auto payload = hex("01000000");
+        hd::quic_packet_write packet;
+        packet.kind = hd::quic_packet_kind::one_rtt;
+        packet.packet_number = 30;
+        packet.key_phase = true;
+        packet.payload = payload;
+        std::array<std::byte, 128> output{}, clear{}, scratch{};
+        auto sealed = hd::protect_quic_packet(keys, packet, output, scratch);
+        LT_ASSERT(sealed.code == code::ok);
+        auto wire = std::span(output).first(sealed.consumed);
+        LT_ASSERT(hd::unprotect_quic_packet(keys, wire, 0, 20, clear, scratch).code == code::ok);
+        clear.fill(std::byte{0x55});
+        auto rejected = hd::quic_open_checked(keys, wire, 0, 20, clear, scratch, {hd::quic_reject_unavailable, nullptr});
+        LT_CHECK(rejected.code == code::authentication_failed);
+        LT_CHECK_EQ(rejected.consumed, std::size_t{0});
+        LT_CHECK_EQ(rejected.payload_size, std::size_t{0});
+        LT_CHECK(zeros(std::span(scratch).first(wire.size())));
+        LT_CHECK(std::all_of(clear.begin(), clear.end(), [](auto b) { return b == std::byte{0x55}; }));
+        wire.back() ^= std::byte{1};
+        LT_CHECK(hd::quic_open_checked(keys, wire, 0, 20, clear, scratch, {hd::quic_reject_unavailable, nullptr}).code == code::authentication_failed);
+        LT_ASSERT(EVP_set_default_properties(nullptr, "provider=task152_missing_provider") == 1);
+        auto failed = hd::quic_open_checked(keys, wire, 0, 20, clear, scratch, {hd::quic_reject_unavailable, nullptr});
+        auto restored = EVP_set_default_properties(nullptr, "");
+        LT_CHECK_EQ(restored, 1);
+        LT_CHECK(failed.code == code::provider_failure);
+        LT_CHECK(std::all_of(clear.begin(), clear.end(), [](auto b) { return b == std::byte{0x55}; }));
+    }
+LT_END_AUTO_TEST(unavailable_generation_never_publishes_even_authenticated_plaintext)
+LT_BEGIN_AUTO_TEST(state_suite, application_read_installation_failure_is_transactional)
+    hd::quic_key_state state;
+    auto secret = traffic_secret();
+    LT_ASSERT(state.install_traffic_secret(level::application, direction::write, cipher_suite, secret) == code::ok);
+    auto original = state.keys(level::application, direction::write)->key.bytes();
+    std::vector<std::byte> original_key(original.begin(), original.end());
+    LT_ASSERT(EVP_set_default_properties(nullptr, "provider=task152_missing_provider") == 1);
+    auto failed = state.install_traffic_secret(level::application, direction::read, cipher_suite, secret);
+    auto restored = EVP_set_default_properties(nullptr, "");
+    LT_CHECK_EQ(restored, 1);
+    LT_CHECK(failed == code::provider_failure);
+    LT_CHECK(state.keys(level::application, direction::read) == nullptr);
+    LT_CHECK(std::equal(original_key.begin(), original_key.end(), state.keys(level::application, direction::write)->key.bytes().begin()));
+    LT_CHECK(!seal(state, 1).empty());
+    LT_ASSERT(state.install_traffic_secret(level::application, direction::read, cipher_suite, secret) == code::ok);
+    auto wire = seal(state, 2);
+    std::array<std::byte, 128> clear{}, scratch{};
+    LT_CHECK(state.open_packet(level::application, wire, 0, {}, true, clear, scratch).code == code::ok);
+LT_END_AUTO_TEST(application_read_installation_failure_is_transactional)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
