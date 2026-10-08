@@ -87,6 +87,7 @@ src/detail/fake_io_backend.cpp
 src/detail/io_poll_backend.cpp
 src/detail/io_epoll_backend.cpp
 src/detail/io_kqueue_backend.cpp
+src/detail/io_iocp_backend.cpp
 src/detail/io_managed_backend.cpp
 src/detail/io_managed_socket_backend.cpp
 src/detail/worker_pool.cpp
@@ -120,6 +121,8 @@ src/httpserver/detail/tls_build_probe.hpp
 src/httpserver/detail/io_socket_backend.hpp
 src/httpserver/detail/io_epoll_backend.hpp
 src/httpserver/detail/io_kqueue_backend.hpp
+src/httpserver/detail/io_iocp_backend.hpp
+src/httpserver/detail/io_completion_storage.hpp
 src/httpserver/detail/io_managed_backend.hpp
 src/httpserver/detail/io_managed_socket_backend.hpp
 src/httpserver/detail/http1_websocket_handshake.hpp

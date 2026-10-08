@@ -1366,6 +1366,44 @@ jobs:
         fi
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
 
+    - name: Verify native Windows IOCP oracle and lifetime traces (TASK-146)
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd build
+        make -C test -j2 io_completion_storage io_iocp_backend io_backend_contract
+        make -C test -j1 recheck check_PROGRAMS='io_completion_storage io_iocp_backend io_backend_contract' TESTS='io_completion_storage io_iocp_backend io_backend_contract'
+        log=test/io_iocp_backend.log
+        for scenario in managed_windows_selects_iocp read_delivers_bytes_exactly_once \
+          write_completes_with_transferred timer_fires_at_deadline_not_before \
+          two_timers_earliest_first_sequence_tie wake_completes_all_wakes_once \
+          cancel_pending_target cancel_terminal_target_reports_invalid_state \
+          close_sweeps_every_pending_once submit_after_close_connection_closed \
+          late_request_cancel_reports_invalid_state n_awaiter_resume_exactly_once \
+          cancel_vs_stimulus_race accept_round_trip http1_round_trip partial_read \
+          synchronous_candidate_abort_retries_same_logical_accept \
+          failed_candidate_packet_retries_same_logical_accept \
+          fatal_accept_initiation_error_retires_listener fatal_accept_packet_error_retires_listener \
+          success_claim_before_cancel_delivers_exactly_once cancel_claim_before_packet_delivers_exactly_once \
+          read_hangup write_hangup idle_iterations_stay_bounded slow_reader_no_busy_loop \
+          queued_success_cancel_not_found_retains_storage_until_packet \
+          failed_packet_cancellation_preserves_socket_and_next_read \
+          stale_packet_after_release_and_readoption_cannot_touch_new_buffer \
+          late_successful_accept_cancellation_closes_candidate_once \
+          pending_accept_cancel_and_concurrent_close_drain_every_native_request \
+          out_of_order_native_packets_across_owners_preserve_each_result \
+          empty_spans_complete_ok_without_eof write_failure_preserves_unread_inbound_bytes \
+          managed_http_loopback_uses_completion_backend \
+          cancel_unposted_operation_never_borrows_destroyed_storage \
+          driver_delivery_can_close_reentrantly_without_self_join \
+          opposite_direction_completes_before_earlier_pending_receive \
+          receive_eof_retires_registration_and_sweeps_connection_controls; do
+          grep -F "Running test" "$log" | grep -F ": $scenario" >/dev/null
+        done
+        if grep -E 'SKIP|FAILURE|[1-9][0-9]* failures' "$log"; then exit 1; fi
+        grep -F '0 failures' "$log"
+      if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
+
     - name: Run Valgrind checks
       timeout-minutes: 90
       run: |
