@@ -8,6 +8,7 @@
 #include <span>
 #include <httpserver/detail/quic_codec.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/detail/quic_storage.hpp>
 namespace httpserver::detail {
 struct quic_stream_limits {
     std::size_t max_buffered_bytes = 65536;
@@ -27,6 +28,8 @@ struct quic_stream_result {
 class quic_reassembly final {
  public:
     quic_reassembly(quic_stream_limits limits, server::resource_budget budget);
+    quic_reassembly(quic_stream_limits limits, quic_storage_lease storage);
+    static std::size_t storage_capacity(quic_stream_limits limits);
     ~quic_reassembly();
     quic_reassembly(const quic_reassembly&) = delete;
     quic_reassembly& operator=(const quic_reassembly&) = delete;
@@ -50,6 +53,7 @@ class quic_reassembly final {
         std::size_t count;
         void operator()(range* pointer) const noexcept;
     };
+    quic_storage_lease storage_owner_;
     quic_stream_limits limits_;
     server::resource_budget budget_;
     server::reservation metadata_;

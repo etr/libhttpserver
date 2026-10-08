@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdlib>
 #include <new>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 #include <httpserver/detail/quic_key_state.hpp>
@@ -271,6 +272,38 @@ LT_BEGIN_AUTO_TEST(quic_tls_suite, callback_failures_are_terminal_and_zero_capac
     hd::quic_tls_callbacks limited(config, budget, keys);
     LT_CHECK(!limited.parameters(octets({15, 1, 7})));
 LT_END_AUTO_TEST(callback_failures_are_terminal_and_zero_capacity_retries)
+LT_BEGIN_AUTO_TEST(quic_tls_suite, protected_crypto_survives_saturated_data_and_pool_handle_teardown)
+    auto root = httpserver::server::resource_budget::root({});
+    constexpr auto resource = httpserver::server::resource::quic_reassembly_bytes;
+    hd::quic_key_state keys;
+    hd::quic_tls_config config;
+    config.input_limits = {8, 2, 100};
+    config.output_capacity = 8;
+    config.receive_lease_capacity = 4;
+    config.maximum_peer_parameters = 16;
+    const auto capacity = hd::quic_tls_callbacks::storage_capacity(config);
+    LT_CHECK(capacity > 44);
+    std::unique_ptr<hd::quic_tls_callbacks> tls;
+    {
+        hd::quic_storage_pool pool(8, capacity, root);
+        httpserver::server::reservation data;
+        LT_ASSERT(pool.data().budget.reserve(resource, 8, data).ok());
+        tls = std::make_unique<hd::quic_tls_callbacks>(config, pool.critical(), keys);
+        auto bytes = octets({1, 2, 3, 4, 5, 6, 7, 8});
+        LT_ASSERT(tls->receive(hd::quic_crypto_level::initial, 0, bytes));
+        std::size_t sent = 0;
+        LT_ASSERT(tls->send(bytes, &sent));
+        LT_CHECK(sent == 8);
+    }
+    LT_CHECK(root.in_use(resource) == 8 + capacity);
+    const unsigned char* bytes = nullptr;
+    std::size_t size = 0;
+    LT_ASSERT(tls->recv(&bytes, &size));
+    LT_CHECK(size == 4 && bytes[0] == 1 && bytes[3] == 4);
+    LT_ASSERT(tls->release(size));
+    tls.reset();
+    LT_CHECK(root.in_use(resource) == 0);
+LT_END_AUTO_TEST(protected_crypto_survives_saturated_data_and_pool_handle_teardown)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -12,6 +12,8 @@ namespace httpserver::detail {
 class quic_tls_callbacks final {
  public:
     quic_tls_callbacks(const quic_tls_config& config, server::resource_budget budget, quic_key_state& keys);
+    quic_tls_callbacks(const quic_tls_config& config, quic_storage_lease storage, quic_key_state& keys);
+    static std::size_t storage_capacity(const quic_tls_config& config);
     quic_tls_result receive(quic_crypto_level level, std::uint64_t offset, std::span<const std::byte> bytes);
     quic_tls_result copy_output(quic_crypto_level level, std::uint64_t offset, std::span<std::byte> destination) const;
     quic_tls_result retire_output_prefix(quic_crypto_level level, std::uint64_t through);
@@ -35,6 +37,7 @@ class quic_tls_callbacks final {
         std::uint64_t begin = 0;
         std::size_t size = 0;
     };
+    quic_storage_lease storage_owner_;
     server::reservation storage_;
     std::array<output_stream, 3> output_;
     std::size_t output_capacity_, lease_capacity_, peer_capacity_, local_size_, peer_size_ = 0;

@@ -2189,3 +2189,14 @@ quic_recovery_tls_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 quic_recovery_tls_LDADD = $(tls_io_LDADD)
 quic_recovery_tls_LDFLAGS = $(tls_io_LDFLAGS)
 endif
+
+check_PROGRAMS += quic_flow_control quic_flow_recovery quic_flow_storage
+quic_flow_control_SOURCES = unit/quic_flow_control_test.cpp
+quic_flow_control_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_flow_control_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+quic_flow_recovery_SOURCES = unit/quic_flow_recovery_test.cpp
+quic_flow_recovery_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_flow_recovery_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+quic_flow_storage_SOURCES = unit/quic_flow_storage_test.cpp
+quic_flow_storage_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_flow_storage_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

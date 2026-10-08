@@ -42,6 +42,7 @@ class quic_tls_session final {
  public:
     quic_tls_session(tls_credentials_selection selection, const quic_tls_config& config,
                      server::resource_budget budget, quic_key_state& keys);
+    quic_tls_session(tls_credentials_selection selection, const quic_tls_config& config, quic_storage_lease storage, quic_key_state& keys);
     ~quic_tls_session();
     quic_tls_result receive(quic_crypto_level level, std::uint64_t offset, std::span<const std::byte> bytes);
     tls_session::result handshake();
@@ -54,6 +55,7 @@ class quic_tls_session final {
     quic_tls_failure failure() const;
 
  private:
+    quic_storage_lease storage_owner_;
     struct impl;
     std::unique_ptr<impl> impl_;
 };

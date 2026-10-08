@@ -302,7 +302,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-154 | [Implement QUIC stream state and bounded reassembly](M11-http3-first-slice/TASK-154.md) | M11 | Complete | TASK-151 |
 | TASK-155 | [Bridge OpenSSL QUIC TLS callbacks to owned CRYPTO streams](M11-http3-first-slice/TASK-155.md) | M11 | Complete | TASK-131, TASK-132, TASK-152, TASK-153 |
 | TASK-156 | [Implement ACK generation, RFC 9002 loss detection and PTO](M11-http3-first-slice/TASK-156.md) | M11 | Complete | TASK-151, TASK-152, TASK-155 |
-| TASK-157 | [Implement QUIC stream/connection flow control](M11-http3-first-slice/TASK-157.md) | M11 | Not Started | TASK-154, TASK-156 |
+| TASK-157 | [Implement QUIC stream/connection flow control](M11-http3-first-slice/TASK-157.md) | M11 | In Progress | TASK-154, TASK-156 |
 | TASK-158 | [Implement QUIC congestion control, pacing and fair send scheduling](M11-http3-first-slice/TASK-158.md) | M11 | Not Started | TASK-156, TASK-157 |
 | TASK-159 | [Implement bounded static-only QPACK codec](M11-http3-first-slice/TASK-159.md) | M11 | Not Started | TASK-097 |
 | TASK-160 | [Implement HTTP/3 control streams, SETTINGS and frame roles](M11-http3-first-slice/TASK-160.md) | M11 | Not Started | TASK-155, TASK-157, TASK-159 |

@@ -129,6 +129,25 @@ LT_BEGIN_AUTO_TEST(quic_tls_handshake_suite, quic_isolates_acme_and_external_psk
     psk.hosts[0].alpn = {"h3"};
     LT_CHECK(!registry.replace(psk).ok());
 LT_END_AUTO_TEST(quic_isolates_acme_and_external_psk_profiles)
+LT_BEGIN_AUTO_TEST(quic_tls_handshake_suite, protected_tls_handshake_progresses_while_data_budget_is_full)
+    hd::tls_credentials_registry registry;
+    LT_ASSERT(registry.replace(quic_test::credentials()).ok());
+    auto root = httpserver::server::resource_budget::root({});
+    constexpr auto resource = httpserver::server::resource::quic_reassembly_bytes;
+    std::unique_ptr<quic_test::connection> connection;
+    const auto critical_capacity = 512U * 1024;
+    {
+        hd::quic_storage_pool pool(16, critical_capacity, root);
+        httpserver::server::reservation saturation;
+        LT_ASSERT(pool.data().budget.reserve(resource, 16, saturation).ok());
+        connection = std::make_unique<quic_test::connection>(registry.acquire()->select_default(), pool.critical());
+        LT_ASSERT(connection->connect());
+    }
+    LT_CHECK(root.in_use(resource) == 16 + critical_capacity);
+    LT_CHECK(connection->server.negotiated_protocol() == hd::tls_negotiated_protocol::h3);
+    connection.reset();
+    LT_CHECK(root.in_use(resource) == 0);
+LT_END_AUTO_TEST(protected_tls_handshake_progresses_while_data_budget_is_full)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
