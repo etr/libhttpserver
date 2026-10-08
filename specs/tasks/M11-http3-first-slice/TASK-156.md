@@ -24,6 +24,6 @@ Provide ACK generation, RFC 9002 loss detection and PTO for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [Recovery ownership and local verification](../../../docs/task-156-quic-recovery.md). Caller-owned validation is pending.
