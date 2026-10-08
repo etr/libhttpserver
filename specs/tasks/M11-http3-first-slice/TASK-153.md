@@ -9,9 +9,9 @@
 Provide server CID admission, Retry and amplification limits for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Demultiplex CIDs and bound pending Initial state.
-- [ ] Implement version negotiation, Retry and address token checks.
-- [ ] Track three-times amplification budget per unvalidated path.
+- [x] Demultiplex CIDs and bound pending Initial state.
+- [x] Implement version negotiation, Retry and address token checks.
+- [x] Track three-times amplification budget per unvalidated path.
 
 **Dependencies:**
 - Blocked by: TASK-149, TASK-151, TASK-152
@@ -24,4 +24,4 @@ Provide server CID admission, Retry and amplification limits for libhttpserver v
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
