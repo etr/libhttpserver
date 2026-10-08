@@ -24,7 +24,7 @@ Provide bounded static-only QPACK codec for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-017
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence (2026-10-08):**
 - Added private stateless `qpack_encoder` / `qpack_decoder`, owned ordered occurrences,
