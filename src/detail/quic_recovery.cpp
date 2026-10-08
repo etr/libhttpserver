@@ -57,10 +57,10 @@ quic_recovery_code quic_recovery::implementation::send_admission(quic_pn_space s
 }
 quic_recovery_code quic_recovery::implementation::commit_admission(std::uint64_t token, time_point now, std::size_t bytes, bool eliciting, bool flight) const {
     if (!pending || pending->token != token) return quic_recovery_code::invalid;
-    const auto& s = *state(pending->space);
     if (!valid_emission(bytes, eliciting, flight)) return quic_recovery_code::invalid;
 
-    if (s.last_sent && now < *s.last_sent) return quic_recovery_code::invalid;
+    for (const auto& other : spaces)
+        if (other.last_sent && now < *other.last_sent) return quic_recovery_code::invalid;
     return quic_recovery_code::ok;
 }
 bool quic_recovery::implementation::valid_emission(std::size_t bytes, bool eliciting, bool flight) const {
@@ -76,34 +76,13 @@ quic_recovery_result quic_recovery::commit_sent(std::uint64_t token, time_point 
                                               bool eliciting, bool in_flight, std::uint64_t generation) {
     auto admission = impl_->commit_admission(token, now, wire_bytes, eliciting, in_flight);
     if (admission != quic_recovery_code::ok) return {admission};
-    auto& pending = *impl_->pending;
-    if (pending.flow) {
-        quic_flow_result charged;
-        if (pending.stream) {
-            const auto& f = *pending.stream;
-            charged = pending.flow->record_stream_sent(f.stream, f.offset, f.data.size(), f.fin);
-        } else if (pending.reset) {
-            charged = pending.flow->record_reset_sent(pending.reset->stream, pending.reset->final_size);
-        }
-        if (!charged) return {quic_recovery_code::invalid};
+    if (impl_->pending->scheduled) {
+        auto permission = check_scheduled_emission(token, now, wire_bytes, eliciting, in_flight);
+        if (!permission) return {permission.code};
     }
-    auto& s = *impl_->state(impl_->pending->space);
-    implementation::packet packet;
-    packet.critical = pending.critical;
-    packet.number = impl_->pending->number;
-    packet.content = impl_->pending->content;
-    packet.receive_watermark = impl_->pending->receive_watermark;
-    packet.ack_generation = impl_->pending->ack_generation;
-    packet.key_generation = generation;
-    packet.sent_at = now;
-    packet.wire_bytes = wire_bytes;
-    packet.ack_eliciting = eliciting;
-    packet.in_flight = in_flight;
-    s.sent.push_back(packet);
-    s.last_sent = now;
-    if (eliciting) s.last_eliciting = now;
-    if (in_flight) impl_->in_flight += wire_bytes;
-    impl_->update_information(packet.content, information_status::sent);
+    auto charged = impl_->charge_flow();
+    if (charged != quic_recovery_code::ok) return {charged};
+    impl_->record_emission(now, wire_bytes, eliciting, in_flight, generation);
     if (impl_->pending->ack_generation) publish_ack(impl_->pending->space, *impl_->pending->ack_generation);
     impl_->pending.reset();
     return {};
@@ -159,6 +138,8 @@ quic_recovery_events quic_recovery::receive_ack(quic_pn_space space, const quic_
     if (!decode_ranges(ack, storage)) return {{quic_recovery_code::invalid}};
     auto ranges = std::span(storage).first(ack.range_count + 1);
     if (!acknowledges_sent(*s, ranges, now)) return {{quic_recovery_code::invalid}};
+    impl_->acknowledge_congestion_runs(space, ranges);
+    impl_->send_due.reset();
     impl_->sample_ack(*s, ranges, ack, now, space);
     auto result = impl_->acknowledge_packets(*s, ranges, space);
     if (!result.acknowledged_packets) return result;
@@ -166,6 +147,7 @@ quic_recovery_events quic_recovery::receive_ack(quic_pn_space space, const quic_
     result.lost_bytes = impl_->detect_loss(*s, now);
     if (space == quic_pn_space::handshake) impl_->environment.peer_validated_endpoint = true;
     if (impl_->environment.peer_validated_endpoint) {
+        impl_->probe_grants.fill(0);
         impl_->pto_count = 0;
         impl_->last_pto.reset();
         impl_->idle_pto_anchor.reset();
@@ -191,9 +173,11 @@ quic_recovery_events quic_recovery::implementation::acknowledge_packets(space_st
         if (p.acknowledged || !covers(ranges, p.number)) continue;
         update_information(p.content, information_status::delivered);
         retire_acknowledged_receive(s, p);
+        note_congestion_outcome(p, outcome::acknowledged);
         p.acknowledged = true;
         ++result.acknowledged_packets;
         if (p.in_flight) {
+            congestion.acknowledge(p.wire_bytes, p.sent_at, p.limited);
             result.acknowledged_bytes += p.wire_bytes;
             in_flight -= p.wire_bytes;
             p.in_flight = false;
@@ -228,19 +212,23 @@ std::size_t quic_recovery::implementation::detect_loss(space_state& s, time_poin
     if (!s.largest_acked) return 0;
     auto delay = std::max(recovery_scale(std::max(rtt.latest, rtt.smoothed), 9, 8), recovery_duration(std::chrono::milliseconds(1)));
     std::size_t lost = 0;
+    std::optional<time_point> newest;
     for (auto& p : s.sent) {
         if (!p.in_flight || p.number > *s.largest_acked) continue;
         auto deadline = recovery_after(p.sent_at, delay);
         if (*s.largest_acked - p.number >= 3 || deadline <= now) {
+            newest = newest ? std::max(*newest, p.sent_at) : p.sent_at;
             lost += p.wire_bytes;
             in_flight -= p.wire_bytes;
             p.in_flight = false;
             p.lost = true;
+            note_congestion_outcome(p, outcome::lost);
             update_information(p.content, information_status::pending);
         } else if (!s.loss_due || deadline < *s.loss_due) {
             s.loss_due = deadline;
         }
     }
+    finish_loss(newest, now);
     return lost;
 }
 quic_rtt_state quic_recovery::rtt() const { return impl_->rtt; }

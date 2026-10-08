@@ -2200,3 +2200,14 @@ quic_flow_recovery_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 quic_flow_storage_SOURCES = unit/quic_flow_storage_test.cpp
 quic_flow_storage_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 quic_flow_storage_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += quic_congestion quic_pacing quic_send_schedule
+quic_congestion_SOURCES = unit/quic_congestion_test.cpp
+quic_congestion_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_congestion_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+quic_pacing_SOURCES = unit/quic_pacing_test.cpp
+quic_pacing_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_pacing_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+quic_send_schedule_SOURCES = unit/quic_send_schedule_test.cpp
+quic_send_schedule_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_send_schedule_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

@@ -17,7 +17,7 @@ bool valid_ack_config(const quic_recovery_config& c) {
 }
 }  // namespace
 quic_recovery::implementation::implementation(quic_recovery_config c, server::resource_budget b, server::resource_budget critical)
-: config(c), budget(std::move(b)), critical_budget(std::move(critical)) {
+: config(c), budget(std::move(b)), critical_budget(std::move(critical)), congestion(c.max_datagram_size), pacing(c.max_datagram_size) {
     if (!valid_capacities(c) || !valid_ack_config(c)) throw std::invalid_argument("Invalid QUIC recovery limits");
     auto bytes = quic_recovery::storage_capacity(c);
     try {
@@ -28,11 +28,17 @@ quic_recovery::implementation::implementation(quic_recovery_config c, server::re
         std::array<space_state, 3> staged;
         std::vector<information> descriptors;
         descriptors.reserve(c.max_information);
+        std::vector<stream_schedule> staged_streams;
+        std::vector<congestion_run> staged_runs;
+        staged_streams.reserve(c.max_information);
+        staged_runs.reserve(3 * c.max_sent_packets + 1);
         for (auto& s : staged) {
             s.received.reserve(c.max_receive_ranges + 1);
             s.sent.reserve(c.max_sent_packets);
             s.retired_sent.reserve(c.max_sent_packets);
         }
+        streams = std::move(staged_streams);
+        congestion_runs = std::move(staged_runs);
         spaces = std::move(staged);
         information_records = std::move(descriptors);
     } catch (const std::bad_alloc&) {
@@ -135,7 +141,10 @@ quic_recovery::quic_recovery(quic_recovery_config config, quic_storage_lease dat
     : data_owner_(std::move(data)), critical_owner_(std::move(critical)), impl_(std::make_unique<implementation>(config, data_owner_.budget, critical_owner_.budget)) {}
 std::size_t quic_recovery::storage_capacity(quic_recovery_config c) {
     if (!valid_capacities(c) || !valid_ack_config(c)) throw std::invalid_argument("Invalid QUIC recovery limits");
-    return 3 * ((c.max_receive_ranges + 1) * sizeof(quic_ack_range) + c.max_sent_packets * (sizeof(implementation::packet) + sizeof(quic_ack_range))) +
-        c.max_information * sizeof(implementation::information);
+    quic_congestion validate(c.max_datagram_size);
+    const auto history = (3 * c.max_sent_packets + 1) * sizeof(implementation::congestion_run);
+    return history + 3 * ((c.max_receive_ranges + 1) * sizeof(quic_ack_range) +
+        c.max_sent_packets * (sizeof(implementation::packet) + sizeof(quic_ack_range))) +
+        c.max_information * (sizeof(implementation::information) + sizeof(implementation::stream_schedule));
 }
 }  // namespace httpserver::detail
