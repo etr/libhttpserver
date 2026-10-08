@@ -2149,3 +2149,11 @@ quic_server_admission_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 quic_server_admission_LDADD = $(tls_io_LDADD)
 quic_server_admission_LDFLAGS = $(tls_io_LDFLAGS)
 endif
+
+check_PROGRAMS += quic_stream_state quic_reassembly
+quic_stream_state_SOURCES = unit/quic_stream_state_test.cpp
+quic_stream_state_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_stream_state_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+quic_reassembly_SOURCES = unit/quic_reassembly_test.cpp
+quic_reassembly_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_reassembly_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

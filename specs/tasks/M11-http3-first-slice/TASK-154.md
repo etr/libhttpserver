@@ -9,9 +9,9 @@
 Provide QUIC stream state and bounded reassembly for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Implement QUIC stream IDs, state transitions and final-size rules.
-- [ ] Reassemble out-of-order STREAM ranges under gap/byte budgets.
-- [ ] Handle FIN, RESET_STREAM and STOP_SENDING once.
+- [x] Implement QUIC stream IDs, state transitions and final-size rules.
+- [x] Reassemble out-of-order STREAM ranges under gap/byte budgets.
+- [x] Handle FIN, RESET_STREAM and STOP_SENDING once.
 
 **Dependencies:**
 - Blocked by: TASK-151
@@ -24,4 +24,4 @@ Provide QUIC stream state and bounded reassembly for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-021
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
