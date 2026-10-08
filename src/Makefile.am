@@ -151,3 +151,6 @@ if NATIVE_V3_TLS
 libhttpserver_v3tls_la_SOURCES += detail/quic_tls_buffers.cpp detail/quic_tls_callbacks.cpp detail/quic_tls_session.cpp
 endif
 noinst_HEADERS += httpserver/detail/quic_tls_session.hpp detail/quic_tls_callbacks.hpp
+
+libhttpserver_v3core_la_SOURCES += detail/quic_ack_state.cpp detail/quic_recovery.cpp detail/quic_recovery_timer.cpp detail/quic_repacketize.cpp
+noinst_HEADERS += httpserver/detail/quic_recovery.hpp detail/quic_recovery_internal.hpp
