@@ -2,6 +2,7 @@
 #include "test/support/http3_network_owner.hpp"
 #include <algorithm>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <iostream>
 #include <memory>
@@ -38,7 +39,7 @@ hd::quic_pn_space packet_space(hd::quic_packet_kind kind) {
 }
 }  // namespace
 connection::connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes,
-                       httpserver::manual_executor& executor, std::uint64_t id)
+                       httpserver::manual_executor& executor, std::uint64_t id, const std::string& file_root)
     : facts_(std::move(facts)),
       root_(budget()),
       pool_(4194304, 1048576, root_),
@@ -46,12 +47,16 @@ connection::connection(hd::tls_credentials_selection credentials, hd::quic_admis
       routes_(routes),
       executor_(executor),
       id_(id) {
+    if (!file_root.empty()) {
+        files_ = std::make_unique<hqnet::files>(file_root);
+        expires_ = clock_type::now() + std::chrono::seconds(120);
+    }
     auto envelope = hd::parse_quic_envelope(facts_.initial->bytes);
     require(envelope.code == hd::quic_codec_code::ok, "admitted Initial envelope");
     client_cid_.assign(envelope.value.source.begin(), envelope.value.source.end());
     server_cid_.assign(facts_.destination.bytes.begin(), facts_.destination.bytes.begin() + facts_.destination.size);
     require(keys_.install_initial(hd::quic_endpoint_role::server, envelope.value.destination) == hd::quic_crypto_code::ok, "Initial keys");
-    local_.max_idle_timeout = 15000;
+    local_.max_idle_timeout = files_ ? 120000 : 15000;
     local_.max_udp_payload_size = 1200;
     local_.initial_max_data = 1048576;
     local_.initial_max_stream_data_bidi_local = 65536;
@@ -114,6 +119,8 @@ void connection::receive_packet(std::span<const std::byte> packet, clock_type::t
         ++stats_.drops;
         return;
     }
+    if (space == hd::quic_pn_space::application && keys_.generation(hd::quic_key_direction::read) > keys_.generation(hd::quic_key_direction::write))
+        require(keys_.respond_to_peer_update(connected_) == hd::quic_crypto_code::ok, "peer key update response");
     const auto number = opened.header.packet_number;
     auto receipt = recovery_.inspect_received(space, number);
     require(receipt != hd::quic_receipt::invalid, "packet receive capacity");
@@ -161,6 +168,10 @@ void connection::apply(const hd::quic_frame& frame, hd::quic_pn_space space, clo
         // Admission / body pulls may make an already buffered prefix readable
         // without another datagram. Finish each receive turn before resuming
         // handlers, then revisit the bounded prefix rather than parking it.
+        if (files_) {
+            files_->receive(s, *flow_);
+            return;
+        }
         for (unsigned pass = 0; pass < 16; ++pass) {
             engine_->begin_turn();
             engine_->pump_receive(data->stream);
@@ -171,11 +182,16 @@ void connection::apply(const hd::quic_frame& frame, hd::quic_pn_space space, clo
     } else if (auto* reset = std::get_if<hd::quic_reset_stream_frame>(&frame)) {
         auto& s = stream(reset->stream);
         require(static_cast<bool>(flow_->receive(s, *reset)), "RESET final size");
-        if (auto terminal = s.take_terminal())
-            engine_->terminal(reset->stream, *terminal);
+        if (files_) files_->cancel(reset->stream, recovery_);
+        else if (auto terminal = s.take_terminal()) engine_->terminal(reset->stream, *terminal);
     } else if (auto* stop = std::get_if<hd::quic_stop_sending_frame>(&frame)) {
         stream(stop->stream);
-        engine_->stop_sending(stop->stream, stop->error);
+        if (files_) {
+            files_->cancel(stop->stream, recovery_);
+            require(static_cast<bool>(recovery_.retain_reset({stop->stream, stop->error, streams_.at(stop->stream)->highest_sent()})), "hq RESET retention");
+        } else {
+            engine_->stop_sending(stop->stream, stop->error);
+        }
     } else if (auto* flow = std::get_if<hd::quic_flow_frame>(&frame)) {
         require(flow_ && static_cast<bool>(flow_->apply(*flow)), "flow frame");
     } else if (auto* close = std::get_if<hd::quic_close_frame>(&frame)) {
@@ -202,10 +218,10 @@ void connection::drive_tls() {
         flow_ = std::make_unique<hd::quic_flow_control>(hd::quic_endpoint_role::server, local_, peer.value, 64, pool_.data());
     }
     if (!connected_ && result.state == hd::tls_session::progress::complete) {
-        require(tls_->negotiated_protocol() == hd::tls_negotiated_protocol::h3, "ALPN h3");
+        require(tls_->negotiated_protocol() == (files_ ? hd::tls_negotiated_protocol::other : hd::tls_negotiated_protocol::h3), "application ALPN");
         connected_ = true;
         require(static_cast<bool>(recovery_.retain_handshake_done()), "retain HANDSHAKE_DONE");
-        admit_h3();
+        if (!files_) admit_h3();
     }
 }
 void connection::admit_h3() {
@@ -225,11 +241,11 @@ void connection::admit_h3() {
 hd::quic_stream_state& connection::stream(std::uint64_t id) {
     if (auto found = streams_.find(id); found != streams_.end())
         return *found->second;
-    require(flow_ && engine_ && streams_.size() < 64, "stream lifetime capacity");
+    require(flow_ && (engine_ || files_) && streams_.size() < 64 && (!files_ || (id & 3) == 0), "stream lifetime capacity");
     require(static_cast<bool>(flow_->observe_peer(id)), "peer stream admission");
     auto s = std::make_unique<hd::quic_stream_state>(id, hd::quic_endpoint_role::server, flow_->ids(), hd::quic_stream_limits{},
                                                      (id & 2) ? pool_.critical() : pool_.data());
-    require(!engine_->attach_peer(*s), "H3 stream attach");
+    if (engine_) require(!engine_->attach_peer(*s), "H3 stream attach");
     auto& result = *s;
     streams_.emplace(id, std::move(s));
     return result;
@@ -250,6 +266,8 @@ void connection::drain_completions() {
             }
         } else if (done->kind == hd::quic_information_kind::flow && done->flow) {
             flow_->credit_acknowledged(*done->flow);
+        } else if (files_ && done->kind == hd::quic_information_kind::stream) {
+            files_->completed(*done);
         } else if (engine_ && (done->kind == hd::quic_information_kind::stream || done->kind == hd::quic_information_kind::reset_stream)) {
             engine_->information_completed(*done);
         }
@@ -277,8 +295,13 @@ void connection::retain_output() {
             crypto_acknowledged_[i].emplace(retained.id, crypto_prefix{copied_[i], false});
         }
     }
-    if (!engine_)
+    if (files_) {
+        if (!flow_) return;
+        files_->pump(*flow_, recovery_);
+        if (auto credit = flow_->pending_credit()) require(static_cast<bool>(recovery_.retain_flow(*credit)), "hq consumption credit");
         return;
+    }
+    if (!engine_) return;
     // A semantic writer can expose DATA or FIN after its HEADERS were retained,
     // without producing a socket event. Drain a bounded owner turn before parking.
     for (unsigned turn = 0; turn < 16; ++turn) {

@@ -91,3 +91,5 @@ __pycache__/
 !scripts/run-v3-http3-gates.py
 !test/integ/http3_client_aioquic.py
 !test/integ/http3_gate_runner_test.py
+!scripts/run-v3-quic-interop.py
+!test/integ/quic_interop_runner_test.py

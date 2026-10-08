@@ -57,7 +57,7 @@ LT_BEGIN_AUTO_TEST(quic_tls_handshake_suite, sni_policy_rotation_and_missing_h3_
     quic_test::connection b(registry.acquire()->select_default(), quic_test::client_context(), "b.example");
     LT_ASSERT(b.connect());
     LT_CHECK(b.client.serial() == 202);
-    for (const auto& offers : std::vector<std::vector<std::string>>{{}, {"h2"}, {"acme-tls/1"}}) {
+    for (const auto& offers : std::vector<std::vector<std::string>>{{}, {"h2"}, {"hq-interop"}, {"acme-tls/1"}}) {
         quic_test::connection rejected(registry.acquire()->select_default(), quic_test::client_context(), "a.example", offers);
         LT_CHECK(!rejected.connect());
         LT_CHECK(rejected.server.negotiated_protocol() == hd::tls_negotiated_protocol::unknown);

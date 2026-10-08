@@ -1,0 +1,9 @@
+# Package an already verified native C++20 build; Dockerfile performs a clean source build.
+FROM scratch AS artifact
+COPY build/task163-clang-on/test/quic_interop_endpoint /quic_interop_endpoint
+FROM martenseemann/quic-network-simulator-endpoint@sha256:3b2b9e6fa317da238c8140a7b6d2bf8d4d45a8464b873eecac3ff2a32520b71a
+COPY --from=artifact /quic_interop_endpoint /quic_interop_endpoint
+COPY test/interop/quic/run_endpoint.sh /run_endpoint.sh
+RUN sha256sum /quic_interop_endpoint > /provenance.sha256
+ENV LIBHTTPSERVER_INTEROP_TEST_MODE=1
+ENTRYPOINT ["/run_endpoint.sh"]

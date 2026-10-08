@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "test/support/quic_interop_files.hpp"
 #include <httpserver/detail/http3_request_engine.hpp>
 #include <httpserver/detail/quic_server_admission.hpp>
 #include <httpserver/detail/quic_tls_session.hpp>
@@ -25,7 +26,7 @@ struct transmission {
 class connection final : public hd::datagram_sink {
  public:
     connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes,
-               httpserver::manual_executor& executor, std::uint64_t id);
+               httpserver::manual_executor& executor, std::uint64_t id, const std::string& file_root = {});
     ~connection();
     void on_datagram(std::shared_ptr<const hd::io_datagram> packet) noexcept override;
     void tick(clock_type::time_point now);
@@ -56,6 +57,7 @@ class connection final : public hd::datagram_sink {
     std::unique_ptr<hd::quic_flow_control> flow_;
     std::map<std::uint64_t, std::unique_ptr<hd::quic_stream_state>> streams_;
     std::unique_ptr<hd::http3_request_engine> engine_;
+    std::unique_ptr<hqnet::files> files_;
     const hs::route_registry& routes_;
     httpserver::manual_executor& executor_;
     std::uint64_t id_, current_stream_ = 0;
