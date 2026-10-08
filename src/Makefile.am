@@ -90,7 +90,7 @@ noinst_HEADERS += httpserver/detail/http1_host.hpp
 libhttpserver_v3core_la_LIBADD =
 if NATIVE_V3_TLS
 noinst_LTLIBRARIES += libhttpserver_v3tls.la
-libhttpserver_v3tls_la_SOURCES = detail/tls_provider.cpp detail/tls_session.cpp detail/tls_io_backend.cpp detail/tls_credentials.cpp detail/tls_psk.cpp detail/tls_psk_runtime.cpp detail/tls_psk_attempt.cpp
+libhttpserver_v3tls_la_SOURCES = detail/tls_provider.cpp detail/tls_session.cpp detail/tls_io_backend.cpp detail/tls_credentials.cpp detail/tls_psk.cpp detail/tls_psk_runtime.cpp detail/tls_psk_attempt.cpp detail/quic_key_derivation.cpp detail/quic_packet_crypto.cpp detail/quic_retry_integrity.cpp detail/quic_key_state.cpp
 libhttpserver_v3tls_la_CPPFLAGS = $(V3_TLS_CFLAGS) $(AM_CPPFLAGS) $(CPPFLAGS)
 libhttpserver_v3tls_la_LDFLAGS = $(V3_TLS_LDFLAGS)
 libhttpserver_v3tls_la_LIBADD = $(V3_TLS_LIBS)
@@ -130,3 +130,7 @@ noinst_HEADERS += httpserver/detail/quic_codec.hpp httpserver/detail/quic_varint
 
 libhttpserver_v3core_la_SOURCES += detail/quic_packet.cpp detail/quic_frame.cpp detail/quic_frame_write.cpp detail/quic_transport_parameters.cpp
 noinst_HEADERS += httpserver/detail/quic_packet.hpp httpserver/detail/quic_frame.hpp httpserver/detail/quic_transport_parameters.hpp
+
+noinst_HEADERS += httpserver/detail/quic_crypto.hpp
+noinst_HEADERS += detail/quic_crypto_provider.hpp
+noinst_HEADERS += httpserver/detail/quic_key_state.hpp

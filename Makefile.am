@@ -662,3 +662,5 @@ check-v3-installed-consumer:
 .PHONY: check-v3-installed-package-fixtures check-v3-installed-consumer
 
 EXTRA_DIST += docs/task-151-quic-codecs.md
+
+EXTRA_DIST += docs/task-152-quic-protection.md
