@@ -2157,3 +2157,17 @@ quic_stream_state_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 quic_reassembly_SOURCES = unit/quic_reassembly_test.cpp
 quic_reassembly_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 quic_reassembly_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+if NATIVE_V3_TLS
+check_PROGRAMS += quic_tls_session
+quic_tls_session_SOURCES = unit/quic_tls_session_test.cpp
+quic_tls_session_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+quic_tls_session_LDADD = $(tls_io_LDADD)
+quic_tls_session_LDFLAGS = $(tls_io_LDFLAGS)
+check_PROGRAMS += quic_tls_handshake
+quic_tls_handshake_SOURCES = unit/quic_tls_handshake_test.cpp
+quic_tls_handshake_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+quic_tls_handshake_LDADD = $(tls_io_LDADD)
+quic_tls_handshake_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+EXTRA_DIST += unit/quic_tls_peer.hpp

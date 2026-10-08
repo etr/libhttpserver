@@ -9,9 +9,9 @@
 Provide OpenSSL QUIC TLS callbacks to owned CRYPTO streams for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Adapt ordered CRYPTO bytes to SSL_set_quic_tls_cbs.
-- [ ] Own callback and transport-parameter buffer lifetimes.
-- [ ] Install secrets by level, select h3 ALPN and disable 0-RTT.
+- [x] Adapt ordered CRYPTO bytes to SSL_set_quic_tls_cbs.
+- [x] Own callback and transport-parameter buffer lifetimes.
+- [x] Install secrets by level, select h3 ALPN and disable 0-RTT.
 
 **Dependencies:**
 - Blocked by: TASK-131, TASK-132, TASK-152, TASK-153
@@ -24,4 +24,6 @@ Provide OpenSSL QUIC TLS callbacks to owned CRYPTO streams for libhttpserver v3.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-034
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** [QUIC TLS bridge and local checks](../../../docs/task-155-quic-tls.md). Validation and integration remain pending.
