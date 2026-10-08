@@ -22,8 +22,10 @@
 #include <array>
 #include <cstdlib>
 #include <cstdint>
+#include <exception>
 #include <new>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -43,12 +45,14 @@ using std::string_view_literals::operator""sv;
 namespace allocation_observer {
 bool enabled = false;
 bool fail = false;
+const std::length_error* length_failure = nullptr;
 std::size_t calls = 0;
 }
 void* operator new(std::size_t size) {
     if (allocation_observer::enabled) {
         ++allocation_observer::calls;
         if (allocation_observer::fail) throw std::bad_alloc();
+        if (allocation_observer::length_failure) throw *allocation_observer::length_failure;
     }
     if (void* p = std::malloc(size == 0 ? 1 : size)) return p;
     throw std::bad_alloc();
@@ -78,7 +82,9 @@ bool same(std::span<const qpack_field> owned, std::span<const qpack_field_view> 
 }  // namespace
 LT_BEGIN_SUITE(qpack_section_suite)
     void set_up() {}
-    void tear_down() { allocation_observer::enabled = false; allocation_observer::fail = false; }
+    void tear_down() {
+        allocation_observer::enabled = false; allocation_observer::fail = false; allocation_observer::length_failure = nullptr;
+    }
 LT_END_SUITE(qpack_section_suite)
 LT_BEGIN_AUTO_TEST(qpack_section_suite, rfc_vectors_and_all_static_indexes)
     qpack_decoder decoder;
@@ -192,6 +198,68 @@ LT_BEGIN_AUTO_TEST(qpack_section_suite, exact_limits_expansion_and_exception_bou
     LT_CHECK(allocation_encode.status.state == qpack_state::limit_exceeded && allocation_encode.value.empty());
     LT_CHECK(encoder.encode(fields, exact).status.ok() && decoder.decode(qpack_octets(wire), exact).status.ok());
 LT_END_AUTO_TEST(exact_limits_expansion_and_exception_boundaries)
+LT_BEGIN_AUTO_TEST(qpack_section_suite, uncached_semantic_rejection_precedes_allocation)
+    qpack_encoder encoder;
+    const std::string large(200, 'a');
+    for (auto limit : {qpack_section_limits{4096, 8192, 0}, qpack_section_limits{4096, 232, 1}, qpack_section_limits{1, 8192, 1}}) {
+        httpserver::http::fields fields;
+        fields.append("x", large);
+
+        allocation_observer::enabled = true; allocation_observer::calls = 0;
+        const auto rejected = encoder.encode_fields(fields, false, limit);
+        allocation_observer::enabled = false;
+
+        LT_CHECK(rejected.status.state == qpack_state::limit_exceeded && rejected.value.empty() && rejected.consumed == 0);
+        LT_CHECK(allocation_observer::calls == 0);
+    }
+LT_END_AUTO_TEST(uncached_semantic_rejection_precedes_allocation)
+LT_BEGIN_AUTO_TEST(qpack_section_suite, uncached_semantic_allocation_failure_is_atomic)
+    qpack_encoder encoder;
+    httpserver::http::fields fields;
+    fields.append("x", std::string(200, 'a'));
+    const std::length_error length_failure("injected string length failure");
+    // A noexcept cache rebuild must fail the executable rather than silently pass.
+    const auto terminate = std::set_terminate([] { std::_Exit(86); });
+
+    allocation_observer::enabled = true; allocation_observer::fail = true; allocation_observer::calls = 0;
+    const auto bad_alloc = encoder.encode_fields(fields, true, limits);
+    allocation_observer::enabled = false; allocation_observer::fail = false;
+    LT_CHECK(bad_alloc.status.state == qpack_state::limit_exceeded && bad_alloc.value.empty() && bad_alloc.consumed == 0);
+    LT_CHECK(allocation_observer::calls > 0);
+
+    allocation_observer::enabled = true; allocation_observer::length_failure = &length_failure; allocation_observer::calls = 0;
+    const auto too_long = encoder.encode_fields(fields, true, limits);
+    allocation_observer::enabled = false; allocation_observer::length_failure = nullptr;
+    std::set_terminate(terminate);
+    LT_CHECK(too_long.status.state == qpack_state::limit_exceeded && too_long.value.empty() && too_long.consumed == 0);
+    LT_CHECK(allocation_observer::calls > 0);
+    LT_CHECK(encoder.encode_fields(fields, true, limits).status.ok());
+LT_END_AUTO_TEST(uncached_semantic_allocation_failure_is_atomic)
+LT_BEGIN_AUTO_TEST(qpack_section_suite, uncached_semantic_order_sensitivity_and_exact_limits)
+    qpack_encoder encoder;
+    qpack_decoder decoder;
+    const std::string large(200, 'a');
+    httpserver::http::fields fields;
+    fields.append("X", large);
+    fields.append(":method", "GET");
+    fields.append("x", "tail");
+    constexpr std::size_t expanded = 1 + 200 + 32 + 7 + 3 + 32 + 1 + 4 + 32;
+    for (bool huffman : {false, true}) {
+        for (bool never_indexed : {false, true}) {
+            const std::array expected = {qpack_field_view{"X", large, never_indexed}, qpack_field_view{":method", "GET", never_indexed},
+                                         qpack_field_view{"X", "tail", never_indexed}};
+            const auto wire = encoder.encode(expected, limits, huffman).value;
+            const qpack_section_limits exact{wire.size(), expanded, 3};
+
+            const auto encoded = encoder.encode_fields(fields, never_indexed, exact, huffman);
+            const auto rejected = encoder.encode_fields(fields, never_indexed, {wire.size() - 1, expanded, 3}, huffman);
+
+            LT_CHECK(encoded.status.ok() && encoded.value == wire);
+            LT_CHECK(same(decoder.decode(qpack_octets(encoded.value), exact).fields, expected));
+            LT_CHECK(rejected.status.state == qpack_state::limit_exceeded && rejected.value.empty() && rejected.consumed == 0);
+        }
+    }
+LT_END_AUTO_TEST(uncached_semantic_order_sensitivity_and_exact_limits)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -35,32 +35,33 @@ namespace httpserver::detail {
 class qpack_encoder {
  public:
     qpack_bytes_result encode(std::span<const qpack_field_view> fields, qpack_section_limits limits, bool huffman = false) const {
-        return encode_sequence(fields, [](auto field) { return field; }, limits, huffman);
+        return encode_sequence(fields.size(), [fields](auto i) { return fields[i]; }, limits, huffman);
     }
     qpack_bytes_result encode_section(std::span<const qpack_field> fields, qpack_section_limits limits, bool huffman = false) const {
-        return encode_sequence(fields, [](const auto& field) { return field.view(); }, limits, huffman);
+        return encode_sequence(fields.size(), [fields](auto i) { return fields[i].view(); }, limits, huffman);
     }
     // Semantic fields do not retain sensitivity; policy must be explicit.
     qpack_bytes_result encode_fields(const http::fields& fields, bool never_indexed, qpack_section_limits limits, bool huffman = false) const {
-        return encode_sequence(fields.entries(), [never_indexed](auto field) {
-            return qpack_field_view{field.name, field.value, never_indexed};
+        return encode_sequence(fields.size(), [&fields, never_indexed](auto i) {
+            const auto [key, value] = fields.order_[i];
+            return qpack_field_view{fields.name_store_[key], fields.value_store_[key][value], never_indexed};
         }, limits, huffman);
     }
 
  private:
-    template<typename Range, typename View>
-    static qpack_bytes_result encode_sequence(const Range& fields, View view, qpack_section_limits limits, bool huffman) {
-        if (fields.size() > limits.max_fields || limits.max_compressed_bytes < 2) return {{qpack_state::limit_exceeded}, {}};
+    template<typename View>
+    static qpack_bytes_result encode_sequence(std::size_t count, View view, qpack_section_limits limits, bool huffman) {
+        if (count > limits.max_fields || limits.max_compressed_bytes < 2) return {{qpack_state::limit_exceeded}, {}};
         auto remaining = limits.max_expanded_bytes;
-        for (const auto& occurrence : fields) {
-            const auto field = view(occurrence);
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto field = view(i);
             if (!qpack_admit_field(field.name.size(), field.value.size(), remaining)) return {{qpack_state::limit_exceeded}, {}};
         }
         try {
             // Required Insert Count=0, sign=0, Delta Base=0. Dynamic capacity is fixed at zero.
             std::string wire(2, '\0');
-            for (const auto& occurrence : fields) {
-                const auto status = write_field(view(occurrence), huffman, wire, limits.max_compressed_bytes);
+            for (std::size_t i = 0; i < count; ++i) {
+                const auto status = write_field(view(i), huffman, wire, limits.max_compressed_bytes);
                 if (!status.ok()) return {status, {}};
             }
             const auto size = wire.size();

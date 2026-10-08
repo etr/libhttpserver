@@ -51,7 +51,7 @@ Provide bounded static-only QPACK codec for libhttpserver v3.0.
 - Focused Makefile targets and all seven executables passed: `qpack_static_table`,
   `qpack_primitives`, `qpack_field_section`, `hpack_primitives`,
   `hpack_static_table`, `hpack_corpus`, and `hpack_field_section`
-  (28 tests, 5,245 checks, zero failures/skips). Coverage includes independent
+  (31 tests, 5,268 checks, zero failures/skips). Coverage includes independent
   Appendix B.1 bytes, all static indexes, Huffman names/values, sensitivity,
   duplicate occurrence order, atomic failures, allocation-free rejection,
   injected allocation failure, and exact size/count ceilings.
@@ -59,6 +59,18 @@ Provide bounded static-only QPACK codec for libhttpserver v3.0.
   `-Wall -Wextra -Werror -pedantic`. Changed C++ files passed
   `python3 -m cpplint --extensions=cpp,hpp --headers=hpp`; `git diff --check`
   passed. Build/test/lint receipts are under `/private/tmp/task159-*`.
+- Validation repair: semantic encoding now traverses owned occurrences directly
+  through private `http::fields` friendship, sharing the indexed encoder with
+  span/owned inputs. Public semantic behavior is unchanged. Uncached semantic
+  count/expanded/prefix rejection allocates nothing; admitted allocation and
+  length failures return empty `limit_exceeded` results. New regressions first
+  produced three allocation-check failures and terminated at the allocation
+  boundary with sentinel exit 86 (`/private/tmp/task159-fix-section-red.log`),
+  then passed seven field-section tests / 354 checks. Rebuilt and reran the seven
+  codec executables above plus `http_semantic_fields` (eight tests / 49 checks),
+  for 39 tests / 5,317 checks overall with zero failures/skips. Full local
+  `make -j2`, strict direct C++20 QPACK compilation, changed-file cpplint and
+  diff check passed; repair receipts are `/private/tmp/task159-fix-*`.
 - BSD, Windows, and other nonlocal platform checks are unexecuted here and belong
   to CI and the v3 PR per `AGENTS.md`. HTTP/3 framing/control streams and dynamic
   QPACK remain the responsibility of dependent tasks.

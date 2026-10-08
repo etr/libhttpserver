@@ -33,6 +33,8 @@
 
 namespace httpserver {
 
+namespace detail { class qpack_encoder; }
+
 namespace http {
 
 // Insertion-ordered multivalue field collection (PRD-V3N-REQ-017/018).
@@ -143,6 +145,9 @@ class fields {
     }
 
  private:
+    // The private codec traverses owned occurrences without allocating the entry cache.
+    friend class httpserver::detail::qpack_encoder;
+
     static constexpr std::size_t npos = static_cast<std::size_t>(-1);
 
     static bool iequals(std::string_view a, std::string_view b) noexcept {
