@@ -216,6 +216,47 @@ LT_BEGIN_AUTO_TEST(network_owner_suite, protected_rebinding_keeps_two_parked_str
         LT_CHECK_EQ(h3test::decode_response(f.output[id]).body, "retained");
     }
 LT_END_AUTO_TEST(protected_rebinding_keeps_two_parked_streams_and_complete_head_peer_snapshots)
+LT_BEGIN_AUTO_TEST(network_owner_suite, complete_packet_cid_retirement_preserves_parked_streams_in_either_frame_order)
+    for (bool reverse : {false, true}) {
+        owner_test::peer f;
+        httpserver::resume_signal pause;
+        unsigned started = 0;
+        LT_ASSERT(f.routes
+                      .route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+                             [&](httpserver::exchange& x) -> httpserver::task<void> {
+                                 ++started;
+                                 co_await pause.wait();
+                                 x.start_response(httpserver::http::status::from_code(200), {});
+                                 const std::string body = "retained";
+                                 co_await x.writer().write(std::as_bytes(std::span(body)));
+                                 co_await x.writer().finish();
+                             })
+                      .ok());
+        f.connect();
+        auto head = h3test::headers(h3test::get());
+        const std::array<hd::quic_frame, 2> requests{hd::quic_stream_frame{0, 0, head, true}, hd::quic_stream_frame{4, 0, head, true}};
+        f.send(requests, f.address);
+        f.drain(10);
+        LT_ASSERT_EQ(started, 2u);
+        std::array<std::byte, 1> retired{std::byte{90}}, surviving{std::byte{91}};
+        std::array<std::byte, 16> retired_token{std::byte{90}}, surviving_token{std::byte{91}};
+        std::array<hd::quic_frame, 2> frames{hd::quic_new_connection_id_frame{1, 0, retired, retired_token}, hd::quic_new_connection_id_frame{2, 2, surviving, surviving_token}};
+        if (reverse) std::reverse(frames.begin(), frames.end());
+
+        f.send(frames, f.address);
+
+        LT_ASSERT(f.server->failure().empty());
+        f.client_cid = surviving;
+        pause.signal();
+        f.executor.run_pending();
+        f.drain();
+        LT_ASSERT(f.server->failure().empty());
+        LT_CHECK_EQ(started, 2u);
+        LT_CHECK(f.fins[0] && f.fins[4]);
+        LT_CHECK_EQ(h3test::decode_response(f.output[0]).body, "retained");
+        LT_CHECK_EQ(h3test::decode_response(f.output[4]).body, "retained");
+    }
+LT_END_AUTO_TEST(complete_packet_cid_retirement_preserves_parked_streams_in_either_frame_order)
 LT_BEGIN_AUTO_TEST(network_owner_suite, unauthenticated_and_replayed_changed_paths_never_redirect_application_packets)
     owner_test::peer f;
     f.connect();

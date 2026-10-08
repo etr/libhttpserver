@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <array>
+#include <algorithm>
 #include <memory>
 #include <vector>
 #include <httpserver/detail/quic_recovery.hpp>
@@ -273,6 +274,40 @@ LT_BEGIN_AUTO_TEST(identity_suite, retire_prior_to_is_applied_across_entire_pack
         LT_CHECK_EQ(f.identity.retirement_floor(), 3u);
     }
 LT_END_AUTO_TEST(retire_prior_to_is_applied_across_entire_packet_independent_of_frame_order)
+LT_BEGIN_AUTO_TEST(identity_suite, full_packet_retirement_selects_later_surviving_cid_in_either_frame_order)
+    for (bool reverse : {false, true}) {
+        fixture f;
+        auto retired = cid(90), surviving = cid(91);
+        std::array<std::byte, 16> retired_token{std::byte{90}}, surviving_token{std::byte{91}};
+        std::array<hd::quic_frame, 2> frames{hd::quic_new_connection_id_frame{1, 0, std::span(retired.bytes).first(retired.size), retired_token},
+                                          hd::quic_new_connection_id_frame{2, 2, std::span(surviving.bytes).first(surviving.size), surviving_token}};
+        if (reverse) std::reverse(frames.begin(), frames.end());
+
+        const auto result = f.receive(path(), 1, frames);
+
+        LT_ASSERT(result.code == hd::quic_identity_code::ok);
+        LT_CHECK(result.allow_payload);
+        LT_CHECK_EQ(f.identity.retirement_floor(), 2u);
+        LT_CHECK_EQ(f.identity.active_peer_cids(), 1u);
+        LT_CHECK(f.identity.application_cid() == surviving);
+        LT_CHECK(f.identity.application_path() == path());
+        std::array<std::byte, 1200> out{};
+        std::vector<std::uint64_t> retirements;
+        for (unsigned emission = 0; emission < 2; ++emission) {
+            auto plan = f.recovery.prepare_packet(hd::quic_pn_space::application, out, {});
+            LT_ASSERT(plan);
+            hd::quic_frame_cursor cursor;
+            while (cursor.offset < plan.bytes) {
+                auto decoded = hd::next_quic_frame(std::span(out).first(plan.bytes), cursor);
+                LT_ASSERT(decoded.code == hd::quic_codec_code::ok);
+                if (auto* retirement = std::get_if<hd::quic_retire_connection_id_frame>(&decoded.value)) retirements.push_back(retirement->sequence);
+            }
+            LT_ASSERT(f.recovery.commit_sent(plan.token, {}, plan.bytes, true, true));
+        }
+        std::sort(retirements.begin(), retirements.end());
+        LT_CHECK(retirements == std::vector<std::uint64_t>({0, 1}));
+    }
+LT_END_AUTO_TEST(full_packet_retirement_selects_later_surviving_cid_in_either_frame_order)
 LT_BEGIN_AUTO_TEST(identity_suite, retired_reset_token_history_cannot_be_reused_for_another_issued_id)
     httpserver::manual_executor ex;
     hd::io_connection_owner owner(ex);

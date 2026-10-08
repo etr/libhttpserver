@@ -138,6 +138,9 @@ struct quic_connection_identity::state {
             existing->token_known = true;
             std::copy(frame.reset_token.begin(), frame.reset_token.end(), existing->reset.begin());
         }
+        return {};
+    }
+    quic_identity_result retire_peer_cids(std::uint64_t new_floor) {
         // Reserve every required reliable retirement before changing selection.
         for (const auto& c : peer)
             if (c.active && c.sequence < new_floor) {
@@ -245,6 +248,9 @@ quic_identity_result quic_connection_identity::receive(const quic_authenticated_
             auto result = s.receive_new(*c, packet_floor);
             if (!result) return result;
         }
+    // Later NEW frames may supply the only CID surviving this packet's floor.
+    auto retired = s.retire_peer_cids(packet_floor);
+    if (!retired) return retired;
     for (const auto& frame : frames)
         if (auto* c = std::get_if<quic_retire_connection_id_frame>(&frame)) {
             if (c->sequence >= s.local_used || s.local[c->sequence].cid == packet.destination) return {quic_identity_code::protocol};
