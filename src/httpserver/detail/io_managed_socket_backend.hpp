@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 #include <httpserver/detail/io_socket_backend.hpp>
+#include <httpserver/detail/io_udp_backend.hpp>
 
 namespace httpserver {
 namespace detail {
@@ -29,6 +30,7 @@ namespace detail {
 class io_managed_socket_backend : public io_socket_backend {
  public:
     ~io_managed_socket_backend() override;
+    void adopt_datagram(std::uint64_t id, pollsys::native_socket_t socket) override;
     void adopt_listener(std::uint64_t id, pollsys::native_socket_t socket) override;
     void adopt_connection(std::uint64_t id, pollsys::native_socket_t socket) override;
     void release_connection(std::uint64_t id) override;
@@ -56,6 +58,8 @@ class io_managed_socket_backend : public io_socket_backend {
         std::uint32_t installed = 0;
         std::uint32_t armed = 0;
         std::uint32_t mask = 0;
+        bool datagram = false;
+        udp_admission udp;
         bool write_closed = false;
     };
     using completion = std::pair<std::shared_ptr<op_state>, io_result>;
@@ -63,7 +67,7 @@ class io_managed_socket_backend : public io_socket_backend {
     static void deliver(const completions& done);
     void finish_locked(const std::shared_ptr<op_state>& op, io_result result, completions& done);
     void retire_locked(std::uint64_t id, completions& done);
-    void adopt_locked(std::uint64_t id, pollsys::native_socket_t socket, bool listener);
+    void adopt_locked(std::uint64_t id, pollsys::native_socket_t socket, bool listener, bool datagram = false);
     void notify_locked();
     virtual std::optional<std::chrono::steady_clock::time_point> reconcile_locked() = 0;
     virtual void run_loop() = 0;

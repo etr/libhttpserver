@@ -82,6 +82,9 @@ src/httpserver/websocket/session.hpp
 V3CORE_SOURCES="
 src/detail/features.cpp
 src/detail/io_operation.cpp
+src/detail/io_udp_backend.cpp
+src/detail/quic_invariant_header.cpp
+src/detail/quic_datagram_dispatch.cpp
 src/detail/io_connection_owner.cpp
 src/detail/fake_io_backend.cpp
 src/detail/io_poll_backend.cpp
@@ -119,6 +122,10 @@ src/detail/websocket_session.cpp
 V3_DETAIL_HEADERS="
 src/httpserver/detail/tls_build_probe.hpp
 src/httpserver/detail/io_socket_backend.hpp
+src/httpserver/detail/io_datagram.hpp
+src/httpserver/detail/io_udp_backend.hpp
+src/httpserver/detail/quic_invariant_header.hpp
+src/httpserver/detail/quic_datagram_dispatch.hpp
 src/httpserver/detail/io_epoll_backend.hpp
 src/httpserver/detail/io_kqueue_backend.hpp
 src/httpserver/detail/io_iocp_backend.hpp

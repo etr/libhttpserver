@@ -11,6 +11,7 @@
 
 #if defined(_WIN32)
 #include <httpserver/detail/io_socket_backend.hpp>
+#include <httpserver/detail/io_udp_backend.hpp>
 #include <windows.h>
 #include <mswsock.h>
 #include <array>
@@ -33,6 +34,7 @@ class io_iocp_backend final : public io_socket_backend {
  public:
     io_iocp_backend();
     ~io_iocp_backend() override;
+    void adopt_datagram(std::uint64_t id, pollsys::native_socket_t socket) override;
     void adopt_listener(std::uint64_t id, pollsys::native_socket_t socket) override;
     void adopt_connection(std::uint64_t id, pollsys::native_socket_t socket) override;
     void release_connection(std::uint64_t id) override;
@@ -56,9 +58,11 @@ class io_iocp_backend final : public io_socket_backend {
         pollsys::native_socket_t socket = pollsys::k_invalid_socket;
         ULONG_PTR token = 0;
         bool listener = false;
+        bool datagram = false;
         bool write_closed = false;
         WSAPROTOCOL_INFOW protocol{};
         LPFN_ACCEPTEX accept = nullptr;
+        LPFN_WSARECVMSG receive_datagram = nullptr;
     };
     struct native_request {
         ~native_request() { pollsys::close_socket(candidate); }
@@ -66,14 +70,21 @@ class io_iocp_backend final : public io_socket_backend {
         std::shared_ptr<op_state> op;
         std::shared_ptr<registration> socket;
         std::optional<owned_completion_storage> storage;
+        std::shared_ptr<io_datagram> datagram;
+        sockaddr_storage datagram_peer{};
+        int datagram_peer_length = sizeof(sockaddr_storage);
+        std::byte zero_capacity_probe{};
         WSABUF buffer{};
+        WSAMSG message{};
+        alignas(WSACMSGHDR) std::array<char, 256> control{};
         DWORD flags = 0;
         DWORD bytes = 0;
         std::array<char, 2 * (sizeof(sockaddr_storage) + 16)> addresses{};
         pollsys::native_socket_t candidate = pollsys::k_invalid_socket;
     };
     using completions = std::vector<std::pair<std::shared_ptr<op_state>, io_result>>;
-    bool adopt_locked(std::uint64_t id, pollsys::native_socket_t socket, bool listener);
+    http::outcome_code admit_udp_locked(const std::shared_ptr<op_state>& op);
+    bool adopt_locked(std::uint64_t id, pollsys::native_socket_t socket, bool listener, bool datagram = false);
     void retire_locked(std::uint64_t id, completions& done);
     void notify_locked();
     void finish_locked(const std::shared_ptr<op_state>& op, io_result result, completions& done);

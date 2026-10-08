@@ -83,13 +83,7 @@ static_assert(static_cast<std::uint8_t>(hd::io_op_kind::accept) == 0
                   && static_cast<std::uint8_t>(hd::io_op_kind::timer) == 3
                   && static_cast<std::uint8_t>(hd::io_op_kind::wake) == 4
                   && static_cast<std::uint8_t>(hd::io_op_kind::cancel) == 5,
-              "io_op_kind has exactly the six enumerators accept..cancel");
-
-constexpr hd::io_result kDefaultResult{};
-static_assert(kDefaultResult.code == hh::outcome_code::ok
-                  && kDefaultResult.transferred == 0
-                  && kDefaultResult.accepted_id == 0,
-              "io_result defaults to {ok, 0, 0}");
+              "the original accept..cancel operation values remain stable");
 
 namespace {
 
@@ -129,6 +123,14 @@ LT_BEGIN_SUITE(io_operation_suite)
     void tear_down() {
     }
 LT_END_SUITE(io_operation_suite)
+
+LT_BEGIN_AUTO_TEST(io_operation_suite, result_defaults_and_owned_datagram_slot)
+    const hd::io_result result{};
+    LT_CHECK(result.code == hh::outcome_code::ok);
+    LT_CHECK_EQ(result.transferred, std::size_t{0});
+    LT_CHECK_EQ(result.accepted_id, std::uint64_t{0});
+    LT_CHECK(!result.datagram);
+LT_END_AUTO_TEST(result_defaults_and_owned_datagram_slot)
 
 // Test 1/2: the terminal claim CAS is the single enforcement point. The
 // first claimant wins; every later claim loses and the stored result is

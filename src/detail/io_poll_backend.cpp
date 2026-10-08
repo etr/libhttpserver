@@ -99,18 +99,35 @@ void io_poll_backend::submit(op_state& op) {
     }
     bool registered = false;
     bool rejected = false;
+    http::outcome_code admission = http::outcome_code::ok;
     {
         std::lock_guard<std::mutex> lock(mu_);
         op.set_sequence(next_sequence_++);
         rejected = closed_ || (op.kind() != io_op_kind::cancel
                                && unavailable_locked(op));
-        if (!rejected && op.kind() != io_op_kind::cancel) {
+        const auto socket = connections_.find(op.connection());
+        if (!rejected && socket != connections_.end()) {
+            const bool fd_op = op.kind() == io_op_kind::read || op.kind() == io_op_kind::write
+                || op.kind() == io_op_kind::accept || is_udp(op.kind());
+            if (fd_op && is_udp(op.kind()) != socket->second.datagram) {
+                admission = http::outcome_code::invalid_state;
+            } else if (is_udp(op.kind())) {
+                admission = socket->second.udp.admit(state);
+            }
+        } else if (!rejected && is_udp(op.kind())) {
+            admission = http::outcome_code::invalid_state;
+        }
+        if (!rejected && admission == http::outcome_code::ok && op.kind() != io_op_kind::cancel) {
             register_pending_locked(state);
             registered = true;
         }
     }
     if (rejected) {
         finish_now(state, closed_result());
+        return;
+    }
+    if (admission != http::outcome_code::ok) {
+        finish_now(state, io_result{admission});
         return;
     }
     if (registered) {
@@ -140,7 +157,7 @@ void io_poll_backend::register_pending_locked(const std::shared_ptr<op_state>& s
     const auto cit = connections_.find(op.connection());
     if (cit != connections_.end()
             && (op.kind() == io_op_kind::read || op.kind() == io_op_kind::write
-                || op.kind() == io_op_kind::accept)) {
+                || op.kind() == io_op_kind::accept || is_udp(op.kind()))) {
         bindings_[&op] = cit->second.lifetime;
     }
 }
@@ -216,9 +233,14 @@ io_poll_backend::make_lifetime_locked(pollsys::native_socket_t socket) {
     }
 }
 
+void io_poll_backend::adopt_datagram(std::uint64_t id, pollsys::native_socket_t socket) {
+    prepare_datagram_socket(socket);
+    adopt_socket(id, socket, false, true);
+}
+
 void io_poll_backend::adopt_socket(std::uint64_t id,
                                    pollsys::native_socket_t socket,
-                                   bool listener) {
+                                   bool listener, bool datagram) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         const auto it = connections_.find(id);
@@ -232,6 +254,7 @@ void io_poll_backend::adopt_socket(std::uint64_t id,
         connection_record record;
         record.socket = socket;
         record.listener = listener;
+        record.datagram = datagram;
         record.lifetime = make_lifetime_locked(socket);
         connections_[id] = std::move(record);
         if (id >= next_connection_id_) {
@@ -418,10 +441,10 @@ io_poll_backend::scan_interest_locked(
     for (const auto& entry : pending_) {
         const op_state& op = *entry.second;
         pollsys::event_mask bits = 0;
-        if (op.kind() == io_op_kind::read
+        if (op.kind() == io_op_kind::udp_receive || op.kind() == io_op_kind::read
             || op.kind() == io_op_kind::accept) {
             bits = pollsys::k_readable;
-        } else if (op.kind() == io_op_kind::write) {
+        } else if (op.kind() == io_op_kind::udp_send || op.kind() == io_op_kind::write) {
             bits = pollsys::k_writable;
         } else if (op.kind() == io_op_kind::timer) {
             const auto deadline =
@@ -485,6 +508,19 @@ void io_poll_backend::dispatch_revents(
         if (revents == 0) {
             continue;
         }
+        bool datagram = false;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            const auto found = connections_.find(ids[i]);
+            datagram = found != connections_.end() && found->second.datagram;
+        }
+        if (datagram && !(revents & pollsys::k_poll_invalid)) {
+            // A UDP error belongs to a packet; receive/send consumes it without
+            // treating the shared listener as a disconnected TCP connection.
+            if (revents & (pollsys::k_readable | pollsys::k_poll_error)) dispatch_readable(ids[i]);
+            if (revents & (pollsys::k_writable | pollsys::k_poll_error)) dispatch_writable(ids[i]);
+            continue;
+        }
         if ((revents & (pollsys::k_poll_error
                         | pollsys::k_poll_invalid)) != 0) {
             hangup_connection(ids[i]);  // use-after-close defense
@@ -543,7 +579,7 @@ void io_poll_backend::collect_direction_locked(
         const auto& op = entry.second;
         const io_op_kind kind = op->kind();
         if (op->connection() == id
-            && (kind == wanted || (reads_and_accepts && kind == io_op_kind::accept))) {
+            && (kind == wanted || kind == (reads_and_accepts ? io_op_kind::udp_receive : io_op_kind::udp_send) || (reads_and_accepts && kind == io_op_kind::accept))) {
             batch.push_back(op);
         }
     }
@@ -658,6 +694,12 @@ step_outcome io_poll_backend::write_step(
 
 step_outcome io_poll_backend::socket_step(pollsys::native_socket_t socket,
     const std::shared_ptr<op_state>& state) {
+    if (is_udp(state->kind())) {
+        const auto result = datagram_step(socket, *state);
+        if (!result) return step_outcome::pending_again;
+        finish_now(state, *result);
+        return step_outcome::completed;
+    }
     if (state->kind() == io_op_kind::accept) return accept_step(socket, state);
     if (state->kind() == io_op_kind::read) return read_step(socket, state);
     return write_step(socket, state);

@@ -64,6 +64,7 @@
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/net/address.hpp>
+#include <httpserver/detail/io_datagram.hpp>
 
 namespace httpserver {
 namespace detail {
@@ -83,10 +84,16 @@ enum class io_op_kind : std::uint8_t {
     cancel,
     tls_handshake,
     tls_shutdown,
+    udp_receive,
+    udp_send,
 };
 
 constexpr bool is_tls_control(io_op_kind kind) noexcept {
     return kind == io_op_kind::tls_handshake || kind == io_op_kind::tls_shutdown;
+}
+
+constexpr bool is_udp(io_op_kind kind) noexcept {
+    return kind == io_op_kind::udp_receive || kind == io_op_kind::udp_send;
 }
 
 // One terminal result. The vocabulary is http::outcome_code only.
@@ -98,11 +105,17 @@ struct io_result {
     // captured at accept; unspec when the platform reported no
     // address or the completion is another kind.
     net::peer_address peer;
+    std::shared_ptr<const io_datagram> datagram;
 };
 
-// Per-kind owned payload carried inside op_state. Buffers are
-// caller-owned memory the operation borrows until the terminal result.
+// Per-kind payload carried inside op_state. Stream spans borrow caller memory
+// until the terminal result; UDP payloads own their packet storage.
 // TLS consumes read/write deadlines; raw backends use timer_operation.
+struct udp_payload {
+    std::shared_ptr<io_datagram> packet;
+    bool valid = true;
+    std::size_t storage_bytes = 0;  // immutable admission charge through terminal claim
+};
 struct accept_payload { };
 struct read_payload {
     std::span<std::byte> buffer;
@@ -121,7 +134,7 @@ struct cancel_payload {
 };
 
 // IWYU note: kept on one line; a wrapped namespace-scope continuation trips cpplint.
-using op_payload = std::variant<accept_payload, read_payload, write_payload, timer_payload, wake_payload, cancel_payload>;
+using op_payload = std::variant<accept_payload, read_payload, write_payload, timer_payload, wake_payload, cancel_payload, udp_payload>;
 
 // Shared, lifetime-safe terminal state of one operation. Exactly-once
 // termination is enforced by claim_terminal(): duplicate completions,
@@ -413,6 +426,38 @@ class write_operation final : public op_handle {
 
     std::span<const std::byte> bytes() const noexcept {
         return std::get<write_payload>(state()->payload()).bytes;
+    }
+};
+
+// UDP storage is owned, unlike the stream spans. Invalid sizes allocate no
+// packet bytes and are completed with limit_exceeded at backend admission.
+class udp_receive_operation final : public op_handle {
+ public:
+    udp_receive_operation(io_connection_owner& owner, std::uint64_t socket,
+                          std::size_t capacity = k_max_datagram_bytes)
+        : op_handle(std::make_shared<op_state>(io_op_kind::udp_receive, &owner,
+            socket, make_payload(capacity))) { }
+ private:
+    static op_payload make_payload(std::size_t capacity) {
+        auto packet = std::make_shared<io_datagram>();
+        const bool valid = capacity <= k_max_datagram_bytes;
+        if (valid) packet->bytes.resize(capacity);
+        return udp_payload{std::move(packet), valid, valid ? capacity : 0};
+    }
+};
+class udp_send_operation final : public op_handle {
+ public:
+    udp_send_operation(io_connection_owner& owner, std::uint64_t socket,
+                       std::span<const std::byte> bytes, datagram_endpoint peer)
+        : op_handle(std::make_shared<op_state>(io_op_kind::udp_send, &owner,
+            socket, make_payload(bytes, peer))) { }
+ private:
+    static op_payload make_payload(std::span<const std::byte> bytes, datagram_endpoint peer) {
+        auto packet = std::make_shared<io_datagram>();
+        const bool valid = bytes.size() <= k_max_datagram_bytes;
+        if (valid) packet->bytes.assign(bytes.begin(), bytes.end());
+        packet->peer = peer;
+        return udp_payload{std::move(packet), valid, valid ? bytes.size() : 0};
     }
 };
 

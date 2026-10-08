@@ -19,6 +19,7 @@
 #include <httpserver/detail/io_iocp_backend.hpp>
 #include <httpserver/detail/io_managed_backend.hpp>
 #include "./io_backend_contract.hpp"
+#include "./io_udp_backend_contract.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -43,6 +44,10 @@ struct io_iocp_test_access {
     static pollsys::native_socket_t candidate(io_iocp_backend& backend, OVERLAPPED* address) {
         std::lock_guard<std::mutex> lock(backend.mu_);
         return backend.outstanding_.at(address)->candidate;
+    }
+    static std::weak_ptr<io_datagram> datagram(io_iocp_backend& backend, op_state* op) {
+        std::lock_guard<std::mutex> lock(backend.mu_);
+        return backend.outstanding_.at(backend.posted_.at(op))->datagram;
     }
     static HANDLE port(io_iocp_backend& backend) { return backend.port_; }
     static void dispatch(io_iocp_backend& backend, OVERLAPPED* address, ULONG_PTR token, DWORD bytes, DWORD error) {
@@ -746,6 +751,74 @@ LT_BEGIN_AUTO_TEST(iocp_suite, receive_eof_retires_registration_and_sweeps_conne
     LT_CHECK(late.state()->stored_result().code == hh::outcome_code::connection_closed);
 LT_END_AUTO_TEST(receive_eof_retires_registration_and_sweeps_connection_controls)
 
+LT_BEGIN_AUTO_TEST(iocp_suite, udp_cancelled_packet_keeps_native_storage_and_reuse_generation)
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    hd::io_iocp_backend backend;
+    auto local = io_udp_contract::udp_socket(), peer = io_udp_contract::udp_socket();
+    const auto endpoint = io_udp_contract::endpoint(local);
+    backend.adopt_datagram(1, local);
+    packet_gate gate(backend);
+    std::shared_ptr<hd::op_state> state;
+    {
+        hd::udp_receive_operation receive(owner, 1, 3);
+        state = receive.state();
+        receive.submit(backend);
+    }
+    LT_ASSERT(until([&] { return native_access::posted(backend, state.get()); }));
+    const auto native_packet = native_access::datagram(backend, state.get());
+    sockaddr_storage destination{};
+    int length = 0;
+    LT_ASSERT(hd::encode_datagram_endpoint(endpoint, destination, length));
+    LT_CHECK_EQ(::sendto(peer, "udp", 3, 0, reinterpret_cast<sockaddr*>(&destination), length), 3);
+    LT_ASSERT(gate.captured());
+    LT_CHECK(backend.request_cancel(*state) == hh::outcome_code::ok);
+    ex.run_pending();
+    const auto cancelled = state->stored_result();
+    LT_CHECK(cancelled.code == hh::outcome_code::cancelled);
+    state.reset();
+    LT_CHECK(!native_packet.expired());
+    backend.release_connection(1);
+    backend.adopt_datagram(1, io_udp_contract::udp_socket());
+    hd::udp_receive_operation fresh(owner, 1, 3);
+    fresh.submit(backend);
+    native_access::dispatch(backend, gate.address, gate.token + 1, gate.bytes, gate.error);
+    LT_CHECK(!native_packet.expired());
+    LT_CHECK(!fresh.is_terminal());
+    gate.release();
+    LT_CHECK(until([&] { return native_packet.expired(); }));
+    native_access::dispatch(backend, gate.address, gate.token, gate.bytes, gate.error);
+    LT_CHECK(!fresh.is_terminal());
+    LT_CHECK(cancelled.code == hh::outcome_code::cancelled);
+    backend.close();
+    ex.run_pending();
+    LT_CHECK(fresh.state()->stored_result().code == hh::outcome_code::connection_closed);
+    LT_CHECK_EQ(native_access::outstanding(backend), std::size_t{0});
+    pollsys::close_socket(peer);
+LT_END_AUTO_TEST(udp_cancelled_packet_keeps_native_storage_and_reuse_generation)
+LT_BEGIN_AUTO_TEST(iocp_suite, udp_wildcard_receive_captures_destination_and_interface)
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    hd::io_iocp_backend backend;
+    auto local = io_udp_contract::udp_socket(AF_INET, true), peer = io_udp_contract::udp_socket();
+    auto endpoint = io_udp_contract::endpoint(local);
+    endpoint.peer.address = *httpserver::net::parse_address("127.0.0.1");
+    backend.adopt_datagram(1, local);
+    hd::udp_receive_operation receive(owner, 1, 3);
+    receive.submit(backend);
+    sockaddr_storage destination{};
+    int length = 0;
+    LT_ASSERT(hd::encode_datagram_endpoint(endpoint, destination, length));
+    LT_CHECK_EQ(::sendto(peer, "udp", 3, 0, reinterpret_cast<sockaddr*>(&destination), length), 3);
+    LT_ASSERT(until([&] { ex.run_pending(); return receive.state()->applied(); }));
+    auto result = receive.state()->stored_result();
+    LT_CHECK(result.code == hh::outcome_code::ok);
+    LT_ASSERT(result.datagram && result.datagram->local);
+    LT_CHECK(result.datagram->local->peer == endpoint.peer);
+    LT_CHECK(result.datagram->interface_index.has_value());
+    backend.close();
+    pollsys::close_socket(peer);
+LT_END_AUTO_TEST(udp_wildcard_receive_captures_destination_and_interface)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

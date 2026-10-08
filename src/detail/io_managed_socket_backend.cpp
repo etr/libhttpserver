@@ -77,8 +77,22 @@ void io_managed_socket_backend::submit(op_state& op) {
                 : http::outcome_code::invalid_state, 0, 0, {}}, done);
         } else if (op.connection() != 0 && !connections_.contains(op.connection())) {
             finish_locked(state, closed_result(), done);
+        } else if (is_udp(op.kind()) && op.connection() == 0) {
+            finish_locked(state, {http::outcome_code::invalid_state}, done);
         } else {
-            pending_.emplace(&op, state);
+            http::outcome_code admission = http::outcome_code::ok;
+            const auto socket = connections_.find(op.connection());
+            const bool fd_op = op.kind() == io_op_kind::read || op.kind() == io_op_kind::write
+                || op.kind() == io_op_kind::accept || is_udp(op.kind());
+            if (socket != connections_.end() && fd_op) {
+                if (is_udp(op.kind()) != socket->second->datagram) {
+                    admission = http::outcome_code::invalid_state;
+                } else if (is_udp(op.kind())) {
+                    admission = socket->second->udp.admit(state);
+                }
+            }
+            if (admission == http::outcome_code::ok) pending_.emplace(&op, state);
+            else finish_locked(state, {admission}, done);
         }
         notify_locked();
     }
@@ -105,7 +119,7 @@ http::outcome_code io_managed_socket_backend::request_cancel(op_state& target) {
 }
 
 void io_managed_socket_backend::adopt_locked(std::uint64_t id, pollsys::native_socket_t socket,
-                                   bool listener) {
+                                   bool listener, bool datagram) {
     if (connections_.contains(id)) throw std::logic_error("httpserver: duplicate connection id");
     if (closed_) {
         pollsys::close_socket(socket);
@@ -117,7 +131,8 @@ void io_managed_socket_backend::adopt_locked(std::uint64_t id, pollsys::native_s
         throw std::overflow_error("httpserver: managed socket identity exhausted");
     }
     pollsys::set_nonblocking(socket, true);
-    pollsys::prepare_stream_socket(socket);
+    if (datagram) prepare_datagram_socket(socket);
+    else pollsys::prepare_stream_socket(socket);
     std::shared_ptr<registration> record;
     try {
         record = std::make_shared<registration>(socket, next_token_++, listener);
@@ -125,6 +140,7 @@ void io_managed_socket_backend::adopt_locked(std::uint64_t id, pollsys::native_s
         pollsys::close_socket(socket);
         throw;
     }
+    record->datagram = datagram;
     tokens_.emplace(record->token, id);
     try {
         connections_.emplace(id, record);
@@ -139,6 +155,12 @@ void io_managed_socket_backend::adopt_locked(std::uint64_t id, pollsys::native_s
 void io_managed_socket_backend::adopt_connection(std::uint64_t id, pollsys::native_socket_t socket) {
     std::lock_guard<std::mutex> lock(mu_);
     adopt_locked(id, socket, false);
+    notify_locked();
+}
+
+void io_managed_socket_backend::adopt_datagram(std::uint64_t id, pollsys::native_socket_t socket) {
+    std::lock_guard<std::mutex> lock(mu_);
+    adopt_locked(id, socket, false, true);
     notify_locked();
 }
 
@@ -237,8 +259,10 @@ std::optional<std::chrono::steady_clock::time_point> io_managed_socket_backend::
     for (const auto& entry : pending_) {
         const auto& op = *entry.second;
         switch (op.kind()) {
+            case io_op_kind::udp_receive:
             case io_op_kind::read:
             case io_op_kind::accept: masks[op.connection()] |= k_read; break;
+            case io_op_kind::udp_send:
             case io_op_kind::write: masks[op.connection()] |= k_write; break;
             case io_op_kind::timer: {
                 const auto time = std::get<timer_payload>(op.payload()).deadline;
@@ -292,6 +316,12 @@ std::pair<std::size_t, bool> io_managed_socket_backend::transfer_stream(
 
 bool io_managed_socket_backend::step_locked(const std::shared_ptr<op_state>& op,
     const std::shared_ptr<registration>& lease, completions& done) {
+    if (is_udp(op->kind())) {
+        const auto result = datagram_step(lease->socket, *op);
+        if (!result) return false;
+        finish_locked(op, *result, done);
+        return true;
+    }
     if (op->kind() == io_op_kind::accept) return accept_locked(op, lease, done);
     const bool read = op->kind() == io_op_kind::read;
     if (!read && lease->write_closed) {
@@ -321,8 +351,8 @@ void io_managed_socket_backend::complete_stream_locked(const std::shared_ptr<op_
 }
 
 bool io_managed_socket_backend::wants_event(const op_state& op, std::uint32_t events) {
-    const bool read = op.kind() == io_op_kind::read || op.kind() == io_op_kind::accept;
-    return read ? (events & k_read) : op.kind() == io_op_kind::write && (events & k_write);
+    const bool read = op.kind() == io_op_kind::udp_receive || op.kind() == io_op_kind::read || op.kind() == io_op_kind::accept;
+    return read ? (events & k_read) : (op.kind() == io_op_kind::udp_send || op.kind() == io_op_kind::write) && (events & k_write);
 }
 
 std::vector<std::shared_ptr<op_state>> io_managed_socket_backend::collect_event_locked(
@@ -356,7 +386,7 @@ void io_managed_socket_backend::dispatch_batch(std::uint64_t token,
             // Cancel/release can win between operations, including selected ones.
             if (closed_ || !tokens_.contains(token)) break;
             if (!pending_.contains(op.get())) continue;
-            bool& blocked = op->kind() == io_op_kind::write ? write_blocked : read_blocked;
+            bool& blocked = (op->kind() == io_op_kind::write || op->kind() == io_op_kind::udp_send) ? write_blocked : read_blocked;
             if (!blocked) blocked = !step_locked(op, lease, done);
         }
         deliver(done);

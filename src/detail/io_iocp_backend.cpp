@@ -109,6 +109,31 @@ http::outcome_code io_iocp_backend::cancel_locked(op_state& target, completions&
     return http::outcome_code::ok;
 }
 
+http::outcome_code io_iocp_backend::admit_udp_locked(const std::shared_ptr<op_state>& op) {
+    const auto& payload = std::get<udp_payload>(op->payload());
+    if (!payload.valid) return http::outcome_code::limit_exceeded;
+    std::size_t count = 0, bytes = 0;
+    const auto socket = connections_.at(op->connection());
+    // Cancelled native requests consume capacity until their packet retires
+    // OVERLAPPED and owned receive/address storage.
+    for (const auto& entry : outstanding_) {
+        const auto& request = *entry.second;
+        if (request.socket == socket && request.datagram) {
+            ++count;
+            bytes += request.datagram->bytes.size();
+        }
+    }
+    for (const auto& entry : pending_) {
+        const auto& pending = *entry.second;
+        if (pending.connection() == op->connection() && is_udp(pending.kind()) && !posted_.contains(entry.first)) {
+            ++count;
+            bytes += std::get<udp_payload>(pending.payload()).storage_bytes;
+        }
+    }
+    return count >= k_udp_pending_operations || payload.storage_bytes > k_udp_pending_bytes - bytes
+        ? http::outcome_code::limit_exceeded : http::outcome_code::ok;
+}
+
 void io_iocp_backend::submit(op_state& op) {
     const auto state = op.shared_from_this();
     completions done;
@@ -126,7 +151,18 @@ void io_iocp_backend::submit(op_state& op) {
         } else if (op.connection() != 0 && !connections_.contains(op.connection())) {
             finish_locked(state, closed_result(), done);
         } else {
-            pending_.emplace(&op, state);
+            http::outcome_code admission = http::outcome_code::ok;
+            const auto socket = connections_.find(op.connection());
+            const bool fd_op = op.kind() == io_op_kind::read || op.kind() == io_op_kind::write
+                || op.kind() == io_op_kind::accept || is_udp(op.kind());
+            if ((is_udp(op.kind()) && socket == connections_.end())
+                || (socket != connections_.end() && fd_op && is_udp(op.kind()) != socket->second->datagram)) {
+                admission = http::outcome_code::invalid_state;
+            } else if (is_udp(op.kind())) {
+                admission = admit_udp_locked(state);
+            }
+            if (admission == http::outcome_code::ok) pending_.emplace(&op, state);
+            else finish_locked(state, {admission}, done);
         }
         notify_locked();
     }
@@ -144,7 +180,7 @@ http::outcome_code io_iocp_backend::request_cancel(op_state& target) {
     return result;
 }
 
-bool io_iocp_backend::adopt_locked(std::uint64_t id, pollsys::native_socket_t socket, bool listener) {
+bool io_iocp_backend::adopt_locked(std::uint64_t id, pollsys::native_socket_t socket, bool listener, bool datagram) {
     if (connections_.contains(id)) throw std::logic_error("httpserver: duplicate connection id");
     if (closed_ || failed_) {
         pollsys::close_socket(socket);
@@ -164,8 +200,11 @@ bool io_iocp_backend::adopt_locked(std::uint64_t id, pollsys::native_socket_t so
     record->socket = socket;
     record->token = next_token_++;
     record->listener = listener;
+    record->datagram = datagram;
     bool configured = pollsys::set_nonblocking(socket, true);
-    pollsys::prepare_stream_socket(socket);
+    if (datagram) prepare_datagram_socket(socket);
+    else pollsys::prepare_stream_socket(socket);
+    if (datagram) record->receive_datagram = datagram_receive_api(socket);
     if (listener) {
         int size = sizeof(record->protocol);
         DWORD bytes = 0;
@@ -191,6 +230,12 @@ void io_iocp_backend::adopt_connection(std::uint64_t id, pollsys::native_socket_
     notify_locked();
 }
 
+void io_iocp_backend::adopt_datagram(std::uint64_t id, pollsys::native_socket_t socket) {
+    std::lock_guard<std::mutex> lock(mu_);
+    adopt_locked(id, socket, false, true);
+    notify_locked();
+}
+
 void io_iocp_backend::adopt_listener(std::uint64_t id, pollsys::native_socket_t socket) {
     std::lock_guard<std::mutex> lock(mu_);
     adopt_locked(id, socket, true);
@@ -209,7 +254,13 @@ void io_iocp_backend::retire_locked(std::uint64_t id, completions& done) {
         const auto record = found->second;
         connections_.erase(found);  // invalidate before socket reuse
         ::CancelIoEx(reinterpret_cast<HANDLE>(record->socket), nullptr);
-        pollsys::close_socket(record->socket);
+        if (record->datagram) {
+            // The completion lease survives closure; do not let its destructor
+            // close a descriptor reused by a newly adopted UDP socket.
+            pollsys::close_socket(std::exchange(record->socket, pollsys::k_invalid_socket));
+        } else {
+            pollsys::close_socket(record->socket);
+        }
     }
     std::vector<std::shared_ptr<op_state>> swept;
     for (const auto& entry : pending_) {
@@ -306,6 +357,19 @@ void io_iocp_backend::post_locked(const std::shared_ptr<op_state>& op, completio
             finish_locked(op, closed_result(), done);
             return;
         }
+    } else if (is_udp(op->kind())) {
+        // The UDP payload already owns its bytes. Pin that storage through
+        // physical completion, even if the terminal claim was cancelled.
+        request->datagram = std::get<udp_payload>(op->payload()).packet;
+        request->buffer.buf = reinterpret_cast<char*>(request->datagram->bytes.empty()
+            ? &request->zero_capacity_probe : request->datagram->bytes.data());
+        request->buffer.len = static_cast<ULONG>(op->kind() == io_op_kind::udp_receive && request->datagram->bytes.empty()
+            ? 1 : request->datagram->bytes.size());
+        if (op->kind() == io_op_kind::udp_send && !encode_datagram_endpoint(request->datagram->peer,
+                request->datagram_peer, request->datagram_peer_length)) {
+            finish_locked(op, {http::outcome_code::invalid_state}, done);
+            return;
+        }
     } else {
         request->storage.emplace(*op);
         if (request->storage->size() == 0) {
@@ -331,6 +395,20 @@ void io_iocp_backend::post_locked(const std::shared_ptr<op_state>& op, completio
         const DWORD region = sizeof(sockaddr_storage) + 16;
         status = socket->accept(socket->socket, native->candidate, native->addresses.data(), 0,
             region, region, &native->bytes, address) ? 0 : SOCKET_ERROR;
+    } else if (op->kind() == io_op_kind::udp_receive && socket->receive_datagram) {
+        native->message.name = reinterpret_cast<sockaddr*>(&native->datagram_peer);
+        native->message.namelen = sizeof(native->datagram_peer);
+        native->message.lpBuffers = &native->buffer;
+        native->message.dwBufferCount = 1;
+        native->message.Control.buf = native->control.data();
+        native->message.Control.len = static_cast<ULONG>(native->control.size());
+        status = socket->receive_datagram(socket->socket, &native->message, &native->bytes, address, nullptr);
+    } else if (op->kind() == io_op_kind::udp_receive) {
+        status = ::WSARecvFrom(socket->socket, &native->buffer, 1, &native->bytes, &native->flags,
+            reinterpret_cast<sockaddr*>(&native->datagram_peer), &native->datagram_peer_length, address, nullptr);
+    } else if (op->kind() == io_op_kind::udp_send) {
+        status = ::WSASendTo(socket->socket, &native->buffer, 1, &native->bytes, 0,
+            reinterpret_cast<sockaddr*>(&native->datagram_peer), native->datagram_peer_length, address, nullptr);
     } else if (op->kind() == io_op_kind::read) {
         status = ::WSARecv(socket->socket, &native->buffer, 1, &native->bytes, &native->flags, address, nullptr);
     } else {
@@ -344,6 +422,10 @@ void io_iocp_backend::post_locked(const std::shared_ptr<op_state>& op, completio
             // The failed candidate is gone. Wake the next driver iteration to
             // repost this logical accept without terminating the listener.
             notify_locked();
+            return;
+        }
+        if (is_udp(op->kind())) {
+            finish_locked(op, {error == WSAEMSGSIZE ? http::outcome_code::limit_exceeded : http::outcome_code::protocol_error}, done);
             return;
         }
         finish_locked(op, closed_result(), done);
@@ -363,6 +445,25 @@ void io_iocp_backend::packet_locked(OVERLAPPED* address, ULONG_PTR token, DWORD 
     posted_.erase(op.get());
     const auto registered = connections_.find(op->connection());
     if (op->is_terminal() || registered == connections_.end() || registered->second != request->socket) return;
+    if (is_udp(op->kind())) {
+        const bool truncated = bytes > request->datagram->bytes.size()
+            || ((request->flags | request->message.dwFlags) & (MSG_TRUNC | MSG_PARTIAL)) != 0;
+        if (error != ERROR_SUCCESS || truncated) {
+            finish_locked(op, {error == WSAEMSGSIZE || truncated
+                ? http::outcome_code::limit_exceeded : http::outcome_code::protocol_error}, done);
+        } else if (op->kind() == io_op_kind::udp_receive) {
+            capture_datagram_metadata(request->socket->socket, *request->datagram, request->datagram_peer, op->connection());
+            if (request->socket->receive_datagram) {
+                capture_datagram_control(*request->datagram, request->message, pollsys::bound_listener_port(request->socket->socket));
+            }
+            request->datagram->bytes.resize(bytes);
+            finish_locked(op, {http::outcome_code::ok, bytes, 0, {}, request->datagram}, done);
+        } else {
+            finish_locked(op, {bytes == request->datagram->bytes.size()
+                ? http::outcome_code::ok : http::outcome_code::protocol_error, bytes}, done);
+        }
+        return;
+    }
     if (error != ERROR_SUCCESS) {
         if (op->kind() == io_op_kind::accept && transient_accept_error(error)) {
             // The packet has been consumed, so request destruction can close
