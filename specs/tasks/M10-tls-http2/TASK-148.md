@@ -36,7 +36,7 @@ their implementation into M10 or treating known legacy linkage as a plan blocker
 **Related Requirements:** PRD-V3N-REQ-001, PRD-V3N-REQ-002, PRD-V3N-REQ-003, PRD-V3N-REQ-037
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** In Progress
+**Status:** Complete
 
 
 **Implementation evidence:** [Installed consumer receipts](../../../docs/task-148-installed-consumer-evidence.md).
