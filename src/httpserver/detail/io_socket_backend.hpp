@@ -24,6 +24,7 @@ class io_socket_backend : public io_backend, public server::readiness_driver {
     virtual http::outcome ready() const = 0;
     virtual void activate_external() = 0;
     virtual void adopt_connection(std::uint64_t id, pollsys::native_socket_t socket) = 0;
+    virtual void adopt_datagram(std::uint64_t id, pollsys::native_socket_t socket) = 0;
     virtual void adopt_listener(std::uint64_t id, pollsys::native_socket_t socket) = 0;
     virtual pollsys::native_socket_t native_handle(std::uint64_t id) const = 0;
     virtual void release_connection(std::uint64_t id) = 0;

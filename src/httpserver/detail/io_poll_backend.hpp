@@ -70,6 +70,7 @@
 #include <vector>
 
 #include <httpserver/detail/io_socket_backend.hpp>
+#include <httpserver/detail/io_udp_backend.hpp>
 #include <httpserver/detail/io_poll_sys.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/options.hpp>
@@ -150,6 +151,9 @@ class io_poll_backend final : public io_socket_backend {
     void adopt_connection(std::uint64_t id,
                           pollsys::native_socket_t socket) override;
 
+    // Owned UDP socket; stream operations are rejected on this registration.
+    void adopt_datagram(std::uint64_t id, pollsys::native_socket_t socket) override;
+
     // Same, flagged as a listener (accept ops poll for readability).
     void adopt_listener(std::uint64_t id, pollsys::native_socket_t socket) override;
 
@@ -195,13 +199,15 @@ class io_poll_backend final : public io_socket_backend {
 
     struct connection_record {
         pollsys::native_socket_t socket = pollsys::k_invalid_socket;
+        bool datagram = false;
+        udp_admission udp;
         bool listener = false;
         bool dead = false;  // hangup/released: submits reject
         std::shared_ptr<registration_lifetime> lifetime;
     };
 
     void adopt_socket(std::uint64_t id, pollsys::native_socket_t socket,
-                      bool listener);
+                      bool listener, bool datagram = false);
     void run_loop();
     // Rebuilds the pollfd projection from the registries (wake slot
     // plus one entry per live connection with pending fd work); dead

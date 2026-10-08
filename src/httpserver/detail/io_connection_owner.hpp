@@ -54,6 +54,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <utility>
 
 #include <httpserver/concurrency/executor.hpp>
 #include <httpserver/detail/io_operation.hpp>
@@ -61,11 +62,39 @@
 namespace httpserver {
 namespace detail {
 
-class io_connection_owner final {
+class datagram_sink {
  public:
+    virtual ~datagram_sink() = default;
+    virtual void on_datagram(std::shared_ptr<const io_datagram> packet) noexcept = 0;
+};
+// A route generation owns its sink until all queued/active deliveries retire.
+struct datagram_delivery {
+    explicit datagram_delivery(std::shared_ptr<datagram_sink> target) : sink(std::move(target)) { }
+    std::shared_ptr<datagram_sink> sink;
+    std::atomic<bool> retired{false};
+};
+enum class datagram_enqueue_code { queued, retired, full };
+
+class io_connection_owner final {
+    struct shared_state;
+ public:
+    // A lifetime-safe enqueue port; retained routes never dereference an owner.
+    class datagram_port {
+     public:
+        datagram_enqueue_code enqueue(std::shared_ptr<datagram_delivery> delivery,
+                                      std::shared_ptr<const io_datagram> packet) const;
+     private:
+        friend class io_connection_owner;
+        datagram_port(std::weak_ptr<shared_state> state, executor* ex) : state_(std::move(state)), ex_(ex) { }
+        std::weak_ptr<shared_state> state_;
+        executor* ex_;
+    };
+    datagram_port datagrams() const { return datagram_port(state_, &ex_); }
+
     // @p ex is the serialization executor: drain jobs run on it, and
     // operations awaited on it resume inline during the drain.
-    explicit io_connection_owner(executor& ex) noexcept;
+    explicit io_connection_owner(executor& ex, std::size_t packet_count = k_udp_pending_operations,
+                                 std::size_t packet_bytes = k_udp_pending_bytes) noexcept;
 
     io_connection_owner(const io_connection_owner&) = delete;
     io_connection_owner& operator=(const io_connection_owner&) = delete;
@@ -90,6 +119,8 @@ class io_connection_owner final {
     struct record {
         std::shared_ptr<op_state> state;
         io_result result;
+        std::shared_ptr<datagram_delivery> delivery;
+        std::shared_ptr<const io_datagram> packet;
     };
 
     // Queue, coalescing flag, and drain marker live in a block shared
@@ -101,12 +132,20 @@ class io_connection_owner final {
     // released the connection (every op claimed), so a post-mortem
     // drain is always a no-op sweep.
     struct shared_state {
+        // Serializes enqueue posting with teardown; recursive for inline executors.
+        std::recursive_mutex posting_mu;
         mutable std::mutex mu;
         std::deque<record> queue;
+        bool alive = true;
+        std::size_t packet_count = 0;
+        std::size_t packet_bytes = 0;
+        std::size_t max_packet_count = k_udp_pending_operations;
+        std::size_t max_packet_bytes = k_udp_pending_bytes;
         bool drain_posted = false;  // guarded by mu; coalesces jobs
         std::atomic<bool> draining{false};
     };
 
+    static void apply_record(record entry, const std::shared_ptr<shared_state>& pending);
     static void drain(std::shared_ptr<shared_state> pending);
 
     executor& ex_;

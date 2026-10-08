@@ -184,6 +184,7 @@ io_poll_backend::find_registration_locked(const server::readiness_event& event) 
 void io_poll_backend::dispatch_event(const server::readiness_event& event) {
     std::shared_ptr<registration_lifetime> lease;
     std::uint64_t id = 0;
+    bool datagram = false;
     std::vector<std::shared_ptr<op_state>> reads;
     std::vector<std::shared_ptr<op_state>> writes;
     {
@@ -191,17 +192,18 @@ void io_poll_backend::dispatch_event(const server::readiness_event& event) {
         if (closed_) return;
         std::tie(id, lease) = find_registration_locked(event);
         if (!lease) return;
+        datagram = connections_.at(id).datagram;
         // Prepare both directions before detaching either one. A failure in
         // writable collection must also leave the readable batch recoverable.
-        if (event.readable) collect_direction_locked(id, true, reads);
-        if (event.writable) collect_direction_locked(id, false, writes);
+        if (event.readable || (datagram && event.error)) collect_direction_locked(id, true, reads);
+        if (event.writable || (datagram && event.error)) collect_direction_locked(id, false, writes);
         detach_batch_locked(reads);
         detach_batch_locked(writes);
     }
     // Drain readable data before honoring a simultaneous close indication.
     dispatch_batch(id, reads, lease);
     dispatch_batch(id, writes, lease);
-    if (event.error || (event.closed && !event.readable && !event.writable)) {
+    if (!datagram && (event.error || (event.closed && !event.readable && !event.writable))) {
         hangup_connection(id, lease);
     }
 }

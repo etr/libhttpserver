@@ -22,14 +22,17 @@
 #include "httpserver/detail/io_connection_owner.hpp"
 
 #include <deque>
+#include <memory>
 #include <exception>
 #include <utility>
 
 namespace httpserver {
 namespace detail {
 
-io_connection_owner::io_connection_owner(executor& ex) noexcept
+io_connection_owner::io_connection_owner(executor& ex, std::size_t packet_count, std::size_t packet_bytes) noexcept
     : ex_(ex), state_(std::make_shared<shared_state>()) {
+    state_->max_packet_count = packet_count;
+    state_->max_packet_bytes = packet_bytes;
 }
 
 io_connection_owner::~io_connection_owner() {
@@ -38,14 +41,67 @@ io_connection_owner::~io_connection_owner() {
     // are witness-guarded, so frames destroyed by the same teardown are
     // safe. Documented teardown order keeps the backend quiet by now;
     // a drain job still queued finds the swept state empty and no-ops.
+    std::lock_guard<std::recursive_mutex> posting_lock(state_->posting_mu);
     std::deque<record> remaining;
     {
         std::lock_guard<std::mutex> lock(state_->mu);
+        state_->alive = false;
         remaining.swap(state_->queue);
     }
     for (record& entry : remaining) {
-        entry.state->apply(entry.result);
+        apply_record(std::move(entry), state_);
     }
+}
+
+datagram_enqueue_code io_connection_owner::datagram_port::enqueue(
+    std::shared_ptr<datagram_delivery> delivery, std::shared_ptr<const io_datagram> packet) const {
+    const auto pending = state_.lock();
+    if (!pending || !delivery || !packet) return datagram_enqueue_code::retired;
+    std::lock_guard<std::recursive_mutex> posting_lock(pending->posting_mu);
+    bool need_post = false;
+    {
+        std::lock_guard<std::mutex> lock(pending->mu);
+        if (!pending->alive || delivery->retired.load(std::memory_order_acquire)) return datagram_enqueue_code::retired;
+        if (pending->packet_count >= pending->max_packet_count
+            || packet->bytes.size() > pending->max_packet_bytes - pending->packet_bytes) return datagram_enqueue_code::full;
+        pending->queue.push_back(record{{}, {}, std::move(delivery), std::move(packet)});
+        ++pending->packet_count;
+        pending->packet_bytes += pending->queue.back().packet->bytes.size();
+        if (!pending->drain_posted) {
+            pending->drain_posted = true;
+            need_post = true;
+        }
+    }
+    if (need_post) {
+        try {
+            // Queue lock is released even for synchronous executors; posting
+            // lifetime stays pinned until post returns, including owner teardown.
+            ex_->post([pending] { drain(pending); });
+        } catch (...) {
+            std::lock_guard<std::mutex> lock(pending->mu);
+            pending->drain_posted = false;
+        }
+    }
+    return datagram_enqueue_code::queued;
+}
+
+void io_connection_owner::apply_record(record entry, const std::shared_ptr<shared_state>& pending) {
+    if (entry.state) {
+        entry.state->apply(entry.result);
+        return;
+    }
+    bool alive;
+    {
+        std::lock_guard<std::mutex> lock(pending->mu);
+        alive = pending->alive;
+    }
+    if (alive && !entry.delivery->retired.load(std::memory_order_acquire)) {
+        entry.delivery->sink->on_datagram(entry.packet);
+    }
+    // Reservations cover detached drain batches and reentrant callbacks, too.
+    std::lock_guard<std::mutex> lock(pending->mu);
+    --pending->packet_count;
+    pending->packet_bytes -= entry.packet->bytes.size();
 }
 
 void io_connection_owner::enqueue(std::shared_ptr<op_state> state,
@@ -92,7 +148,7 @@ void io_connection_owner::drain(std::shared_ptr<shared_state> pending) {
         while (!batch.empty()) {
             record entry = std::move(batch.front());
             batch.pop_front();
-            entry.state->apply(entry.result);
+            apply_record(std::move(entry), pending);
         }
         std::lock_guard<std::mutex> lock(pending->mu);
         if (pending->queue.empty()) {
