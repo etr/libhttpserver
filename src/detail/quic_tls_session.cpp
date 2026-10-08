@@ -21,6 +21,8 @@ quic_tls_session::quic_tls_session(tls_credentials_selection selection, const qu
     : impl_(std::make_unique<impl>(config, std::move(budget), keys)) {
     impl_->tls.reset(new tls_session(std::move(selection), true, {tls_transport::quic, 0}, &impl_->callbacks));
 }
+quic_tls_session::quic_tls_session(tls_credentials_selection selection, const quic_tls_config& config, quic_storage_lease storage, quic_key_state& keys)
+    : quic_tls_session(std::move(selection), config, storage.budget, keys) { storage_owner_ = std::move(storage); }
 quic_tls_session::~quic_tls_session() = default;
 quic_tls_result quic_tls_session::receive(quic_crypto_level level, std::uint64_t offset, std::span<const std::byte> bytes) {
     return impl_->callbacks.receive(level, offset, bytes);

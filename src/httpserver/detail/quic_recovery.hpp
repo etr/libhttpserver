@@ -8,7 +8,9 @@
 #include <memory>
 #include <httpserver/detail/quic_frame.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/detail/quic_storage.hpp>
 namespace httpserver::detail {
+class quic_flow_control;
 enum class quic_pn_space { initial, handshake, application };
 enum class quic_recovery_code { ok, invalid, capacity, no_memory, no_space, no_data, discarded, busy };
 enum class quic_receipt { fresh, duplicate, retired, invalid };
@@ -18,6 +20,7 @@ struct quic_recovery_result {
 };
 struct quic_recovery_config {
     std::size_t max_receive_ranges = 64, max_sent_packets = 256, max_information = 64, max_retained_bytes = 65536;
+    std::size_t critical_information = 0, critical_retained_bytes = 0, critical_sent_packets = 0;
     std::chrono::microseconds local_max_ack_delay{25000}, peer_max_ack_delay{25000};
     unsigned local_ack_delay_exponent = 3, peer_ack_delay_exponent = 3;
     quic_endpoint_role role = quic_endpoint_role::server;
@@ -30,11 +33,14 @@ struct quic_send_plan : quic_recovery_result {
     std::uint64_t token = 0, packet_number = 0;
     std::size_t bytes = 0;
     bool ack_eliciting = false;
+    std::optional<quic_stream_frame> stream{};
+    std::optional<quic_reset_stream_frame> reset{};
+    std::optional<quic_flow_frame> flow{};
 };
 struct quic_recovery_events : quic_recovery_result {
     std::size_t acknowledged_bytes = 0, lost_bytes = 0, discarded_bytes = 0, acknowledged_packets = 0;
-    std::optional<std::uint64_t> application_generation;
-    std::optional<quic_pn_space> probe_space;
+    std::optional<std::uint64_t> application_generation{};
+    std::optional<quic_pn_space> probe_space{};
     unsigned probes = 0;
     std::array<bool, 3> acknowledge_spaces{};
 };
@@ -49,7 +55,7 @@ struct quic_recovery_environment {
     bool handshake_confirmed = false, peer_validated_endpoint = true, send_permitted = true;
 };
 using quic_information_id = std::uint64_t;
-enum class quic_information_kind { crypto, stream, reset_stream };
+enum class quic_information_kind { crypto, stream, reset_stream, flow };
 struct quic_information_result : quic_recovery_result {
     quic_information_id id = 0;
 };
@@ -59,6 +65,7 @@ struct quic_information_completion {
     quic_pn_space space;
     std::uint64_t stream = 0, through_offset = 0;
     bool fin = false;
+    std::optional<quic_flow_frame> flow{};
 };
 struct quic_recovery_timer {
     enum class kind { acknowledge, detect_loss, probe };
@@ -71,6 +78,8 @@ class quic_recovery final {
  public:
     using time_point = std::chrono::steady_clock::time_point;
     quic_recovery(quic_recovery_config config, server::resource_budget budget);
+    quic_recovery(quic_recovery_config config, quic_storage_lease data, quic_storage_lease critical);
+    static std::size_t storage_capacity(quic_recovery_config config);
     ~quic_recovery();
     quic_recovery(const quic_recovery&) = delete;
     quic_recovery& operator=(const quic_recovery&) = delete;
@@ -95,6 +104,7 @@ class quic_recovery final {
     unsigned pto_count() const;
     quic_information_result retain_crypto(quic_pn_space space, std::uint64_t offset, std::span<const std::byte> data);
     quic_information_result retain_stream(const quic_stream_frame& frame);
+    quic_information_result retain_flow(const quic_flow_frame& frame);
     quic_information_result retain_reset(const quic_reset_stream_frame& frame);
     quic_recovery_result cancel_information(quic_information_id id);
     std::optional<std::uint64_t> delivered_prefix(quic_information_id id) const;
@@ -102,11 +112,15 @@ class quic_recovery final {
     // Writes fresh frames, selecting one bounded information slice and current ACK.
     // Caller protects using packet_number, reports actual emission or abandons.
     quic_send_plan prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, bool probe = false);
+    quic_send_plan prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control& flow, bool probe = false);
     quic_recovery_events discard_space(quic_pn_space space);
 
  private:
+    quic_send_plan prepare(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control* flow, bool probe);
+    quic_send_plan reserve(quic_pn_space space, bool critical);
     quic_recovery_code empty_plan_code(quic_pn_space space) const;
     void append_ack(quic_send_plan& plan, quic_pn_space space, std::span<std::byte> output, time_point now);
+    quic_storage_lease data_owner_, critical_owner_;
     struct implementation;
     std::unique_ptr<implementation> impl_;
 };

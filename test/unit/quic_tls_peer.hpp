@@ -186,6 +186,8 @@ struct connection {
     connection(hd::tls_credentials_selection selection, context_ptr ctx = client_context(), const char* name = "a.example",
                const std::vector<std::string>& offers = {"http/1.1", "h2", "h3"}, SSL_SESSION* ticket = nullptr, bool early = false)
         : server(std::move(selection), configuration(), budget, keys), client(std::move(ctx), name, offers, ticket, early) {}
+    connection(hd::tls_credentials_selection selection, hd::quic_storage_lease storage)
+        : server(std::move(selection), configuration(), std::move(storage), keys), client(client_context(), "a.example", {"h3"}, nullptr, false) {}
     bool deliver_client(std::size_t maximum = 4096) {
         for (unsigned level = 0; level < 3; ++level) {
             auto& pending = client.output[level];

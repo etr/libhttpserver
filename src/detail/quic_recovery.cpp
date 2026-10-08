@@ -3,20 +3,49 @@
 #include <iterator>
 #include "./quic_recovery_internal.hpp"
 namespace httpserver::detail {
-quic_send_plan quic_recovery::reserve_packet(quic_pn_space space) {
+quic_send_plan quic_recovery::reserve_packet(quic_pn_space space) { return reserve(space, false); }
+quic_send_plan quic_recovery::reserve(quic_pn_space space, bool critical) {
     auto* s = impl_->state(space);
     auto admission = impl_->send_admission(space);
     if (admission != quic_recovery_code::ok) return {{admission}};
     impl_->collect_packets(*s);
     if (s->sent.size() >= impl_->config.max_sent_packets) return {{quic_recovery_code::capacity}};
+    if (space == quic_pn_space::application && !critical) {
+        const auto count = std::count_if(s->sent.begin(), s->sent.end(), [](const auto& p) { return !p.critical; });
+        if (static_cast<std::size_t>(count) >= impl_->config.max_sent_packets - impl_->config.critical_sent_packets) return {{quic_recovery_code::capacity}};
+    }
     impl_->pending = implementation::preparation{space, impl_->next_token++, s->next_number++};
+    impl_->pending->critical = critical;
     return {{}, impl_->pending->token, impl_->pending->number};
 }
 void quic_recovery::implementation::collect_packets(space_state& s) {
     auto last = std::find_if(s.sent.begin(), s.sent.end(), [&](const auto& p) { return !can_collect(p); });
     if (last != s.sent.begin()) s.sent_floor = std::prev(last)->number + 1;
     s.sent.erase(s.sent.begin(), last);
+    std::erase_if(s.retired_sent, [&](auto r) { return r.largest < s.sent_floor; });
+    for (auto& r : s.retired_sent) r.smallest = std::max(r.smallest, s.sent_floor);
+    for (auto it = s.sent.begin(); it != s.sent.end();) {
+        if (it->critical && can_collect(*it) && retire_packet_number(s, it->number)) it = s.sent.erase(it);
+        else ++it;
+    }
 }
+bool quic_recovery::implementation::retire_packet_number(space_state& s, std::uint64_t number) {
+    auto pos = std::find_if(s.retired_sent.begin(), s.retired_sent.end(), [number](auto r) { return r.largest + 1 >= number; });
+    if (pos != s.retired_sent.end() && number + 1 >= pos->smallest) {
+        pos->smallest = std::min(pos->smallest, number);
+        pos->largest = std::max(pos->largest, number);
+    } else {
+        if (s.retired_sent.size() == config.max_sent_packets) return false;
+        pos = s.retired_sent.insert(pos, {number, number});
+    }
+    auto next = std::next(pos);
+    if (next != s.retired_sent.end() && pos->largest + 1 >= next->smallest) {
+        pos->largest = next->largest;
+        s.retired_sent.erase(next);
+    }
+    return true;
+}
+
 quic_recovery_code quic_recovery::implementation::send_admission(quic_pn_space space) const {
     const auto* s = state(space);
     if (!s) return quic_recovery_code::invalid;
@@ -47,8 +76,20 @@ quic_recovery_result quic_recovery::commit_sent(std::uint64_t token, time_point 
                                               bool eliciting, bool in_flight, std::uint64_t generation) {
     auto admission = impl_->commit_admission(token, now, wire_bytes, eliciting, in_flight);
     if (admission != quic_recovery_code::ok) return {admission};
+    auto& pending = *impl_->pending;
+    if (pending.flow) {
+        quic_flow_result charged;
+        if (pending.stream) {
+            const auto& f = *pending.stream;
+            charged = pending.flow->record_stream_sent(f.stream, f.offset, f.data.size(), f.fin);
+        } else if (pending.reset) {
+            charged = pending.flow->record_reset_sent(pending.reset->stream, pending.reset->final_size);
+        }
+        if (!charged) return {quic_recovery_code::invalid};
+    }
     auto& s = *impl_->state(impl_->pending->space);
     implementation::packet packet;
+    packet.critical = pending.critical;
     packet.number = impl_->pending->number;
     packet.content = impl_->pending->content;
     packet.receive_watermark = impl_->pending->receive_watermark;
@@ -85,6 +126,15 @@ bool covers(std::span<const quic_ack_range> ranges, std::uint64_t number) {
     return std::any_of(ranges.begin(), ranges.end(), [number](auto r) { return number >= r.smallest && number <= r.largest; });
 }
 template<class State>
+std::size_t retired_count(const State& s, std::uint64_t lower, std::uint64_t upper) {
+    std::size_t found = 0;
+    for (auto retired : s.retired_sent) {
+        const auto begin = std::max(lower, retired.smallest), end = std::min(upper, retired.largest);
+        if (begin <= end) found += end - begin + 1;
+    }
+    return found;
+}
+template<class State>
 bool acknowledges_sent(const State& s, std::span<const quic_ack_range> ranges, quic_recovery::time_point now) {
     for (auto range : ranges) {
         auto lower = std::max(range.smallest, s.sent_floor);
@@ -95,6 +145,7 @@ bool acknowledges_sent(const State& s, std::span<const quic_ack_range> ranges, q
             if (!p.acknowledged && now < p.sent_at) return false;
             ++found;
         }
+        found += retired_count(s, lower, range.largest);
         if (found != range.largest - lower + 1) return false;
     }
     return true;

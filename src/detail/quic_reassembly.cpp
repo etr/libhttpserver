@@ -22,10 +22,7 @@ void quic_reassembly::range_deleter::operator()(range* pointer) const noexcept {
 }
 quic_reassembly::quic_reassembly(quic_stream_limits limits, server::resource_budget budget)
     : limits_(limits), budget_(std::move(budget)) {
-    const auto maximum = std::numeric_limits<std::size_t>::max();
-    if (limits.max_ranges > maximum / sizeof(range) || limits.max_offset_span > k_quic_max_integer ||
-        limits.max_buffered_bytes > (maximum - limits.max_ranges * sizeof(range)) / 2)
-        throw std::invalid_argument("QUIC reassembly limits overflow storage accounting");
+    storage_capacity(limits);
 }
 quic_reassembly::~quic_reassembly() = default;
 quic_stream_result quic_reassembly::insert(std::uint64_t offset, std::span<const std::byte> data) {
@@ -154,4 +151,14 @@ void quic_reassembly::clear() {
     count_ = buffered_ = storage_ = 0;
 }
 std::size_t quic_reassembly::retained_storage() const { return storage_ + metadata_.units(); }
+
+quic_reassembly::quic_reassembly(quic_stream_limits limits, quic_storage_lease storage)
+    : quic_reassembly(limits, storage.budget) { storage_owner_ = std::move(storage); }
+std::size_t quic_reassembly::storage_capacity(quic_stream_limits limits) {
+    const auto maximum = std::numeric_limits<std::size_t>::max();
+    if (limits.max_ranges > maximum / sizeof(range) || limits.max_offset_span > k_quic_max_integer ||
+        limits.max_buffered_bytes > (maximum - limits.max_ranges * sizeof(range)) / 2)
+        throw std::invalid_argument("QUIC reassembly limits overflow storage accounting");
+    return limits.max_ranges * sizeof(range) + 2 * limits.max_buffered_bytes;
+}
 }  // namespace httpserver::detail

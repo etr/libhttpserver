@@ -154,3 +154,7 @@ noinst_HEADERS += httpserver/detail/quic_tls_session.hpp detail/quic_tls_callbac
 
 libhttpserver_v3core_la_SOURCES += detail/quic_ack_state.cpp detail/quic_recovery.cpp detail/quic_recovery_timer.cpp detail/quic_repacketize.cpp
 noinst_HEADERS += httpserver/detail/quic_recovery.hpp detail/quic_recovery_internal.hpp
+
+# Connection-owned QUIC flow ledger and protected storage envelope.
+libhttpserver_v3core_la_SOURCES += detail/quic_flow_control.cpp detail/quic_flow_receive.cpp detail/quic_flow_send.cpp detail/quic_storage.cpp detail/quic_recovery_flow.cpp
+noinst_HEADERS += httpserver/detail/quic_flow_control.hpp httpserver/detail/quic_storage.hpp detail/quic_flow_internal.hpp

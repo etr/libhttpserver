@@ -3,6 +3,7 @@
 #include <cstring>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include "detail/quic_tls_callbacks.hpp"
 namespace httpserver::detail {
 namespace {
@@ -94,5 +95,22 @@ int quic_tls_callbacks::fail(quic_tls_code code) noexcept {
 int quic_tls_callbacks::alert(unsigned char code) noexcept {
     failure_.alert = code;
     return fail(quic_tls_code::alert);
+}
+}  // namespace httpserver::detail
+
+namespace httpserver::detail {
+quic_tls_callbacks::quic_tls_callbacks(const quic_tls_config& config, quic_storage_lease storage, quic_key_state& keys)
+    : quic_tls_callbacks(config, storage.budget, keys) { storage_owner_ = std::move(storage); }
+std::size_t quic_tls_callbacks::storage_capacity(const quic_tls_config& config) {
+    const auto maximum = server::max_capacity(server::resource::quic_reassembly_bytes);
+    const auto reassembly = quic_reassembly::storage_capacity(config.input_limits);
+    if (reassembly > maximum / 3 || !config.receive_lease_capacity) throw std::invalid_argument("Invalid QUIC TLS storage limits");
+    auto total = 3 * reassembly;
+    for (auto bytes : {config.output_capacity, config.output_capacity, config.output_capacity,
+        config.receive_lease_capacity, config.maximum_peer_parameters, config.local_parameters.size()}) {
+        if (bytes > maximum - total) throw std::invalid_argument("QUIC TLS storage envelope overflow");
+        total += bytes;
+    }
+    return total;
 }
 }  // namespace httpserver::detail

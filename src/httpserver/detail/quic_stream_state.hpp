@@ -47,6 +47,8 @@ class quic_stream_state final {
  public:
     quic_stream_state(std::uint64_t id, quic_endpoint_role local, const quic_stream_ids& ids,
                       quic_stream_limits limits, server::resource_budget budget);
+    quic_stream_state(std::uint64_t id, quic_endpoint_role local, const quic_stream_ids& ids,
+                      quic_stream_limits limits, quic_storage_lease storage);
     quic_stream_state(const quic_stream_state&) = delete;
     quic_stream_state& operator=(const quic_stream_state&) = delete;
     quic_stream_result receive(const quic_stream_frame& frame);
@@ -59,6 +61,7 @@ class quic_stream_state final {
     quic_stream_result acknowledge_reset();
     std::optional<quic_reset_stream_frame> take_reset_request();
     std::optional<quic_stream_terminal> take_terminal();
+    std::uint64_t id() const { return id_; }
     quic_receive_state receive_state() const { return receive_; }
     quic_send_state send_state() const { return send_; }
     std::optional<std::uint64_t> final_size() const { return final_; }
@@ -73,6 +76,7 @@ class quic_stream_state final {
     quic_stream_result check_frame(std::uint64_t id, bool receive_half) const;
     quic_stream_result check_final(std::uint64_t end, bool fixes_size) const;
     void update_receive();
+    quic_storage_lease storage_owner_;
     std::uint64_t id_;
     quic_receive_state receive_ = quic_receive_state::receiving;
     quic_send_state send_ = quic_send_state::ready;

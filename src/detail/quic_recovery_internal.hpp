@@ -7,6 +7,7 @@
 #include <limits>
 #include <type_traits>
 #include <httpserver/detail/quic_recovery.hpp>
+#include <httpserver/detail/quic_flow_control.hpp>
 namespace httpserver::detail {
 using recovery_duration = std::chrono::steady_clock::duration;
 inline recovery_duration recovery_scale(recovery_duration value, std::uint64_t numerator, std::uint64_t denominator = 1) {
@@ -45,6 +46,7 @@ struct quic_recovery::implementation {
         quic_information_kind kind = quic_information_kind::crypto;
         quic_pn_space space = quic_pn_space::initial;
         std::uint64_t stream = 0, offset = 0, error = 0;
+        quic_flow_frame flow;
         std::size_t length = 0, delivered_bytes = 0;
         std::vector<std::byte> data;
         std::vector<information_status> status;
@@ -59,15 +61,16 @@ struct quic_recovery::implementation {
     };
     struct packet {
         std::uint64_t number = 0, key_generation = 0;
-        slice content;
+        slice content{};
         std::optional<std::uint64_t> receive_watermark, ack_generation;
         time_point sent_at{};
         std::size_t wire_bytes = 0;
-        bool ack_eliciting = false, in_flight = false, acknowledged = false, lost = false;
+        bool critical = false, ack_eliciting = false, in_flight = false, acknowledged = false, lost = false;
     };
     struct space_state {
         std::vector<quic_ack_range> received;
         std::vector<packet> sent;
+        std::vector<quic_ack_range> retired_sent;
         std::uint64_t next_number = 0, sent_floor = 0;
         std::optional<std::uint64_t> largest_acked;
         std::optional<time_point> last_sent, last_eliciting, loss_due;
@@ -78,34 +81,42 @@ struct quic_recovery::implementation {
         bool discarded = false;
     };
     quic_recovery_config config;
-    server::resource_budget budget;
+    server::resource_budget budget, critical_budget;
     server::reservation metadata;
     quic_recovery_code admission = quic_recovery_code::ok;
     std::array<space_state, 3> spaces;
     struct preparation {
         quic_pn_space space;
         std::uint64_t token, number;
-        slice content;
+        slice content{};
         std::size_t payload_bytes = 0;
-        bool prepared = false, ack_eliciting = false;
-        std::optional<std::uint64_t> ack_generation, receive_watermark;
+        bool prepared = false, ack_eliciting = false, critical = false;
+        quic_flow_control* flow = nullptr;
+        std::optional<quic_stream_frame> stream{};
+        std::optional<quic_reset_stream_frame> reset{};
+        std::optional<std::uint64_t> ack_generation{}, receive_watermark{};
     };
     std::optional<preparation> pending;
     std::uint64_t next_token = 1, next_information = 1;
     std::vector<information> information_records;
-    std::size_t retained_bytes = 0;
+    std::size_t retained_bytes = 0, data_retained_bytes = 0;
     information* find_information(quic_information_id id);
     const information* find_information(quic_information_id id) const;
     quic_information_result retain(information value, std::span<const std::byte> data);
-    bool information_capacity() const;
+    bool information_capacity(quic_information_kind kind) const;
+    bool payload_capacity(quic_information_kind kind, std::size_t bytes) const;
     bool valid_information(const information& value, std::span<const std::byte> data) const;
+    quic_recovery_result stage_plan(quic_send_plan& plan, std::optional<slice> content, std::span<std::byte> output, quic_flow_control* flow);
     quic_encode_result encode_content(std::optional<slice>& content, std::span<std::byte> output);
     bool valid_emission(std::size_t bytes, bool eliciting, bool flight) const;
     quic_information_result store_information(information value, std::span<const std::byte> data);
     void update_information(slice content, information_status status);
     void complete_information(information& value);
     void release_storage(information& value);
-    std::optional<slice> select_information(quic_pn_space space, bool probe) const;
+    std::optional<slice> select_packet_information(quic_pn_space space, bool probe, const quic_flow_control* flow, bool ack) const;
+    bool constrain_slice(slice& content, const information& value, const quic_flow_control* flow) const;
+    std::optional<slice> eligible_slice(const information& value, bool probe, const quic_flow_control* flow) const;
+    std::optional<slice> select_information(quic_pn_space space, bool probe, const quic_flow_control* flow) const;
     quic_frame information_frame(const information& value, slice content) const;
     quic_encode_result encode_information(slice& content, std::span<std::byte> output);
     void retire_acknowledged_receive(space_state& s, const packet& p);
@@ -125,6 +136,7 @@ struct quic_recovery::implementation {
     void insert_received(space_state& s, std::uint64_t number);
     void note_ack_work(space_state& s, quic_pn_space space, bool gap, bool reordered, time_point now);
     void schedule_ack(space_state& s, quic_pn_space space, bool gap, time_point now);
+    bool retire_packet_number(space_state& s, std::uint64_t number);
     void collect_packets(space_state& s);
     quic_recovery_code send_admission(quic_pn_space space) const;
     quic_recovery_code commit_admission(std::uint64_t token, time_point now, std::size_t bytes, bool eliciting, bool flight) const;
@@ -134,7 +146,7 @@ struct quic_recovery::implementation {
     std::optional<quic_recovery_timer> idle_probe_timer() const;
     void update_rtt(std::chrono::steady_clock::duration sample, std::uint64_t delay, quic_pn_space space);
     std::size_t detect_loss(space_state& s, time_point now);
-    implementation(quic_recovery_config config, server::resource_budget budget);
+    implementation(quic_recovery_config config, server::resource_budget budget, server::resource_budget critical_budget);
     space_state* state(quic_pn_space s) {
         auto index = static_cast<unsigned>(s);
         return index < spaces.size() ? &spaces[index] : nullptr;

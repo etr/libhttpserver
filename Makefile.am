@@ -668,3 +668,5 @@ EXTRA_DIST += docs/task-152-quic-protection.md
 EXTRA_DIST += docs/task-155-quic-tls.md
 
 EXTRA_DIST += docs/task-156-quic-recovery.md
+
+EXTRA_DIST += docs/task-157-quic-flow-control.md

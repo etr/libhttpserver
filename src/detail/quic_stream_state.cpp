@@ -165,4 +165,8 @@ std::optional<quic_stream_terminal> quic_stream_state::take_terminal() {
     }
     return terminal;
 }
+
+quic_stream_state::quic_stream_state(std::uint64_t id, quic_endpoint_role local, const quic_stream_ids& ids,
+                                   quic_stream_limits limits, quic_storage_lease storage)
+    : quic_stream_state(id, local, ids, limits, storage.budget) { storage_owner_ = std::move(storage); }
 }  // namespace httpserver::detail

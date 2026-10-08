@@ -7,7 +7,8 @@
 namespace httpserver::detail {
 namespace {
 bool valid_capacities(const quic_recovery_config& c) {
-    return c.max_receive_ranges <= 256 && c.max_sent_packets <= 4096 && c.max_information <= 4096 && c.max_retained_bytes <= 16777216;
+    return c.critical_information <= c.max_information && c.critical_sent_packets <= c.max_sent_packets && c.critical_retained_bytes <= c.max_retained_bytes &&
+        c.max_receive_ranges <= 256 && c.max_sent_packets <= 4096 && c.max_information <= 4096 && c.max_retained_bytes <= 16777216;
 }
 bool valid_ack_config(const quic_recovery_config& c) {
     return c.local_ack_delay_exponent <= 20 && c.peer_ack_delay_exponent <= 20 &&
@@ -15,11 +16,12 @@ bool valid_ack_config(const quic_recovery_config& c) {
         c.peer_max_ack_delay.count() >= 0 && c.peer_max_ack_delay < std::chrono::milliseconds(16384);
 }
 }  // namespace
-quic_recovery::implementation::implementation(quic_recovery_config c, server::resource_budget b) : config(c), budget(std::move(b)) {
+quic_recovery::implementation::implementation(quic_recovery_config c, server::resource_budget b, server::resource_budget critical)
+: config(c), budget(std::move(b)), critical_budget(std::move(critical)) {
     if (!valid_capacities(c) || !valid_ack_config(c)) throw std::invalid_argument("Invalid QUIC recovery limits");
-    auto bytes = 3 * ((c.max_receive_ranges + 1) * sizeof(quic_ack_range) + c.max_sent_packets * sizeof(packet)) + c.max_information * sizeof(information);
+    auto bytes = quic_recovery::storage_capacity(c);
     try {
-        if (!budget.reserve(server::resource::quic_reassembly_bytes, bytes, metadata).ok()) {
+        if (!critical_budget.reserve(server::resource::quic_reassembly_bytes, bytes, metadata).ok()) {
             admission = quic_recovery_code::no_memory;
             return;
         }
@@ -29,6 +31,7 @@ quic_recovery::implementation::implementation(quic_recovery_config c, server::re
         for (auto& s : staged) {
             s.received.reserve(c.max_receive_ranges + 1);
             s.sent.reserve(c.max_sent_packets);
+            s.retired_sent.reserve(c.max_sent_packets);
         }
         spaces = std::move(staged);
         information_records = std::move(descriptors);
@@ -38,7 +41,7 @@ quic_recovery::implementation::implementation(quic_recovery_config c, server::re
     }
 }
 quic_recovery::quic_recovery(quic_recovery_config c, server::resource_budget b)
-    : impl_(std::make_unique<implementation>(c, std::move(b))) {}
+    : impl_(std::make_unique<implementation>(c, b, b)) {}
 quic_recovery::~quic_recovery() = default;
 quic_receipt quic_recovery::inspect_received(quic_pn_space space, std::uint64_t number) const {
     auto* s = impl_->state(space);
@@ -126,5 +129,13 @@ void quic_recovery::publish_ack(quic_pn_space space, std::uint64_t generation) {
         s->ack_due.reset();
         s->eliciting_since_ack = 0;
     }
+}
+
+quic_recovery::quic_recovery(quic_recovery_config config, quic_storage_lease data, quic_storage_lease critical)
+    : data_owner_(std::move(data)), critical_owner_(std::move(critical)), impl_(std::make_unique<implementation>(config, data_owner_.budget, critical_owner_.budget)) {}
+std::size_t quic_recovery::storage_capacity(quic_recovery_config c) {
+    if (!valid_capacities(c) || !valid_ack_config(c)) throw std::invalid_argument("Invalid QUIC recovery limits");
+    return 3 * ((c.max_receive_ranges + 1) * sizeof(quic_ack_range) + c.max_sent_packets * (sizeof(implementation::packet) + sizeof(quic_ack_range))) +
+        c.max_information * sizeof(implementation::information);
 }
 }  // namespace httpserver::detail
