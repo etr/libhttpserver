@@ -24,7 +24,7 @@ Provide certificate rotation, SNI, mTLS, PSK and ACME under concurrency for libh
 **Related Requirements:** PRD-V3N-REQ-034, PRD-V3N-REQ-035, PRD-V3N-REQ-036
 **Related Decisions:** DR-V3-002, DR-V3-007
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:**
 - Added real TCP barrier, rotation, lifetime and hostile-profile suites for TLS 1.2/1.3.
