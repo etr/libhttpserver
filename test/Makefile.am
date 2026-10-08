@@ -2211,3 +2211,12 @@ quic_pacing_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 quic_send_schedule_SOURCES = unit/quic_send_schedule_test.cpp
 quic_send_schedule_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 quic_send_schedule_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += qpack_static_table qpack_primitives qpack_field_section
+qpack_static_table_SOURCES = unit/qpack_static_table_test.cpp
+qpack_static_table_LDADD =
+qpack_primitives_SOURCES = unit/qpack_primitives_test.cpp
+qpack_primitives_LDADD =
+qpack_field_section_SOURCES = unit/qpack_field_section_test.cpp
+qpack_field_section_LDADD =
+EXTRA_DIST += data/qpack/rfc9204.hpp

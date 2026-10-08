@@ -161,3 +161,6 @@ noinst_HEADERS += httpserver/detail/quic_flow_control.hpp httpserver/detail/quic
 
 libhttpserver_v3core_la_SOURCES += detail/quic_congestion.cpp detail/quic_pacing.cpp detail/quic_send_schedule.cpp detail/quic_persistent_congestion.cpp detail/quic_recovery_emission.cpp
 noinst_HEADERS += httpserver/detail/quic_congestion.hpp httpserver/detail/quic_pacing.hpp
+
+# Static-only QPACK remains below semantic HTTP fields.
+noinst_HEADERS += httpserver/detail/qpack_static_table.hpp httpserver/detail/qpack_primitives.hpp httpserver/detail/qpack_field_section.hpp httpserver/detail/qpack_decoder.hpp httpserver/detail/qpack_encoder.hpp
