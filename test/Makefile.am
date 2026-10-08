@@ -1784,6 +1784,15 @@ websocket_upgrade_decision_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 websocket_utf8_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 if NATIVE_V3_TLS
+check_PROGRAMS += tls_policy_concurrency tls_policy_hostile_profiles
+tls_policy_concurrency_SOURCES = unit/tls_policy_concurrency_test.cpp
+tls_policy_concurrency_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+tls_policy_concurrency_LDADD = $(tls_io_LDADD)
+tls_policy_concurrency_LDFLAGS = $(tls_io_LDFLAGS)
+tls_policy_hostile_profiles_SOURCES = unit/tls_policy_hostile_profiles_test.cpp
+tls_policy_hostile_profiles_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+tls_policy_hostile_profiles_LDADD = $(tls_io_LDADD)
+tls_policy_hostile_profiles_LDFLAGS = $(tls_io_LDFLAGS)
 check_PROGRAMS += tls_acme_lifetime tls_acme_selection tls_acme_credentials tls_io tls_io_race tls_io_loopback tls_credentials tls_credentials_rotation tls_selection tls_mtls tls_psk_contract tls_psk tls_psk_runtime
 tls_acme_lifetime_SOURCES = unit/tls_acme_lifetime_test.cpp
 tls_acme_lifetime_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
@@ -1839,7 +1848,7 @@ tls_credentials_rotation_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
 tls_credentials_rotation_LDADD = $(tls_io_LDADD)
 tls_credentials_rotation_LDFLAGS = $(tls_io_LDFLAGS)
 endif
-noinst_HEADERS += unit/tls_acme_adapter.hpp unit/tls_acme_peer.hpp unit/tls_acme_fixture.hpp unit/tls_io_fixture.hpp unit/tls_credentials_fixture.hpp unit/tls_mtls_fixture.hpp unit/tls_psk_fixture.hpp
+noinst_HEADERS += unit/tls_policy_tcp_fixture.hpp unit/tls_acme_adapter.hpp unit/tls_acme_peer.hpp unit/tls_acme_fixture.hpp unit/tls_io_fixture.hpp unit/tls_credentials_fixture.hpp unit/tls_mtls_fixture.hpp unit/tls_psk_fixture.hpp
 
 check_PROGRAMS += io_tls_control
 io_tls_control_SOURCES = unit/io_tls_control_test.cpp
