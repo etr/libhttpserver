@@ -1,0 +1,6 @@
+.git
+.worktrees
+build
+!build/tooling
+build/tooling/*
+!build/tooling/openssl-3.5.9.tar.gz

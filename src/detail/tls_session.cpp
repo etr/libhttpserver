@@ -4,13 +4,17 @@
      SPDX-License-Identifier: LGPL-2.1-or-later
 */
 
-#include <httpserver/detail/tls_session.hpp>
-#include <httpserver/detail/tls_credentials.hpp>
-#include <httpserver/detail/tls_psk_attempt.hpp>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
 
+#if defined(LIBHTTPSERVER_QUIC_INTEROP_TEST_PROVIDER)
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstdlib>
+#endif
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -20,6 +24,9 @@
 #include <string>
 #include <stdexcept>
 #include <utility>
+#include <httpserver/detail/tls_session.hpp>
+#include <httpserver/detail/tls_credentials.hpp>
+#include <httpserver/detail/tls_psk_attempt.hpp>
 #include "detail/quic_tls_callbacks.hpp"
 namespace httpserver::detail {
 namespace {
@@ -105,6 +112,50 @@ tls_negotiated_protocol selected_protocol(SSL* ssl) {
 }
 }  // namespace
 struct tls_session::impl {
+#if defined(LIBHTTPSERVER_QUIC_INTEROP_TEST_PROVIDER)
+    int keylog_fd = -1;
+    static bool interop_mode() {
+        const char* mode = std::getenv("LIBHTTPSERVER_INTEROP_TEST_MODE");
+        return mode && std::string_view(mode) == "1";
+    }
+    static bool quic_protocol(std::string_view token) {
+        return token == "h3" || (token == "hq-interop" && interop_mode());
+    }
+    void open_keylog() {
+        const char* path = std::getenv("SSLKEYLOGFILE");
+        if (!quic || !interop_mode() || !path || !*path) return;
+        keylog_fd = ::open(path, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC, 0600);
+        struct stat info{};
+        if (keylog_fd < 0 || fstat(keylog_fd, &info) != 0 || !S_ISREG(info.st_mode) || fchmod(keylog_fd, 0600) != 0) {
+            throw std::runtime_error("test keylog unavailable");
+        }
+    }
+    static void keylog(const SSL* ssl, const char* line) noexcept {
+        auto* self = state(const_cast<SSL*>(ssl));
+        if (!self || self->keylog_fd < 0) return;
+        struct stat info{};
+        const auto size = strnlen(line, 1024);
+        if (size == 1024 || fstat(self->keylog_fd, &info) != 0 || info.st_size + size + 1 > 1048576) {
+            self->metadata_failed = true;
+            return;
+        }
+        std::array<char, 1025> record{};
+        std::memcpy(record.data(), line, size);
+        record[size] = '\n';
+        std::size_t through = 0;
+        while (through < size + 1) {
+            const auto wrote = ::write(self->keylog_fd, record.data() + through, size + 1 - through);
+            if (wrote < 0 && errno == EINTR) continue;
+            if (wrote <= 0) {
+                self->metadata_failed = true;
+                return;
+            }
+            through += wrote;
+        }
+    }
+#else
+    static bool quic_protocol(std::string_view token) { return token == "h3"; }
+#endif
     tls_credentials_selection selection;
     SSL* ssl = nullptr;
     bool accepted_name = false;
@@ -319,7 +370,7 @@ struct tls_session::impl {
         if (quic) {
             if (!selection.snapshot || selection.context->psk_) return false;
             const auto& protocols = metadata().alpn;
-            if (std::find(protocols.begin(), protocols.end(), "h3") == protocols.end()) return false;
+            if (std::none_of(protocols.begin(), protocols.end(), quic_protocol)) return false;
             const unsigned char* data = nullptr;
             std::size_t size = 0;
             return SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_application_layer_protocol_negotiation, &data, &size) == 1;
@@ -356,7 +407,7 @@ struct tls_session::impl {
             if (self->acme) return acme_alpn(out, length, input, size);
             if (!self->selection.snapshot || self->metadata().alpn.empty()) return SSL_TLSEXT_ERR_NOACK;
             for (const auto& token : self->metadata().alpn) {
-                if (self->quic ? token != "h3" : !http_protocol(token)) continue;
+                if (self->quic ? !quic_protocol(token) : !http_protocol(token)) continue;
                 if (const auto* match = offered(token, input, size)) {
                     *out = match;
                     *length = static_cast<unsigned char>(token.size());
@@ -370,6 +421,9 @@ struct tls_session::impl {
     }
     BIO* wire = nullptr;
     ~impl() {
+#if defined(LIBHTTPSERVER_QUIC_INTEROP_TEST_PROVIDER)
+        if (keylog_fd >= 0) ::close(keylog_fd);
+#endif
         SSL_free(ssl);
         BIO_free(wire);
     }
@@ -399,6 +453,9 @@ void tls_context::configure_server() {
     }
     SSL_CTX_set_psk_server_callback(ctx, psk_ ? tls_session::impl::psk12 : nullptr);
     SSL_CTX_set_psk_find_session_callback(ctx, psk_ ? tls_session::impl::psk13 : nullptr);
+#if defined(LIBHTTPSERVER_QUIC_INTEROP_TEST_PROVIDER)
+    SSL_CTX_set_keylog_callback(ctx, tls_session::impl::keylog);
+#endif
     SSL_CTX_set_alpn_select_cb(ctx, tls_session::impl::alpn, nullptr);
     SSL_CTX_set_client_hello_cb(ctx, tls_session::impl::client_hello, nullptr);
     SSL_CTX_set_tlsext_servername_callback(ctx, tls_session::impl::server_name);
@@ -428,6 +485,9 @@ tls_session::tls_session(tls_credentials_selection selection, bool server, tls_h
     if (impl::index() < 0 || SSL_set_ex_data(impl_->ssl, impl::index(), impl_.get()) != 1) {
         throw std::runtime_error("TLS session unavailable");
     }
+#if defined(LIBHTTPSERVER_QUIC_INTEROP_TEST_PROVIDER)
+    impl_->open_keylog();
+#endif
     if (server) {
         impl_->server_side = true;
         impl_->apply_verification();
@@ -458,6 +518,7 @@ tls_session::result tls_session::handshake() {
     ERR_clear_error();
     if (impl_->metadata_failed) return {progress::failed};
     const auto result = impl_->classify(SSL_do_handshake(impl_->ssl));
+    if (impl_->metadata_failed) return {progress::failed};
     if (result.state == progress::complete && !impl_->peer) {
         try {
             impl_->peer = copy_peer(impl_->ssl, impl_->server_side);

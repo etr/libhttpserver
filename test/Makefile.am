@@ -2253,14 +2253,14 @@ EXTRA_DIST += unit/http3_route_parity_fixture.hpp
 
 if NATIVE_V3_TLS
 check_PROGRAMS += http3_network_owner
-http3_network_owner_SOURCES = unit/http3_network_owner_test.cpp support/http3_network_owner.cpp
+http3_network_owner_SOURCES = unit/http3_network_owner_test.cpp support/http3_network_owner.cpp support/quic_interop_files.cpp
 http3_network_owner_CPPFLAGS = $(tls_io_loopback_CPPFLAGS) -I$(top_srcdir)
 http3_network_owner_LDADD = $(tls_io_LDADD)
 http3_network_owner_LDFLAGS = $(tls_io_LDFLAGS)
 endif
 if NATIVE_V3_TLS
 noinst_PROGRAMS += http3_udp_fixture
-http3_udp_fixture_SOURCES = integ/http3_udp_fixture.cpp support/http3_network_owner.cpp
+http3_udp_fixture_SOURCES = integ/http3_udp_fixture.cpp support/http3_network_owner.cpp support/quic_interop_files.cpp
 http3_udp_fixture_CPPFLAGS = $(http3_network_owner_CPPFLAGS)
 http3_udp_fixture_LDADD = $(tls_io_LDADD)
 http3_udp_fixture_LDFLAGS = $(tls_io_LDFLAGS)
@@ -2268,3 +2268,34 @@ endif
 EXTRA_DIST += support/http3_network_owner.hpp integ/http3_client_aioquic.py integ/http3-client-requirements.txt integ/http3-client-go/go.mod integ/http3-client-go/go.sum
 
 EXTRA_DIST += integ/http3-client-go/main.go integ/http3_gate_runner_test.py
+
+if NATIVE_V3_TLS
+check_PROGRAMS += quic_interop_tls
+quic_interop_tls_SOURCES = unit/quic_interop_tls_test.cpp support/http3_network_owner.cpp support/quic_interop_files.cpp
+quic_interop_tls_CPPFLAGS = $(http3_network_owner_CPPFLAGS)
+quic_interop_tls_LDADD = libquic_interop_provider.a $(top_builddir)/src/.libs/libhttpserver_v3core.a $(V3_TLS_LIBS) -lpthread -ldl
+quic_interop_tls_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+check_PROGRAMS += quic_interop_files
+quic_interop_files_SOURCES = unit/quic_interop_files_test.cpp support/quic_interop_files.cpp
+quic_interop_files_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
+quic_interop_files_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_interop_files_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+EXTRA_DIST += support/quic_interop_files.hpp
+
+if NATIVE_V3_TLS
+noinst_LIBRARIES = libquic_interop_provider.a
+libquic_interop_provider_a_SOURCES = $(top_srcdir)/src/detail/tls_session.cpp $(top_srcdir)/src/detail/quic_tls_session.cpp
+libquic_interop_provider_a_CPPFLAGS = $(http3_network_owner_CPPFLAGS) -DLIBHTTPSERVER_QUIC_INTEROP_TEST_PROVIDER
+endif
+
+if NATIVE_V3_TLS
+noinst_PROGRAMS += quic_interop_endpoint
+quic_interop_endpoint_SOURCES = integ/quic_interop_endpoint.cpp support/http3_network_owner.cpp support/quic_interop_files.cpp
+quic_interop_endpoint_CPPFLAGS = $(http3_network_owner_CPPFLAGS)
+quic_interop_endpoint_LDADD = $(quic_interop_tls_LDADD)
+quic_interop_endpoint_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+EXTRA_DIST += interop/quic/run_endpoint.sh integ/quic_interop_runner_test.py
+EXTRA_DIST += interop/quic/Dockerfile interop/quic/Dockerfile.dockerignore
+EXTRA_DIST += interop/quic/Dockerfile.native interop/quic/Dockerfile.native.dockerignore

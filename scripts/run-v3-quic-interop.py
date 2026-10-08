@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Bounded driver for a pinned, explicitly provisioned upstream QUIC runner."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import signal
+import struct
+import subprocess
+import sys
+
+RUNNER_COMMIT = "740c05a10b61d65e8abd3ad38d60898004d335d9"
+CLIENT = "martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88"
+PROVIDER_RELEASE = "3.5.9"
+PROVIDER_ARCHIVE_SHA256 = "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a"
+SIMULATOR = "martenseemann/quic-network-simulator@sha256:c23d82a55caffe681b1bdae65d4d30d23e1283141a414a7f02ee56cf15f9c6b9"
+
+def validate_results(document):
+    try:
+        if document.get("servers") != ["libhttpserver"] or document.get("clients") != ["quic-go"]:
+            return False
+        rows = document["results"]
+        if len(rows) != 1 or len(rows[0]) != 2:
+            return False
+        return {cell["name"] for cell in rows[0]} == {"handshake", "transfer"} and all(cell["result"] == "succeeded" for cell in rows[0])
+    except (KeyError, TypeError):
+        return False
+
+
+def capture_records(path):
+    data = Path(path).read_bytes()
+    if not 24 <= len(data) <= 64 * 1024 * 1024:
+        raise ValueError("capture size")
+    if data[:4] == b"\x0a\x0d\x0d\x0a":
+        return pcapng_records(data)
+    endian = {b"\xd4\xc3\xb2\xa1": "<", b"\xa1\xb2\xc3\xd4": ">", b"\x4d\x3c\xb2\xa1": "<"}.get(data[:4])
+    if endian is None or struct.unpack_from(endian + "HH", data, 4) != (2, 4):
+        raise ValueError("capture format")
+    snaplen, link = struct.unpack_from(endian + "II", data, 16)
+    if link not in (1, 101, 113):
+        raise ValueError("capture envelope")
+    offset, records = 24, 0
+    while offset < len(data):
+        if offset + 16 > len(data):
+            raise ValueError("truncated capture record")
+        captured, original = struct.unpack_from(endian + "II", data, offset + 8)
+        offset += 16
+        if not captured or captured > min(original, snaplen) or offset + captured > len(data):
+            raise ValueError("invalid capture record")
+        offset += captured
+        records += 1
+    if not records:
+        raise ValueError("empty capture")
+    return records
+
+
+def pcapng_records(data):
+    endian = {b"\x4d\x3c\x2b\x1a": "<", b"\x1a\x2b\x3c\x4d": ">"}.get(data[8:12])
+    if endian is None:
+        raise ValueError("pcapng byte order")
+    offset, records, interfaces = 0, 0, []
+    while offset < len(data):
+        if offset + 12 > len(data):
+            raise ValueError("truncated pcapng")
+        kind, length = struct.unpack_from(endian + "II", data, offset)
+        if length < 12 or length % 4 or offset + length > len(data) or struct.unpack_from(endian + "I", data, offset + length - 4)[0] != length:
+            raise ValueError("pcapng block length")
+        if kind == 1:
+            if length < 20:
+                raise ValueError("pcapng interface")
+            link = struct.unpack_from(endian + "H", data, offset + 8)[0]
+            snaplen = struct.unpack_from(endian + "I", data, offset + 12)[0]
+            if link not in (1, 101, 113):
+                raise ValueError("pcapng link type")
+            interfaces.append(snaplen)
+        if kind == 6:
+            if length < 32:
+                raise ValueError("pcapng packet")
+            interface = struct.unpack_from(endian + "I", data, offset + 8)[0]
+            captured, original = struct.unpack_from(endian + "II", data, offset + 20)
+            if interface >= len(interfaces) or not captured or captured > min(original, interfaces[interface]) or 32 + ((captured + 3) // 4) * 4 > length:
+                raise ValueError("pcapng packet size")
+            records += 1
+        offset += length
+    if not records:
+        raise ValueError("empty pcapng")
+    return records
+
+
+def validate_artifacts(logs):
+    inventory = {}
+    for case in ("handshake", "transfer"):
+        root = Path(logs) / "libhttpserver_quic-go" / case
+        key = root / "server/keys.log"
+        lines = key.read_text().splitlines()
+        labels = set()
+        for line in lines:
+            fields = line.split()
+            if len(fields) != 3 or len(fields[1]) != 64:
+                raise ValueError("malformed NSS key material")
+            bytes.fromhex(fields[1])
+            bytes.fromhex(fields[2])
+            labels.add(fields[0])
+        if not {"SERVER_TRAFFIC_SECRET_0", "CLIENT_TRAFFIC_SECRET_0"} <= labels or key.stat().st_mode & 0o077:
+            raise ValueError("NSS key material missing or permissions unsafe")
+        captures = list((root / "sim").glob("*.pcap"))
+        if not captures:
+            raise ValueError("simulator packet capture missing")
+        for path in captures + [root / "server/packets.pcap"]:
+            inventory[str(path)] = capture_records(path)
+        output = (root / "output.txt").read_text()
+        if "interop endpoint failure:" in output or "READY 443" not in output:
+            raise ValueError("endpoint failure or missing readiness")
+    return inventory
+
+
+def run_bounded(command, cwd, stdout, stderr, timeout):
+    with Path(stdout).open("wb") as out, Path(stderr).open("wb") as err:
+        process = subprocess.Popen(command, cwd=cwd, stdout=out, stderr=err, start_new_session=True)
+        try:
+            return process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=10)
+            raise RuntimeError("upstream runner deadline exceeded")
+
+
+def preflight(runner, output):
+    if Path(output).exists():
+        raise ValueError("existing evidence directory preserved")
+    for name in ("run.py", "implementations_quic.json", "docker-compose.yml"):
+        if not (Path(runner) / name).is_file():
+            raise ValueError("upstream runner missing " + name)
+    revision = subprocess.check_output(["git", "-C", str(runner), "rev-parse", "HEAD"], text=True).strip()
+    if revision != RUNNER_COMMIT:
+        raise ValueError("runner revision must be " + RUNNER_COMMIT)
+    if subprocess.check_output(["git", "-C", str(runner), "status", "--porcelain"], text=True).strip():
+        raise ValueError("upstream runner checkout must be clean")
+    for command in (["docker", "info"], ["docker", "compose", "version"], ["tshark", "--version"]):
+        subprocess.run(command, check=True, capture_output=True, timeout=30)
+
+
+def compose_config(text, direct_routing_compat=False):
+    text = text.replace("image: martenseemann/quic-network-simulator\n", "image: " + SIMULATOR + "\n")
+    if direct_routing_compat:
+        text = text.replace("com.docker.network.bridge.enable_ip_masquerade: 'false'", "com.docker.network.bridge.enable_ip_masquerade: 'false'\n      com.docker.network.bridge.gateway_mode_ipv4: 'nat-unprotected'\n      com.docker.network.bridge.gateway_mode_ipv6: 'nat-unprotected'")
+    return text
+
+
+def provenance(image):
+    root = Path(__file__).resolve().parents[1]
+    sources = ["src/detail/tls_session.cpp", "src/detail/quic_tls_session.cpp", "test/Makefile.am", "test/support/http3_network_owner.cpp", "test/support/http3_network_owner.hpp", "test/support/quic_interop_files.cpp", "test/support/quic_interop_files.hpp", "test/integ/quic_interop_endpoint.cpp", "test/interop/quic/run_endpoint.sh", "test/interop/quic/Dockerfile", "test/interop/quic/Dockerfile.native", "scripts/run-v3-quic-interop.py"]
+    commands = {"docker": ["docker", "version"], "compose": ["docker", "compose", "version"], "tshark": ["tshark", "--version"], "python_packages": [sys.executable, "-m", "pip", "freeze"], "endpoint_sha256": ["docker", "run", "--rm", "--network", "none", "--entrypoint", "sha256sum", image, "/quic_interop_endpoint"]}
+    return {"provider_release": PROVIDER_RELEASE, "provider_archive_sha256": PROVIDER_ARCHIVE_SHA256, "source_sha256": {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in sources}, "tools": {name: subprocess.check_output(command, text=True, timeout=30).strip() for name, command in commands.items()}}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--runner-dir", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--server-image", required=True)
+    parser.add_argument("--docker-direct-routing-compat", action="store_true", help="Docker 28+ compatibility on the two task-owned runner networks only")
+    parser.add_argument("--timeout", type=int, default=600)
+    args = parser.parse_args(argv)
+    output = Path(args.output).resolve()
+    preflight(args.runner_dir, output)
+    images = {image: json.loads(subprocess.check_output(["docker", "image", "inspect", image], text=True))[0]["Id"] for image in (args.server_image, CLIENT, SIMULATOR)}
+    inputs = provenance(images[args.server_image])
+    output.mkdir(mode=0o700, parents=True)
+    runner = output / "runner"
+    shutil.copytree(args.runner_dir, runner, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+    registry = {"libhttpserver": {"image": images[args.server_image], "url": "https://github.com/etr/libhttpserver", "role": "server"}, "quic-go": {"image": CLIENT, "url": "https://github.com/quic-go/quic-go", "role": "client"}}
+    (runner / "implementations_quic.json").write_text(json.dumps(registry, indent=2))
+    compose = runner / "docker-compose.yml"
+    compose.write_text(compose_config(compose.read_text(), args.docker_direct_routing_compat))
+    command = [sys.executable, "run.py", "-s", "libhttpserver", "-c", "quic-go", "-t", "handshake,transfer", "-n", "libhttpserver", "-l", str(output / "runner-logs"), "-j", str(output / "results.json")]
+    manifest = {"runner_commit": RUNNER_COMMIT, "images": images, "docker_direct_routing_compat": args.docker_direct_routing_compat, "command": command, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(), "passed": False, "provenance": inputs}
+    try:
+        code = run_bounded(command, runner, output / "stdout.log", output / "stderr.log", args.timeout)
+        manifest["returncode"] = code
+        if code or not validate_results(json.loads((output / "results.json").read_text())):
+            raise ValueError("required upstream handshake/transfer cells did not succeed")
+        manifest["capture_records"] = validate_artifacts(output / "runner-logs")
+        manifest["passed"] = True
+    finally:
+        subprocess.run(["docker", "compose", "--env-file", "empty.env", "down", "--timeout", "5"], cwd=runner, capture_output=True, timeout=60)
+        manifest["artifacts"] = {str(path.relative_to(output)): {"bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in output.rglob("*") if path.is_file() and "runner" not in path.relative_to(output).parts}
+        (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as error:
+        print("QUIC interop failed: " + str(error), file=sys.stderr)
+        raise SystemExit(1)

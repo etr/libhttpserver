@@ -672,3 +672,6 @@ EXTRA_DIST += docs/task-156-quic-recovery.md
 EXTRA_DIST += docs/task-157-quic-flow-control.md
 
 EXTRA_DIST += scripts/run-v3-http3-gates.py docs/task-162-http3-evidence.md
+
+EXTRA_DIST += scripts/run-v3-quic-interop.py docs/task-163-quic-interop-evidence.md
+EXTRA_DIST += .dockerignore

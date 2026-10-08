@@ -1,0 +1,9 @@
+**
+!build
+!build/task163-clang-on
+!build/task163-clang-on/test
+!build/task163-clang-on/test/quic_interop_endpoint
+!test
+!test/interop
+!test/interop/quic
+!test/interop/quic/run_endpoint.sh

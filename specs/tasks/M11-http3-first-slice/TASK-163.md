@@ -9,9 +9,9 @@
 Provide a QUIC interop-runner endpoint and diagnostics for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Create test-only interop-runner endpoint and container.
-- [ ] Export reproducible logs, packet captures and key material only in test mode.
-- [ ] Run handshake and transfer scenarios.
+- [x] Create test-only interop-runner endpoint and container.
+- [x] Export reproducible logs, packet captures and key material only in test mode.
+- [x] Run handshake and transfer scenarios.
 
 **Dependencies:**
 - Blocked by: TASK-155, TASK-157, TASK-161
@@ -24,4 +24,6 @@ Provide a QUIC interop-runner endpoint and diagnostics for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
+
+Implementation evidence: [TASK-163 receipts](../../../docs/task-163-quic-interop-evidence.md).

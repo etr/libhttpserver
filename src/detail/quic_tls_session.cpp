@@ -33,7 +33,12 @@ tls_session::result quic_tls_session::handshake() {
 }
 tls_session::result quic_tls_session::process_post_handshake() {
     if (failure().code != quic_tls_code::ok) return {tls_session::progress::failed};
+#if defined(LIBHTTPSERVER_QUIC_INTEROP_TEST_PROVIDER)
+    // The test provider's only additional QUIC ALPN is the gated hq-interop token.
+    if (negotiated_protocol() != tls_negotiated_protocol::h3 && negotiated_protocol() != tls_negotiated_protocol::other) return {tls_session::progress::failed};
+#else
     if (negotiated_protocol() != tls_negotiated_protocol::h3) return {tls_session::progress::failed};
+#endif
     return impl_->record(impl_->tls->process_post_handshake());
 }
 quic_tls_result quic_tls_session::copy_output(quic_crypto_level level, std::uint64_t offset, std::span<std::byte> destination) const {
