@@ -31,6 +31,9 @@ LT_BEGIN_AUTO_TEST(http3_connection_suite, critical_roles_uniqueness_and_termina
         hd::http3_connection c(pool.data(), pool.critical());
         LT_CHECK(!c.attach_stream(2)); LT_CHECK(!feed(c, 2, bytes({type})).error);
         LT_CHECK_EQ(c.terminal(2, {hd::quic_terminal_kind::eof})->wire_code, 0x104U);
+        hd::http3_connection reset(pool.data(), pool.critical()); reset.attach_stream(2);
+        LT_CHECK(!feed(reset, 2, bytes({type})).error);
+        LT_CHECK_EQ(reset.terminal(2, {hd::quic_terminal_kind::reset})->wire_code, 0x104U);
         hd::http3_connection d(pool.data(), pool.critical()); d.attach_stream(2); d.attach_stream(6);
         feed(d, 2, bytes({type})); LT_CHECK_EQ(feed(d, 6, bytes({type})).error->wire_code, 0x103U);
     }
@@ -236,6 +239,52 @@ LT_BEGIN_AUTO_TEST(http3_connection_suite, descriptor_allocation_rolls_back_and_
     LT_CHECK(!feed(*owner, 0, bytes({1, 2, 0, 0})).error);
     owner.reset(); LT_CHECK_EQ(root.in_use(hs::resource::quic_reassembly_bytes), 0U);
 LT_END_AUTO_TEST(descriptor_allocation_rolls_back_and_lease_outlives_pool_handle)
+LT_BEGIN_AUTO_TEST(http3_connection_suite, incomplete_uni_type_terminals_allow_other_stream_progress)
+    for (auto prefix : {bytes({}), bytes({0x40}), bytes({0x80, 0, 0}), bytes({0xc0, 0, 0, 0, 0, 0, 0})}) {
+        for (auto kind : {hd::quic_terminal_kind::eof, hd::quic_terminal_kind::reset}) {
+            hd::quic_storage_pool pool(200000, 30000, budget());
+            hd::http3_connection c(pool.data(), pool.critical());
+            LT_ASSERT(!c.attach_stream(2));
+            auto r = feed(c, 2, prefix); LT_CHECK(!r.error); LT_CHECK_EQ(r.consumed, prefix.size());
+
+            LT_ASSERT(!c.terminal(2, {kind}));
+            LT_CHECK(!c.terminal(2, {kind})); LT_CHECK(!c.event(2));
+            LT_CHECK_EQ(pool.critical().budget.in_use(hs::resource::streams), 1U);
+            LT_ASSERT(!c.attach_stream(6)); LT_CHECK(!feed(c, 6, bytes({0, 4, 0})).error);
+            LT_CHECK(c.peer_settings().received);
+            LT_ASSERT(!c.attach_stream(0)); LT_CHECK(!feed(c, 0, bytes({1, 3, 0, 0, 0xd1})).error);
+            LT_ASSERT(c.event(0)); LT_CHECK_EQ(c.event(0)->fields[0].value, "GET");
+            c.release_event(0); LT_CHECK(!c.terminal(0, {hd::quic_terminal_kind::eof}));
+            LT_CHECK_EQ(c.attach_stream(2)->wire_code, 0x103U);
+        }
+    }
+LT_END_AUTO_TEST(incomplete_uni_type_terminals_allow_other_stream_progress)
+LT_BEGIN_AUTO_TEST(http3_connection_suite, valid_qpack_exact_expanded_and_field_limits_publish_ordered_fields)
+    hd::quic_storage_pool pool(200000, 30000, budget());
+    hd::http3_limits limits; limits.headers.max_expanded_bytes = 84; limits.headers.max_fields = 2;
+    hd::http3_connection c(pool.data(), pool.critical(), limits); c.attach_stream(0);
+
+    auto r = feed(c, 0, bytes({1, 4, 0, 0, 0xd1, 0xd9}));
+    LT_CHECK(!r.error); LT_CHECK_EQ(r.consumed, 6U); LT_ASSERT(c.event(0));
+    LT_ASSERT_EQ(c.event(0)->fields.size(), 2U);
+    LT_CHECK_EQ(c.event(0)->fields[0].name, ":method"); LT_CHECK_EQ(c.event(0)->fields[0].value, "GET");
+    LT_CHECK_EQ(c.event(0)->fields[1].name, ":status"); LT_CHECK_EQ(c.event(0)->fields[1].value, "200");
+    c.release_event(0); LT_CHECK_EQ(pool.data().budget.in_use(hs::resource::quic_reassembly_bytes), 0U);
+LT_END_AUTO_TEST(valid_qpack_exact_expanded_and_field_limits_publish_ordered_fields)
+LT_BEGIN_AUTO_TEST(http3_connection_suite, valid_qpack_one_over_decoded_limits_releases_all_data_storage)
+    for (auto bounds : {std::pair{83U, 2U}, std::pair{84U, 1U}}) {
+        hd::quic_storage_pool pool(200000, 30000, budget());
+        hd::http3_limits limits; limits.headers.max_expanded_bytes = bounds.first; limits.headers.max_fields = bounds.second;
+        hd::http3_connection c(pool.data(), pool.critical(), limits); c.attach_stream(0);
+        const auto before = pool.data().budget.in_use(hs::resource::quic_reassembly_bytes);
+
+        auto r = feed(c, 0, bytes({1, 4, 0, 0, 0xd1, 0xd9}));
+        LT_ASSERT(r.error); LT_CHECK_EQ(r.error->wire_code, 0x107U);
+        LT_CHECK(r.error->outcome == httpserver::http::outcome_code::limit_exceeded);
+        LT_CHECK(!c.event(0)); LT_CHECK_EQ(r.consumed, 6U);
+        LT_CHECK_EQ(pool.data().budget.in_use(hs::resource::quic_reassembly_bytes), before);
+    }
+LT_END_AUTO_TEST(valid_qpack_one_over_decoded_limits_releases_all_data_storage)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -58,7 +58,9 @@ receipts through `consume_protocol`, advances partial body receipts through
 `consume_body`, and defers later framing credit until preceding DATA is handled.
 RESET cancellation abandons parser storage and uses `settle_reset` for credit.
 Known critical FIN/RESET takes error 0x104; ordinary clean truncation takes
-0x106; request RESET mid-frame is cancellation.
+0x106; request RESET mid-frame is cancellation. FIN/RESET before a complete
+unidirectional type is tolerated: incomplete type scratch is discarded, the
+closed stream record is retained, and unrelated requests/control remain usable.
 
 ## Local verification
 
@@ -84,8 +86,8 @@ build and the provider-free v3 core build pass.
 | Suite | Tests | Checks |
 |---|---:|---:|
 | http3_frame | 5 | 476 |
-| http3_settings | 3 | 32 |
-| http3_connection | 15 | 141 |
+| http3_settings | 7 | 57 |
+| http3_connection | 18 | 296 |
 | quic_varint | 4 | 184 |
 | quic_stream_state | 9 | 186 |
 | quic_reassembly | 7 | 165 |
@@ -94,10 +96,10 @@ build and the provider-free v3 core build pass.
 | qpack_static_table | 1 | 504 |
 | qpack_primitives | 2 | 2137 |
 | qpack_field_section | 7 | 354 |
-| Total | 72 | 4512 |
+| Total | 79 | 4692 |
 
 All 11 executables pass without skips. The three HTTP/3 suites also pass
-ASan/UBSan (23 tests, 649 checks), rebuilding their actual native/QUIC composition
+ASan/UBSan (30 tests, 829 checks), rebuilding their actual native/QUIC composition
 sources with matching instrumentation. Changed-file cpplint and whitespace
 checks pass. New HTTP/3 functions meet CCN <= 10. `make check-local` passes,
 including native linkage, independent header consumers, documentation checks,
@@ -115,3 +117,37 @@ unexecuted and assigned to CI/the v3 PR by AGENTS.md. These local receipts prove
 private framing/control ownership, not network HTTP/3 interoperability or
 complete request serving. The task remains In Progress until caller-owned
 validation/finalization.
+
+## Validation repair iteration 1
+
+The terminal regression first failed at the empty peer-unidirectional FIN
+(`build/task160-off/repair-iter1-terminal-red.log`). The corrected terminal
+path also tolerates partial 2/4/8-byte types with FIN and RESET, clears bounded
+scratch, retains the closed ID against recreation, and permits another control
+stream and request to progress. Identified peer critical FIN/RESET remains
+0x104 and the existing truncated request frame remains 0x106.
+
+Small-limit SETTINGS fixtures accept the exact byte/identifier bounds and
+reject one over with 0x107/limit_exceeded without partial publication. Ignored
+identifiers count toward the identifier bound. Oversized byte admission consumes
+only the uni type and frame header and leaves protected storage unchanged.
+Literal valid QPACK sections accept exactly 84 expanded bytes and two ordered
+fields; one-over expanded-byte or field-count loads expose no event and restore
+data reservations to their pre-feed value. Malformed QPACK and injected
+allocation failure retain their distinct 0x200 and 0x102 mappings.
+
+Four temporary instrumented connection mutants, each resetting one configured
+limit to its default, are rejected by the new corresponding boundary test.
+They were built only under `/private/tmp/task160-repair-limit-mutants`; no
+mutant was applied to the worktree. Red receipts are
+`build/task160-off/repair-iter1-mutant-*-red.log`.
+
+Repair receipts under `build/task160-off/repair-iter1-*` record the full C++20
+build, all 11 rebuilt focused suites (79 tests, 4692 checks, no failures/skips),
+changed-file cpplint, whitespace, and `check-local`. Rebuilt ASan/UBSan HTTP/3
+receipts under `build/task160-sanitized/` record 30 tests, 829 checks, no
+failures/skips or sanitizer diagnostics. The changed connection source passes
+CCN <= 10. Repository complexity still has the same 19 existing violations
+with identical normalized function/metric output; the file-size gate has
+byte-identical baseline output. Warning-suppression checks pass. Nonlocal
+checks remain assigned to CI/the v3 PR.

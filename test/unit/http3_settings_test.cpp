@@ -39,6 +39,51 @@ LT_BEGIN_AUTO_TEST(http3_settings_suite, full_width_values_unknown_settings_and_
     LT_CHECK(c.local_prefix(hd::http3_role::control).empty());
     LT_CHECK_EQ(std::to_integer<unsigned>(c.local_prefix(hd::http3_role::qpack_encoder)[0]), 2U);
 LT_END_AUTO_TEST(full_width_values_unknown_settings_and_local_bootstrap)
+LT_BEGIN_AUTO_TEST(http3_settings_suite, exact_settings_byte_limit_publishes_complete_values)
+    hd::quic_storage_pool pool(200000, 30000, budget());
+    hd::http3_limits limits; limits.settings_bytes = 4;
+    hd::http3_connection c(pool.data(), pool.critical(), limits); c.attach_stream(2);
+
+    auto r = feed(c, 2, bytes({0, 4, 4, 1, 9, 7, 8}));
+    LT_CHECK(!r.error); LT_CHECK_EQ(r.consumed, 7U);
+    LT_CHECK(c.peer_settings().received); LT_CHECK_EQ(c.peer_settings().qpack_capacity, 9U);
+    LT_CHECK_EQ(c.peer_settings().qpack_blocked, 8U);
+LT_END_AUTO_TEST(exact_settings_byte_limit_publishes_complete_values)
+LT_BEGIN_AUTO_TEST(http3_settings_suite, one_over_settings_byte_limit_rejects_before_payload_reservation)
+    hd::quic_storage_pool pool(200000, 30000, budget());
+    hd::http3_limits limits; limits.settings_bytes = 3;
+    hd::http3_connection c(pool.data(), pool.critical(), limits); c.attach_stream(2);
+    const auto before = pool.critical().budget.in_use(hs::resource::quic_reassembly_bytes);
+
+    auto r = feed(c, 2, bytes({0, 4, 4, 1, 9, 7, 8}));
+    LT_ASSERT(r.error); LT_CHECK_EQ(r.error->wire_code, 0x107U);
+    LT_CHECK(r.error->outcome == httpserver::http::outcome_code::limit_exceeded);
+    LT_CHECK_EQ(r.consumed, 3U); LT_CHECK(!c.peer_settings().received);
+    LT_CHECK_EQ(c.peer_settings().qpack_capacity, 0U); LT_CHECK_EQ(c.peer_settings().qpack_blocked, 0U);
+    LT_CHECK_EQ(pool.critical().budget.in_use(hs::resource::quic_reassembly_bytes), before);
+LT_END_AUTO_TEST(one_over_settings_byte_limit_rejects_before_payload_reservation)
+LT_BEGIN_AUTO_TEST(http3_settings_suite, exact_settings_identifier_limit_counts_ignored_identifier)
+    hd::quic_storage_pool pool(200000, 30000, budget());
+    hd::http3_limits limits; limits.settings_identifiers = 2;
+    hd::http3_connection c(pool.data(), pool.critical(), limits); c.attach_stream(2);
+
+    auto r = feed(c, 2, bytes({0, 4, 4, 1, 9, 33, 8}));
+    LT_CHECK(!r.error); LT_CHECK_EQ(r.consumed, 7U);
+    LT_CHECK(c.peer_settings().received); LT_CHECK_EQ(c.peer_settings().qpack_capacity, 9U);
+LT_END_AUTO_TEST(exact_settings_identifier_limit_counts_ignored_identifier)
+LT_BEGIN_AUTO_TEST(http3_settings_suite, ignored_identifier_one_over_limit_prevents_partial_publication)
+    hd::quic_storage_pool pool(200000, 30000, budget());
+    hd::http3_limits limits; limits.settings_identifiers = 1;
+    hd::http3_connection c(pool.data(), pool.critical(), limits); c.attach_stream(2);
+    const auto before = pool.critical().budget.in_use(hs::resource::quic_reassembly_bytes);
+
+    auto r = feed(c, 2, bytes({0, 4, 4, 1, 9, 33, 8}));
+    LT_ASSERT(r.error); LT_CHECK_EQ(r.error->wire_code, 0x107U);
+    LT_CHECK(r.error->outcome == httpserver::http::outcome_code::limit_exceeded);
+    LT_CHECK_EQ(r.consumed, 7U); LT_CHECK(!c.peer_settings().received);
+    LT_CHECK_EQ(c.peer_settings().qpack_capacity, 0U); LT_CHECK_EQ(c.peer_settings().max_field_section, hd::k_quic_max_integer);
+    LT_CHECK_EQ(pool.critical().budget.in_use(hs::resource::quic_reassembly_bytes), before);
+LT_END_AUTO_TEST(ignored_identifier_one_over_limit_prevents_partial_publication)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

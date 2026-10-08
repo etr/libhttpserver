@@ -237,14 +237,13 @@ std::optional<http3_error> http3_connection::terminal(std::uint64_t id, quic_str
     if (s.closed) return {};
     if (s.role >= http3_role::control && s.role <= http3_role::qpack_decoder) return fail(0x104, "Critical stream closed", id);
     if (terminal.kind == quic_terminal_kind::eof && clean_terminal(s, id)) return error_;
-    s.closed = true;
+    s.closed = true; s.scratch = {}; s.scratch_size = 0;
     if (terminal.kind == quic_terminal_kind::reset) {
         release_event(id); s.parser.reset();
     }
     return {};
 }
 std::optional<http3_error> http3_connection::clean_terminal(stream& s, std::uint64_t id) {
-    if (s.role == http3_role::pending) return fail(0x103, "Unidirectional stream lacks type", id);
     if (!s.parser) return {};
     if (auto error = s.parser->finish()) return fail(error->wire_code, error->diagnostic, id);
     if (!s.request_stage) return fail(0x105, "Request lacks HEADERS", id);
