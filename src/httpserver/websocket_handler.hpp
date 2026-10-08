@@ -25,28 +25,13 @@
 #ifndef SRC_HTTPSERVER_WEBSOCKET_HANDLER_HPP_
 #define SRC_HTTPSERVER_WEBSOCKET_HANDLER_HPP_
 
-// <microhttpd.h> and <microhttpd_ws.h> are
-// deliberately NOT included from this public header. The class below
-// uses two MHD-defined struct types only by pointer (forward-declared
-// at file scope below) and `MHD_socket` (an integer typedef -- `int`
-// on POSIX, `SOCKET` (`UINT_PTR`) on Windows). Because typedef-names
-// cannot be forward-declared, the public surface uses `std::intptr_t`
-// -- which is at least as wide as `MHD_socket` on every platform we
-// support. A static_assert in src/websocket_handler.cpp pins that
-// invariant where <microhttpd.h> is reachable.
-//
-// The public declarations below are visible
-// unconditionally. Method bodies live in
-// src/websocket_handler.cpp; on HAVE_WEBSOCKET-off builds the
-// definitions in that TU either throw feature_unavailable or are no-ops
-// (see the file for the per-method policy).
+// Backend handles use opaque pointer storage. The implementation restores
+// their types at the private provider boundary, preserving the pointer layout.
+// Public methods are available in every feature configuration.
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
-
-struct MHD_UpgradeResponseHandle;
-struct MHD_WebSocketStream;
 
 namespace httpserver {
 
@@ -120,16 +105,16 @@ class websocket_session {
      // intptr_t loses bit-pattern fidelity when the high bit is set (CWE-681).
      // src/websocket_handler.cpp casts back to MHD_socket at the boundary
      // and static_asserts the underlying-width invariant.
-     websocket_session(std::uintptr_t sock, struct MHD_UpgradeResponseHandle* urh,
-                       struct MHD_WebSocketStream* ws_stream);
+     websocket_session(std::uintptr_t sock, void* urh,
+                       void* ws_stream);
      ~websocket_session();
 
      websocket_session(const websocket_session&) = delete;
      websocket_session& operator=(const websocket_session&) = delete;
 
      std::uintptr_t sock;
-     struct MHD_UpgradeResponseHandle* urh;
-     struct MHD_WebSocketStream* ws_stream;
+     void* urh;
+     void* ws_stream;
      bool valid;
 
      friend class webserver;

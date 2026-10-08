@@ -48,17 +48,17 @@ static_assert(sizeof(MHD_socket) <= sizeof(std::uintptr_t),
 
 // websocket_session implementation
 
-websocket_session::websocket_session(std::uintptr_t sock, struct MHD_UpgradeResponseHandle* urh,
-                                     struct MHD_WebSocketStream* ws_stream):
+websocket_session::websocket_session(std::uintptr_t sock, void* urh,
+                                     void* ws_stream):
     sock(sock), urh(urh), ws_stream(ws_stream), valid(true) {
 }
 
 websocket_session::~websocket_session() {
     if (ws_stream != nullptr) {
-        MHD_websocket_stream_free(ws_stream);
+        MHD_websocket_stream_free(static_cast<MHD_WebSocketStream*>(ws_stream));
     }
     if (urh != nullptr) {
-        MHD_upgrade_action(urh, MHD_UPGRADE_ACTION_CLOSE);
+        MHD_upgrade_action(static_cast<MHD_UpgradeResponseHandle*>(urh), MHD_UPGRADE_ACTION_CLOSE);
     }
 }
 
@@ -76,9 +76,9 @@ void websocket_session::send_text(const std::string& msg) {
     if (!valid) return;
     char* frame = nullptr;
     size_t frame_len = 0;
-    if (MHD_websocket_encode_text(ws_stream, msg.c_str(), msg.size(), 0, &frame, &frame_len, nullptr) == MHD_WEBSOCKET_STATUS_OK) {
+    if (MHD_websocket_encode_text(static_cast<MHD_WebSocketStream*>(ws_stream), msg.c_str(), msg.size(), 0, &frame, &frame_len, nullptr) == MHD_WEBSOCKET_STATUS_OK) {
         if (!send_all(static_cast<MHD_socket>(sock), frame, frame_len)) valid = false;
-        MHD_websocket_free(ws_stream, frame);
+        MHD_websocket_free(static_cast<MHD_WebSocketStream*>(ws_stream), frame);
     }
 }
 
@@ -86,9 +86,9 @@ void websocket_session::send_binary(const void* data, size_t len) {
     if (!valid) return;
     char* frame = nullptr;
     size_t frame_len = 0;
-    if (MHD_websocket_encode_binary(ws_stream, static_cast<const char*>(data), len, 0, &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
+    if (MHD_websocket_encode_binary(static_cast<MHD_WebSocketStream*>(ws_stream), static_cast<const char*>(data), len, 0, &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
         if (!send_all(static_cast<MHD_socket>(sock), frame, frame_len)) valid = false;
-        MHD_websocket_free(ws_stream, frame);
+        MHD_websocket_free(static_cast<MHD_WebSocketStream*>(ws_stream), frame);
     }
 }
 
@@ -111,7 +111,7 @@ static void send_control_frame(control_frame_encoder encode,
     size_t frame_len = 0;
     if (encode(ws_stream, payload.c_str(), payload.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
         if (!send_all(sock, frame, frame_len)) valid = false;
-        MHD_websocket_free(ws_stream, frame);
+        MHD_websocket_free(static_cast<MHD_WebSocketStream*>(ws_stream), frame);
     } else {
         // Encode failure (e.g. stream already in error state): treat as a
         // closed session so callers stop issuing further frames on this
@@ -123,13 +123,13 @@ static void send_control_frame(control_frame_encoder encode,
 
 void websocket_session::send_ping(const std::string& payload) {
     if (!valid) return;
-    send_control_frame(&MHD_websocket_encode_ping, ws_stream,
+    send_control_frame(&MHD_websocket_encode_ping, static_cast<MHD_WebSocketStream*>(ws_stream),
                        static_cast<MHD_socket>(sock), payload, valid);
 }
 
 void websocket_session::send_pong(const std::string& payload) {
     if (!valid) return;
-    send_control_frame(&MHD_websocket_encode_pong, ws_stream,
+    send_control_frame(&MHD_websocket_encode_pong, static_cast<MHD_WebSocketStream*>(ws_stream),
                        static_cast<MHD_socket>(sock), payload, valid);
 }
 
@@ -138,9 +138,9 @@ void websocket_session::close(uint16_t code, const std::string& reason) {
     valid = false;
     char* frame = nullptr;
     size_t frame_len = 0;
-    if (MHD_websocket_encode_close(ws_stream, code, reason.c_str(), reason.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
+    if (MHD_websocket_encode_close(static_cast<MHD_WebSocketStream*>(ws_stream), code, reason.c_str(), reason.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
         send_all(static_cast<MHD_socket>(sock), frame, frame_len);
-        MHD_websocket_free(ws_stream, frame);
+        MHD_websocket_free(static_cast<MHD_WebSocketStream*>(ws_stream), frame);
     }
 }
 
@@ -194,8 +194,8 @@ namespace httpserver {
 }
 
 websocket_session::websocket_session(std::uintptr_t sock,
-                                     struct MHD_UpgradeResponseHandle* urh,
-                                     struct MHD_WebSocketStream* ws_stream)
+                                     void* urh,
+                                     void* ws_stream)
     : sock(sock), urh(urh), ws_stream(ws_stream), valid(false) {}
 
 websocket_session::~websocket_session() = default;

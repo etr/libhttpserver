@@ -649,3 +649,14 @@ EXTRA_DIST += docs/task-131-tls-credentials-evidence.md
 EXTRA_DIST += docs/external-psk-lookup-contract.md docs/task-134-psk-contract-evidence.md
 
 EXTRA_DIST += scripts/run-v3-http2-gates.py docs/task-145-http2-evidence.md
+
+# TASK-148: policy fixtures are local; the fresh installed matrix is opt-in.
+EXTRA_DIST += scripts/audit-v3-installed-package.py scripts/check-v3-installed-consumer.py scripts/test-v3-installed-package.py scripts/v3-installed-dependency-policy.json docs/task-148-installed-consumer-evidence.md
+check-v3-installed-package-fixtures:
+	@python3 $(top_srcdir)/scripts/test-v3-installed-package.py
+
+# Supply INSTALL_AUDIT_ARGS="--output /fresh/path --provider-prefix /provider --prerequisite-prefix /prerequisites".
+check-v3-installed-consumer:
+	@python3 $(top_srcdir)/scripts/check-v3-installed-consumer.py $(INSTALL_AUDIT_ARGS)
+
+.PHONY: check-v3-installed-package-fixtures check-v3-installed-consumer

@@ -2030,3 +2030,5 @@ io_completion_storage_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 io_iocp_backend_SOURCES = unit/io_iocp_backend_test.cpp
 io_iocp_backend_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 io_iocp_backend_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+EXTRA_DIST += installed/v3_package_consumer.cpp
