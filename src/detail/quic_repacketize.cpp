@@ -82,6 +82,25 @@ quic_information_result quic_recovery::retain_stream(const quic_stream_frame& fr
     value.terminal = frame.fin ? information_status::pending : information_status::delivered;
     return impl_->retain(std::move(value), frame.data);
 }
+quic_information_result quic_recovery::retain_handshake_done() {
+    if (impl_->config.role != quic_endpoint_role::server) return {{quic_recovery_code::invalid}};
+    implementation::information value;
+    value.kind = quic_information_kind::handshake_done;
+    value.space = quic_pn_space::application;
+    value.terminal = information_status::pending;
+    return impl_->retain(std::move(value), {});
+}
+quic_information_result quic_recovery::retain_stop_sending(const quic_stop_sending_frame& frame) {
+    if (frame.stream > k_quic_max_integer || frame.error > k_quic_max_integer ||
+        !quic_stream_sender_allowed(frame.stream, false, impl_->config.role)) return {{quic_recovery_code::invalid}};
+    implementation::information value;
+    value.kind = quic_information_kind::stop_sending;
+    value.space = quic_pn_space::application;
+    value.stream = frame.stream;
+    value.error = frame.error;
+    value.terminal = information_status::pending;
+    return impl_->retain(std::move(value), {});
+}
 quic_information_result quic_recovery::retain_reset(const quic_reset_stream_frame& frame) {
     if (frame.stream > k_quic_max_integer || frame.error > k_quic_max_integer || frame.final_size > k_quic_max_integer ||
         !quic_stream_sender_allowed(frame.stream, true, impl_->config.role)) return {{quic_recovery_code::invalid}};
@@ -163,6 +182,8 @@ std::optional<quic_recovery::implementation::slice> quic_recovery::implementatio
     return content;
 }
 quic_frame quic_recovery::implementation::information_frame(const information& value, slice content) const {
+    if (value.kind == quic_information_kind::handshake_done) return quic_handshake_done_frame{};
+    if (value.kind == quic_information_kind::stop_sending) return quic_stop_sending_frame{value.stream, value.error};
     if (value.kind == quic_information_kind::flow) return value.flow;
     if (value.kind == quic_information_kind::reset_stream) return quic_reset_stream_frame{value.stream, value.error, value.offset};
     const auto bytes = std::span(value.data).subspan(content.start, content.length);
