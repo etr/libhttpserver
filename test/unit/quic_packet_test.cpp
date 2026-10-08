@@ -50,6 +50,42 @@ LT_BEGIN_AUTO_TEST(packet_suite, fixed_envelopes_headers_and_transactional_write
             LT_CHECK(parsed.value.kind == kind);
             LT_CHECK_EQ(parsed.consumed, expected.size());
             LT_CHECK_EQ(parsed.value.destination.size(), std::size_t{2});
+            LT_CHECK(std::equal(parsed.value.destination.begin(), parsed.value.destination.end(), dcid.begin(), dcid.end()));
+            LT_CHECK(parsed.value.destination.data() == expected.data() + (kind == hd::quic_packet_kind::one_rtt ? 1 : 6));
+            LT_CHECK(parsed.value.packet.data() == expected.data() && parsed.value.packet.size() == expected.size());
+            if (kind == hd::quic_packet_kind::one_rtt) {
+                LT_CHECK(parsed.value.source.empty());
+            } else {
+                LT_ASSERT(parsed.value.source.size() == 1);
+                LT_CHECK(parsed.value.source[0] == std::byte{0xef});
+                LT_CHECK(parsed.value.source.data() == expected.data() + 9);
+            }
+            if (kind == hd::quic_packet_kind::initial || kind == hd::quic_packet_kind::retry) {
+                LT_CHECK(std::equal(parsed.value.token.begin(), parsed.value.token.end(), token.begin(), token.end()));
+                LT_CHECK(parsed.value.token.data() == expected.data() + (kind == hd::quic_packet_kind::initial ? 11 : 10));
+            } else {
+                LT_CHECK(parsed.value.token.empty());
+            }
+            if (kind == hd::quic_packet_kind::version_negotiation) {
+                LT_CHECK(std::equal(parsed.value.versions.begin(), parsed.value.versions.end(), versions.begin(), versions.end()));
+                LT_CHECK(parsed.value.versions.data() == expected.data() + 10);
+            } else {
+                LT_CHECK(parsed.value.versions.empty());
+            }
+            if (kind == hd::quic_packet_kind::retry) {
+                LT_CHECK(std::equal(parsed.value.integrity_tag.begin(), parsed.value.integrity_tag.end(), tag.begin(), tag.end()));
+                LT_CHECK(parsed.value.integrity_tag.data() == expected.data() + 12);
+            } else {
+                LT_CHECK(parsed.value.integrity_tag.empty());
+            }
+            if (numbered) {
+                const std::size_t offset = kind == hd::quic_packet_kind::one_rtt ? 3 : kind == hd::quic_packet_kind::initial ? 14 : 11;
+                LT_CHECK_EQ(parsed.value.packet_number_offset, offset);
+                LT_CHECK(parsed.value.protected_remainder.data() == expected.data() + offset);
+                LT_CHECK(std::equal(parsed.value.protected_remainder.begin(), parsed.value.protected_remainder.end(), expected.begin() + offset, expected.end()));
+            } else {
+                LT_CHECK(parsed.value.protected_remainder.empty());
+            }
             if (numbered) {
                 auto pn = std::span(expected).subspan(parsed.value.packet_number_offset, width);
                 const auto clear = hd::decode_quic_unprotected_header(parsed.value, {static_cast<std::uint8_t>(first), pn}, std::nullopt);
@@ -176,6 +212,85 @@ LT_BEGIN_AUTO_TEST(packet_suite, explicit_wider_lengths_exact_output_and_maximum
     auto huge_token = octets({0xc0, 0, 0, 0, 1, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff});
     LT_CHECK(hd::parse_quic_envelope(huge_token).code == hd::quic_codec_code::truncated);
 LT_END_AUTO_TEST(explicit_wider_lengths_exact_output_and_maximum_cid_views)
+LT_BEGIN_AUTO_TEST(packet_suite, version_negotiation_has_eight_bit_cid_lengths)
+    for (const unsigned length : {21U, 255U}) {
+        // Independent wire vector: version zero, distinct repeated CIDs, version one.
+        auto wire = octets({0x80, 0, 0, 0, 0, length});
+        wire.insert(wire.end(), length, std::byte{0xab});
+        wire.push_back(std::byte(length));
+        wire.insert(wire.end(), length, std::byte{0xcd});
+        const auto versions = octets({0, 0, 0, 1});
+        wire.insert(wire.end(), versions.begin(), versions.end());
+        auto parsed = hd::parse_quic_envelope(wire);
+        LT_CHECK(parsed.code == hd::quic_codec_code::ok);
+        if (parsed.code == hd::quic_codec_code::ok) {
+            LT_CHECK(parsed.value.kind == hd::quic_packet_kind::version_negotiation);
+            LT_CHECK_EQ(parsed.consumed, wire.size());
+            LT_CHECK_EQ(parsed.value.destination.size(), std::size_t(length));
+            LT_CHECK_EQ(parsed.value.source.size(), std::size_t(length));
+            LT_CHECK(parsed.value.destination.data() == wire.data() + 6);
+            LT_CHECK(parsed.value.source.data() == wire.data() + 7 + length);
+            LT_CHECK(std::all_of(parsed.value.destination.begin(), parsed.value.destination.end(), [](auto b) { return b == std::byte{0xab}; }));
+            LT_CHECK(std::all_of(parsed.value.source.begin(), parsed.value.source.end(), [](auto b) { return b == std::byte{0xcd}; }));
+            LT_CHECK(parsed.value.versions.data() == wire.data() + 7 + 2 * length);
+            LT_CHECK(std::equal(parsed.value.versions.begin(), parsed.value.versions.end(), versions.begin(), versions.end()));
+        }
+        hd::quic_packet_write packet;
+        packet.kind = hd::quic_packet_kind::version_negotiation;
+        packet.destination = std::span(wire).subspan(6, length);
+        packet.source = std::span(wire).subspan(7 + length, length);
+        packet.versions = versions;
+        std::vector<std::byte> out(wire.size(), std::byte{0x55});
+        LT_CHECK(hd::encode_quic_packet(packet, out).code == hd::quic_codec_code::ok);
+        LT_CHECK(out == wire);
+        out.assign(wire.size(), std::byte{0x55});
+        LT_CHECK(hd::encode_quic_packet(packet, std::span(out).first(out.size() - 1)).code == hd::quic_codec_code::no_space);
+        LT_CHECK(std::all_of(out.begin(), out.end(), [](auto b) { return b == std::byte{0x55}; }));
+        for (const auto end : {std::size_t{5} + length, std::size_t{6} + 2 * length}) {
+            auto truncated = hd::parse_quic_envelope(std::span(wire).first(end));
+            LT_CHECK(truncated.code == hd::quic_codec_code::truncated);
+            LT_CHECK_EQ(truncated.consumed, std::size_t{0});
+            LT_CHECK(truncated.value.destination.empty() && truncated.value.source.empty());
+        }
+        // The identical long CIDs remain invalid for each v1 long-header kind.
+        for (const unsigned first : {0xc0U, 0xd0U, 0xe0U, 0xf0U}) {
+            auto v1 = wire;
+            v1[0] = std::byte(first);
+            v1[4] = std::byte{1};
+            LT_CHECK(hd::parse_quic_envelope(v1).code == hd::quic_codec_code::malformed);
+            v1.erase(v1.begin() + 6, v1.begin() + 6 + length);
+            v1[5] = std::byte{0};
+            LT_CHECK(hd::parse_quic_envelope(v1).code == hd::quic_codec_code::malformed);
+        }
+        const std::array<std::byte, 16> tag{};
+        const auto token = octets({1});
+        packet.versions = {};
+        packet.tag = tag;
+        for (auto kind : {hd::quic_packet_kind::initial, hd::quic_packet_kind::handshake, hd::quic_packet_kind::zero_rtt, hd::quic_packet_kind::retry,
+                          hd::quic_packet_kind::one_rtt}) {
+            packet.kind = kind;
+            packet.token = kind == hd::quic_packet_kind::retry ? std::span<const std::byte>(token) : std::span<const std::byte>{};
+            for (const bool source : {false, true}) {
+                packet.destination = source ? std::span<const std::byte>{} : std::span(wire).subspan(6, length);
+                packet.source = source ? std::span(wire).subspan(7 + length, length) : std::span<const std::byte>{};
+                LT_CHECK(hd::encode_quic_packet(packet, out).code == hd::quic_codec_code::malformed);
+                LT_CHECK(std::all_of(out.begin(), out.end(), [](auto b) { return b == std::byte{0x55}; }));
+            }
+        }
+    }
+    std::array<std::byte, 256> oversized{};
+    hd::quic_packet_write packet;
+    packet.kind = hd::quic_packet_kind::version_negotiation;
+    packet.versions = std::span(oversized).first(4);
+    std::array<std::byte, 600> output;
+    output.fill(std::byte{0x55});
+    for (const bool source : {false, true}) {
+        packet.destination = source ? std::span<const std::byte>{} : oversized;
+        packet.source = source ? oversized : std::span<const std::byte>{};
+        LT_CHECK(hd::encode_quic_packet(packet, output).code == hd::quic_codec_code::malformed);
+        LT_CHECK(std::all_of(output.begin(), output.end(), [](auto b) { return b == std::byte{0x55}; }));
+    }
+LT_END_AUTO_TEST(version_negotiation_has_eight_bit_cid_lengths)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

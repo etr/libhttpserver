@@ -18,6 +18,8 @@ contains the implementations; these codecs need no TLS provider.
   0-RTT use their encoded lengths; short headers consume the remainder. Retry
   and Version Negotiation have their own envelope shapes. Unsupported versions
   have a separate verdict. 0-RTT recognition introduces no runtime acceptance.
+  Version Negotiation CIDs use the full 0–255-byte wire length; v1 long and
+  short headers retain the 20-byte CID limit.
 - `quic_frame.hpp` yields one typed frame, with all core families and STREAM
   flags. Placement follows the RFC frame table, including sender restrictions
   and unidirectional stream direction. ACK ranges use a validated encoded view
@@ -137,7 +139,7 @@ make -C build/task151-codecs/test check check_PROGRAMS="$focused" TESTS="$focuse
 ```
 
 Both Automake selectors are needed: setting `TESTS` alone still attempts to
-build unrelated legacy programs. The final focused run passed all nine
+build unrelated legacy programs. The initial implementation focused run passed all nine
 executables (44 cases, 2,416 checks), with no failures or skips. The existing datagram dispatch loopback test first
 failed under the sandbox and passed when the same suite was rerun with socket
 access. Final logs are under `build/task151-codecs/`.
@@ -182,3 +184,51 @@ logs are `build/baseline-*.log`, `build/{file-size,complexity,duplication}.log`,
 `git diff --check` passes. BSD, Windows and other nonlocal platform checks are
 unexecuted and CI/v3-PR-owned. These results establish local codec behavior;
 there is no interoperability, HTTP/3 request, deployment or production claim.
+
+## Validation repair, iteration 1
+
+The authorized repair applies packet-specific CID bounds and strengthens the
+independent field/value oracles. VN vectors with 21-byte and 255-byte destination
+and source CIDs first produced 12 failing checks in
+`build/validation-packet-red.log`; the repaired packet suite now passes 956
+checks. Truncated VN CIDs return transactional errors, VN writes reject 256-byte
+CIDs without changing output, and v1 packets still reject oversized CIDs.
+
+All envelope-kind fixtures now assert CID values and borrowed locations,
+including Initial source byte `0xef`, and applicable token, version-list,
+integrity-tag and protected-remainder views. Client and server parameter
+fixtures assert independent canonical bytes and every known numeric/CID/token
+value after reparse. The bounded fuzz parameter round trip additionally preserves
+known values, including preferred-address values, while allowing unknown tuples
+and nonminimal widths to canonicalize. Existing fuzz caps are unchanged.
+
+Copied-source mutation probes confirm the assertions detect the reported gaps:
+forcing parameter ID 4 (`initial_max_data`) to zero fails six checks, and
+redirecting Initial source to destination bytes fails eight checks. Logs are
+`build/validation-{parameters,packet}-mutant.log`; production sources were not
+mutated for these probes.
+
+The core and nine focused test executables were rebuilt with the commands
+above. The exact focused `make check` gate passed all nine executables, 45 cases
+and 2,771 checks, with no skips (`build/validation-focused.log`). The sandboxed
+run failed the existing UDP loopback assertion; the same command passed when
+rerun with local socket access. The existing zero-allocation executable passes.
+
+```sh
+bash scripts/run-v3-protocol-fuzz.sh \
+  --compiler /opt/homebrew/opt/llvm/bin/clang++ \
+  --build-dir build/task151-validation-repair-fuzz \
+  --targets quic_parser --runs 2000 --seconds 30
+python3 -m cpplint --extensions=cpp,hpp --headers=hpp \
+  src/detail/quic_packet.cpp test/unit/quic_packet_test.cpp \
+  test/unit/quic_transport_parameters_test.cpp test/fuzz/quic_parser_fuzz.cpp
+python3 -m lizard -C 10 --warnings_only src/detail/quic_packet.cpp
+git diff --check
+```
+
+All commands passed. ASan/UBSan libFuzzer completed 2,000 runs with seed 128,
+the existing 4-KiB input and 512-MiB RSS limits and 30-second cap; receipts are
+`build/task151-validation-repair-fuzz/quic_parser/{run.log,reproduce.sh}`.
+Lint and complexity logs are `build/validation-{cpplint,complexity}.log`.
+BSD, Windows and other nonlocal checks remain unexecuted and CI/v3-PR-owned.
+Task status remains **In Progress** for runner-owned finalization.

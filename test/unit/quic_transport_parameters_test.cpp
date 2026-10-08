@@ -7,6 +7,11 @@ LT_BEGIN_SUITE(parameter_suite)
     void set_up() {}
     void tear_down() {}
 LT_END_SUITE(parameter_suite)
+namespace {
+bool equal_optional_bytes(const std::optional<std::span<const std::byte>>& a, const std::optional<std::span<const std::byte>>& b) {
+    return a.has_value() == b.has_value() && (!a || std::equal(a->begin(), a->end(), b->begin(), b->end()));
+}
+}  // namespace
 LT_BEGIN_AUTO_TEST(parameter_suite, fixed_client_and_server_blocks_defaults_and_serialization)
     auto wire = octets({1, 1, 10, 3, 2, 0x44, 0xb0, 4, 1, 30, 5, 1, 10, 6, 1, 11, 7, 1, 12, 8, 1, 5, 9, 1, 6, 10, 1, 4, 11, 1, 26, 12, 0, 14, 1, 3, 15, 2, 0xab, 0xcd});
     for (auto sender : {hd::quic_endpoint_role::client, hd::quic_endpoint_role::server}) {
@@ -37,10 +42,37 @@ LT_BEGIN_AUTO_TEST(parameter_suite, fixed_client_and_server_blocks_defaults_and_
         LT_CHECK_EQ(p.initial_source_cid->size(), std::size_t{2});
         std::vector<std::byte> out(block.size() + 10, std::byte{0x55});
         auto written = hd::encode_quic_transport_parameters(p, sender, out);
-        LT_CHECK(written.code == hd::quic_codec_code::ok);
+        LT_ASSERT(written.code == hd::quic_codec_code::ok);
+        // Independent canonical bytes put ID 1 between the server's IDs 0 and 2.
+        const auto canonical = sender == hd::quic_endpoint_role::client
+                                   ? octets({1, 1, 10, 3, 2, 0x44, 0xb0, 4, 1, 30, 5, 1, 10, 6, 1, 11, 7, 1, 12, 8, 1, 5, 9, 1, 6, 10, 1, 4, 11, 1, 26, 12, 0, 14, 1, 3, 15, 2, 0xab, 0xcd})
+                                   : octets({0, 1, 0xab, 1, 1, 10, 2, 16, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 3, 2, 0x44, 0xb0, 4, 1, 30,
+                                             5, 1, 10, 6, 1, 11, 7, 1, 12, 8, 1, 5, 9, 1, 6, 10, 1, 4, 11, 1, 26, 12, 0, 14, 1, 3, 15, 2, 0xab, 0xcd, 16, 1, 0xef});
+        LT_CHECK_EQ(written.consumed, canonical.size());
+        LT_CHECK(std::equal(out.begin(), out.begin() + written.consumed, canonical.begin(), canonical.end()));
+        LT_CHECK(std::all_of(out.begin() + written.consumed, out.end(), [](auto b) { return b == std::byte{0x55}; }));
         auto reparsed = hd::decode_quic_transport_parameters(std::span(out).first(written.consumed), sender);
-        LT_CHECK(reparsed.code == hd::quic_codec_code::ok);
-        LT_CHECK_EQ(reparsed.value.present, p.present);
+        LT_ASSERT(reparsed.code == hd::quic_codec_code::ok);
+        const auto& round = reparsed.value;
+        LT_CHECK_EQ(round.present, p.present);
+        LT_CHECK_EQ(round.max_idle_timeout, p.max_idle_timeout);
+        LT_CHECK_EQ(round.max_udp_payload_size, p.max_udp_payload_size);
+        LT_CHECK_EQ(round.initial_max_data, std::uint64_t{30});
+        LT_CHECK_EQ(round.initial_max_data, p.initial_max_data);
+        LT_CHECK_EQ(round.initial_max_stream_data_bidi_local, p.initial_max_stream_data_bidi_local);
+        LT_CHECK_EQ(round.initial_max_stream_data_bidi_remote, p.initial_max_stream_data_bidi_remote);
+        LT_CHECK_EQ(round.initial_max_stream_data_uni, p.initial_max_stream_data_uni);
+        LT_CHECK_EQ(round.initial_max_streams_bidi, p.initial_max_streams_bidi);
+        LT_CHECK_EQ(round.initial_max_streams_uni, p.initial_max_streams_uni);
+        LT_CHECK_EQ(round.ack_delay_exponent, p.ack_delay_exponent);
+        LT_CHECK_EQ(round.max_ack_delay, p.max_ack_delay);
+        LT_CHECK_EQ(round.active_connection_id_limit, p.active_connection_id_limit);
+        LT_CHECK(round.disable_active_migration == p.disable_active_migration);
+        LT_CHECK(equal_optional_bytes(round.initial_source_cid, p.initial_source_cid));
+        LT_CHECK(equal_optional_bytes(round.original_destination_cid, p.original_destination_cid));
+        LT_CHECK(equal_optional_bytes(round.retry_source_cid, p.retry_source_cid));
+        LT_CHECK(equal_optional_bytes(round.stateless_reset_token, p.stateless_reset_token));
+        LT_CHECK(round.preferred_address.has_value() == p.preferred_address.has_value());
         const auto original = out;
         LT_CHECK(hd::encode_quic_transport_parameters(p, sender, std::span(out).first(written.consumed - 1)).code == hd::quic_codec_code::no_space);
         LT_CHECK(out == original);

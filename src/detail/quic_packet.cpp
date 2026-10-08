@@ -4,9 +4,9 @@
 namespace httpserver {
 namespace detail {
 namespace {
-std::span<const std::byte> read_cid(quic_cursor& cursor) noexcept {
+std::span<const std::byte> read_cid(quic_cursor& cursor, std::size_t maximum) noexcept {
     const auto size = cursor.fixed(1);
-    if (size > 20) cursor.fail(quic_codec_code::malformed);
+    if (size > maximum) cursor.fail(quic_codec_code::malformed);
     return cursor.take(size);
 }
 quic_codec_code parse_unprotected_body(quic_cursor& cursor, quic_packet_envelope& packet) noexcept {
@@ -38,8 +38,9 @@ quic_codec_code parse_long_body(quic_cursor& cursor, quic_packet_envelope& packe
 quic_codec_code parse_long(quic_cursor& cursor, quic_packet_envelope& packet, std::uint64_t first) noexcept {
     packet.kind = static_cast<quic_packet_kind>((first >> 4) & 3);
     packet.version = cursor.fixed(4);
-    packet.destination = read_cid(cursor);
-    packet.source = read_cid(cursor);
+    const std::size_t maximum_cid = packet.version == 0 ? 255 : 20;
+    packet.destination = read_cid(cursor, maximum_cid);
+    packet.source = read_cid(cursor, maximum_cid);
     if (cursor.code() != quic_codec_code::ok) return cursor.code();
     if (packet.version && !(first & 0x40)) return quic_codec_code::malformed;
     if (packet.version > 1) return quic_codec_code::unsupported_version;
@@ -98,7 +99,8 @@ bool valid_packet_metadata(const quic_packet_write& p) noexcept {
     return !(p.key_phase || p.spin);
 }
 bool valid_packet_views(const quic_packet_write& p) noexcept {
-    if (p.destination.size() > 20 || p.source.size() > 20) return false;
+    const std::size_t maximum_cid = p.kind == quic_packet_kind::version_negotiation ? 255 : 20;
+    if (p.destination.size() > maximum_cid || p.source.size() > maximum_cid) return false;
     if (!valid_packet_metadata(p)) return false;
     const bool token_allowed = p.kind == quic_packet_kind::initial || p.kind == quic_packet_kind::retry;
     if (!token_allowed && !p.token.empty()) return false;

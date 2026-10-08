@@ -75,6 +75,26 @@ bool fuzz_frames(std::span<const std::byte> bytes, hd::quic_frame_context contex
     }
     return !bytes.empty();
 }
+void parameter_values(const hd::quic_transport_parameters& a, const hd::quic_transport_parameters& b) {
+    require(a.present == b.present && a.disable_active_migration == b.disable_active_migration);
+    require(a.max_idle_timeout == b.max_idle_timeout && a.max_udp_payload_size == b.max_udp_payload_size && a.initial_max_data == b.initial_max_data);
+    require(a.initial_max_stream_data_bidi_local == b.initial_max_stream_data_bidi_local);
+    require(a.initial_max_stream_data_bidi_remote == b.initial_max_stream_data_bidi_remote && a.initial_max_stream_data_uni == b.initial_max_stream_data_uni);
+    require(a.initial_max_streams_bidi == b.initial_max_streams_bidi && a.initial_max_streams_uni == b.initial_max_streams_uni);
+    require(a.ack_delay_exponent == b.ack_delay_exponent && a.max_ack_delay == b.max_ack_delay && a.active_connection_id_limit == b.active_connection_id_limit);
+    const auto equal_view = [](auto x, auto y) { return std::equal(x.begin(), x.end(), y.begin(), y.end()); };
+    const auto equal_optional = [&](auto x, auto y) { return x.has_value() == y.has_value() && (!x || equal_view(*x, *y)); };
+    require(equal_optional(a.original_destination_cid, b.original_destination_cid));
+    require(equal_optional(a.initial_source_cid, b.initial_source_cid) && equal_optional(a.retry_source_cid, b.retry_source_cid));
+    require(equal_optional(a.stateless_reset_token, b.stateless_reset_token));
+    require(a.preferred_address.has_value() == b.preferred_address.has_value());
+    if (a.preferred_address) {
+        const auto& x = *a.preferred_address;
+        const auto& y = *b.preferred_address;
+        require(x.ipv4 == y.ipv4 && x.ipv4_port == y.ipv4_port && x.ipv6 == y.ipv6 && x.ipv6_port == y.ipv6_port);
+        require(equal_view(x.cid, y.cid) && equal_view(x.reset_token, y.reset_token));
+    }
+}
 bool fuzz_parameters(std::span<const std::byte> bytes, hd::quic_endpoint_role role) {
     auto a = hd::decode_quic_transport_parameters(bytes, role, {4096, 256, 64, 64});
     auto b = hd::decode_quic_transport_parameters(bytes, role, {4096, 256, 64, 64});
@@ -92,6 +112,8 @@ bool fuzz_parameters(std::span<const std::byte> bytes, hd::quic_endpoint_role ro
     require(w.code == hd::quic_codec_code::ok);
     auto round = hd::decode_quic_transport_parameters(std::span(output).first(w.consumed), role);
     require(round.code == hd::quic_codec_code::ok && round.consumed == w.consumed);
+    // Unknown tuples and nonminimal widths may canonicalize; known values must survive.
+    parameter_values(a.value, round.value);
     auto twice = hd::encode_quic_transport_parameters(round.value, role, canonical);
     require(twice.code == hd::quic_codec_code::ok && twice.consumed == w.consumed);
     require(std::equal(output.begin(), output.begin() + w.consumed, canonical.begin()));
