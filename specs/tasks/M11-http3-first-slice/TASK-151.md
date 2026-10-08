@@ -9,9 +9,9 @@
 Provide strict QUIC v1 packet, frame and parameter codecs for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Implement varints, packet numbers, long/short headers and frames.
-- [ ] Parse transport parameters with strict duplicate and length checks.
-- [ ] Replay vectors and malformed-corpus inputs without proportional allocation.
+- [x] Implement varints, packet numbers, long/short headers and frames.
+- [x] Parse transport parameters with strict duplicate and length checks.
+- [x] Replay vectors and malformed-corpus inputs without proportional allocation.
 
 **Dependencies:**
 - Blocked by: TASK-150
@@ -24,4 +24,4 @@ Provide strict QUIC v1 packet, frame and parameter codecs for libhttpserver v3.0
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** Complete

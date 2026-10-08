@@ -124,3 +124,9 @@ noinst_HEADERS += httpserver/detail/websocket_handshake.hpp httpserver/detail/ht
 libhttpserver_v3core_la_SOURCES += detail/websocket_handshake.cpp detail/http2_websocket_handshake.cpp detail/http2_websocket_stream.cpp
 
 noinst_HEADERS += httpserver/detail/io_datagram.hpp httpserver/detail/io_udp_backend.hpp httpserver/detail/quic_invariant_header.hpp httpserver/detail/quic_datagram_dispatch.hpp
+
+libhttpserver_v3core_la_SOURCES += detail/quic_varint.cpp
+noinst_HEADERS += httpserver/detail/quic_codec.hpp httpserver/detail/quic_varint.hpp
+
+libhttpserver_v3core_la_SOURCES += detail/quic_packet.cpp detail/quic_frame.cpp detail/quic_frame_write.cpp detail/quic_transport_parameters.cpp
+noinst_HEADERS += httpserver/detail/quic_packet.hpp httpserver/detail/quic_frame.hpp httpserver/detail/quic_transport_parameters.hpp
