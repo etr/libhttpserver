@@ -174,3 +174,6 @@ noinst_HEADERS += httpserver/detail/http3_request_head.hpp
 libhttpserver_v3core_la_SOURCES += detail/http3_request_engine.cpp detail/http3_body_stream.cpp detail/http3_response_stream.cpp
 noinst_HEADERS += httpserver/detail/http3_request_engine.hpp httpserver/detail/http3_request_state.hpp httpserver/detail/http3_body_stream.hpp
 noinst_HEADERS += httpserver/detail/request_handler_frames.hpp httpserver/detail/multiplexed_request_head.hpp
+
+libhttpserver_v3core_la_SOURCES += detail/quic_connection_identity.cpp
+noinst_HEADERS += httpserver/detail/quic_connection_identity.hpp

@@ -2299,3 +2299,10 @@ endif
 EXTRA_DIST += interop/quic/run_endpoint.sh integ/quic_interop_runner_test.py
 EXTRA_DIST += interop/quic/Dockerfile interop/quic/Dockerfile.dockerignore
 EXTRA_DIST += interop/quic/Dockerfile.native interop/quic/Dockerfile.native.dockerignore
+
+check_PROGRAMS += quic_connection_identity
+quic_connection_identity_SOURCES = unit/quic_connection_identity_test.cpp
+quic_connection_identity_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_connection_identity_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+EXTRA_DIST += unit/quic_owner_peer.hpp

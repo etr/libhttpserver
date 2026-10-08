@@ -46,6 +46,115 @@ LT_BEGIN_SUITE(repacketize_suite)
     void set_up() {}
     void tear_down() {}
 LT_END_SUITE(repacketize_suite)
+LT_BEGIN_AUTO_TEST(repacketize_suite, owned_cid_controls_repacketize_after_loss_and_complete_once_on_late_ack)
+    for (bool retire : {false, true}) {
+        hd::quic_recovery r({}, budget());
+        std::array<std::byte, 8> cid{std::byte{42}};
+        std::array<std::byte, 16> token{std::byte{19}};
+        LT_ASSERT(retire ? static_cast<bool>(r.retain_retire_connection_id({17})) : static_cast<bool>(r.retain_new_connection_id({17, 2, cid, token})));
+        cid.fill({});
+        token.fill({});
+        std::array<std::byte, 100> out{};
+        auto original = r.prepare_packet(space::application, out, {});
+        LT_ASSERT(original);
+        LT_ASSERT(r.commit_sent(original.token, {}, 100, true, true));
+        for (unsigned i = 0; i < 3; ++i) ping(r, space::application);
+        LT_ASSERT(r.receive_ack(space::application, ack(3), {}));
+        auto replacement = r.prepare_packet(space::application, out, {});
+        LT_ASSERT(replacement);
+        LT_CHECK(replacement.packet_number > original.packet_number);
+        auto parsed = frame(std::span(out).first(replacement.bytes));
+        if (retire) {
+            LT_CHECK_EQ(std::get<hd::quic_retire_connection_id_frame>(parsed).sequence, 17u);
+        } else {
+            auto control = std::get<hd::quic_new_connection_id_frame>(parsed);
+            LT_CHECK_EQ(control.sequence, 17u);
+            LT_CHECK_EQ(control.retire_prior_to, 2u);
+            LT_CHECK(control.cid[0] == std::byte{42} && control.reset_token[0] == std::byte{19});
+        }
+        LT_ASSERT(r.receive_ack(space::application, ack(original.packet_number), {}));
+        LT_ASSERT(r.take_completion());
+        LT_CHECK(!r.take_completion());
+        LT_ASSERT(r.commit_sent(replacement.token, {}, 100, true, true));
+        LT_ASSERT(r.receive_ack(space::application, ack(replacement.packet_number), {}));
+        LT_CHECK(!r.take_completion());
+    }
+LT_END_AUTO_TEST(owned_cid_controls_repacketize_after_loss_and_complete_once_on_late_ack)
+LT_BEGIN_AUTO_TEST(repacketize_suite, migration_preserves_information_but_isolates_old_flight_rtt_and_congestion)
+    hd::quic_recovery r({}, budget());
+    auto retained = r.retain_stream({1, 0, data, true});
+    LT_ASSERT(retained);
+    std::array<std::byte, 100> out{};
+    auto old = r.prepare_packet(space::application, out, {});
+    LT_ASSERT(old);
+    LT_ASSERT(r.commit_sent(old.token, {}, 100, true, true));
+    LT_ASSERT(r.activate_path());
+    LT_CHECK_EQ(r.bytes_in_flight(), 0u);
+    LT_CHECK(!r.rtt().sampled);
+    auto replacement = r.prepare_packet(space::application, out, 1ms + time_point{});
+    LT_ASSERT(replacement);
+    LT_ASSERT(r.commit_sent(replacement.token, 1ms + time_point{}, 100, true, true));
+    auto window = r.congestion().window;
+    LT_ASSERT(r.receive_ack(space::application, ack(old.packet_number), 2ms + time_point{}));
+    LT_CHECK_EQ(r.congestion().window, window);
+    LT_CHECK_EQ(r.bytes_in_flight(), 100u);
+    LT_CHECK(!r.rtt().sampled);
+    auto done = r.take_completion();
+    LT_ASSERT(done);
+    LT_CHECK_EQ(done->id, retained.id);
+    LT_ASSERT(r.receive_ack(space::application, ack(replacement.packet_number), 3ms + time_point{}));
+    LT_CHECK_EQ(r.bytes_in_flight(), 0u);
+    LT_CHECK(r.rtt().sampled);
+    LT_CHECK(!r.take_completion());
+LT_END_AUTO_TEST(migration_preserves_information_but_isolates_old_flight_rtt_and_congestion)
+LT_BEGIN_AUTO_TEST(repacketize_suite, off_path_probe_ack_and_loss_do_not_change_active_path_estimates)
+    hd::quic_recovery r({}, budget());
+    std::array<std::byte, 8> challenge{std::byte{9}};
+    std::array<std::byte, 1200> out{};
+    auto probe = r.prepare_path_packet({false, challenge}, out, {}, {}, false);
+    LT_ASSERT(probe);
+    LT_ASSERT(r.commit_sent(probe.token, {}, 1200, true, true));
+    auto window = r.congestion().window;
+    LT_ASSERT(r.receive_ack(space::application, ack(probe.packet_number), 10ms + time_point{}));
+    LT_CHECK(!r.rtt().sampled);
+    LT_CHECK_EQ(r.congestion().window, window);
+    auto lost = r.prepare_path_packet({false, challenge}, out, 20ms + time_point{}, {}, false);
+    LT_ASSERT(lost);
+    LT_ASSERT(r.commit_sent(lost.token, 20ms + time_point{}, 1200, true, true));
+    for (unsigned i = 0; i < 3; ++i) {
+        auto p = r.reserve_packet(space::application);
+        LT_ASSERT(p);
+        LT_ASSERT(r.commit_sent(p.token, 20ms + time_point{}, 100, true, true));
+    }
+    auto last = r.receive_ack(space::application, ack(lost.packet_number + 3), 21ms + time_point{});
+    LT_ASSERT(last);
+    LT_CHECK_EQ(last.lost_bytes, 1200u);
+    LT_CHECK(r.congestion().window >= window);
+LT_END_AUTO_TEST(off_path_probe_ack_and_loss_do_not_change_active_path_estimates)
+LT_BEGIN_AUTO_TEST(repacketize_suite, off_path_probe_cannot_extend_active_persistent_congestion_interval)
+    hd::quic_recovery r({}, budget());
+    const time_point origin{};
+    auto sampled = r.reserve_packet(space::application);
+    LT_ASSERT(sampled);
+    LT_ASSERT(r.commit_sent(sampled.token, {}, 100, true, true));
+    LT_ASSERT(r.receive_ack(space::application, ack(sampled.packet_number), origin + 1ms));
+    std::array<std::byte, 8> challenge{std::byte{9}};
+    std::array<std::byte, 1200> out{};
+    auto probe = r.prepare_path_packet({false, challenge}, out, origin + 2ms, {}, false);
+    LT_ASSERT(probe);
+    LT_ASSERT(r.commit_sent(probe.token, origin + 2ms, 1200, true, true));
+    auto active = r.reserve_packet(space::application);
+    LT_ASSERT(active);
+    LT_ASSERT(r.commit_sent(active.token, origin + 102ms, 100, true, true));
+    auto last = r.reserve_packet(space::application);
+    LT_ASSERT(last);
+    LT_ASSERT(r.commit_sent(last.token, origin + 103ms, 100, true, true));
+    const auto window = r.congestion().window;
+    auto received = r.receive_ack(space::application, ack(last.packet_number), origin + 104ms);
+    LT_ASSERT(received);
+    LT_CHECK_EQ(received.lost_bytes, 1300u);
+    LT_CHECK(r.congestion().window >= window / 2);
+LT_END_AUTO_TEST(off_path_probe_cannot_extend_active_persistent_congestion_interval)
 LT_BEGIN_AUTO_TEST(repacketize_suite, reliable_controls_survive_unsent_and_lost_packets)
     for (bool stop : {false, true}) {
         hd::quic_recovery r({}, budget());

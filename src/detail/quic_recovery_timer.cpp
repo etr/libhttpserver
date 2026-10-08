@@ -103,6 +103,9 @@ quic_recovery_events quic_recovery::expire(time_point now) {
     return result;
 }
 unsigned quic_recovery::pto_count() const { return impl_->pto_count; }
+std::chrono::steady_clock::duration quic_recovery::path_probe_interval() const {
+    return std::max(std::chrono::steady_clock::duration(std::chrono::seconds(1)), impl_->pto_duration(quic_pn_space::application));
+}
 quic_recovery_events quic_recovery::discard_space(quic_pn_space space) {
     auto* s = impl_->state(space);
     if (!s) return {{quic_recovery_code::invalid}};

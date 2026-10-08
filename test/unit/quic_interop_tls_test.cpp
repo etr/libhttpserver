@@ -80,8 +80,9 @@ LT_BEGIN_AUTO_TEST(interop_tls_suite, partial_initial_keeps_file_pump_parked_bef
     LT_ASSERT(facts);
     httpserver::manual_executor executor;
     httpserver::server::route_registry routes;
+    httpserver::server::peer_policy policy;
     const auto root = std::filesystem::temp_directory_path();
-    h3net::connection owner(registry.acquire()->select_default(), *facts, routes, executor, 1, root.string());
+    h3net::connection owner(registry.acquire()->select_default(), *facts, routes, executor, 1, policy, root.string());
     owner.on_datagram(packet);
     owner.tick(h3net::clock_type::now());
     LT_CHECK(owner.failure().empty());

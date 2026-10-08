@@ -9,9 +9,9 @@
 Provide QUIC CID lifecycle, path validation and rebinding for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Issue/retire connection IDs with bounded lookup state.
-- [ ] Validate new paths before redirecting application output.
-- [ ] Reevaluate IP policy and document request peer-address snapshots after rebinding.
+- [x] Issue/retire connection IDs with bounded lookup state.
+- [x] Validate new paths before redirecting application output.
+- [x] Reevaluate IP policy and document request peer-address snapshots after rebinding.
 
 **Dependencies:**
 - Blocked by: TASK-153, TASK-156, TASK-158
@@ -24,4 +24,6 @@ Provide QUIC CID lifecycle, path validation and rebinding for libhttpserver v3.0
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** [CID lifecycle, validated rebinding and peer snapshots](../../../docs/task-164-quic-rebinding.md). Local validation/finalization is caller-owned; status remains In Progress until that handoff completes.

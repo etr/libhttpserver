@@ -104,6 +104,17 @@ An ordinary `response` is one-shot. `response_definition` is immutable and share
 | QUIC v1 | UDP connection-ID demux, version negotiation, anti-amplification, path validation and rebinding, packet protection, CRYPTO reassembly, three packet-number-space loss/PTO state, congestion control and pacing, stream reassembly, flow control, and close/drain state. Packet records reference retransmittable information; packet bytes are never replayed as retransmission. 0-RTT is disabled for v3.0; session resumption may remain enabled. |
 | HTTP/3 | ALPN `h3`, QUIC streams, one control stream and QPACK encoder/decoder streams per endpoint, connection-owned QPACK and blocked-stream accounting, limits and scheduler priority for critical streams, stream reset and GOAWAY. QUIC v1 is the required wire transport; QUIC v2 is not a v3.0 gate. |
 
+TASK-164 implements the private QUIC identity coordinator with four active IDs,
+32 cumulative IDs per direction, eight pending retirements and three canonical
+path records. It registers aliases before reliable advertisement, validates
+sent challenge tokens and minimum-MTU reachability before application output,
+and reevaluates live peer policy at discovery and activation. Recovery retains
+streams/information across path epochs while resetting RTT/congestion. H3 peer
+metadata snapshots at complete initial HEADERS; existing exchanges retain their
+copied peer. The bounded TLS network owner exercises this private production
+seam; public H3 listener enablement remains a later gate. See
+[the rebinding evidence](../../../docs/task-164-quic-rebinding.md).
+
 The WebSocket codec consumes an ordered full-duplex byte stream. HTTP/1.1 uses Upgrade; HTTP/2 and HTTP/3 use negotiated Extended CONNECT on one stream. It validates masking, fragmentation, UTF-8, control frames, ping/pong, message limits, and close handshake. A typed session reports accepted/backpressured/closed on `try_send`; pending sends can await `writable()`. The close notification fires once with the best available reason. Extensions are not negotiated in v3.0. A WebSocket on HTTP/2 or HTTP/3 does not take over other streams.
 
 ### 3.4 I/O, concurrency, and external loop

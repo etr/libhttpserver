@@ -67,6 +67,7 @@ bool quic_recovery::implementation::valid_emission(std::size_t bytes, bool elici
     if (!bytes || bytes > 65535 || (eliciting && !flight)) return false;
     return !pending->prepared || (pending->ack_eliciting == eliciting && bytes >= pending->payload_bytes);
 }
+bool quic_recovery::preparation_pending() const { return impl_->pending.has_value(); }
 quic_recovery_result quic_recovery::abandon_packet(std::uint64_t token) {
     if (!impl_->pending || impl_->pending->token != token) return {quic_recovery_code::invalid};
     impl_->pending.reset();
@@ -158,7 +159,7 @@ bool quic_recovery::implementation::sample_ack(const space_state& s, std::span<c
     bool newly_eliciting = false, newly_acknowledged = false;
     std::optional<time_point> sample_sent;
     for (const auto& p : s.sent) {
-        if (p.acknowledged || !covers(ranges, p.number)) continue;
+        if (p.path_epoch != path_epoch || p.acknowledged || !covers(ranges, p.number)) continue;
         newly_acknowledged = true;
         newly_eliciting |= p.ack_eliciting;
         if (p.number == ack.largest) sample_sent = p.sent_at;
@@ -177,7 +178,7 @@ quic_recovery_events quic_recovery::implementation::acknowledge_packets(space_st
         p.acknowledged = true;
         ++result.acknowledged_packets;
         if (p.in_flight) {
-            congestion.acknowledge(p.wire_bytes, p.sent_at, p.limited);
+            if (p.path_epoch == path_epoch) congestion.acknowledge(p.wire_bytes, p.sent_at, p.limited);
             result.acknowledged_bytes += p.wire_bytes;
             in_flight -= p.wire_bytes;
             p.in_flight = false;
@@ -217,7 +218,7 @@ std::size_t quic_recovery::implementation::detect_loss(space_state& s, time_poin
         if (!p.in_flight || p.number > *s.largest_acked) continue;
         auto deadline = recovery_after(p.sent_at, delay);
         if (*s.largest_acked - p.number >= 3 || deadline <= now) {
-            newest = newest ? std::max(*newest, p.sent_at) : p.sent_at;
+            if (p.path_epoch == path_epoch) newest = newest ? std::max(*newest, p.sent_at) : p.sent_at;
             lost += p.wire_bytes;
             in_flight -= p.wire_bytes;
             p.in_flight = false;

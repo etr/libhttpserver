@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
+#include <limits>
 #include "./quic_recovery_internal.hpp"
 namespace httpserver::detail {
 void quic_recovery::implementation::register_stream(std::uint64_t stream) {
@@ -143,4 +144,23 @@ void quic_recovery::implementation::commit_stream_turn() {
 }
 quic_congestion_snapshot quic_recovery::congestion() const { return impl_->congestion.snapshot(); }
 std::optional<quic_recovery::time_point> quic_recovery::next_send_deadline() const { return impl_->send_due; }
+quic_send_plan quic_recovery::prepare_path_packet(const quic_path_frame& frame, std::span<std::byte> output, time_point now, quic_send_request request, bool on_active_path) {
+    if (frame.data.size() != 8 || request.protection_overhead >= request.max_wire_bytes || request.max_wire_bytes > impl_->config.max_datagram_size) return {{quic_recovery_code::invalid}};
+    auto plan = reserve(quic_pn_space::application, true);
+    if (!plan) return plan;
+    auto bytes = output.first(std::min(output.size(), request.max_wire_bytes - request.protection_overhead));
+    auto encoded = encode_quic_frame(frame, bytes);
+    if (encoded.code != quic_codec_code::ok) {
+        abandon_packet(plan.token);
+        return {{quic_recovery_code::no_space}};
+    }
+    std::fill(bytes.begin() + encoded.consumed, bytes.end(), std::byte{});
+    plan.bytes = bytes.size();
+    plan.ack_eliciting = true;
+    impl_->pending->prepared = true;
+    impl_->pending->ack_eliciting = true;
+    impl_->pending->payload_bytes = plan.bytes;
+    if (!on_active_path) impl_->pending->path_epoch = std::numeric_limits<std::uint64_t>::max();
+    return admit_scheduled(plan, now, request);
+}
 }  // namespace httpserver::detail

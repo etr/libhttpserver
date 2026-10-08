@@ -3,6 +3,7 @@
 #include "./quic_recovery_internal.hpp"
 namespace httpserver::detail {
 void quic_recovery::implementation::note_congestion_packet(const packet& p, quic_pn_space space) {
+    if (p.path_epoch != path_epoch) return;
     compact_congestion_runs();
     // Forgetting an oldest unresolved prefix can only shorten a congestion run.
     // Keep a fixed bound even when control records are repeatedly collected.
@@ -11,6 +12,7 @@ void quic_recovery::implementation::note_congestion_packet(const packet& p, quic
                               p.ack_eliciting ? outcome::pending : outcome::neutral, p.sampled});
 }
 void quic_recovery::implementation::note_congestion_outcome(const packet& p, outcome status) {
+    if (p.path_epoch != path_epoch) return;
     for (auto& run : congestion_runs) {
         if (p.sequence < run.first || p.sequence > run.last) continue;
         // A late ACK of a compressed lost interval invalidates the whole

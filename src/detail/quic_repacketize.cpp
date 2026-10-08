@@ -101,6 +101,29 @@ quic_information_result quic_recovery::retain_stop_sending(const quic_stop_sendi
     value.terminal = information_status::pending;
     return impl_->retain(std::move(value), {});
 }
+quic_information_result quic_recovery::retain_new_connection_id(const quic_new_connection_id_frame& frame) {
+    if (frame.sequence > k_quic_max_integer || frame.retire_prior_to > frame.sequence || frame.cid.empty() || frame.cid.size() > 20 || frame.reset_token.size() != 16)
+        return {{quic_recovery_code::invalid}};
+    implementation::information value;
+    value.kind = quic_information_kind::new_connection_id;
+    value.space = quic_pn_space::application;
+    value.stream = frame.sequence;
+    value.offset = frame.retire_prior_to;
+    value.cid_size = frame.cid.size();
+    std::copy(frame.cid.begin(), frame.cid.end(), value.cid_bytes.begin());
+    std::copy(frame.reset_token.begin(), frame.reset_token.end(), value.cid_bytes.begin() + 20);
+    value.terminal = information_status::pending;
+    return impl_->retain(std::move(value), {});
+}
+quic_information_result quic_recovery::retain_retire_connection_id(const quic_retire_connection_id_frame& frame) {
+    if (frame.sequence > k_quic_max_integer) return {{quic_recovery_code::invalid}};
+    implementation::information value;
+    value.kind = quic_information_kind::retire_connection_id;
+    value.space = quic_pn_space::application;
+    value.stream = frame.sequence;
+    value.terminal = information_status::pending;
+    return impl_->retain(std::move(value), {});
+}
 quic_information_result quic_recovery::retain_reset(const quic_reset_stream_frame& frame) {
     if (frame.stream > k_quic_max_integer || frame.error > k_quic_max_integer || frame.final_size > k_quic_max_integer ||
         !quic_stream_sender_allowed(frame.stream, true, impl_->config.role)) return {{quic_recovery_code::invalid}};
@@ -185,6 +208,9 @@ quic_frame quic_recovery::implementation::information_frame(const information& v
     if (value.kind == quic_information_kind::handshake_done) return quic_handshake_done_frame{};
     if (value.kind == quic_information_kind::stop_sending) return quic_stop_sending_frame{value.stream, value.error};
     if (value.kind == quic_information_kind::flow) return value.flow;
+    if (value.kind == quic_information_kind::new_connection_id)
+        return quic_new_connection_id_frame{value.stream, value.offset, std::span(value.cid_bytes).first(value.cid_size), std::span(value.cid_bytes).subspan(20, 16)};
+    if (value.kind == quic_information_kind::retire_connection_id) return quic_retire_connection_id_frame{value.stream};
     if (value.kind == quic_information_kind::reset_stream) return quic_reset_stream_frame{value.stream, value.error, value.offset};
     const auto bytes = std::span(value.data).subspan(content.start, content.length);
     const auto offset = value.offset + content.start;
