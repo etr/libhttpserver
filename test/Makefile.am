@@ -2048,3 +2048,33 @@ quic_datagram_dispatch_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 quic_datagram_dispatch_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 noinst_HEADERS += unit/io_udp_backend_contract.hpp
+
+check_PROGRAMS += quic_network_harness
+quic_network_harness_SOURCES = unit/quic_network_harness_test.cpp support/quic_network_harness.cpp
+quic_network_harness_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/test
+quic_network_harness_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_network_harness_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+EXTRA_DIST += support/quic_network_harness.hpp
+check_PROGRAMS += quic_fuzz_replay
+quic_fuzz_replay_SOURCES = unit/quic_fuzz_replay_test.cpp fuzz/quic_parser_fuzz.cpp fuzz/quic_state_fuzz.cpp support/quic_network_harness.cpp
+quic_fuzz_replay_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/test -DQUIC_SEED_DIR='"$(abs_top_srcdir)/test/data/quic"'
+quic_fuzz_replay_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_fuzz_replay_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+EXTRA_DIST += fuzz/quic_parser_fuzz.hpp fuzz/quic_state_fuzz.hpp
+EXTRA_DIST += data/quic/parser/README.md
+EXTRA_DIST += data/quic/parser/empty.seed
+EXTRA_DIST += data/quic/parser/long.seed
+EXTRA_DIST += data/quic/parser/max-cids.seed
+EXTRA_DIST += data/quic/parser/missing-fixed.seed
+EXTRA_DIST += data/quic/parser/oversized.seed
+EXTRA_DIST += data/quic/parser/short.seed
+EXTRA_DIST += data/quic/parser/truncated.seed
+EXTRA_DIST += data/quic/parser/version-zero.seed
+EXTRA_DIST += data/quic/state/README.md
+EXTRA_DIST += data/quic/state/empty.seed
+EXTRA_DIST += data/quic/state/invalid.seed
+EXTRA_DIST += data/quic/state/network.seed
+EXTRA_DIST += data/quic/state/teardown.seed
+EXTRA_DIST += data/quic/state/timers.seed
+EXTRA_DIST += data/quic/state/truncated.seed
+EXTRA_DIST += data/quic/state/loss-reorder.seed data/quic/parser/truncated-source.seed

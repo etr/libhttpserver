@@ -27,6 +27,28 @@ class FuzzRunnerTest(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn('libFuzzer compiler unavailable', result.stderr)
 
+    def test_selected_quic_missing_compiler_is_fatal(self):
+        with tempfile.TemporaryDirectory() as build:
+            result = subprocess.run(['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                                     '--build-dir', build, '--targets', 'quic_parser quic_state',
+                                     '--compiler', '/missing/compiler'],
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('libFuzzer compiler unavailable', result.stderr)
+
+    def test_quic_state_requires_tls_off_configuration_before_building(self):
+        for config in (None, '#define NATIVE_V3_TLS 1\n'):
+            with tempfile.TemporaryDirectory() as build:
+                args = ['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                        '--build-dir', build, '--targets', 'quic_state', '--compiler', '/usr/bin/true']
+                if config is not None:
+                    pathlib.Path(build, 'config.h').write_text(config)
+                    args += ['--native-config-dir', build]
+                result = subprocess.run(args, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('TLS-off', result.stderr)
+                self.assertFalse(pathlib.Path(build, 'probe.cpp').exists())
+
     def test_requested_unavailable_compiler_fails(self):
         with tempfile.TemporaryDirectory() as build:
             result = subprocess.run(['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
