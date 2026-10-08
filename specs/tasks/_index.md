@@ -307,7 +307,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-159 | [Implement bounded static-only QPACK codec](M11-http3-first-slice/TASK-159.md) | M11 | Complete | TASK-097 |
 | TASK-160 | [Implement HTTP/3 control streams, SETTINGS and frame roles](M11-http3-first-slice/TASK-160.md) | M11 | Complete | TASK-155, TASK-157, TASK-159 |
 | TASK-161 | [Bridge HTTP/3 request streams to semantic exchanges](M11-http3-first-slice/TASK-161.md) | M11 | Complete | TASK-102, TASK-103, TASK-104, TASK-158, TASK-160 |
-| TASK-162 | [Run independent HTTP/3 client smoke tests](M11-http3-first-slice/TASK-162.md) | M11 | Not Started | TASK-161 |
+| TASK-162 | [Run independent HTTP/3 client smoke tests](M11-http3-first-slice/TASK-162.md) | M11 | In Progress | TASK-161 |
 | TASK-163 | [Package a QUIC interop-runner endpoint and diagnostics](M11-http3-first-slice/TASK-163.md) | M11 | Not Started | TASK-155, TASK-157, TASK-161 |
 | TASK-164 | [Implement QUIC CID lifecycle, path validation and rebinding](M12-http3-full/TASK-164.md) | M12 | Not Started | TASK-153, TASK-156, TASK-158 |
 | TASK-165 | [Implement QUIC datagram sizing and black-hole recovery](M12-http3-full/TASK-165.md) | M12 | Not Started | TASK-158, TASK-164 |

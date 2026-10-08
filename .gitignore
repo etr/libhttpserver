@@ -88,3 +88,6 @@ build-san/
 !scripts/check-v3-installed-consumer.py
 !scripts/test-v3-installed-package.py
 __pycache__/
+!scripts/run-v3-http3-gates.py
+!test/integ/http3_client_aioquic.py
+!test/integ/http3_gate_runner_test.py

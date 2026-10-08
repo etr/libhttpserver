@@ -2250,3 +2250,21 @@ http3_cancellation_LDFLAGS = $(http3_headers_LDFLAGS)
 EXTRA_DIST += unit/http3_request_fixture.hpp
 
 EXTRA_DIST += unit/http3_route_parity_fixture.hpp
+
+if NATIVE_V3_TLS
+check_PROGRAMS += http3_network_owner
+http3_network_owner_SOURCES = unit/http3_network_owner_test.cpp support/http3_network_owner.cpp
+http3_network_owner_CPPFLAGS = $(tls_io_loopback_CPPFLAGS) -I$(top_srcdir)
+http3_network_owner_LDADD = $(tls_io_LDADD)
+http3_network_owner_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+if NATIVE_V3_TLS
+noinst_PROGRAMS += http3_udp_fixture
+http3_udp_fixture_SOURCES = integ/http3_udp_fixture.cpp support/http3_network_owner.cpp
+http3_udp_fixture_CPPFLAGS = $(http3_network_owner_CPPFLAGS)
+http3_udp_fixture_LDADD = $(tls_io_LDADD)
+http3_udp_fixture_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+EXTRA_DIST += support/http3_network_owner.hpp integ/http3_client_aioquic.py integ/http3-client-requirements.txt integ/http3-client-go/go.mod integ/http3-client-go/go.sum
+
+EXTRA_DIST += integ/http3-client-go/main.go integ/http3_gate_runner_test.py

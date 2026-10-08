@@ -670,3 +670,5 @@ EXTRA_DIST += docs/task-155-quic-tls.md
 EXTRA_DIST += docs/task-156-quic-recovery.md
 
 EXTRA_DIST += docs/task-157-quic-flow-control.md
+
+EXTRA_DIST += scripts/run-v3-http3-gates.py docs/task-162-http3-evidence.md

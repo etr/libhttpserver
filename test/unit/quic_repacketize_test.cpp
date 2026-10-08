@@ -46,6 +46,38 @@ LT_BEGIN_SUITE(repacketize_suite)
     void set_up() {}
     void tear_down() {}
 LT_END_SUITE(repacketize_suite)
+LT_BEGIN_AUTO_TEST(repacketize_suite, reliable_controls_survive_unsent_and_lost_packets)
+    for (bool stop : {false, true}) {
+        hd::quic_recovery r({}, budget());
+        auto information = stop ? r.retain_stop_sending({0, 0x10c}) : r.retain_handshake_done();
+        LT_ASSERT(information);
+        std::array<std::byte, 100> out{};
+        auto unsent = r.prepare_packet(space::application, out, {});
+        LT_ASSERT(unsent);
+        LT_ASSERT(r.abandon_packet(unsent.token));
+        auto original = r.prepare_packet(space::application, out, {});
+        LT_ASSERT(original);
+        LT_ASSERT(r.commit_sent(original.token, {}, 100, true, true));
+        for (unsigned i = 0; i < 3; ++i) ping(r, space::application);
+        LT_ASSERT(r.receive_ack(space::application, ack(original.packet_number + 3), {}));
+        auto replacement = r.prepare_packet(space::application, out, {});
+        LT_ASSERT(replacement);
+        LT_CHECK(replacement.packet_number > original.packet_number);
+        auto parsed = frame(std::span(out).first(replacement.bytes));
+        if (stop) {
+            const auto control = std::get<hd::quic_stop_sending_frame>(parsed);
+            LT_CHECK(control.stream == 0 && control.error == 0x10c);
+        } else {
+            LT_CHECK(std::holds_alternative<hd::quic_handshake_done_frame>(parsed));
+        }
+        LT_ASSERT(r.commit_sent(replacement.token, {}, 100, true, true));
+        LT_ASSERT(r.receive_ack(space::application, ack(replacement.packet_number), {}));
+        auto completion = r.take_completion();
+        LT_ASSERT(completion);
+        LT_CHECK(completion->id == information.id);
+        LT_CHECK(!r.take_completion());
+    }
+LT_END_AUTO_TEST(reliable_controls_survive_unsent_and_lost_packets)
 LT_BEGIN_AUTO_TEST(repacketize_suite, loss_replacement_and_original_ack_share_delivery)
     hd::quic_recovery r({}, budget());
     auto retained = r.retain_crypto(space::initial, 0, data);
