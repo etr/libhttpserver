@@ -142,3 +142,7 @@ if NATIVE_V3_TLS
 libhttpserver_v3tls_la_SOURCES += detail/quic_address_token.cpp detail/quic_server_admission.cpp
 endif
 noinst_HEADERS += httpserver/detail/quic_address_token.hpp httpserver/detail/quic_server_admission.hpp
+
+# TASK-154: private stream lifecycle and bounded, owned receive ranges.
+libhttpserver_v3core_la_SOURCES += detail/quic_stream_state.cpp detail/quic_reassembly.cpp
+noinst_HEADERS += httpserver/detail/quic_stream_state.hpp httpserver/detail/quic_reassembly.hpp
