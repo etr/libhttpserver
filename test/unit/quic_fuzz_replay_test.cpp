@@ -56,6 +56,17 @@ LT_BEGIN_AUTO_TEST(quic_fuzz_suite, committed_seeds_and_fixed_seed_mutations)
         }
     }
 LT_END_AUTO_TEST(committed_seeds_and_fixed_seed_mutations)
+LT_BEGIN_AUTO_TEST(quic_fuzz_suite, codec_modes_reach_the_real_packet_frame_and_parameter_decoders)
+    const std::vector<std::uint8_t> ping{1}, parameters{15, 0};
+    auto packet = std::vector<std::uint8_t>{0xc0, 0, 0, 0, 1, 0, 0, 0, 17, 0}; packet.resize(26);
+    LT_CHECK_EQ(quic_codec_fuzz_input(ping), std::uint32_t{2});
+    LT_CHECK_EQ(quic_codec_fuzz_input(parameters), std::uint32_t{4});
+    LT_CHECK((quic_codec_fuzz_input(packet) & 1) != 0);
+    const std::vector<std::uint8_t> nonminimal_ping{0x40, 1};
+    LT_CHECK((quic_codec_fuzz_input(nonminimal_ping) & 2) == 0);
+    const std::vector<std::uint8_t> duplicate_parameters{27, 0, 27, 0};
+    LT_CHECK((quic_codec_fuzz_input(duplicate_parameters) & 4) == 0);
+LT_END_AUTO_TEST(codec_modes_reach_the_real_packet_frame_and_parameter_decoders)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

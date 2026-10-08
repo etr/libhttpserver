@@ -61,7 +61,11 @@ PY
     sources=("$root/test/fuzz/${target}_fuzz.cpp")
     if [ "$target" = http1_head ]; then sources+=("$root/src/detail/net_address.cpp"); fi
     if [ "$target" = websocket_codec ]; then sources+=("$root/src/detail/websocket_codec.cpp"); fi
-    if [ "$target" = quic_parser ]; then sources+=("$root/src/detail/quic_invariant_header.cpp"); fi
+    if [ "$target" = quic_parser ]; then
+        sources+=("$root/src/detail/quic_invariant_header.cpp" "$root/src/detail/quic_varint.cpp"
+            "$root/src/detail/quic_packet.cpp" "$root/src/detail/quic_frame.cpp"
+            "$root/src/detail/quic_frame_write.cpp" "$root/src/detail/quic_transport_parameters.cpp")
+    fi
     if [ "$target" = quic_state ]; then sources+=("$root/test/support/quic_network_harness.cpp"); fi
     target_flags=()
     if [ "$target" = quic_parser ]; then target_flags+=(-DQUIC_PARSER_LIBFUZZER -I"$root/test"); fi

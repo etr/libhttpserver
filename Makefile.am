@@ -660,3 +660,5 @@ check-v3-installed-consumer:
 	@python3 $(top_srcdir)/scripts/check-v3-installed-consumer.py $(INSTALL_AUDIT_ARGS)
 
 .PHONY: check-v3-installed-package-fixtures check-v3-installed-consumer
+
+EXTRA_DIST += docs/task-151-quic-codecs.md

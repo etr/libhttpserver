@@ -2078,3 +2078,39 @@ EXTRA_DIST += data/quic/state/teardown.seed
 EXTRA_DIST += data/quic/state/timers.seed
 EXTRA_DIST += data/quic/state/truncated.seed
 EXTRA_DIST += data/quic/state/loss-reorder.seed data/quic/parser/truncated-source.seed
+
+check_PROGRAMS += quic_varint
+quic_varint_SOURCES = unit/quic_varint_test.cpp
+quic_varint_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_varint_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+EXTRA_DIST += unit/quic_codec_test_support.hpp
+
+check_PROGRAMS += quic_packet
+quic_packet_SOURCES = unit/quic_packet_test.cpp
+quic_packet_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_packet_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += quic_frame
+quic_frame_SOURCES = unit/quic_frame_test.cpp
+quic_frame_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_frame_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += quic_transport_parameters
+quic_transport_parameters_SOURCES = unit/quic_transport_parameters_test.cpp
+quic_transport_parameters_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_transport_parameters_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += quic_codec_allocation
+quic_codec_allocation_SOURCES = unit/quic_codec_allocation_test.cpp
+quic_codec_allocation_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_codec_allocation_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+EXTRA_DIST += data/quic/parser/codec-initial.seed
+EXTRA_DIST += data/quic/parser/codec-ack.seed
+EXTRA_DIST += data/quic/parser/codec-stream.seed
+EXTRA_DIST += data/quic/parser/codec-parameters.seed
+EXTRA_DIST += data/quic/parser/codec-huge-length.seed
+EXTRA_DIST += data/quic/parser/codec-ack-underflow.seed
+EXTRA_DIST += data/quic/parser/codec-duplicate-parameters.seed
+EXTRA_DIST += data/quic/parser/codec-nonminimal-frame.seed
+EXTRA_DIST += data/quic/parser/codec-scalar-truncation.seed
