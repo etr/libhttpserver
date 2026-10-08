@@ -1,5 +1,7 @@
 Version 2.0.1
 
+	Fixed CI lint annotations for libcurl-required long types in the
+		raw multipart upload regression helper.
 	Fixed an unauthenticated server crash when a multipart file part omits
 		the name attribute. Unnamed file parts are ignored before memory
 		or disk upload handling. Thanks to AllenYen for the private report.

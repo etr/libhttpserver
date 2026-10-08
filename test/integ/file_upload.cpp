@@ -297,7 +297,8 @@ class print_file_upload_resource : public http_resource {
 
 // Raw multipart bytes preserve the missing name attribute; curl_mime would
 // supply a name and conceal this malformed-input regression.
-static std::pair<CURLcode, long> send_raw_multipart(int port, const string& body) {
+// libcurl requires long for POSTFIELDSIZE and the response-code output.
+static std::pair<CURLcode, long> send_raw_multipart(int port, const string& body) {  // NOLINT(runtime/int)
     CURL* curl = curl_easy_init();
     const string url = "http://127.0.0.1:" + std::to_string(port) + "/anything";
     curl_slist* headers = curl_slist_append(nullptr,
@@ -305,12 +306,12 @@ static std::pair<CURLcode, long> send_raw_multipart(int port, const string& body
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data());
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
         +[](char*, size_t size, size_t count, void*) -> size_t { return size * count; });
     const CURLcode result = curl_easy_perform(curl);
-    long status = 0;
+    long status = 0;  // NOLINT(runtime/int)
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     curl_easy_cleanup(curl);
     curl_slist_free_all(headers);
