@@ -1381,6 +1381,10 @@ jobs:
           close_sweeps_every_pending_once submit_after_close_connection_closed \
           late_request_cancel_reports_invalid_state n_awaiter_resume_exactly_once \
           cancel_vs_stimulus_race accept_round_trip http1_round_trip partial_read \
+          synchronous_candidate_abort_retries_same_logical_accept \
+          failed_candidate_packet_retries_same_logical_accept \
+          fatal_accept_initiation_error_retires_listener fatal_accept_packet_error_retires_listener \
+          success_claim_before_cancel_delivers_exactly_once cancel_claim_before_packet_delivers_exactly_once \
           read_hangup write_hangup idle_iterations_stay_bounded slow_reader_no_busy_loop \
           queued_success_cancel_not_found_retains_storage_until_packet \
           failed_packet_cancellation_preserves_socket_and_next_read \

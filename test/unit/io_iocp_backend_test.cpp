@@ -28,6 +28,10 @@ struct io_iocp_test_access {
         backend.wait_ = wait;
         backend.notify_locked();
     }
+    static LPFN_ACCEPTEX install_accept(io_iocp_backend& backend, std::uint64_t id, LPFN_ACCEPTEX accept) {
+        std::lock_guard<std::mutex> lock(backend.mu_);
+        return std::exchange(backend.connections_.at(id)->accept, accept);
+    }
     static std::size_t outstanding(io_iocp_backend& backend) {
         std::lock_guard<std::mutex> lock(backend.mu_);
         return backend.outstanding_.size();
@@ -114,9 +118,15 @@ struct packet_gate {
         released = true;
         cv.notify_all();
     }
+    void fail(DWORD error) {
+        std::lock_guard<std::mutex> lock(mu);
+        injected_error = error;
+        released = true;
+        cv.notify_all();
+    }
     static BOOL WINAPI wait(HANDLE port, LPDWORD bytes, PULONG_PTR token, LPOVERLAPPED* address, DWORD timeout) {
-        const BOOL result = ::GetQueuedCompletionStatus(port, bytes, token, address, timeout);
-        const auto error = result ? ERROR_SUCCESS : ::GetLastError();
+        BOOL result = ::GetQueuedCompletionStatus(port, bytes, token, address, timeout);
+        DWORD error = result ? ERROR_SUCCESS : ::GetLastError();
         if (*address != nullptr) {
             auto& gate = *active;
             std::unique_lock<std::mutex> lock(gate.mu);
@@ -127,6 +137,10 @@ struct packet_gate {
                 gate.error = error;
                 gate.cv.notify_all();
                 gate.cv.wait(lock, [&] { return gate.released; });
+                if (gate.injected_error) {
+                    error = *gate.injected_error;
+                    result = FALSE;
+                }
             }
         }
         ::SetLastError(error);
@@ -140,7 +154,31 @@ struct packet_gate {
     DWORD bytes = 0;
     DWORD error = 0;
     bool released = false;
+    std::optional<DWORD> injected_error;
     static inline packet_gate* active = nullptr;
+};
+
+// Inject only the native initiation outcome; all request ownership and retries
+// still execute in the real backend. Subsequent calls use real AcceptEx.
+struct accept_gate {
+    accept_gate(hd::io_iocp_backend& backend, std::uint64_t id, int error) : error(error) {
+        active = this;
+        original = native_access::install_accept(backend, id, &accept);
+    }
+    ~accept_gate() { active = nullptr; }
+    static BOOL PASCAL accept(SOCKET listener, SOCKET candidate, PVOID buffer, DWORD bytes,
+                             DWORD local, DWORD remote, LPDWORD received, LPOVERLAPPED address) {
+        auto& gate = *active;
+        if (gate.calls.fetch_add(1) == 0 && gate.error != 0) {
+            ::WSASetLastError(gate.error);
+            return FALSE;
+        }
+        return gate.original(listener, candidate, buffer, bytes, local, remote, received, address);
+    }
+    int error;
+    LPFN_ACCEPTEX original = nullptr;
+    std::atomic<int> calls{0};
+    static inline accept_gate* active = nullptr;
 };
 
 }  // namespace
@@ -256,6 +294,128 @@ LT_BEGIN_AUTO_TEST(iocp_suite, slow_reader_no_busy_loop)
     iocp_rig rig;
     io_contract::slow_reader_no_busy_loop(__lt_tr__, __lt_name__, rig);
 LT_END_AUTO_TEST(slow_reader_no_busy_loop)
+
+LT_BEGIN_AUTO_TEST(iocp_suite, synchronous_candidate_abort_retries_same_logical_accept)
+    for (const int error : {WSAECONNRESET, WSAECONNABORTED}) {
+        iocp_rig rig;
+        auto listener = rig.adopt_listener(2);
+        accept_gate posting(rig.backend, 2, error);
+        hd::accept_operation op(rig.rig.owner, 2);
+        op.submit(rig.backend);
+        LT_ASSERT(until([&] { return posting.calls.load() >= 2; }));
+        LT_CHECK(!op.is_terminal());
+        LT_CHECK(rig.backend.native_handle(2) != pollsys::k_invalid_socket);
+        auto client = io_loopback::connect_to(listener.port());
+        LT_CHECK(wait_applied(rig.rig, op.state()));
+        LT_CHECK(op.state()->stored_result().code == hh::outcome_code::ok);
+        LT_CHECK(op.state()->stored_result().accepted_id != 0);
+        LT_CHECK(rig.backend.request_cancel(*op.state()) == hh::outcome_code::invalid_state);
+        rig.backend.close();
+        pollsys::close_socket(client);
+    }
+LT_END_AUTO_TEST(synchronous_candidate_abort_retries_same_logical_accept)
+
+LT_BEGIN_AUTO_TEST(iocp_suite, failed_candidate_packet_retries_same_logical_accept)
+    for (const DWORD error : {DWORD{WSAECONNRESET}, DWORD{WSAECONNABORTED},
+                              DWORD{ERROR_NETNAME_DELETED}, DWORD{ERROR_CONNECTION_ABORTED}}) {
+        iocp_rig rig;
+        auto listener = rig.adopt_listener(2);
+        accept_gate posting(rig.backend, 2, 0);
+        packet_gate packet(rig.backend);
+        hd::accept_operation op(rig.rig.owner, 2);
+        op.submit(rig.backend);
+        auto aborted = io_loopback::connect_to(listener.port());
+        LT_ASSERT(packet.captured());
+        linger reset{1, 0};
+        LT_CHECK_EQ(::setsockopt(aborted, SOL_SOCKET, SO_LINGER,
+            reinterpret_cast<const char*>(&reset), sizeof(reset)), 0);
+        pollsys::close_socket(aborted);
+        // Force each native error mapping after aborting the real peer. The
+        // packet has been dequeued; request lifetime remains backend-owned.
+        packet.fail(error);
+        LT_ASSERT(until([&] { return posting.calls.load() >= 2; }));
+        LT_CHECK(!op.is_terminal());
+        LT_CHECK(rig.backend.native_handle(2) != pollsys::k_invalid_socket);
+        LT_CHECK_EQ(native_access::outstanding(rig.backend), std::size_t{1});
+        auto healthy = io_loopback::connect_to(listener.port());
+        LT_CHECK(wait_applied(rig.rig, op.state()));
+        LT_CHECK(op.state()->stored_result().code == hh::outcome_code::ok);
+        LT_CHECK(op.state()->stored_result().accepted_id != 0);
+        rig.backend.close();
+        pollsys::close_socket(healthy);
+    }
+LT_END_AUTO_TEST(failed_candidate_packet_retries_same_logical_accept)
+
+LT_BEGIN_AUTO_TEST(iocp_suite, fatal_accept_initiation_error_retires_listener)
+    iocp_rig rig;
+    auto listener = rig.adopt_listener(2);
+    accept_gate posting(rig.backend, 2, WSAENOTSOCK);
+    hd::accept_operation op(rig.rig.owner, 2);
+    op.submit(rig.backend);
+    LT_CHECK(wait_applied(rig.rig, op.state()));
+    LT_CHECK(op.state()->stored_result().code == hh::outcome_code::connection_closed);
+    LT_CHECK(rig.backend.native_handle(2) == pollsys::k_invalid_socket);
+    LT_CHECK_EQ(posting.calls.load(), 1);
+    rig.backend.close();
+LT_END_AUTO_TEST(fatal_accept_initiation_error_retires_listener)
+
+LT_BEGIN_AUTO_TEST(iocp_suite, fatal_accept_packet_error_retires_listener)
+    iocp_rig rig;
+    auto listener = rig.adopt_listener(2);
+    packet_gate packet(rig.backend);
+    hd::accept_operation op(rig.rig.owner, 2);
+    op.submit(rig.backend);
+    auto client = io_loopback::connect_to(listener.port());
+    LT_ASSERT(packet.captured());
+    packet.fail(ERROR_INVALID_HANDLE);
+    LT_CHECK(wait_applied(rig.rig, op.state()));
+    LT_CHECK(op.state()->stored_result().code == hh::outcome_code::connection_closed);
+    LT_CHECK(rig.backend.native_handle(2) == pollsys::k_invalid_socket);
+    LT_CHECK_EQ(native_access::outstanding(rig.backend), std::size_t{0});
+    pollsys::close_socket(client);
+LT_END_AUTO_TEST(fatal_accept_packet_error_retires_listener)
+
+LT_BEGIN_AUTO_TEST(iocp_suite, success_claim_before_cancel_delivers_exactly_once)
+    iocp_rig rig;
+    auto pair = rig.adopt_pair(1);
+    packet_gate packet(rig.backend);
+    hd::read_operation op(rig.rig.owner, 1, rig.rig.buffer);
+    op.submit(rig.backend);
+    const auto state = op.state();
+    io_contract::probe result;
+    std::vector<httpserver::task<void>> tasks;
+    io_contract::launch_probe(rig.rig, std::move(op), &result, tasks);
+    rig.rig.ex.run_pending();
+    io_loopback::write_all(pair.peer(), "x", 1);
+    LT_ASSERT(packet.captured());
+    packet.release();
+    LT_CHECK(io_contract::wait_terminal(rig.rig, result));
+    LT_CHECK(rig.backend.request_cancel(*state) == hh::outcome_code::invalid_state);
+    LT_CHECK(result.observed.code == hh::outcome_code::ok);
+    LT_CHECK_EQ(result.delivered.load(), 1);
+LT_END_AUTO_TEST(success_claim_before_cancel_delivers_exactly_once)
+
+LT_BEGIN_AUTO_TEST(iocp_suite, cancel_claim_before_packet_delivers_exactly_once)
+    iocp_rig rig;
+    auto pair = rig.adopt_pair(1);
+    packet_gate packet(rig.backend);
+    hd::read_operation op(rig.rig.owner, 1, rig.rig.buffer);
+    op.submit(rig.backend);
+    const auto state = op.state();
+    io_contract::probe result;
+    std::vector<httpserver::task<void>> tasks;
+    io_contract::launch_probe(rig.rig, std::move(op), &result, tasks);
+    rig.rig.ex.run_pending();
+    io_loopback::write_all(pair.peer(), "x", 1);
+    LT_ASSERT(packet.captured());
+    LT_CHECK(rig.backend.request_cancel(*state) == hh::outcome_code::ok);
+    LT_CHECK(io_contract::wait_terminal(rig.rig, result));
+    packet.release();
+    LT_CHECK(until([&] { return native_access::outstanding(rig.backend) == 0; }));
+    rig.rig.ex.run_pending();
+    LT_CHECK(result.observed.code == hh::outcome_code::cancelled);
+    LT_CHECK_EQ(result.delivered.load(), 1);
+LT_END_AUTO_TEST(cancel_claim_before_packet_delivers_exactly_once)
 
 LT_BEGIN_AUTO_TEST(iocp_suite, queued_success_cancel_not_found_retains_storage_until_packet)
     iocp_rig rig;

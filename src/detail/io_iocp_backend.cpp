@@ -21,6 +21,10 @@ namespace {
 constexpr std::uint64_t k_listener_id_base = 1ULL << 62;
 constexpr ULONG_PTR k_control = 1;
 io_result closed_result() { return {http::outcome_code::connection_closed}; }
+bool transient_accept_error(DWORD error) {
+    return error == WSAECONNRESET || error == WSAECONNABORTED
+        || error == ERROR_NETNAME_DELETED || error == ERROR_CONNECTION_ABORTED;
+}
 }  // namespace
 
 thread_local io_iocp_backend* io_iocp_backend::current_driver_ = nullptr;
@@ -332,9 +336,16 @@ void io_iocp_backend::post_locked(const std::shared_ptr<op_state>& op, completio
     } else {
         status = ::WSASend(socket->socket, &native->buffer, 1, &native->bytes, 0, address, nullptr);
     }
-    if (status == SOCKET_ERROR && ::WSAGetLastError() != WSA_IO_PENDING) {
+    const auto error = status == SOCKET_ERROR ? ::WSAGetLastError() : 0;
+    if (status == SOCKET_ERROR && error != WSA_IO_PENDING) {
         posted_.erase(op.get());
         outstanding_.erase(address);  // synchronous failure: no packet exists
+        if (accept && transient_accept_error(error)) {
+            // The failed candidate is gone. Wake the next driver iteration to
+            // repost this logical accept without terminating the listener.
+            notify_locked();
+            return;
+        }
         finish_locked(op, closed_result(), done);
         if (op->kind() == io_op_kind::write) socket->write_closed = true;
         else retire_locked(op->connection(), done);
@@ -353,6 +364,12 @@ void io_iocp_backend::packet_locked(OVERLAPPED* address, ULONG_PTR token, DWORD 
     const auto registered = connections_.find(op->connection());
     if (op->is_terminal() || registered == connections_.end() || registered->second != request->socket) return;
     if (error != ERROR_SUCCESS) {
+        if (op->kind() == io_op_kind::accept && transient_accept_error(error)) {
+            // The packet has been consumed, so request destruction can close
+            // its candidate before the next iteration posts a fresh request.
+            notify_locked();
+            return;
+        }
         finish_locked(op, closed_result(), done);
         if (op->kind() == io_op_kind::write) request->socket->write_closed = true;
         else retire_locked(op->connection(), done);

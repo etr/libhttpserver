@@ -624,15 +624,13 @@ void n_awaiter_resume_exactly_once(littletest::test_runner* __lt_tr__,
 
 // S11: cancel-vs-stimulus race. Both contenders start on a spin gate;
 // per iteration the target is terminal exactly once with outcome ok or
-// cancelled; both classes must occur across the loop. The alternating
-// bias keeps both classes alive on any scheduler.
+// cancelled. Any distribution of winners is legal; chosen-winner coverage
+// belongs in separate tests that synchronize terminal claims.
 template <typename FX>
 void cancel_vs_stimulus_race(littletest::test_runner* __lt_tr__,
                              const char* __lt_name__, FX& fx) {
     (void)__lt_name__;
     constexpr int kIterations = 100;
-    int ok_count = 0;
-    int cancelled_count = 0;
 
     contract_rig& r = fx.rig;
     for (int i = 0; i < kIterations; ++i) {
@@ -649,17 +647,14 @@ void cancel_vs_stimulus_race(littletest::test_runner* __lt_tr__,
 
         std::atomic<int> arrivals{0};
         gate g(&arrivals);
-        const auto loser_delay = std::chrono::microseconds(50);
-        std::thread stimulator([&state, &fx, i, &g, loser_delay] {
+        std::thread stimulator([&state, &fx, &g] {
             g.arrive();
             g.wait(2);
-            if (i % 2 == 1) std::this_thread::sleep_for(loser_delay);
             fx.deliver_read(*state, "x");
         });
-        std::thread canceler([&state, &fx, i, &g, loser_delay] {
+        std::thread canceler([&state, &fx, &g] {
             g.arrive();
             g.wait(2);
-            if (i % 2 == 0) std::this_thread::sleep_for(loser_delay);
             fx.backend().request_cancel(*state);
         });
         stimulator.join();
@@ -669,16 +664,11 @@ void cancel_vs_stimulus_race(littletest::test_runner* __lt_tr__,
         if (p.delivered.load() != 1) {
             LT_FAIL("cancel/stimulus race: not terminal exactly once");
         }
-        if (p.observed.code == hh::outcome_code::ok) {
-            ++ok_count;
-        } else if (p.observed.code == hh::outcome_code::cancelled) {
-            ++cancelled_count;
-        } else {
+        if (p.observed.code != hh::outcome_code::ok
+            && p.observed.code != hh::outcome_code::cancelled) {
             LT_FAIL("cancel/stimulus race: unexpected outcome");
         }
     }
-    LT_CHECK(ok_count > 0);
-    LT_CHECK(cancelled_count > 0);
 }
 
 // Socket-driver scenarios (S12-S18).
