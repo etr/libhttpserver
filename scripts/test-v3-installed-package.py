@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Adversarial policy fixtures; these are not installed-package proof."""
 import importlib.util
+import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('audit', Path(__file__).with_name('audit-v3-installed-package.py'))
 audit = importlib.util.module_from_spec(spec)
@@ -26,6 +29,87 @@ class AuditTest(unittest.TestCase):
 
     def violations(self, graph, mode='pre-cutover', tls='no', surface='aggregate', declarations=None):
         return audit.graph_violations(graph, mode, tls, surface, self.policy if declarations is None else declarations, self.root)
+
+    def installed_audit(self, mode='strict', source_legacy=False, installed_legacy=False,
+                        legacy_dependency=False, legacy_symbol=False):
+        root = self.root.resolve()
+        source, prefix, build = (root / name for name in ('source', 'prefix', 'build'))
+        for directory in (source / 'scripts', source / 'src', prefix / 'include', prefix / 'lib/pkgconfig',
+                          build / 'src/.libs', build / 'test'):
+            directory.mkdir(parents=True, exist_ok=True)
+        (source / 'scripts/v3-installed-dependency-policy.json').write_text(json.dumps(self.policy))
+        (source / 'configure.ac').write_text('AC_INIT([fixture], [3])\n')
+        (source / 'src/Makefile.am').write_text('LIBADD = -lmicrohttpd\n' if source_legacy else 'LIBADD =\n')
+        metadata = 'Requires.private: libmicrohttpd\n' if installed_legacy else 'Requires.private:\n'
+        (source / 'libhttpserver.pc.in').write_text(metadata)
+        (prefix / 'lib/pkgconfig/libhttpserver.pc').write_text(metadata)
+        (build / 'libhttpserver.pc').write_text(metadata)
+        (build / 'config.log').write_text('fixture configuration\n')
+        (build / 'src/Makefile').write_text('fixture build\n')
+        (prefix / 'include/httpserver.hpp').write_text('struct fixture_server {};\n')
+        (prefix / 'include/httpserverpp').write_text('#include <httpserver.hpp>\n')
+        shared = prefix / 'lib/libhttpserver.dylib'
+        archive = prefix / 'lib/libhttpserver.a'
+        native = build / 'test/v3_native_linkage'
+        native_archive = build / 'src/.libs/libhttpserver_v3core.a'
+        consumer = root / 'consumer'
+        legacy = root / 'libmicrohttpd.dylib'
+        for artifact in (shared, archive, native, native_archive, consumer, legacy):
+            artifact.touch()
+
+        # Replace only external inspection tools; audit orchestration, header
+        # compilation, graph traversal and symbol policy all execute normally.
+        real_run = subprocess.run
+        def inspect(command, **kwargs):
+            if command[:2] == ['otool', '-L']:
+                dependency = str(legacy) if legacy_dependency and command[-1] == str(shared) else '/usr/lib/libSystem.B.dylib'
+                output = command[-1] + ':\n\t' + dependency + ' (compatibility version 1.0.0, current version 1.0.0)\n'
+            elif command[:2] == ['otool', '-l']:
+                output = ''
+            elif command[:2] == ['nm', '-u']:
+                output = 'unused.o:\n U _MHD_start_daemon\n' if legacy_symbol and command[-1] == str(archive) else 'used.o:\n U _fixture_runtime\n'
+            else:
+                return real_run(command, **kwargs)
+            return subprocess.CompletedProcess(command, 0, stdout=output, stderr='')
+
+        with patch.object(audit, '__file__', str(source / 'scripts/audit-v3-installed-package.py')), \
+                patch.object(audit.platform, 'system', return_value='Darwin'), \
+                patch.object(subprocess, 'run', side_effect=inspect):
+            return audit.audit(prefix, build, consumer, 'no', mode, self.root / 'provider')
+
+    def test_strict_installed_audit_accepts_legacy_free_provenance(self):
+        try:
+            receipt = self.installed_audit()
+        except audit.AuditError as error:
+            self.fail('strict audit must assess legacy-free provenance: ' + str(error))
+        self.assertEqual([], receipt['violations'])
+        self.assertNotIn('libmicrohttpd', receipt['provenance']['installed/libhttpserver.pc'])
+        self.assertNotIn('-lmicrohttpd', receipt['provenance']['src/Makefile.am'])
+
+    def test_strict_installed_audit_rejects_actual_legacy_dependency(self):
+        try:
+            receipt = self.installed_audit(legacy_dependency=True)
+        except audit.AuditError as error:
+            self.fail('strict audit must assess dependency graph: ' + str(error))
+        self.assertTrue(any('undeclared dependency (aggregate/strict)' in v and 'libmicrohttpd' in v
+                            for v in receipt['violations']))
+
+    def test_strict_installed_audit_rejects_unused_legacy_archive_member(self):
+        try:
+            receipt = self.installed_audit(legacy_symbol=True)
+        except audit.AuditError as error:
+            self.fail('strict audit must assess archive members: ' + str(error))
+        self.assertIn('legacy archive symbol: MHD_start_daemon', receipt['violations'])
+
+    def test_pre_cutover_installed_audit_requires_source_and_package_legacy_provenance(self):
+        for source_legacy, installed_legacy in ((False, True), (True, False)):
+            with self.subTest(source_legacy=source_legacy, installed_legacy=installed_legacy):
+                with self.assertRaisesRegex(audit.AuditError, 'transitional declaration provenance missing'):
+                    self.installed_audit('pre-cutover', source_legacy=source_legacy, installed_legacy=installed_legacy)
+
+    def test_pre_cutover_installed_audit_accepts_declared_legacy_dependency(self):
+        receipt = self.installed_audit('pre-cutover', source_legacy=True, installed_legacy=True, legacy_dependency=True)
+        self.assertEqual([], receipt['violations'])
 
     def test_declared_legacy_closure_and_strict_rejection(self):
         graph = self.graph({'consumer': ['libhttpserver.dylib'], 'libhttpserver.dylib': ['libmicrohttpd.dylib'],

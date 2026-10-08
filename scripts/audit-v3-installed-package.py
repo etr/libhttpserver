@@ -268,7 +268,8 @@ def audit(prefix, build, consumer, tls, mode, provider_prefix, compiler='c++'):
     for name in ('libhttpserver.pc', 'config.log', 'src/Makefile'):
         provenance['build/' + name] = (build / name).read_text()
     provenance['installed/libhttpserver.pc'] = (prefix / 'lib/pkgconfig/libhttpserver.pc').read_text()
-    if '-lmicrohttpd' not in provenance['src/Makefile.am'] or 'libmicrohttpd' not in provenance['installed/libhttpserver.pc']:
+    if mode == 'pre-cutover' and ('-lmicrohttpd' not in provenance['src/Makefile.am'] or
+                                  'libmicrohttpd' not in provenance['installed/libhttpserver.pc']):
         raise AuditError('transitional declaration provenance missing')
     artifacts = sorted(p for p in (prefix / 'lib').iterdir() if p.is_file() and
                        (p.name.endswith('.dylib') or '.so' in p.name or p.suffix == '.a'))
