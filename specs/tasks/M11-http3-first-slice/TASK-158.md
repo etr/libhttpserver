@@ -9,9 +9,9 @@
 Provide QUIC congestion control, pacing and fair send scheduling for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Implement NewReno congestion window, recovery and pacing.
-- [ ] Schedule streams fairly with control-plane reserve.
-- [ ] Test loss, persistent congestion and probe allowance on fake clock.
+- [x] Implement NewReno congestion window, recovery and pacing.
+- [x] Schedule streams fairly with control-plane reserve.
+- [x] Test loss, persistent congestion and probe allowance on fake clock.
 
 **Dependencies:**
 - Blocked by: TASK-156, TASK-157
@@ -24,4 +24,6 @@ Provide QUIC congestion control, pacing and fair send scheduling for libhttpserv
 **Related Requirements:** PRD-V3N-REQ-008, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** [QUIC scheduling contract and local checks](../../../docs/task-158-quic-scheduling.md). Caller-owned validation and finalization remain pending.

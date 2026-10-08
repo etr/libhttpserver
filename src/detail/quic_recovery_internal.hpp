@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <httpserver/detail/quic_recovery.hpp>
 #include <httpserver/detail/quic_flow_control.hpp>
+#include <httpserver/detail/quic_pacing.hpp>
 namespace httpserver::detail {
 using recovery_duration = std::chrono::steady_clock::duration;
 inline recovery_duration recovery_scale(recovery_duration value, std::uint64_t numerator, std::uint64_t denominator = 1) {
@@ -60,11 +61,12 @@ struct quic_recovery::implementation {
         bool terminal = false;
     };
     struct packet {
-        std::uint64_t number = 0, key_generation = 0;
+        std::uint64_t number = 0, key_generation = 0, sequence = 0;
         slice content{};
         std::optional<std::uint64_t> receive_watermark, ack_generation;
         time_point sent_at{};
         std::size_t wire_bytes = 0;
+        bool sampled = false, limited = false;
         bool critical = false, ack_eliciting = false, in_flight = false, acknowledged = false, lost = false;
     };
     struct space_state {
@@ -91,6 +93,8 @@ struct quic_recovery::implementation {
         slice content{};
         std::size_t payload_bytes = 0;
         bool prepared = false, ack_eliciting = false, critical = false;
+        quic_send_request request{};
+        bool scheduled = false;
         quic_flow_control* flow = nullptr;
         std::optional<quic_stream_frame> stream{};
         std::optional<quic_reset_stream_frame> reset{};
@@ -122,6 +126,45 @@ struct quic_recovery::implementation {
     void retire_acknowledged_receive(space_state& s, const packet& p);
     void retire_received(space_state& s, std::uint64_t watermark);
     bool can_collect(const packet& p) const;
+    struct stream_schedule { std::uint64_t stream; std::size_t deficit = 0; };
+    std::vector<stream_schedule> streams;
+    std::optional<std::uint64_t> next_stream;
+    unsigned consecutive_controls = 0;
+    // Bounded outcome summaries contain no flight bytes or retransmission state.
+    enum class outcome { pending, neutral, acknowledged, lost, discarded };
+    struct congestion_run {
+        std::uint64_t first, last, first_number, last_number;
+        quic_pn_space space;
+        time_point begin, end;
+        outcome status;
+        bool sampled;
+    };
+    std::vector<congestion_run> congestion_runs;
+    void note_congestion_packet(const packet& p, quic_pn_space space);
+    void acknowledge_congestion_runs(quic_pn_space space, std::span<const quic_ack_range> ranges);
+    void note_congestion_outcome(const packet& p, outcome status);
+    void compact_congestion_runs();
+    bool persistent_congestion() const;
+    std::optional<std::uint64_t> persistent_through;
+    quic_congestion congestion;
+    quic_pacing pacing;
+    std::optional<time_point> send_due;
+    std::array<unsigned, 3> probe_grants{};
+    quic_send_permission permission(time_point now, std::size_t bytes, bool flight, bool critical, bool probe, quic_pn_space space) const;
+    std::optional<slice> select_stream(bool probe, const quic_flow_control* flow) const;
+    void commit_schedule();
+    void commit_stream_turn();
+    bool prefer_data(quic_pn_space space) const;
+    bool data_window_available(std::size_t bytes) const;
+    std::optional<slice> stream_slice(const stream_schedule& entry, bool probe, const quic_flow_control* flow) const;
+    std::size_t scheduled_wire = 0;
+    std::optional<time_point> scheduled_now;
+    quic_recovery_code charge_flow();
+    quic_recovery_code check_flow() const;
+    quic_send_permission window_permission(std::size_t bytes, bool critical) const;
+    void record_emission(time_point now, std::size_t bytes, bool eliciting, bool flight, std::uint64_t generation);
+    void finish_loss(std::optional<time_point> newest, time_point now);
+    void register_stream(std::uint64_t stream);
     std::size_t in_flight = 0;
     quic_rtt_state rtt;
     quic_recovery_environment environment;

@@ -37,6 +37,7 @@ class quic_flow_control final {
     quic_flow_result receive(quic_stream_state& stream, const quic_stream_frame& frame);
     quic_flow_result receive(quic_stream_state& stream, const quic_reset_stream_frame& frame);
     quic_flow_allowance send_allowance(std::uint64_t id, std::uint64_t offset, std::size_t requested) const;
+    quic_flow_result check_stream_sent(std::uint64_t id, std::uint64_t offset, std::size_t length, bool fin) const;
     quic_flow_result record_stream_sent(std::uint64_t id, std::uint64_t offset, std::size_t length, bool fin);
     quic_flow_result check_reset_sent(std::uint64_t id, std::uint64_t final_size) const;
     quic_flow_result record_reset_sent(std::uint64_t id, std::uint64_t final_size);

@@ -18,13 +18,20 @@ bool inconsistent_final(std::optional<std::uint64_t> final, std::uint64_t highes
     return fin && end < highest;
 }
 }  // namespace
-quic_flow_result quic_flow_control::record_stream_sent(std::uint64_t id, std::uint64_t offset, std::size_t length, bool fin) {
+quic_flow_result quic_flow_control::check_stream_sent(std::uint64_t id, std::uint64_t offset, std::size_t length, bool fin) const {
     auto allowance = send_allowance(id, offset, length);
     if (!allowance) return {allowance.code};
     if (allowance.bytes < length) return {quic_flow_code::blocked};
     auto* value = impl_->find(id);
     const auto end = offset + length;
     if (inconsistent_final(value->sent_final, value->sent, end, fin)) return {quic_flow_code::final_size_error};
+    return {};
+}
+quic_flow_result quic_flow_control::record_stream_sent(std::uint64_t id, std::uint64_t offset, std::size_t length, bool fin) {
+    auto checked = check_stream_sent(id, offset, length, fin);
+    if (!checked) return checked;
+    auto* value = impl_->find(id);
+    const auto end = offset + length;
     impl_->sent += end > value->sent ? end - value->sent : 0;
     value->sent = std::max(value->sent, end);
     if (fin) value->sent_final = end;

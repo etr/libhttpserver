@@ -56,6 +56,7 @@ quic_information_result quic_recovery::implementation::store_information(informa
         information_records.push_back(std::move(value));
         retained_bytes += data.size();
         if (information_records.back().kind == quic_information_kind::stream) data_retained_bytes += data.size();
+        if (information_records.back().kind == quic_information_kind::stream) register_stream(information_records.back().stream);
         return {{}, next_information++};
     } catch (const std::bad_alloc&) {
         return {{quic_recovery_code::no_memory}};
@@ -160,15 +161,6 @@ std::optional<quic_recovery::implementation::slice> quic_recovery::implementatio
     if (!constrain_slice(content, value, flow)) return {};
     return content;
 }
-std::optional<quic_recovery::implementation::slice> quic_recovery::implementation::select_information(quic_pn_space space, bool probe, const quic_flow_control* flow) const {
-    for (bool critical : {true, false}) {
-        for (const auto& value : information_records) {
-            if ((value.kind != quic_information_kind::stream) != critical || value.space != space || value.completed || value.cancelled) continue;
-            if (auto content = eligible_slice(value, probe, flow)) return content;
-        }
-    }
-    return {};
-}
 quic_frame quic_recovery::implementation::information_frame(const information& value, slice content) const {
     if (value.kind == quic_information_kind::flow) return value.flow;
     if (value.kind == quic_information_kind::reset_stream) return quic_reset_stream_frame{value.stream, value.error, value.offset};
@@ -202,7 +194,7 @@ std::optional<quic_recovery::implementation::slice> quic_recovery::implementatio
     if (!content && probe) content = select_information(space, true, flow);
     // ACK-only packets get critical record admission even when ordinary sent
     // records or output are full. A STREAM cannot consume that reserved slot.
-    if (content && ack && find_information(content->id)->kind == quic_information_kind::stream) content.reset();
+    if (content && ack && find_information(content->id)->kind == quic_information_kind::stream && !prefer_data(space)) content.reset();
     return content;
 }
 quic_send_plan quic_recovery::prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, bool probe) {
@@ -220,7 +212,9 @@ quic_send_plan quic_recovery::prepare(quic_pn_space space, std::span<std::byte> 
         auto staged = impl_->stage_plan(plan, content, output, flow);
         if (!staged) {
             abandon_packet(plan.token);
-            return {{staged.code}};
+            if (!ack_deadline(space)) return {{staged.code}};
+            plan = reserve(space, true);
+            if (!plan) return plan;
         }
     }
     if (ack_deadline(space)) append_ack(plan, space, output, now);

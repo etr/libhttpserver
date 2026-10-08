@@ -61,6 +61,7 @@ std::optional<quic_recovery_timer> quic_recovery::implementation::recovery_timer
 void quic_recovery::set_environment(quic_recovery_environment environment, time_point now) {
     if (impl_->config.role == quic_endpoint_role::server || environment.handshake_confirmed)
         environment.peer_validated_endpoint = true;
+    impl_->send_due.reset();
     impl_->environment = environment;
     if (environment.peer_validated_endpoint) impl_->idle_pto_anchor.reset();
     else if (!impl_->idle_pto_anchor) impl_->idle_pto_anchor = now;
@@ -95,6 +96,7 @@ quic_recovery_events quic_recovery::expire(time_point now) {
     } else {
         result.probe_space = timer->space;
         result.probes = outstanding_eliciting(*impl_->state(timer->space)) ? 2 : 1;
+        impl_->probe_grants[static_cast<unsigned>(timer->space)] = result.probes;
         impl_->pto_count = std::min(impl_->pto_count + 1, 63U);
         impl_->last_pto = now;
     }
@@ -105,15 +107,19 @@ quic_recovery_events quic_recovery::discard_space(quic_pn_space space) {
     auto* s = impl_->state(space);
     if (!s) return {{quic_recovery_code::invalid}};
     quic_recovery_events result;
-    for (auto& p : s->sent)
+    for (auto& p : s->sent) {
         if (p.in_flight) result.discarded_bytes += p.wire_bytes;
+        impl_->note_congestion_outcome(p, implementation::outcome::discarded);
+    }
     impl_->in_flight -= result.discarded_bytes;
+    impl_->send_due.reset();
     for (auto& value : impl_->information_records) {
         if (value.space != space) continue;
         value.cancelled = true;
         value.completion_pending = false;
         impl_->release_storage(value);
     }
+    impl_->probe_grants[static_cast<unsigned>(space)] = 0;
     s->sent.clear();
     s->received.clear();
     s->loss_due.reset();

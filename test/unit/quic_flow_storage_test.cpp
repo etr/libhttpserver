@@ -174,6 +174,28 @@ LT_BEGIN_AUTO_TEST(flow_storage_suite, envelope_allocation_and_ancestor_refusal_
         LT_CHECK(refused && root.in_use(resource) == 0);
     }
 LT_END_AUTO_TEST(envelope_allocation_and_ancestor_refusal_release_all_charges)
+LT_BEGIN_AUTO_TEST(flow_storage_suite, scheduled_emission_is_allocation_free_and_returns_scheduler_budget)
+    auto root = hs::resource_budget::root({});
+    {
+        hd::quic_recovery recovery({}, root);
+        hd::quic_transport_parameters parameters;
+        hd::quic_flow_control flow(hd::quic_endpoint_role::server, parameters, parameters, 4, root);
+        std::array<std::byte, 1200> output{};
+        LT_ASSERT(recovery.retain_crypto(hd::quic_pn_space::initial, 0, std::span(output).first(10)));
+        auto plan = recovery.prepare_scheduled_packet(hd::quic_pn_space::initial, output, {}, {1200, 40}, flow);
+        LT_ASSERT(plan);
+        allocation_countdown = 0;
+        bool emitted = false;
+        try {
+            emitted = static_cast<bool>(recovery.commit_sent(plan.token, {}, 1200, true, true));
+        } catch (const std::bad_alloc&) {
+            emitted = false;
+        }
+        allocation_countdown = -1;
+        LT_CHECK(emitted);
+    }
+    LT_CHECK(root.in_use(resource) == 0);
+LT_END_AUTO_TEST(scheduled_emission_is_allocation_free_and_returns_scheduler_budget)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

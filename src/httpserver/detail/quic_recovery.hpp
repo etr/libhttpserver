@@ -6,13 +6,14 @@
 #define SRC_HTTPSERVER_DETAIL_QUIC_RECOVERY_HPP_
 #include <chrono>
 #include <memory>
+#include <httpserver/detail/quic_congestion.hpp>
 #include <httpserver/detail/quic_frame.hpp>
 #include <httpserver/server/budgets.hpp>
 #include <httpserver/detail/quic_storage.hpp>
 namespace httpserver::detail {
 class quic_flow_control;
 enum class quic_pn_space { initial, handshake, application };
-enum class quic_recovery_code { ok, invalid, capacity, no_memory, no_space, no_data, discarded, busy };
+enum class quic_recovery_code { ok, invalid, capacity, no_memory, no_space, no_data, discarded, busy, congestion_blocked, pacing_blocked, unavailable };
 enum class quic_receipt { fresh, duplicate, retired, invalid };
 struct quic_recovery_result {
     quic_recovery_code code = quic_recovery_code::ok;
@@ -23,15 +24,24 @@ struct quic_recovery_config {
     std::size_t critical_information = 0, critical_retained_bytes = 0, critical_sent_packets = 0;
     std::chrono::microseconds local_max_ack_delay{25000}, peer_max_ack_delay{25000};
     unsigned local_ack_delay_exponent = 3, peer_ack_delay_exponent = 3;
+    std::size_t max_datagram_size = 1200, control_reserve = 1200;
     quic_endpoint_role role = quic_endpoint_role::server;
 };
 struct quic_ack_plan : quic_recovery_result {
     std::size_t bytes = 0;
     std::uint64_t generation = 0;
 };
+struct quic_send_request {
+    std::size_t max_wire_bytes = 1200, protection_overhead = 40;
+    bool probe = false, limited = false;
+};
+struct quic_send_permission : quic_recovery_result {
+    std::optional<std::chrono::steady_clock::time_point> deadline{};
+};
 struct quic_send_plan : quic_recovery_result {
     std::uint64_t token = 0, packet_number = 0;
     std::size_t bytes = 0;
+    std::optional<std::chrono::steady_clock::time_point> deadline{};
     bool ack_eliciting = false;
     std::optional<quic_stream_frame> stream{};
     std::optional<quic_reset_stream_frame> reset{};
@@ -113,6 +123,13 @@ class quic_recovery final {
     // Caller protects using packet_number, reports actual emission or abandons.
     quic_send_plan prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, bool probe = false);
     quic_send_plan prepare_packet(quic_pn_space space, std::span<std::byte> output, time_point now, quic_flow_control& flow, bool probe = false);
+    // Check immediately before serialized transport emission; commit records that emission.
+    quic_send_plan prepare_scheduled_packet(quic_pn_space space, std::span<std::byte> output, time_point now,
+                                           quic_send_request request, quic_flow_control& flow);
+    quic_send_permission check_scheduled_emission(std::uint64_t token, time_point now, std::size_t wire_bytes,
+                                                 bool ack_eliciting, bool in_flight) const;
+    quic_congestion_snapshot congestion() const;
+    std::optional<time_point> next_send_deadline() const;
     quic_recovery_events discard_space(quic_pn_space space);
 
  private:
