@@ -664,3 +664,5 @@ check-v3-installed-consumer:
 EXTRA_DIST += docs/task-151-quic-codecs.md
 
 EXTRA_DIST += docs/task-152-quic-protection.md
+
+EXTRA_DIST += docs/task-155-quic-tls.md

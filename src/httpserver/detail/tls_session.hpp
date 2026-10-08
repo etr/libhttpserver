@@ -16,6 +16,8 @@
 #include <httpserver/detail/tls_io_backend.hpp>
 #include <httpserver/detail/tls_psk_runtime.hpp>
 namespace httpserver::detail {
+class quic_tls_callbacks;
+class quic_tls_session;
 // Bounded BIO pair. The pump transfers exclusive access to a handshake worker;
 // no SSL/BIO access is permitted on the owner until that step retires.
 class tls_session final {
@@ -46,6 +48,9 @@ class tls_session final {
 
  private:
     friend class tls_context;
+    friend class quic_tls_session;
+    tls_session(tls_credentials_selection selection, bool server, tls_handshake_context handshake, quic_tls_callbacks* callbacks);
+    result process_post_handshake();
     struct impl;
     std::unique_ptr<impl> impl_;
 };

@@ -20,6 +20,7 @@
 #include <string>
 #include <stdexcept>
 #include <utility>
+#include "detail/quic_tls_callbacks.hpp"
 namespace httpserver::detail {
 namespace {
 void metadata_check(bool valid) {
@@ -97,6 +98,7 @@ tls_negotiated_protocol selected_protocol(SSL* ssl) {
     SSL_get0_alpn_selected(ssl, &bytes, &size);
     if (!size) return tls_negotiated_protocol::none;
     const std::string_view selected(reinterpret_cast<const char*>(bytes), size);
+    if (selected == "h3") return tls_negotiated_protocol::h3;
     if (selected == "h2") return tls_negotiated_protocol::h2;
     if (selected == "http/1.1") return tls_negotiated_protocol::http1;
     return tls_negotiated_protocol::other;
@@ -111,6 +113,7 @@ struct tls_session::impl {
     std::string challenge_name;
     tls_handshake_context handshake_context;
     bool server_side = false;
+    bool quic = false;
     bool metadata_failed = false;
     tls_negotiated_protocol protocol = tls_negotiated_protocol::unknown;
     std::shared_ptr<const server::tls_peer_metadata> peer;
@@ -168,6 +171,13 @@ struct tls_session::impl {
             return *session != nullptr;
         } catch (...) { return 0; }
     }
+    void apply_quic_policy() {
+        if (SSL_set_min_proto_version(ssl, TLS1_3_VERSION) != 1 || SSL_set_max_proto_version(ssl, TLS1_3_VERSION) != 1) {
+            throw std::runtime_error("QUIC TLS policy unavailable");
+        }
+        // The provider early-data setter is pre-handshake-only. SNI switches
+        // retain that disabled state; apply_profile reapplies the zero byte cap.
+    }
     void apply_profile() {
         const bool psk = static_cast<bool>(selection.context->psk_);
         SSL_set_psk_server_callback(ssl, psk ? psk12 : nullptr);
@@ -177,6 +187,7 @@ struct tls_session::impl {
             throw std::runtime_error("TLS profile unavailable");
         }
         SSL_set_max_early_data(ssl, 0);
+        if (quic) apply_quic_policy();
         if (psk) {
             SSL_set_options(ssl, SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
             SSL_set_num_tickets(ssl, 0);
@@ -211,7 +222,7 @@ struct tls_session::impl {
         return size == 13 && data[2] == 10 && std::memcmp(data + 3, "acme-tls/1", 10) == 0;
     }
     bool select_acme(const std::string& name) {
-        if (!selection.snapshot || !sole_acme_offer || name.empty() ||
+        if (quic || !selection.snapshot || !sole_acme_offer || name.empty() ||
             handshake_context.transport != tls_transport::tcp || handshake_context.local_port != 443) return false;
         auto challenge = selection.snapshot->select_acme(name);
         if (!challenge) return false;
@@ -305,6 +316,14 @@ struct tls_session::impl {
     }
     const tls_host_metadata& metadata() const { return selection.snapshot->hosts()[selected_host]; }
     bool allows_absent_alpn() const {
+        if (quic) {
+            if (!selection.snapshot || selection.context->psk_) return false;
+            const auto& protocols = metadata().alpn;
+            if (std::find(protocols.begin(), protocols.end(), "h3") == protocols.end()) return false;
+            const unsigned char* data = nullptr;
+            std::size_t size = 0;
+            return SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_application_layer_protocol_negotiation, &data, &size) == 1;
+        }
         if (sole_acme_offer) return acme;
         if (!selection.snapshot || metadata().alpn.empty()) return true;
         const unsigned char* data = nullptr;
@@ -337,7 +356,7 @@ struct tls_session::impl {
             if (self->acme) return acme_alpn(out, length, input, size);
             if (!self->selection.snapshot || self->metadata().alpn.empty()) return SSL_TLSEXT_ERR_NOACK;
             for (const auto& token : self->metadata().alpn) {
-                if (!http_protocol(token)) continue;
+                if (self->quic ? token != "h3" : !http_protocol(token)) continue;
                 if (const auto* match = offered(token, input, size)) {
                     *out = match;
                     *length = static_cast<unsigned char>(token.size());
@@ -387,18 +406,25 @@ void tls_context::configure_server() {
 tls_session::tls_session(std::shared_ptr<const tls_context> context, bool server, tls_handshake_context handshake)
     : tls_session(tls_credentials_selection{nullptr, std::move(context)}, server, handshake) {
 }
-tls_session::tls_session(tls_credentials_selection selection, bool server, tls_handshake_context handshake) : impl_(std::make_unique<impl>()) {
+tls_session::tls_session(tls_credentials_selection selection, bool server, tls_handshake_context handshake)
+    : tls_session(std::move(selection), server, handshake, nullptr) {}
+tls_session::tls_session(tls_credentials_selection selection, bool server, tls_handshake_context handshake, quic_tls_callbacks* callbacks)
+    : impl_(std::make_unique<impl>()) {
     if (!selection.context || !selection.context->native_) {
         throw std::invalid_argument("TLS context missing");
     }
     impl_->handshake_context = handshake;
+    impl_->quic = callbacks != nullptr;
     impl_->selection = std::move(selection);
     impl_->ssl = SSL_new(static_cast<SSL_CTX*>(impl_->selection.context->native_.get()));
     BIO* local = nullptr;
-    if (!impl_->ssl || BIO_new_bio_pair(&local, 16384, &impl_->wire, 16384) != 1) {
+    if (!impl_->ssl) throw std::runtime_error("TLS session unavailable");
+    if (callbacks) {
+        callbacks->install(impl_->ssl);
+    } else if (BIO_new_bio_pair(&local, 16384, &impl_->wire, 16384) != 1) {
         throw std::runtime_error("TLS session unavailable");
     }
-    SSL_set_bio(impl_->ssl, local, local);
+    if (!callbacks) SSL_set_bio(impl_->ssl, local, local);
     if (impl::index() < 0 || SSL_set_ex_data(impl_->ssl, impl::index(), impl_.get()) != 1) {
         throw std::runtime_error("TLS session unavailable");
     }
@@ -444,6 +470,12 @@ tls_session::result tls_session::handshake() {
     }
     if (result.state == progress::complete || result.state == progress::failed || result.state == progress::eof) impl_->attempt.reset();
     return result;
+}
+tls_session::result tls_session::process_post_handshake() {
+    std::size_t bytes = 0;
+    ERR_clear_error();
+    const int rc = SSL_read_ex(impl_->ssl, nullptr, 0, &bytes);
+    return impl_->classify(rc, bytes);
 }
 tls_session::result tls_session::read(std::span<std::byte> buffer) {
     if (impl_->acme) return {progress::failed};
