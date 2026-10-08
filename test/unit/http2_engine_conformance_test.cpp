@@ -154,6 +154,65 @@ LT_BEGIN_AUTO_TEST(http2_engine_conformance_suite, local_reset_compression_survi
     executor.run_pending();
     LT_CHECK(!engine.failure()); LT_CHECK_EQ(routed, 131u);
 LT_END_AUTO_TEST(local_reset_compression_survives_closed_history_pressure)
+LT_BEGIN_AUTO_TEST(http2_engine_conformance_suite, local_reset_history_exhaustion_fails_closed)
+    auto budget = h2test::budget();
+    unsigned routed = 0;
+    {
+        hs::route_registry routes; LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+        routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/",
+            [&](httpserver::exchange& x) -> httpserver::task<void> {
+                ++routed; x.respond(httpserver::http::status::from_code(204), {}); co_return;
+            });
+        httpserver::manual_executor executor; hd::http2_request_limits limits;
+        limits.connection.control_events_per_interval = 4096;
+        limits.connection.stream_openings_per_interval = 4096;
+        hd::http2_request_engine engine(budget, routes, executor, limits);
+        h2test::output(engine); LT_ASSERT(h2test::feed(engine, h2test::preface()));
+        h2test::output(engine);
+        // Each duplicate :method opening is locally reset. Retire each reset so
+        // output queues and rate limits cannot mask the 128-entry history bound.
+        const std::vector<std::uint8_t> malformed{0x82, 0x82, 0x87, 0x84};
+        for (unsigned n = 0; n < 128; ++n) {
+            const unsigned id = 2 * n + 1;
+            LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, id, malformed)));
+            executor.run_pending();
+            const auto output = h2test::output(engine);
+            const auto resets = h2test::resets(output);
+            LT_ASSERT_EQ(resets.size(), 1u);
+            LT_CHECK_EQ(resets[0].stream, id);
+            LT_CHECK(resets[0].code == static_cast<unsigned>(hd::http2_error_code::protocol_error));
+            LT_CHECK_EQ(h2test::count_type(output, 7), 0u);
+            LT_CHECK(!engine.failure());
+        }
+
+        h2test::feed(engine, h2test::frame(1, 5, 257, malformed));
+        const auto failure = engine.failure();
+        LT_ASSERT(failure.has_value());
+        LT_CHECK(failure->scope == hd::http2_error_scope::connection);
+        LT_CHECK(failure->wire_code == hd::http2_error_code::enhance_your_calm);
+        LT_CHECK(failure->outcome == httpserver::http::outcome_code::limit_exceeded);
+        executor.run_pending();
+        const auto terminal = h2test::output(engine);
+        const auto frames = h2test::frames(terminal);
+        LT_ASSERT_EQ(frames.size(), 1u);
+        LT_CHECK_EQ(frames[0].type, 7u);
+        LT_CHECK_EQ(frames[0].stream, 0u);
+        LT_ASSERT(frames[0].payload.size() >= 8);
+        LT_CHECK(h2test::read_u32(frames[0].payload.data() + 4)
+                 == static_cast<unsigned>(hd::http2_error_code::enhance_your_calm));
+
+        const auto retry = engine.feed(h2test::frame(1, 5, 259, {0x82, 0x87, 0x84}));
+        LT_CHECK_EQ(retry.consumed, 0u);
+        LT_ASSERT(retry.error.has_value());
+        LT_CHECK(retry.error->wire_code == failure->wire_code);
+        LT_CHECK(retry.error->outcome == failure->outcome);
+        executor.run_pending();
+        LT_CHECK(engine.output().empty());
+        LT_CHECK_EQ(routed, 0u);
+    }
+    for (std::size_t i = 0; i < hs::resource_count; ++i)
+        LT_CHECK_EQ(budget.in_use(static_cast<hs::resource>(i)), 0u);
+LT_END_AUTO_TEST(local_reset_history_exhaustion_fails_closed)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

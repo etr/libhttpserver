@@ -139,6 +139,7 @@ def main():
                 continue
             stem = case.replace('/', '-')
             report = args.log_dir.resolve() / (stem + '.xml')
+            report.unlink(missing_ok=True)
             run([h2spec, case, '--strict', '--tls', '--insecure', '--host', '127.0.0.1',
                  '--port', ready[1], '--timeout', '2', '--junit-report', str(report)],
                 args.log_dir / (stem + '.log'), 12)
