@@ -2171,3 +2171,21 @@ quic_tls_handshake_LDADD = $(tls_io_LDADD)
 quic_tls_handshake_LDFLAGS = $(tls_io_LDFLAGS)
 endif
 EXTRA_DIST += unit/quic_tls_peer.hpp
+
+check_PROGRAMS += quic_ack_state quic_recovery quic_repacketize
+quic_ack_state_SOURCES = unit/quic_ack_state_test.cpp
+quic_ack_state_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_ack_state_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+quic_recovery_SOURCES = unit/quic_recovery_test.cpp support/quic_network_harness.cpp
+quic_recovery_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_recovery_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+quic_repacketize_SOURCES = unit/quic_repacketize_test.cpp
+quic_repacketize_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_repacketize_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+if NATIVE_V3_TLS
+check_PROGRAMS += quic_recovery_tls
+quic_recovery_tls_SOURCES = unit/quic_recovery_tls_test.cpp
+quic_recovery_tls_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+quic_recovery_tls_LDADD = $(tls_io_LDADD)
+quic_recovery_tls_LDFLAGS = $(tls_io_LDFLAGS)
+endif

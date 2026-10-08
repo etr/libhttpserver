@@ -9,9 +9,9 @@
 Provide ACK generation, RFC 9002 loss detection and PTO for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Track sent information and ACK ranges per packet-number space.
-- [ ] Implement RTT, loss thresholds and PTO timers.
-- [ ] Repacketize information after loss rather than replay encrypted packets.
+- [x] Track sent information and ACK ranges per packet-number space.
+- [x] Implement RTT, loss thresholds and PTO timers.
+- [x] Repacketize information after loss rather than replay encrypted packets.
 
 **Dependencies:**
 - Blocked by: TASK-151, TASK-152, TASK-155
@@ -24,4 +24,6 @@ Provide ACK generation, RFC 9002 loss detection and PTO for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** [Recovery ownership and local verification](../../../docs/task-156-quic-recovery.md). Caller-owned validation is pending.
