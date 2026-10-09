@@ -24,6 +24,7 @@ struct http3_encoded_section {
     quic_storage_lease owner;
     server::reservation charge;
     std::string value;
+    std::uint64_t token = 0;
 };
 // Serialized server-side connection core. QUIC owns opening/reassembly and
 // delivers ordered bytes plus terminal notifications. No packet pump here.
@@ -42,7 +43,13 @@ class http3_connection final {
     bool advance_local_prefix(http3_role role, std::size_t count);
     qpack_status queue_encoder_instruction(const qpack_encoder_instruction& instruction);
     http3_encoded_section encode_section(std::uint64_t id, std::span<const qpack_field_view> fields);
-    void begin_turn() { frames_left_ = limits_.frames_per_turn; }
+    http3_encoded_section encode_response_section(std::uint64_t id, std::span<const qpack_field_view> fields);
+    bool blocked(std::uint64_t id) const;
+    void publish_section(std::uint64_t token);
+    void cancel_section(std::uint64_t token);
+    void cancel_unpublished(std::uint64_t id);
+    void shutdown();
+    void begin_turn() { frames_left_ = limits_.frames_per_turn; critical_frames_left_.fill(limits_.frames_per_turn); }
 
  private:
     struct stream {
@@ -77,17 +84,30 @@ class http3_connection final {
     bool settings(std::span<const std::byte> payload, std::uint64_t id);
     std::size_t uni_input(stream& s, std::span<const std::byte> input, std::uint64_t id);
     bool qpack_input(stream& s, std::byte byte, std::uint64_t id);
+    bool encoder_input(stream& s, std::uint64_t id);
+    bool decoder_input(stream& s, std::uint64_t id);
+    std::size_t instruction_capacity(const stream& s) const;
     bool unblock_sections();
     bool queue_feedback(qpack_decoder_instruction instruction);
     void release_retained(stream& s);
     bool initialize_qpack();
     bool admit_qpack_output();
+    qpack_status queue_encoder_allocated(const qpack_encoder_instruction& instruction);
     bool apply_decoder_instruction(qpack_decoder_instruction instruction);
     struct outgoing_section {
         std::uint64_t stream = 0, required = 0;
         server::reservation charge;
         qpack_reference_hold references;
+        std::uint64_t token = 0;
+        bool published = true;
     };
+    http3_encoded_section encode_section_impl(std::uint64_t id, std::span<const qpack_field_view> fields, bool provisional);
+    http3_encoded_section encode_section_allocated(std::uint64_t id, std::span<const qpack_field_view> fields, bool provisional);
+    bool retain_section(std::uint64_t id, qpack_dynamic_bytes_result& encoded, server::reservation charge, bool provisional, std::uint64_t& token);
+    bool section_may_block(std::uint64_t id, std::uint64_t required) const;
+    bool section_stream(std::uint64_t id) const;
+    void insert_response_names(std::span<const qpack_field_view> fields);
+    std::size_t& frame_budget(const stream& s);
     bool potentially_blocked(std::uint64_t id) const;
     std::size_t outgoing_blocked() const;
     quic_storage_lease data_, critical_;
@@ -109,6 +129,10 @@ class http3_connection final {
     std::array<std::optional<std::uint64_t>, 3> local_ids_{};
     std::array<std::size_t, 3> prefix_positions_{};
     std::size_t frames_left_ = 0;
+    // The last allowance admits new stream types independently of existing roles.
+    std::array<std::size_t, 4> critical_frames_left_{};
+    std::uint64_t next_section_ = 1;
+    bool stopped_ = false;
     std::optional<http3_error> error_;
 };
 }  // namespace httpserver::detail

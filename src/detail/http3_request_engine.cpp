@@ -98,15 +98,19 @@ void http3_request_engine::state::fail(http3_error failure) {
     handlers->disable();
     for (auto& [id, r] : records)
         cancel(*r, failure.outcome);
+    connection.shutdown();
 }
 void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
     if (r.cancelled) return;
     r.cancelled = true;
+    connection.cancel_unpublished(r.transport->id());
+    r.output_token = 0;
     for (auto id : r.information) {
         recovery.cancel_information(id);
         --(r.local ? retained_critical : retained);
     }
     r.information.clear();
+    if (r.local) flow.abandon_critical(r.transport->id());
     r.sections.clear();
     std::vector<std::byte>().swap(r.output);
     r.output_charge.release();
@@ -183,12 +187,20 @@ bool http3_request_engine::state::attach(quic_stream_state& transport, std::opti
     r->scratch.resize(scratch);
     r->receipts.resize(limits.max_receipt_records);
     r->information.reserve(output_records);
-    records.emplace(id, std::move(r));
+    register_record(std::move(r));
     return true;
+}
+void http3_request_engine::state::register_record(std::unique_ptr<record> r) {
+    const auto id = r->transport->id();
+    auto [it, inserted] = records.emplace(id, std::move(r));
+    auto& added = *it->second;
+    if (added.local)
+        critical_records[static_cast<std::size_t>(added.local_role) - static_cast<std::size_t>(http3_role::control)] = &added;
 }
 std::optional<http3_error> http3_request_engine::attach_peer(quic_stream_state& stream) {
     auto s = state_;
     state::pump_guard guard(*s);
+    if (s->disconnected) return s->error;
     try {
         s->attach(stream, {});
     } catch (const std::bad_alloc&) {
@@ -199,6 +211,7 @@ std::optional<http3_error> http3_request_engine::attach_peer(quic_stream_state& 
 std::optional<http3_error> http3_request_engine::attach_local(http3_role role, quic_stream_state& stream) {
     auto s = state_;
     state::pump_guard guard(*s);
+    if (s->disconnected) return s->error;
     try {
         s->attach(stream, role);
     } catch (const std::bad_alloc&) {
@@ -382,17 +395,17 @@ void http3_request_engine::state::notice_terminal(record& r) {
     }
 }
 http3_progress http3_request_engine::state::receive(record& r) {
-    if (r.local) return http3_progress::input;
+    if (r.local || disconnected) return http3_progress::input;
     notice_terminal(r);
     if (error) return http3_progress::failed;
     if (r.receive_done || r.cancelled || r.abandoned) return http3_progress::input;
     // The core's frame budget bounds each turn; scratch is never overwritten
-    // while a DATA event still borrows it. Siblings are pumped independently.
+    // while a DATA event still borrows it. Ready siblings are scheduled below.
     while (!error && receive_step(r)) {}
     return error ? http3_progress::failed : http3_progress::input;
 }
 void http3_request_engine::state::finish_receive(record& r) {
-    if (!r.terminal || r.receive_done || connection.event(r.transport->id())) return;
+    if (!r.terminal || r.receive_done || connection.event(r.transport->id()) || connection.blocked(r.transport->id())) return;
     const auto terminal = *r.terminal;
     if (terminal.kind == quic_terminal_kind::reset) {
         peer_reset(r, terminal);
@@ -405,16 +418,37 @@ void http3_request_engine::state::finish_receive(record& r) {
     r.receive_done = true;
     if (r.semantic && !r.semantic->body.end_receive(std::move(r.semantic->trailers))) reset(r, 0x10e);
 }
+void http3_request_engine::state::receive_critical() {
+    for (auto& [id, r] : records)
+        if (!r->local && (id & 2)) receive(*r);
+}
+void http3_request_engine::state::receive_pending() {
+    receive_critical();
+    auto it = receive_after ? records.upper_bound(*receive_after) : records.begin();
+    for (std::size_t n = 0; n < records.size() && !disconnected; ++n) {
+        if (it == records.end()) it = records.begin();
+        auto& [id, r] = *it++;
+        if (!r->local && !(id & 2)) {
+            const auto before = connection.offset(id);
+            const bool ready = connection.event(id);
+            receive(*r);
+            if (ready || connection.offset(id) != before) receive_after = id;
+        }
+    }
+}
 http3_progress http3_request_engine::pump_receive(std::uint64_t id) {
     auto s = state_;
     state::pump_guard guard(*s);
+    if (s->disconnected) return s->error ? http3_progress::failed : http3_progress::input;
     const auto it = s->records.find(id);
     if (it == s->records.end()) {
         s->fail(h3_error(0x103, "Unknown receive stream", id));
         return http3_progress::failed;
     }
     try {
-        return s->receive(*it->second);
+        s->receive(*it->second);
+        s->receive_pending();
+        return s->error ? http3_progress::failed : http3_progress::input;
     } catch (const std::bad_alloc&) {
         s->fail(h3_error(0x107, "Request allocation failed", id));
         return http3_progress::failed;
@@ -441,6 +475,7 @@ void http3_request_engine::state::peer_reset(record& r, quic_stream_terminal ter
 void http3_request_engine::terminal(std::uint64_t id, quic_stream_terminal terminal) {
     auto s = state_;
     state::pump_guard guard(*s);
+    if (s->disconnected) return;
     auto it = s->records.find(id);
     if (it == s->records.end()) return;
     auto& r = *it->second;
@@ -460,6 +495,7 @@ void http3_request_engine::terminal(std::uint64_t id, quic_stream_terminal termi
 void http3_request_engine::stop_sending(std::uint64_t id, std::uint64_t error) {
     auto s = state_;
     state::pump_guard guard(*s);
+    if (s->disconnected) return;
     auto it = s->records.find(id);
     if (it == s->records.end()) return;
     auto& r = *it->second;
@@ -486,6 +522,7 @@ void http3_request_engine::disconnect(http::outcome reason) {
     s->handlers->disable();
     for (auto& [id, r] : s->records)
         s->cancel(*r, reason.code());
+    s->connection.shutdown();
 }
 void http3_request_engine::begin_turn() {
     state_->reap();

@@ -5,6 +5,7 @@
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP3_REQUEST_STATE_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP3_REQUEST_STATE_HPP_
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <deque>
 #include <map>
@@ -28,6 +29,7 @@ struct wire_section {
     std::vector<std::byte> bytes;
     server::reservation charge;
     bool fin = false;
+    std::uint64_t token = 0;
 };
 }  // namespace http3_request_helpers
 struct http3_request_engine::state : std::enable_shared_from_this<state> {
@@ -73,6 +75,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         std::vector<std::byte> output;
         std::size_t output_position = 0, output_body_begin = 0;
         bool output_fin = false, output_trailers = false;
+        std::uint64_t output_token = 0;
     };
     quic_storage_lease data, critical;
     quic_flow_control& flow;
@@ -85,10 +88,12 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     net::peer_address peer;
     std::map<std::uint64_t, std::unique_ptr<record>> records;
     std::optional<http3_error> error;
-    // Three local roles share reserved retention slots, separate from data.
+    // Each local critical role owns one retention opportunity, separate from data.
     static constexpr std::size_t critical_output_records = 3;
     std::size_t active = 0, retained = 0, retained_critical = 0, pumps = 0;
-    std::optional<std::uint64_t> ordinary_after;
+    std::optional<std::uint64_t> ordinary_after, receive_after;
+    std::array<record*, critical_output_records> critical_records{};
+    std::size_t critical_next = 0;
     bool disconnected = false;
     state(quic_storage_lease d, quic_storage_lease c, quic_flow_control& f, quic_recovery& q, const server::route_registry& r, executor& e, http3_request_limits l,
           std::uint64_t id, net::peer_address p)
@@ -119,6 +124,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     void reap(record& r);
     bool retired(const record& r) const;
     bool attach(quic_stream_state& transport, std::optional<http3_role> role);
+    void register_record(std::unique_ptr<record> r);
     bool receipt(record& r, std::uint64_t begin, std::uint64_t end, bool body);
     void flush_receipts(record& r);
     void consumed(record& r, std::size_t count);
@@ -127,6 +133,8 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     void record_event(record& r, const http3_event& event);
     bool deliver_body(record& r, const http3_event& event);
     void finish_receive(record& r);
+    void receive_pending();
+    void receive_critical();
     void peer_reset(record& r, quic_stream_terminal terminal);
     void notice_terminal(record& r);
     http3_progress receive(record& r);
@@ -143,6 +151,8 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     bool submit(record& r, std::span<const std::byte> bytes, bool fin);
     bool output(record& r);
     void ordinary_output();
+    void reserve_critical_output();
+    void critical_output();
     void complete(const quic_information_completion& completion);
 };
 }  // namespace httpserver::detail

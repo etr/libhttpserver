@@ -34,6 +34,7 @@ http3_connection::http3_connection(quic_storage_lease data, quic_storage_lease c
     }
     if (!critical_.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(http3_peer_settings) + 512, metadata_).ok())
         fail(0x107, "Critical connection storage exhausted", 0);
+    begin_turn();
     if (!error_) initialize_qpack();
 }
 std::optional<http3_error> http3_connection::fail(std::uint64_t code, std::string_view diagnostic, std::uint64_t id) {
@@ -73,9 +74,15 @@ bool http3_connection::classify(stream& s, std::uint64_t type, std::uint64_t id)
     if (type == 0) s.parser.emplace(data_, critical_, limits_, s.offset);
     return true;
 }
+std::size_t& http3_connection::frame_budget(const stream& s) {
+    if (s.role >= http3_role::control && s.role <= http3_role::qpack_decoder)
+        return critical_frames_left_[static_cast<std::size_t>(s.role) - static_cast<std::size_t>(http3_role::control)];
+    if (s.role == http3_role::pending || s.role == http3_role::discard) return critical_frames_left_.back();
+    return frames_left_;
+}
 std::size_t http3_connection::uni_input(stream& s, std::span<const std::byte> input, std::uint64_t id) {
     std::size_t count = 0;
-    while (count < input.size() && !s.parser && !error_ && frames_left_) {
+    while (count < input.size() && !s.parser && !error_ && frame_budget(s)) {
         const auto byte = input[count++]; ++s.offset;
         if (s.role == http3_role::discard) continue;
         if (s.role != http3_role::pending) {
@@ -84,7 +91,7 @@ std::size_t http3_connection::uni_input(stream& s, std::span<const std::byte> in
         s.scratch[s.scratch_size++] = byte;
         const auto decoded = decode_quic_varint(std::span(s.scratch).first(s.scratch_size));
         if (decoded.code == quic_codec_code::truncated) continue;
-        s.scratch_size = 0; classify(s, decoded.value, id);
+        s.scratch_size = 0; --critical_frames_left_.back(); classify(s, decoded.value, id);
     }
     return count;
 }
@@ -175,6 +182,7 @@ bool http3_connection::process(stream& s, std::uint64_t id) {
     return true;
 }
 http3_feed_result http3_connection::feed(std::uint64_t id, std::span<const std::byte> input, std::uint64_t offset) {
+    if (stopped_) return {http3_progress::failed, 0, h3_error(0x102, "Connection stopped", id)};
     if (error_) return {http3_progress::failed, 0, error_};
     const auto it = streams_.find(id);
     if (it == streams_.end()) return {http3_progress::failed, 0, fail(0x103, "Stream was not attached", id)};
@@ -189,12 +197,12 @@ http3_feed_result http3_connection::feed(std::uint64_t id, std::span<const std::
         consumed = uni_input(s, input, id); input = input.subspan(consumed);
     }
     consumed += feed_frames(s, input, id);
-    return {progress_for(error_.has_value(), s.ready, frames_left_), consumed, error_};
+    return {progress_for(error_.has_value(), s.ready, frame_budget(s)), consumed, error_};
 }
 std::size_t http3_connection::feed_frames(stream& s, std::span<const std::byte> input, std::uint64_t id) {
     if (!s.parser || error_) return 0;
     std::size_t consumed = 0;
-    while (!s.ready && !s.blocked && frames_left_) {
+    while (!s.ready && !s.blocked && frame_budget(s)) {
         const auto r = s.parser->feed(input, s.offset);
         consumed += r.consumed; s.offset += r.consumed; input = input.subspan(r.consumed);
         if (!handle_frame(s, r, id)) break;
@@ -220,7 +228,7 @@ bool http3_connection::handle_frame(stream& s, const http3_feed_result& result, 
     }
     if (result.progress == http3_progress::header) return admit(s, id);
     if (result.progress != http3_progress::event) return false;
-    --frames_left_;
+    --frame_budget(s);
     if (!process_safe(s, id)) return false;
     if (!s.ready && !s.blocked) s.parser->release_event();
     return !s.ready && !s.blocked;

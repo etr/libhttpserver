@@ -99,6 +99,13 @@ class qpack_dynamic_table {
             return {qpack_state::limit_exceeded};
         }
     }
+    // Connection teardown calls this after destroying every reference hold.
+    void clear() noexcept {
+        entries_.clear(); charge_.release();
+        bytes_ = capacity_ = maximum_ = 0;
+        inserts_ = received_ = 0;
+        initialized_ = false;
+    }
     bool initialized() const noexcept { return initialized_; }
     qpack_table_role role() const noexcept { return role_; }
     std::size_t capacity() const noexcept { return capacity_; }
