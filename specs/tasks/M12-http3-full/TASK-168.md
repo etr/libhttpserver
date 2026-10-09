@@ -9,9 +9,9 @@
 Provide QPACK blocked-section and critical-stream accounting for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Track QPACK blocked count and retained encoded bytes independently.
-- [ ] Process section acknowledgments and cancellation.
-- [ ] Reserve encoder/decoder stream credit and unblock reordered headers.
+- [x] Track QPACK blocked count and retained encoded bytes independently.
+- [x] Process section acknowledgments and cancellation.
+- [x] Reserve encoder/decoder stream credit and unblock reordered headers.
 
 **Dependencies:**
 - Blocked by: TASK-160, TASK-167
@@ -24,4 +24,8 @@ Provide QPACK blocked-section and critical-stream accounting for libhttpserver v
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** `docs/task-168-qpack-accounting.md`.
+Implementation is prepared for coordinator-owned validation. Status remains In
+Progress until that phase completes; request scheduling is TASK-169 scope.

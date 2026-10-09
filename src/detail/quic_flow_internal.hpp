@@ -14,6 +14,7 @@ struct quic_flow_control::implementation {
     };
     struct record {
         std::uint64_t id = 0, received = 0, sent = 0, released = 0, receive_window = 0, send_limit = 0;
+        std::uint64_t reserved = 0;
         credit receive_limit;
         std::optional<std::uint64_t> sent_final;
         const quic_stream_state* receive_owner = nullptr;
@@ -24,7 +25,7 @@ struct quic_flow_control::implementation {
     std::array<std::uint64_t, 2> send_counts{};
     std::array<credit, 2> receive_counts;
     credit receive_limit;
-    std::uint64_t receive_window = 0, send_limit = 0, received = 0, sent = 0, released = 0;
+    std::uint64_t receive_window = 0, send_limit = 0, received = 0, sent = 0, released = 0, reserved = 0;
     std::size_t maximum;
     server::reservation storage;
     std::vector<record> records;

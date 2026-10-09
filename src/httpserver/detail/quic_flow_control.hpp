@@ -36,6 +36,10 @@ class quic_flow_control final {
     quic_flow_result apply(const quic_flow_frame& frame);
     quic_flow_result receive(quic_stream_state& stream, const quic_stream_frame& frame);
     quic_flow_result receive(quic_stream_state& stream, const quic_reset_stream_frame& frame);
+    // Commit already granted connection credit to a pending local uni range.
+    // Replacing or abandoning a range returns only its unsent credit.
+    quic_flow_result reserve_critical(std::uint64_t id, std::uint64_t offset, std::size_t length);
+    void abandon_critical(std::uint64_t id);
     quic_flow_allowance send_allowance(std::uint64_t id, std::uint64_t offset, std::size_t requested) const;
     quic_flow_result check_stream_sent(std::uint64_t id, std::uint64_t offset, std::size_t length, bool fin) const;
     quic_flow_result record_stream_sent(std::uint64_t id, std::uint64_t offset, std::size_t length, bool fin);

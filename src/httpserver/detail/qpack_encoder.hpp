@@ -42,6 +42,7 @@ struct qpack_dynamic_bytes_result {
     std::string value;
     std::size_t consumed = 0;
     qpack_reference_hold references;
+    std::uint64_t required_insert_count = 0;
 };
 class qpack_encoder {
  public:
@@ -95,6 +96,7 @@ class qpack_encoder {
             qpack_dynamic_bytes_result result;
             status = table.acquire(indexes, limits.max_fields, result.references);
             if (!status.ok()) return {status, {}, 0, {}};
+            result.required_insert_count = required;
             result.value = std::move(wire);
             result.consumed = result.value.size();
             return result;

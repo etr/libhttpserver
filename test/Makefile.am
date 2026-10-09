@@ -2328,3 +2328,13 @@ qpack_instructions_SOURCES = unit/qpack_instructions_test.cpp
 qpack_instructions_LDADD =
 qpack_dynamic_corpus_SOURCES = unit/qpack_dynamic_corpus_test.cpp
 qpack_dynamic_corpus_LDADD =
+
+check_PROGRAMS += http3_qpack
+http3_qpack_SOURCES = unit/http3_qpack_test.cpp
+http3_qpack_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+http3_qpack_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += qpack_accounting
+qpack_accounting_SOURCES = unit/qpack_accounting_test.cpp
+qpack_accounting_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+qpack_accounting_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

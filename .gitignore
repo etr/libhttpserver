@@ -93,3 +93,6 @@ __pycache__/
 !test/integ/http3_gate_runner_test.py
 !scripts/run-v3-quic-interop.py
 !test/integ/quic_interop_runner_test.py
+
+# TASK-168 local C++20 verification build.
+/build-task168/

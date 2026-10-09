@@ -52,7 +52,7 @@ struct qpack_encoder_instruction_result {
     std::size_t consumed = 0;
     qpack_encoder_instruction instruction;
 };
-inline qpack_encoder_instruction_result qpack_decode_encoder_instruction(std::span<const std::uint8_t> input,
+inline qpack_encoder_instruction_result qpack_decode_encoder_instruction_allocated(std::span<const std::uint8_t> input,
                                                                          qpack_instruction_limits limits) {
     if (input.empty()) return {{qpack_state::incomplete}, 0, {}};
     using kind = qpack_encoder_instruction_kind;
@@ -93,29 +93,33 @@ inline qpack_encoder_instruction_result qpack_decode_encoder_instruction(std::sp
         consumed += value.consumed;
     }
     if (consumed > limits.max_encoded_bytes) return {{qpack_state::limit_exceeded}, 0, {}};
-    try {
-        if (!name_wire.empty()) instruction.name = qpack_decode_string(name_wire, {limits.max_encoded_bytes, limits.max_name_bytes}, 5, 0x20).value;
-        if (!value_wire.empty()) instruction.value = qpack_decode_string(value_wire, {limits.max_encoded_bytes, limits.max_value_bytes}).value;
-        return {{}, consumed, std::move(instruction)};
-    } catch (const std::bad_alloc&) {
-        return {{qpack_state::limit_exceeded}, 0, {}};
-    } catch (const std::length_error&) {
-        return {{qpack_state::limit_exceeded}, 0, {}};
-    }
+    if (!name_wire.empty()) instruction.name = qpack_decode_string(name_wire, {limits.max_encoded_bytes, limits.max_name_bytes}, 5, 0x20).value;
+    if (!value_wire.empty()) instruction.value = qpack_decode_string(value_wire, {limits.max_encoded_bytes, limits.max_value_bytes}).value;
+    return {{}, consumed, std::move(instruction)};
 }
-inline qpack_status qpack_apply_encoder_instruction(const qpack_encoder_instruction& instruction, qpack_instruction_limits limits,
+inline qpack_encoder_instruction_result qpack_decode_encoder_instruction(std::span<const std::uint8_t> input,
+                                                                         qpack_instruction_limits limits) {
+    try {
+        return qpack_decode_encoder_instruction_allocated(input, limits);
+    } catch (const std::bad_alloc&) { return {{qpack_state::limit_exceeded}, 0, {}};
+    } catch (const std::length_error&) { return {{qpack_state::limit_exceeded}, 0, {}}; }
+}
+inline qpack_status qpack_apply_encoder_instruction_allocated(const qpack_encoder_instruction& instruction, qpack_instruction_limits limits,
                                                    qpack_dynamic_table& table) {
     using kind = qpack_encoder_instruction_kind;
     switch (instruction.kind) {
         case kind::capacity:
             if (instruction.index > SIZE_MAX) return {qpack_state::malformed};
             return table.set_capacity(static_cast<std::size_t>(instruction.index));
-        case kind::duplicate: return table.duplicate(instruction.index);
+        case kind::duplicate: {
+            const auto* source = table.encoder_relative(instruction.index);
+            return source ? table.insert_allocated(source->name, source->value) : qpack_status{qpack_state::malformed};
+        }
         case kind::insert_literal:
             if (instruction.name.size() > limits.max_name_bytes || instruction.value.size() > limits.max_value_bytes) {
                 return {qpack_state::limit_exceeded};
             }
-            return table.insert(instruction.name, instruction.value);
+            return table.insert_allocated(instruction.name, instruction.value);
         case kind::insert_name: {
             std::string_view name;
             if (instruction.static_name) {
@@ -128,10 +132,17 @@ inline qpack_status qpack_apply_encoder_instruction(const qpack_encoder_instruct
                 name = entry->name;
             }
             if (name.size() > limits.max_name_bytes || instruction.value.size() > limits.max_value_bytes) return {qpack_state::limit_exceeded};
-            return table.insert(name, instruction.value);
+            return table.insert_allocated(name, instruction.value);
         }
     }
     return {qpack_state::invalid_argument};
+}
+inline qpack_status qpack_apply_encoder_instruction(const qpack_encoder_instruction& instruction, qpack_instruction_limits limits,
+                                                   qpack_dynamic_table& table) {
+    try {
+        return qpack_apply_encoder_instruction_allocated(instruction, limits, table);
+    } catch (const std::bad_alloc&) { return {qpack_state::limit_exceeded};
+    } catch (const std::length_error&) { return {qpack_state::limit_exceeded}; }
 }
 inline qpack_encoder_instruction_result qpack_apply_encoder_instruction(std::span<const std::uint8_t> input,
                                                                         qpack_instruction_limits limits, qpack_dynamic_table& table) {
