@@ -41,8 +41,9 @@ websocket_upgrade_result http3_request_engine::state::upgrade(stream& value, con
     }
     auto driver = std::make_shared<websocket_driver>(effective);
     auto session = driver->take_session();
+    observe_websocket(*driver, r.transport->id());
     // Only this section commits the opening decision; ordinary respond() would
-    // abandon the receive half. DATA transport belongs to TASK-172.
+    // abandon the receive half.
     if (!section(r, 200, fields, false)) {
         out.status = {http::outcome_code::limit_exceeded, "WebSocket response admission refused"}; return out;
     }

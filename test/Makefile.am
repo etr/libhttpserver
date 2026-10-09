@@ -2354,3 +2354,18 @@ http3_websocket_handshake_SOURCES = unit/http3_websocket_handshake_test.cpp
 http3_websocket_handshake_LDADD = $(http3_headers_LDADD)
 http3_websocket_handshake_LDFLAGS = $(http3_headers_LDFLAGS)
 EXTRA_DIST += unit/http3_websocket_fixture.hpp
+
+check_PROGRAMS += http3_websocket
+http3_websocket_SOURCES = unit/http3_websocket_test.cpp
+http3_websocket_LDADD = $(http3_headers_LDADD)
+http3_websocket_LDFLAGS = $(http3_headers_LDFLAGS)
+
+check_PROGRAMS += http3_websocket_flow
+http3_websocket_flow_SOURCES = unit/http3_websocket_flow_test.cpp
+http3_websocket_flow_LDADD = $(http3_headers_LDADD)
+http3_websocket_flow_LDFLAGS = $(http3_headers_LDFLAGS)
+
+check_PROGRAMS += http3_websocket_lifecycle
+http3_websocket_lifecycle_SOURCES = unit/http3_websocket_lifecycle_test.cpp
+http3_websocket_lifecycle_LDADD = $(http3_headers_LDADD)
+http3_websocket_lifecycle_LDFLAGS = $(http3_headers_LDFLAGS)

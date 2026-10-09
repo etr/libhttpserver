@@ -34,7 +34,13 @@ http3_request_engine::http3_request_engine(quic_storage_lease data, quic_storage
                                            const server::route_registry& routes, executor& owner, http3_request_limits limits, std::uint64_t id, net::peer_address peer)
     : state_(std::make_shared<state>(std::move(data), std::move(critical), flow, recovery, routes, owner, limits, id, peer)) {
     state_->handlers->after_resume([weak = std::weak_ptr<state>(state_)] {
-        if (auto s = weak.lock()) s->reap();
+        if (auto s = weak.lock()) {
+            state::pump_guard guard(*s);
+            if (!s->disconnected) {
+                for (auto& [id, r] : s->records)
+                    if (!r->cancelled && r->semantic && r->semantic->websocket) s->pump_websocket_input(*r);
+            }
+        }
     });
     if (!valid_limits(limits)) state_->fail(h3_error(0x107, "Invalid request bridge limits"));
 }
@@ -126,7 +132,11 @@ void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
     r.output_charge.release();
     r.scratch_position = r.scratch_size = r.receipt_count = 0;
     if (r.semantic) {
-        r.semantic->websocket.reset();
+        auto driver = std::move(r.semantic->websocket);
+        if (driver) {
+            driver->observe_progress({});
+            driver->transport_failed({reason, "HTTP/3 request cancelled"});
+        }
         r.semantic->websocket_input_charge.release();
         r.semantic->websocket_output_charge.release();
         r.semantic->websocket_message_charge.release();
@@ -358,6 +368,7 @@ bool http3_request_engine::state::deliver_body(record& r, const http3_event& eve
         reset(r, 0x10e);
         return false;
     }
+    if (r.semantic->websocket) return deliver_websocket(r, event);
     const auto n = std::min(event.payload.size() - r.event_position, r.semantic->body.room());
     if (n && !r.semantic->body.receive(event.payload.subspan(r.event_position, n))) {
         reset(r, 0x10e);
@@ -375,6 +386,10 @@ bool http3_request_engine::state::event(record& r) {
     const auto event = *ready;
     record_event(r, event);
     if (event.type == 1) {
+        if (r.semantic && r.semantic->websocket) {
+            reset(r, 0x10e);
+            return false;
+        }
         const bool ok = r.semantic ? stage_trailers(r, event.fields) : head(r, event.fields);
         if (!ok) return false;
     } else if (!deliver_body(r, event)) {
@@ -425,8 +440,13 @@ void http3_request_engine::state::notice_terminal(record& r) {
             r.terminal = terminal;
     }
 }
+bool http3_request_engine::state::can_receive(const record& r) const {
+    return !r.local && !disconnected && !r.receiving;
+}
 http3_progress http3_request_engine::state::receive(record& r) {
-    if (r.local || disconnected) return http3_progress::input;
+    if (!can_receive(r)) return http3_progress::input;
+    r.receiving = true;
+    struct receive_guard { record& value; ~receive_guard() { value.receiving = false; } } guard{r};
     notice_terminal(r);
     if (error) return http3_progress::failed;
     if (r.receive_done || r.cancelled || r.abandoned) return http3_progress::input;
@@ -447,8 +467,19 @@ void http3_request_engine::state::finish_receive(record& r) {
         return;
     }
     r.receive_done = true;
-    if (r.semantic && !r.semantic->body.end_receive(std::move(r.semantic->trailers))) reset(r, 0x10e);
+    end_body(r);
 }
+void http3_request_engine::state::end_body(record& r) {
+    if (!r.semantic) return;
+    if (r.semantic->websocket) {
+        auto driver = r.semantic->websocket;
+        if (!driver->snapshot().peer_close) driver->eof();
+        websocket_terminal(r);
+    } else if (!r.semantic->body.end_receive(std::move(r.semantic->trailers))) {
+        reset(r, 0x10e);
+    }
+}
+
 void http3_request_engine::state::receive_critical() {
     for (auto& [id, r] : records)
         if (!r->local && (id & 2)) receive(*r);
