@@ -1,6 +1,8 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
+#include <algorithm>
 #include <array>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 #include "fuzz/http3_engine_fuzz.hpp"
@@ -30,6 +32,32 @@ LT_BEGIN_AUTO_TEST(http3_fuzz_suite, valid_settings_static_fields_and_fragmented
         LT_CHECK_EQ(result.accepted[16], 1U); LT_CHECK(result.settings);
     }
 LT_END_AUTO_TEST(valid_settings_static_fields_and_fragmented_varints)
+LT_BEGIN_AUTO_TEST(http3_fuzz_suite, held_data_release_schedule_and_terminal_remain_bounded)
+    for (unsigned terminal : {255U, 1U, 2U}) {
+        wire input{7}; auto payload = static_head();
+        payload.insert(payload.end(), {0, 2, 'a', 'b'});
+        event(input, 0, 0, payload); event(input, 12, 0);
+        if (terminal != 255) event(input, terminal, 0);
+        auto result = http3_fuzz_replay(input);
+        LT_CHECK_EQ(result.error, 0U); LT_CHECK_EQ(result.accepted[16], 1U);
+        LT_ASSERT_EQ(result.observations.size(), 2U);
+        LT_CHECK_EQ(result.observations[1].value, "ab");
+    }
+LT_END_AUTO_TEST(held_data_release_schedule_and_terminal_remain_bounded)
+LT_BEGIN_AUTO_TEST(http3_fuzz_suite, near_input_cap_data_allows_scheduler_yields)
+    wire input{0}; auto payload = static_head();
+    const auto frame = h3test::frame(0, std::vector<std::byte>(3800, std::byte{'a'}));
+    for (auto byte : frame) payload.push_back(std::to_integer<std::uint8_t>(byte));
+    for (std::size_t at = 0; at < payload.size(); at += 255) {
+        const auto end = std::min(at + 255, payload.size());
+        event(input, 0, 0, wire(payload.begin() + at, payload.begin() + end));
+    }
+    LT_ASSERT(input.size() < 4096U);
+    auto result = http3_fuzz_replay(input);
+    LT_CHECK_EQ(result.error, 0U); LT_CHECK_EQ(result.accepted[16], 1U);
+    LT_ASSERT_EQ(result.observations.size(), 2U);
+    LT_CHECK_EQ(result.observations[1].value, std::string(3800, 'a'));
+LT_END_AUTO_TEST(near_input_cap_data_allows_scheduler_yields)
 LT_BEGIN_AUTO_TEST(http3_fuzz_suite, known_protocol_failures_have_precise_wire_codes)
     struct scenario { wire payload; unsigned slot; unsigned terminal; std::uint64_t code; };
     for (const auto& s : {scenario{{1}, 8, 255, 0x103}, {{0}, 8, 2, 0x104},

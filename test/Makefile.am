@@ -2419,6 +2419,7 @@ http3_fuzz_replay_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 http3_fuzz_replay_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 EXTRA_DIST += fuzz/qpack_fuzz.hpp fuzz/http3_engine_fuzz.hpp
 EXTRA_DIST += data/http3/README.md data/qpack/seeds/README.md
+EXTRA_DIST += data/http3/held-data.seed data/http3/held-data-fin.seed data/http3/held-data-reset.seed data/http3/near-input-cap-data.seed
 EXTRA_DIST += data/qpack/seeds/blocked.seed
 EXTRA_DIST += data/qpack/seeds/decoder-instructions.seed
 EXTRA_DIST += data/qpack/seeds/dynamic.seed

@@ -52,19 +52,27 @@ eight fields, QPACK tables 128 bytes per direction, two blocked streams,
 retained HEADERS 256 bytes, instructions and QPACK output 128 bytes, eight
 outgoing sections, SETTINGS 128 bytes/eight identifiers, DATA chunks 16 bytes,
 two frames/instructions per turn, and 16 stream records. Data and critical
-storage envelopes are 16 KiB and 64 KiB. Feed calls are capped at 4096; copied
-observations/output at 16 KiB and 2048 observation entries.
+storage envelopes are 16 KiB and 64 KiB. Feed calls are capped at 9536:
+`2 * 4096 + 64 + (64 + 16) * 16` allows consuming calls, scheduler yields,
+explicit feeds, event pumps and final drain visits. Copied observations/output
+are capped at 16 KiB and 2048 observation entries.
 
 Seeds cover varint widths, malformed/truncated frames, SETTINGS ordering and
 identifiers, critical stream duplication/closure, encoder/request ordering,
 blocked siblings, complete/partial cancellation, late insertion, decoded and
 retained limits, table eviction/wrapping, decoder feedback, held events,
-outgoing publication/cancellation, output refusal, and shutdown.
+outgoing publication/cancellation, output refusal, and shutdown. Held DATA with
+one release and subsequent EOF/RESET, plus a 3800-byte DATA frame, preserve the
+regressions for fragmentation-sensitive backpressure and scheduler work.
 
 `http3_fuzz_replay` runs sorted seeds, 32 fixed-seed mutations and 32 prefixes
-per seed. Every input compares two fresh whole-slice executions and a
-one-byte-fragment execution. Valid results normalize DATA chunk boundaries;
-invalid results compare wire errors. Explicit replay tests also require
-successful blocked admission, unblocking, cancellation and decoded-limit
+per seed. Every input compares two fresh whole-slice executions and runs a
+one-byte-fragment execution. Auto-release profiles compare normalized valid
+results or invalid wire errors across fragmentation. Profile 7 compares two
+fresh fragmented executions independently: a finite number of event releases
+advances different byte extents, so observations and EOF errors can differ
+between whole-slice and fragmented delivery. Both schedules retain all typed
+error, resource, consumption, work and teardown assertions. Explicit replay
+tests also require successful blocked admission, unblocking, cancellation and decoded-limit
 rejection. Printed coverage indices 16–20 respectively mean decoded HEADERS,
 blocked admission, cancellation, unblocking and limit rejection.

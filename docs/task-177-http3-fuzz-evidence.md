@@ -51,7 +51,7 @@ executor did not recreate already completed implementation steps.
 | Harness | Bound |
 |---|---|
 | HTTP/3 input/events/streams | 4096 bytes / 64 events / 16 stream records |
-| HTTP/3 feed calls | 4096, with production yield serviced by a defined turn |
+| HTTP/3 feed calls | 9536, including consumption, scheduler yields and bounded pump visits |
 | HTTP/3 copied observations and output | 16 KiB total / 2048 observations |
 | HTTP/3 storage pool | 16 KiB data / 64 KiB critical, charged to an ancestor |
 | HTTP/3 headers | 128 compressed bytes / 256 expanded bytes / eight fields |
@@ -86,8 +86,10 @@ QPACK failures check the existing typed states and transactional codec contract;
 `incomplete` and `inserts_unavailable` are admitted intermediate outcomes.
 
 Every HTTP/3 input runs twice on fresh state and once with one-byte fragments.
-Valid results compare normalized observations/output and counters; malformed
-inputs compare the wire error. QPACK inputs compare two fresh executions.
+Auto-release profiles compare normalized valid observations/output and counters
+or malformed wire errors. The held-event profile compares two fresh fragmented
+executions independently because finite releases advance different byte extents
+and can change EOF errors. QPACK inputs compare two fresh executions.
 Sorted corpus replay uses mutation PRNG seed 176, 32 mutations and 32 truncated
 prefixes per seed. LibFuzzer uses seed 128 and writable corpus copies.
 
@@ -185,3 +187,54 @@ reservation teardown checks still run. BSD, Windows, macOS and other nonlocal
 checks were not executed and belong to CI and the v3 PR under the project
 workflow policy. Authored regression coverage and bounded fuzz exploration do
 not constitute exhaustive conformance proof.
+
+## Validate-phase recovery, 2026-10-09
+
+The interrupted validation left two reproducible harness findings in its local
+review receipts. The existing instrumented binary exited 77 on both
+`/tmp/task177-quality-held-data.seed` (fragmented observations) and
+`/tmp/task177-performance-large-data.seed` (feed-call ceiling). Two new replay
+tests failed for those same reasons before the harness changed; receipts are
+`/tmp/task177-recovery-red-build.log` and `/tmp/task177-recovery-red.log`.
+
+Profile 7 holds DATA events until explicitly released. Whole-slice delivery
+can hold "ab" while one-byte delivery holds "a", with "b" awaiting another
+release. The same finite release schedule can also expose a different EOF
+frame extent. Those schedules now each require deterministic fresh replay
+and retain every invariant independently. Auto-release profiles still require
+cross-fragment equality of valid normalized observations or malformed errors.
+Named regressions cover the held DATA schedule, subsequent EOF and RESET.
+
+The feed-call ceiling is now `2 * input_cap + event_cap +
+(event_cap + stream_cap) * stream_cap`, or 9536. It accounts for consuming
+calls, scheduler yields, explicit feeds, event pumps and final drain visits;
+unbounded no-progress loops still hit the hard cap. A 3854-byte transcript
+containing a 3800-byte DATA frame verifies successful near-limit consumption
+and full normalized payload delivery. All four new seeds are distributed.
+
+Fresh local project build and all 16 focused suites passed with zero skips or
+errors (`/tmp/task177-recovery-project-build.log` and
+`/tmp/task177-recovery-focused.log`). HTTP/3 replay passes ten tests/136 checks
+and 3120 corpus/mutation/prefix replays. Python runner tests pass 10/10;
+changed-file cpplint, shell syntax and diff hygiene pass. The HTTP/3 corpus now
+has 48 seeds and 4719 bytes, with sorted filename/NUL/content SHA-256
+`334c0a755cbed4a7d2bec2a71d7d170d2e8715a2dada8ed7c80af6c2199f5b8b`.
+
+Recovery leaves task tracking In Progress and all edits for the runner-owned
+commit flow. It performs no finalization, merge or publication.
+
+The fresh recovery retry reconfirmed both original failures with the prior
+instrumented binary (exit 77), then passed both inputs and the EOF/RESET seeds
+with the repaired binary. Receipts are
+`/tmp/task177-retry-{held-red,large-red,sanitized-regressions}.log`.
+The project build and all 16 focused suites passed again
+(`/tmp/task177-retry-{project-build,focused}.log`); runner tests passed 10/10
+and changed-file cpplint, shell syntax and diff hygiene passed.
+
+The interrupted QPACK sanitizer compilation was completed using
+`bash build/task177-recovery-fuzz/qpack/compile.sh`. With
+`ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1`, both recovery lanes
+passed 2000 runs without sanitizer or invariant failures. HTTP/3 recorded
+1800 edges/5406 features at 95 MiB RSS; QPACK recorded 802 edges/1939 features
+at 52 MiB RSS. Each lane's `build.log`, `run.log` and `reproduce.sh` are under
+`build/task177-recovery-fuzz/`. Validation is ready for the normal runner retry.
