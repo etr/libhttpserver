@@ -141,7 +141,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     };
     void fail(http3_error failure);
     void cancel(record& r, http::outcome_code reason);
-    void reset(record& r, std::uint64_t code);
+    void reset(record& r, std::uint64_t code, http::outcome_code reason = http::outcome_code::protocol_error);
     void abandon(record& r);
     void reap();
     void reap(record& r);

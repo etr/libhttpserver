@@ -9,9 +9,9 @@
 Provide independent WebSocket-over-HTTP/3 client harness for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Build an external RFC 9220 test client or harness.
-- [ ] Cover handshake, masking, fragmentation, ping/pong and close.
-- [ ] Hold a sibling HTTP/3 request while WS resets and backpressures.
+- [x] Build an external RFC 9220 test client or harness.
+- [x] Cover handshake, masking, fragmentation, ping/pong and close.
+- [x] Hold a sibling HTTP/3 request while WS resets and backpressures.
 
 **Dependencies:**
 - Blocked by: TASK-172
@@ -24,4 +24,12 @@ Provide independent WebSocket-over-HTTP/3 client harness for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-011, PRD-V3N-REQ-012, PRD-V3N-REQ-013
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** Independent pinned aioquic RFC 9220 harness,
+shared bounded fixture routes, native/runner/wire tests, and reproduction
+instructions in `docs/task-175-http3-websocket-harness.md`. Linux TLS-on/off
+C++20 focused suites and the real UDP matrix pass. Peer STOP_SENDING `0x10c`
+now preserves the cancellation reason regardless of companion RESET_STREAM
+ordering, covered by a native regression. Caller-owned validation/finalization
+remain pending; nonlocal checks belong to CI/the v3 PR.

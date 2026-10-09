@@ -146,13 +146,13 @@ void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
         r.semantic->body.fail(reason);
     }
 }
-void http3_request_engine::state::reset(record& r, std::uint64_t code) {
+void http3_request_engine::state::reset(record& r, std::uint64_t code, http::outcome_code reason) {
     if (r.cancelled) return;
     if (!r.receive_done) r.action.stop_sending = quic_stop_sending_frame{r.transport->id(), code};
     r.transport->receive(quic_stop_sending_frame{r.transport->id(), code});
     r.action.reset = r.transport->take_reset_request();
     connection.terminal(r.transport->id(), {quic_terminal_kind::reset, code});
-    cancel(r, http::outcome_code::protocol_error);
+    cancel(r, reason);
 }
 void http3_request_engine::state::abandon(record& r) {
     if (r.abandoned || r.receive_done) return;
@@ -565,7 +565,9 @@ void http3_request_engine::stop_sending(std::uint64_t id, std::uint64_t error) {
         if (auto failure = s->connection.terminal(id, {quic_terminal_kind::reset, error})) s->fail(*failure);
         return;
     }
-    s->reset(r, error);
+    // H3_REQUEST_CANCELLED is a peer cancellation, including when
+    // STOP_SENDING arrives before its companion RESET_STREAM.
+    s->reset(r, error, error == 0x10c ? http::outcome_code::cancelled : http::outcome_code::protocol_error);
 }
 std::optional<http3_request_action> http3_request_engine::take_action() {
     for (auto& [id, r] : state_->records) {

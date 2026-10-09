@@ -25,12 +25,12 @@ class ObservedH3(H3Connection):
 
 
 class SemanticClient(Client):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, h3_factory=ObservedH3, **kwargs):
         QuicConnectionProtocol.__init__(self, *args, **kwargs)
         self.pending = {}
         self.handshake = None
         self.termination = None
-        self.h3 = ObservedH3(self._quic)
+        self.h3 = h3_factory(self._quic)
         self.frozen = set()
         original = self._quic._write_stream_limits
 
