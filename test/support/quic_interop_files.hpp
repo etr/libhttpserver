@@ -8,7 +8,7 @@
 #include <httpserver/detail/quic_recovery.hpp>
 namespace hqnet {
 namespace hd = httpserver::detail;
-// Test-only HTTP/0.9 application. One retained chunk per stream; transport owns retransmission.
+// Test-only HTTP/0.9 application. Eight retained 8 KiB chunks per stream; transport owns retransmission.
 class files final {
  public:
     explicit files(const std::string& root);

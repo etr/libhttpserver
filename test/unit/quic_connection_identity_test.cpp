@@ -528,6 +528,41 @@ LT_BEGIN_AUTO_TEST(identity_suite, detaching_unregistered_identity_removes_reset
     f.identity.detach_routes();
     LT_CHECK(!f.identity.matches_reset(reset, path().peer));
 LT_END_AUTO_TEST(detaching_unregistered_identity_removes_reset_eligibility)
+LT_BEGIN_AUTO_TEST(identity_suite, latest_active_path_cid_survives_reordered_packets_and_allows_nat_rebinding)
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    auto delivery = std::make_shared<sink>();
+    hd::quic_datagram_dispatch dispatch(8, 4);
+    fixture f;
+    auto initial = dispatch.register_cid(cid(1), owner.datagrams(), delivery);
+    LT_ASSERT(initial);
+    LT_ASSERT(f.identity.attach_routes(dispatch, owner.datagrams(), delivery, *initial));
+    LT_ASSERT(f.identity.issue_cid());
+    std::array<std::byte, 1200> out{};
+    auto advertisement = f.recovery.prepare_packet(hd::quic_pn_space::application, out, {});
+    LT_ASSERT(advertisement);
+    hd::quic_frame_cursor cursor;
+    auto decoded = hd::next_quic_frame(std::span(out).first(advertisement.bytes), cursor);
+    LT_ASSERT(decoded.code == hd::quic_codec_code::ok);
+    const auto* frame = std::get_if<hd::quic_new_connection_id_frame>(&decoded.value);
+    LT_ASSERT(frame);
+    hd::quic_cid alias;
+    alias.size = frame->cid.size();
+    std::copy(frame->cid.begin(), frame->cid.end(), alias.bytes.begin());
+    LT_ASSERT(f.recovery.commit_sent(advertisement.token, {}, advertisement.bytes + 40, true, true));
+    LT_ASSERT(f.recovery.receive_ack(hd::quic_pn_space::application, {advertisement.packet_number, 0, 0, 0, {}, {}}, {}));
+    const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+    LT_ASSERT(f.identity.receive({path(), alias, 10, true, true, 1200}, ping, {}));
+    LT_ASSERT(f.identity.receive({path(), cid(1), 9, true, true, 1200}, ping, {}));
+    const auto changed = path(5000);
+    auto result = f.identity.receive({changed, alias, 11, true, true, 1200}, ping, {});
+    LT_CHECK(result.code == hd::quic_identity_code::ok);
+    LT_CHECK(!result.allow_payload);
+    auto challenge = f.identity.prepare_control({}, 21);
+    LT_ASSERT(challenge);
+    LT_CHECK(challenge->path == changed && !challenge->response);
+    LT_ASSERT(f.identity.complete_control(challenge->token, hd::quic_identity_emission::sent, {}));
+LT_END_AUTO_TEST(latest_active_path_cid_survives_reordered_packets_and_allows_nat_rebinding)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

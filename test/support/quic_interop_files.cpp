@@ -13,7 +13,7 @@ struct files::request {
     std::string line;
     int fd = -1;
     std::uint64_t offset = 0, size = 0;
-    std::optional<hd::quic_information_id> pending;
+    std::array<hd::quic_information_id, 8> pending{};
     bool finished = false;
     ~request() { if (fd >= 0) ::close(fd); }
 };
@@ -57,7 +57,9 @@ void files::receive(hd::quic_stream_state& stream, hd::quic_flow_control& flow) 
 void files::pump(hd::quic_flow_control& flow, hd::quic_recovery& recovery) {
     for (auto& [id, owned] : requests_) {
         auto& r = *owned;
-        if (r.fd < 0 || r.pending || r.finished) continue;
+        if (r.fd < 0 || r.finished) continue;
+        auto slot = std::find(r.pending.begin(), r.pending.end(), 0);
+        if (slot == r.pending.end()) continue;
         const auto requested = std::min<std::uint64_t>(8192, r.size - r.offset);
         auto allowance = flow.send_allowance(id, r.offset, requested);
         if (!allowance) continue;
@@ -70,7 +72,7 @@ void files::pump(hd::quic_flow_control& flow, hd::quic_recovery& recovery) {
             if (retained.code == hd::quic_recovery_code::capacity || retained.code == hd::quic_recovery_code::no_memory) continue;
             throw std::runtime_error("interop STREAM retention failed");
         }
-        r.pending = retained.id;
+        *slot = retained.id;
         r.offset += count;
         r.finished = fin;
     }
@@ -79,8 +81,9 @@ void files::completed(const hd::quic_information_completion& receipt) {
     const auto found = requests_.find(receipt.stream);
     if (receipt.kind != hd::quic_information_kind::stream || found == requests_.end()) return;
     auto& r = *found->second;
-    if (r.pending != receipt.id) throw std::runtime_error("interop completion identity");
-    r.pending.reset();
+    auto slot = std::find(r.pending.begin(), r.pending.end(), receipt.id);
+    if (!receipt.id || slot == r.pending.end()) throw std::runtime_error("interop completion identity");
+    *slot = 0;
     if (receipt.fin) {
         ::close(r.fd);
         r.fd = -1;
@@ -88,7 +91,7 @@ void files::completed(const hd::quic_information_completion& receipt) {
 }
 void files::cancel(std::uint64_t stream, hd::quic_recovery& recovery) {
     if (auto found = requests_.find(stream); found != requests_.end()) {
-        if (found->second->pending) recovery.cancel_information(*found->second->pending);
+        for (auto id : found->second->pending) if (id) recovery.cancel_information(id);
         requests_.erase(found);
     }
 }

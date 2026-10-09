@@ -110,13 +110,219 @@ class RunnerTests(unittest.TestCase):
             output = Path(temp) / "evidence"
             def identity(command, **kwargs):
                 return '[{"Id":"sha256:test-fixture"}]' if command[0] == "docker" else "source-head"
-            with mock.patch.object(interop, "preflight"), mock.patch.object(interop.subprocess, "check_output", side_effect=identity), mock.patch.object(interop.subprocess, "run"):
+            with mock.patch.object(interop, "preflight"), mock.patch.object(interop.subprocess, "check_output", side_effect=identity), mock.patch.object(interop.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"", b"")):
                 with self.assertRaises(ValueError):
                     interop.main(["--runner-dir", str(runner), "--output", str(output), "--server-image", "test-endpoint"])
             self.assertEqual(json.loads((output / "results.json").read_text()), {"results": [[]]})
             manifest = json.loads((output / "manifest.json").read_text())
             self.assertFalse(manifest["passed"])
             self.assertTrue((output / "stdout.log").exists())
+
+class Task173MatrixTests(unittest.TestCase):
+    cases = ("handshake", "transfer", "transferloss", "rebind-port", "amplificationlimit", "keyupdate")
+
+    def matrix(self):
+        self.assertTrue(callable(getattr(interop, "load_matrix", None)), "TASK-173 matrix selection is missing")
+        return interop.load_matrix("task173")
+
+    def receipt(self):
+        # Upstream exports rows in clients order, then servers order.
+        return {"servers": ["libhttpserver"], "clients": ["picoquic", "quic-go"],
+                "results": [[{"name": case, "result": "succeeded"} for case in self.cases] for _ in range(2)]}
+
+    def test_complete_two_peer_receipt_is_accepted_in_upstream_order(self):
+        self.assertTrue(interop.validate_results(self.receipt(), self.matrix()))
+
+    def test_each_required_cell_must_succeed_for_each_peer(self):
+        matrix = self.matrix()
+        for row in range(2):
+            for column in range(len(self.cases)):
+                for result in ("failed", "unsupported", None):
+                    receipt = self.receipt()
+                    receipt["results"][row][column]["result"] = result
+                    self.assertFalse(interop.validate_results(receipt, matrix))
+                receipt = self.receipt()
+                del receipt["results"][row][column]
+                self.assertFalse(interop.validate_results(receipt, matrix))
+                receipt = self.receipt()
+                receipt["results"][row][column] = receipt["results"][row][(column + 1) % len(self.cases)]
+                self.assertFalse(interop.validate_results(receipt, matrix))
+
+    def test_wrong_peer_server_and_malformed_receipts_fail_closed(self):
+        matrix = self.matrix()
+        for key, values in (("clients", ["quic-go"]), ("clients", ["quic-go", "quic-go"]),
+                            ("clients", ["quic-go", "ngtcp2"]), ("servers", ["external-server"])):
+            receipt = self.receipt()
+            receipt[key] = values
+            self.assertFalse(interop.validate_results(receipt, matrix))
+        for document in (None, [], {}, {"clients": None}, {**self.receipt(), "results": None},
+                         {**self.receipt(), "results": [None, []]}):
+            self.assertFalse(interop.validate_results(document, matrix))
+
+    def test_two_aliases_of_one_stack_cannot_satisfy_independence(self):
+        matrix = self.matrix()
+        matrix["peers"]["picoquic"]["stack"] = "quic-go"
+        self.assertFalse(interop.validate_results(self.receipt(), matrix))
+
+    def test_unknown_matrix_name_is_rejected(self):
+        with self.assertRaises(ValueError):
+            interop.load_matrix("unrecognized")
+
+    def test_task173_pins_independent_stacks_and_all_six_categories(self):
+        matrix = self.matrix()
+        self.assertEqual(set(matrix["categories"]), {"handshake", "loss", "rebinding", "amplification", "key_update", "closure"})
+        self.assertEqual(set(matrix["cases"]), set(self.cases))
+        self.assertEqual(len({peer["stack"] for peer in matrix["peers"].values()}), 2)
+        for peer in matrix["peers"].values():
+            self.assertRegex(peer["image"], r"@sha256:[0-9a-f]{64}$")
+
+    def artifact_tree(self, root):
+        capture = struct.pack("<IHHIIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 101) + struct.pack("<IIII", 0, 0, 28, 28) + bytes(28)
+        for peer in ("picoquic", "quic-go"):
+            for case in self.cases:
+                cell = Path(root) / ("libhttpserver_" + peer) / case
+                (cell / "server").mkdir(parents=True)
+                (cell / "sim").mkdir()
+                key = cell / "server/keys.log"
+                key.write_text("".join(label + " " + "aa" * 32 + " " + "bb" * 32 + "\n" for label in ("CLIENT_TRAFFIC_SECRET_0", "SERVER_TRAFFIC_SECRET_0")))
+                key.chmod(0o600)
+                (cell / "server/packets.pcap").write_bytes(capture)
+                for name in ("trace_node_left.pcap", "trace_node_right.pcap"):
+                    (cell / "sim" / name).write_bytes(capture)
+                (cell / "output.txt").write_text("READY 443\n")
+
+    def test_artifacts_are_required_for_every_peer_and_case(self):
+        matrix = self.matrix()
+        with tempfile.TemporaryDirectory() as temp:
+            self.artifact_tree(temp)
+            self.assertEqual(len(interop.validate_artifacts(temp, matrix)), 36)
+            for peer in matrix["peers"]:
+                for case in matrix["cases"]:
+                    path = Path(temp) / ("libhttpserver_" + peer) / case / "sim/trace_node_right.pcap"
+                    original = path.read_bytes()
+                    path.unlink()
+                    with self.assertRaises((ValueError, FileNotFoundError)):
+                        interop.validate_artifacts(temp, matrix)
+                    path.write_bytes(original)
+
+    def test_empty_secrets_and_unsafe_permissions_fail(self):
+        matrix = self.matrix()
+        with tempfile.TemporaryDirectory() as temp:
+            self.artifact_tree(temp)
+            key = Path(temp) / "libhttpserver_picoquic/handshake/server/keys.log"
+            original = key.read_text()
+            key.chmod(0o644)
+            with self.assertRaises(ValueError):
+                interop.validate_artifacts(temp, matrix)
+            key.chmod(0o600)
+            key.write_text(original.replace("bb" * 32, ""))
+            with self.assertRaises(ValueError):
+                interop.validate_artifacts(temp, matrix)
+
+    def test_authenticated_normal_close_rejects_errors_and_post_close_streams(self):
+        self.assertTrue(callable(getattr(interop, "validate_closure_rows", None)), "closure witness validation missing")
+        normal = "1\t193.167.0.100\t0x1d\t\t0\n"
+        self.assertEqual(interop.validate_closure_rows(normal)["frame"], 1)
+        for rows in ("", "1\t193.167.0.100\t0x1d\t\t42\n",
+                     "1\t193.167.100.100\t0x1d\t\t0\n",
+                     normal + "2\t193.167.100.100\t0x0a\t\t\n", "malformed"):
+            with self.assertRaises(ValueError):
+                interop.validate_closure_rows(rows)
+
+    def test_peer_normal_application_close_code_is_explicit(self):
+        import inspect
+        self.assertIn("application_error", inspect.signature(interop.validate_closure_rows).parameters)
+        rows = "1\t193.167.0.100\t0x1d\t\t256\n"
+        self.assertEqual(interop.validate_closure_rows(rows, application_error=256)["error_code"], 256)
+        with self.assertRaises(ValueError):
+            interop.validate_closure_rows("1\t193.167.0.100\t0x1c\t256\t\n", application_error=256)
+
+    def run_fake_driver(self, temp, outcome="failed", cleanup_error=False):
+        # Process fakes prove orchestration only, never interoperability acceptance.
+        runner = Path(temp) / "runner"
+        runner.mkdir()
+        for name, data in (("run.py", ""), ("implementations_quic.json", "{}"),
+                           ("docker-compose.yml", "image: martenseemann/quic-network-simulator\n")):
+            (runner / name).write_text(data)
+        output = Path(temp) / "evidence"
+        def identity(command, **kwargs):
+            return '[{"Id":"sha256:fixture"}]' if command[:3] == ["docker", "image", "inspect"] else "fixture-version"
+        def run(command, cwd, stdout, stderr, timeout):
+            Path(stdout).write_text("orchestration fixture")
+            Path(stderr).write_text("")
+            if outcome == "timeout":
+                raise RuntimeError("upstream runner deadline exceeded")
+            receipt = self.receipt()
+            if outcome != "succeeded":
+                receipt["results"][1][0]["result"] = "failed"
+            (output / "results.json").write_text(json.dumps(receipt))
+            return 0
+        cleanup = mock.Mock(side_effect=RuntimeError("cleanup failed")) if cleanup_error else mock.Mock(return_value=subprocess.CompletedProcess([], 0, b"", b""))
+        with mock.patch.object(interop, "preflight"), mock.patch.object(interop.subprocess, "check_output", side_effect=identity), \
+             mock.patch.object(interop, "run_bounded", side_effect=run), mock.patch.object(interop.subprocess, "run", cleanup), \
+             mock.patch.object(interop, "validate_artifacts", return_value={}), \
+             mock.patch.object(interop, "validate_closure_artifacts", return_value={}) as closure:
+            args = ["--runner-dir", str(runner), "--output", str(output), "--server-image", "fixture", "--matrix", "task173"]
+            if outcome == "succeeded":
+                self.assertEqual(interop.main(args), 0)
+                closure.assert_called_once()
+                cleanup_env = cleanup.call_args.kwargs.get("env", {})
+                for name in ("SERVER", "CLIENT", "SERVER_WWW", "CLIENT_WWW", "SERVER_DOWNLOADS", "CLIENT_DOWNLOADS", "CERTS"):
+                    self.assertTrue(cleanup_env.get(name), "cleanup requires Compose interpolation input " + name)
+            else:
+                with self.assertRaisesRegex((ValueError, RuntimeError), "deadline" if outcome == "timeout" else "required upstream"):
+                    interop.main(args)
+        return output
+
+    def test_cli_generates_exact_matrix_registry_and_command(self):
+        self.assertTrue(callable(getattr(interop, "validate_closure_artifacts", None)), "matrix execution missing")
+        with tempfile.TemporaryDirectory() as temp:
+            output = self.run_fake_driver(temp, "succeeded")
+            manifest = json.loads((output / "manifest.json").read_text())
+            registry = json.loads((output / "runner/implementations_quic.json").read_text())
+            self.assertEqual(set(registry), {"libhttpserver", "quic-go", "picoquic"})
+            command = manifest["command"]
+            self.assertEqual(command[command.index("-c") + 1], "quic-go,picoquic")
+            self.assertEqual(set(command[command.index("-t") + 1].split(",")), set(self.cases))
+            self.assertTrue(manifest["passed"])
+            self.assertIn("src/detail/quic_connection_identity.cpp", manifest["provenance"]["source_sha256"])
+            self.assertIn("src/detail/quic_send_schedule.cpp", manifest["provenance"]["source_sha256"])
+            self.assertEqual(set(manifest["matrix"]["categories"]), set(self.matrix()["categories"]))
+
+    def test_cleanup_failure_preserves_primary_error_and_manifest(self):
+        self.assertTrue(callable(getattr(interop, "validate_closure_artifacts", None)), "matrix execution missing")
+        with tempfile.TemporaryDirectory() as temp:
+            output = self.run_fake_driver(temp, cleanup_error=True)
+            manifest = json.loads((output / "manifest.json").read_text())
+            self.assertFalse(manifest["passed"])
+            self.assertIn("required upstream", manifest["failure"])
+            self.assertIn("cleanup failed", manifest["cleanup_failure"])
+            self.assertIn("results.json", manifest["artifacts"])
+
+    def test_timeout_retains_logs_provenance_and_primary_failure(self):
+        self.assertTrue(callable(getattr(interop, "validate_closure_artifacts", None)), "matrix execution missing")
+        with tempfile.TemporaryDirectory() as temp:
+            output = self.run_fake_driver(temp, "timeout", cleanup_error=True)
+            manifest = json.loads((output / "manifest.json").read_text())
+            self.assertIn("deadline", manifest["failure"])
+            self.assertIn("stdout.log", manifest["artifacts"])
+            self.assertIn("provenance", manifest)
+
+    def test_all_selected_server_case_names_dispatch_without_parameters(self):
+        # Verified upstream testname(SERVER) maps the six selected cases to these two names.
+        with tempfile.TemporaryDirectory() as temp:
+            endpoint = Path(temp) / "stub"
+            endpoint.write_text("#!/bin/sh\nexit 42\n")
+            endpoint.chmod(0o755)
+            for case in ("handshake", "transfer"):
+                env = {**os.environ, "ROLE": "server", "TESTCASE": case,
+                       "LIBHTTPSERVER_INTEROP_LOCAL_DIRECT": "1", "LIBHTTPSERVER_INTEROP_TEST_MODE": "1",
+                       "LIBHTTPSERVER_INTEROP_ENDPOINT": str(endpoint)}
+                self.assertEqual(subprocess.run([ROOT / "test/interop/quic/run_endpoint.sh"], env=env).returncode, 42)
+                env["SERVER_PARAMS"] = "unrecognized"
+                process = subprocess.run([ROOT / "test/interop/quic/run_endpoint.sh"], env=env, capture_output=True)
+                self.assertEqual(process.returncode, 1)
+                self.assertIn(b"SERVER_PARAMS unsupported", process.stderr)
 
 class NativeEndpointTests(unittest.TestCase):
     def endpoint(self):

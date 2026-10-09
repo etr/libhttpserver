@@ -1,0 +1,51 @@
+{
+  "runner_commit": "740c05a10b61d65e8abd3ad38d60898004d335d9",
+  "server": "libhttpserver",
+  "peers": {
+    "quic-go": {
+      "stack": "quic-go",
+      "image": "martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88",
+      "url": "https://github.com/quic-go/quic-go",
+      "runtime": "431fe2e3946b8d75c6db436a6866a83a91a24a7d",
+      "closure_application_error": 0
+    },
+    "picoquic": {
+      "stack": "picoquic",
+      "image": "privateoctopus/picoquic@sha256:7e4110e3260cd9d4f815ad63ca1d93e020e94d3a8d3cb6cb9cc5c59d97999b05",
+      "url": "https://github.com/private-octopus/picoquic",
+      "runtime": "1.1.47.0 / 7cafedfe53695357be230dec36a39952bf447898",
+      "closure_application_error": 0
+    }
+  },
+  "cases": [
+    "handshake",
+    "transfer",
+    "transferloss",
+    "rebind-port",
+    "amplificationlimit",
+    "keyupdate"
+  ],
+  "categories": {
+    "handshake": "handshake",
+    "loss": "transferloss",
+    "rebinding": "rebind-port",
+    "amplification": "amplificationlimit",
+    "key_update": "keyupdate",
+    "closure": "transfer"
+  },
+  "server_testnames": {
+    "handshake": "handshake",
+    "transfer": "transfer",
+    "transferloss": "transfer",
+    "rebind-port": "transfer",
+    "amplificationlimit": "transfer",
+    "keyupdate": "transfer"
+  },
+  "parameters": {},
+  "exclusions": {
+    "handshakeloss": "Loss category uses the unchanged transferloss predicate; extreme-loss 50-connection multiconnect is outside this bounded matrix.",
+    "rebind-addr": "Rebinding category uses rebind-port, including PATH_CHALLENGE/PATH_RESPONSE predicates.",
+    "closure": "Pinned runner has no dedicated closure predicate; transfer needs an additional authenticated zero-error CONNECTION_CLOSE witness. Transfer success alone cannot satisfy closure.",
+    "aioquic": "Pinned aioquic 1.3.0 passed five cases but timed out on repeated port rebinding; simulator captures show no client packet after translation. Required rebinding remains covered by picoquic, not waived."
+  }
+}

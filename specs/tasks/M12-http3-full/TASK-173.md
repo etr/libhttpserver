@@ -9,9 +9,9 @@
 Provide required QUIC interop-runner matrix for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Run interop-runner handshake, loss, rebinding, amplification and key-update cases.
-- [ ] Use at least two independent peer stacks.
-- [ ] Record versions, exclusions and failure artifacts.
+- [x] Run interop-runner handshake, loss, rebinding, amplification and key-update cases.
+- [x] Use at least two independent peer stacks.
+- [x] Record versions, exclusions and failure artifacts.
 
 **Dependencies:**
 - Blocked by: TASK-163, TASK-164, TASK-165, TASK-166
@@ -24,4 +24,6 @@ Provide required QUIC interop-runner matrix for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** [Required matrix and local checks](../../../docs/task-173-quic-interop-evidence.md). Validation and final completion status remain coordinator-owned.

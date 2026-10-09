@@ -107,6 +107,41 @@ LT_BEGIN_AUTO_TEST(repacketize_suite, migration_preserves_information_but_isolat
     LT_CHECK(r.rtt().sampled);
     LT_CHECK(!r.take_completion());
 LT_END_AUTO_TEST(migration_preserves_information_but_isolates_old_flight_rtt_and_congestion)
+LT_BEGIN_AUTO_TEST(repacketize_suite, bounded_candidate_probes_progress_when_old_path_window_is_full)
+    hd::quic_recovery r({}, budget());
+    const auto old_window = r.congestion().window;
+    for (std::size_t old_flight = 0; old_flight < old_window; old_flight += 1200) {
+        auto old = r.reserve_packet(space::application);
+        LT_ASSERT(old);
+        LT_ASSERT(r.commit_sent(old.token, {}, 1200, true, true));
+    }
+    std::array<std::byte, 8> challenge{std::byte{9}};
+    std::array<std::byte, 1200> out{};
+    auto active = r.prepare_path_packet({false, challenge}, out, {}, {}, true);
+    LT_CHECK(active.code == hd::quic_recovery_code::congestion_blocked);
+    for (unsigned packet = 0; packet < 10; ++packet) {
+        auto candidate = r.prepare_path_packet({false, challenge}, out, {}, {}, false);
+        LT_ASSERT(candidate);
+        LT_ASSERT(r.commit_sent(candidate.token, {}, 1200, true, true));
+    }
+    auto blocked = r.prepare_path_packet({false, challenge}, out, {}, {}, false);
+    LT_CHECK(blocked.code == hd::quic_recovery_code::congestion_blocked);
+    LT_CHECK(r.congestion().window == old_window);
+    hd::quic_recovery denied({}, budget());
+    hd::quic_recovery_environment environment;
+    environment.send_permitted = false;
+    denied.set_environment(environment, {});
+    LT_CHECK(denied.prepare_path_packet({false, challenge}, out, {}, {}, false).code == hd::quic_recovery_code::unavailable);
+    environment.send_permitted = true;
+    environment.write_keys[static_cast<unsigned>(space::application)] = false;
+    denied.set_environment(environment, {});
+    LT_CHECK(denied.prepare_path_packet({false, challenge}, out, {}, {}, false).code == hd::quic_recovery_code::unavailable);
+    environment.write_keys[static_cast<unsigned>(space::application)] = true;
+    denied.set_environment(environment, {});
+    hd::quic_send_request request;
+    request.probe = true;
+    LT_CHECK(denied.prepare_path_packet({false, challenge}, out, {}, request, false).code == hd::quic_recovery_code::unavailable);
+LT_END_AUTO_TEST(bounded_candidate_probes_progress_when_old_path_window_is_full)
 LT_BEGIN_AUTO_TEST(repacketize_suite, off_path_probe_ack_and_loss_do_not_change_active_path_estimates)
     hd::quic_recovery r({}, budget());
     std::array<std::byte, 8> challenge{std::byte{9}};

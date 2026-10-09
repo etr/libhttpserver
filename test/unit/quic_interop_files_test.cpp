@@ -129,7 +129,29 @@ LT_BEGIN_AUTO_TEST(interop_files_suite, blocked_stream_does_not_prevent_sibling_
     f.files->cancel(4, recovery);
     LT_CHECK(f.files->active_files() == 0);
 LT_END_AUTO_TEST(blocked_stream_does_not_prevent_sibling_file_and_cancel_releases_ownership)
-LT_BEGIN_AUTO_TEST(interop_files_suite, large_file_retention_stays_one_chunk_until_ack)
+LT_BEGIN_AUTO_TEST(interop_files_suite, unknown_completion_cannot_release_a_file_pipeline_slot)
+    fixture f;
+    auto stream = f.stream(0);
+    f.receive(*stream, 0, "GET /file\r\n", true);
+    hd::quic_recovery recovery({}, f.budget);
+    f.files->pump(*f.flow, recovery);
+    for (auto id : {0u, 999u}) {
+        hd::quic_information_completion receipt{};
+        receipt.id = id;
+        receipt.kind = hd::quic_information_kind::stream;
+        receipt.stream = 0;
+        bool rejected = false;
+        try {
+            f.files->completed(receipt);
+        } catch (const std::runtime_error&) {
+            rejected = true;
+        }
+        LT_CHECK(rejected);
+    }
+    f.files->cancel(0, recovery);
+    LT_CHECK(f.files->active_files() == 0);
+LT_END_AUTO_TEST(unknown_completion_cannot_release_a_file_pipeline_slot)
+LT_BEGIN_AUTO_TEST(interop_files_suite, large_file_pipeline_stays_eight_chunks_until_ack)
     fixture f;
     std::ofstream large(f.root / "file", std::ios::binary | std::ios::trunc);
     const std::string block(8192, 'x');
@@ -137,19 +159,45 @@ LT_BEGIN_AUTO_TEST(interop_files_suite, large_file_retention_stays_one_chunk_unt
     large.close();
     auto s = f.stream(0);
     f.receive(*s, 0, "GET /file\r\n", true);
+    LT_ASSERT(f.flow->apply({hd::quic_flow_kind::max_data, 131072}));
+    LT_ASSERT(f.flow->apply({hd::quic_flow_kind::max_stream_data, 131072, 0}));
     hd::quic_recovery_config config;
-    config.max_datagram_size = 9000;
+    config.max_retained_bytes = 262144;
+    config.critical_retained_bytes = 65536;
     hd::quic_recovery recovery(config, f.budget);
     for (unsigned i = 0; i < 100; ++i) f.files->pump(*f.flow, recovery);
-    std::array<std::byte, 9000> bytes{};
-    auto plan = recovery.prepare_packet(hd::quic_pn_space::application, bytes, {}, *f.flow);
-    LT_ASSERT(plan && plan.stream);
-    LT_CHECK(plan.stream->data.size() == 8192 && !plan.stream->fin);
-    LT_ASSERT(recovery.commit_sent(plan.token, {}, 9000, true, true));
-    LT_CHECK(!recovery.prepare_packet(hd::quic_pn_space::application, bytes, {}, *f.flow));
+    std::array<std::byte, 1200> bytes{};
+    auto now = hd::quic_recovery::time_point{};
+    std::size_t sent = 0;
+    std::uint64_t last_packet = 0;
+    for (unsigned packet = 0; packet < 128; ++packet) {
+        auto plan = recovery.prepare_packet(hd::quic_pn_space::application, bytes, now, *f.flow);
+        if (!plan) break;
+        LT_ASSERT(plan.stream);
+        LT_CHECK(plan.stream->offset == sent && !plan.stream->fin);
+        sent += plan.stream->data.size();
+        last_packet = plan.packet_number;
+        LT_ASSERT(recovery.commit_sent(plan.token, now, plan.bytes + 40, true, true));
+        now += std::chrono::seconds(1);
+        f.files->pump(*f.flow, recovery);
+    }
+    // Eight separately owned 8 KiB chunks may be pipelined, but no ninth may
+    // become available before an information receipt frees a bounded slot.
+    LT_CHECK(sent == 65536);
+    LT_CHECK(!recovery.prepare_packet(hd::quic_pn_space::application, bytes, now, *f.flow));
+    LT_ASSERT(recovery.receive_ack(hd::quic_pn_space::application, {last_packet, 0, last_packet, 0, {}, {}}, now));
+    std::vector<hd::quic_information_completion> receipts;
+    while (auto receipt = recovery.take_completion()) receipts.push_back(*receipt);
+    LT_CHECK(receipts.size() == 8);
+    for (auto receipt = receipts.rbegin(); receipt != receipts.rend(); ++receipt) f.files->completed(*receipt);
+    f.files->pump(*f.flow, recovery);
+    auto next = recovery.prepare_packet(hd::quic_pn_space::application, bytes, now, *f.flow);
+    LT_ASSERT(next && next.stream);
+    LT_CHECK(next.stream->offset == 65536);
+    LT_ASSERT(recovery.abandon_packet(next.token));
     f.files->cancel(0, recovery);
     LT_CHECK(f.files->active_files() == 0);
-LT_END_AUTO_TEST(large_file_retention_stays_one_chunk_until_ack)
+LT_END_AUTO_TEST(large_file_pipeline_stays_eight_chunks_until_ack)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -125,6 +125,18 @@ quic_send_permission quic_recovery::check_scheduled_emission(std::uint64_t token
         return {{quic_recovery_code::unavailable}};
     auto checked = impl_->check_flow();
     if (checked != quic_recovery_code::ok) return {{checked}};
+    // Candidate validation must not wait for ACKs stranded on the old path.
+    // All off-path probes share a bounded initial window; identity additionally
+    // enforces per-path amplification credit and finite challenge retries.
+    if (p.path_epoch && *p.path_epoch == std::numeric_limits<std::uint64_t>::max()) {
+        auto gate = impl_->permission(now, bytes, false, p.critical, p.request.probe, p.space);
+        if (!gate) return gate;
+        std::size_t candidate_flight = 0;
+        for (const auto& packet : impl_->state(p.space)->sent)
+            if (packet.in_flight && packet.path_epoch == *p.path_epoch) candidate_flight += packet.wire_bytes;
+        const auto limit = quic_congestion(1200).snapshot().window;
+        return candidate_flight <= limit && bytes <= limit - candidate_flight ? quic_send_permission{} : quic_send_permission{{quic_recovery_code::congestion_blocked}};
+    }
     auto permission = impl_->permission(now, bytes, flight, p.critical, p.request.probe, p.space);
     impl_->send_due = permission.deadline;
     return permission;
