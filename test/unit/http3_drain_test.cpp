@@ -364,11 +364,12 @@ LT_BEGIN_AUTO_TEST(http3_drain_suite, owner_entry_keeps_state_during_inline_canc
             ++entered; co_await x.cancellation().cancelled();
         }).ok());
         f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true)); LT_CHECK_EQ(entered, 1U);
-        hs::drain_ticket ticket; auto deadline = clock_type::now() + std::chrono::milliseconds(20);
-        LT_ASSERT(f.engine->begin_drain(deadline, ticket).ok());
         std::vector<hd::quic_information_completion> held;
         for (unsigned n = 0; n < 100 && transmit(f, held, true, true); ++n) {}
-        LT_ASSERT(!held.empty()); hs::drain_result result; LT_ASSERT(ticket.wait(result).ok());
+        LT_ASSERT(!held.empty());
+        hs::drain_ticket ticket; auto deadline = clock_type::now() + std::chrono::milliseconds(20);
+        LT_ASSERT(f.engine->begin_drain(deadline, ticket).ok());
+        hs::drain_result result; LT_ASSERT(ticket.wait(result).ok());
         executor.destroy = true;
         if (completion) f.engine->information_completed(held.front());
         else f.engine->begin_turn();
