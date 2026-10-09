@@ -42,6 +42,7 @@ http::outcome policy_valid(const ws_upgrade_options& options, std::size_t cap);
 websocket_handshake_plan head_bounds(const http::fields& fields, std::size_t max_bytes, std::size_t max_fields);
 websocket_handshake_plan request_origin(const http::fields& fields, const ws_upgrade_options& options);
 websocket_handshake_plan request_version(const http::fields& fields);
+websocket_handshake_plan extended_fields(const http::fields& fields, const ws_upgrade_options& options);
 websocket_handshake_plan select_protocol(const http::fields& fields, const ws_upgrade_options& options);
 }  // namespace websocket_handshake
 }  // namespace httpserver::detail

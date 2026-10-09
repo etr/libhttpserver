@@ -7,10 +7,21 @@
 #include <httpserver/detail/http3_request_state.hpp>
 namespace httpserver::detail {
 namespace {
+bool valid_websocket_limits(const websocket::options& ws) {
+    return ws.validate().ok() && ws.incoming_messages <= 256 && ws.outgoing_messages <= 256 &&
+        ws.incoming_bytes <= server::max_capacity(server::resource::body_buffer_bytes) / 5 &&
+        ws.output_bytes <= server::max_capacity(server::resource::response_queue_bytes) / 4;
+}
+bool valid_queue_limits(const http3_request_limits& limits) {
+    return limits.body_buffer_bytes && limits.body_buffer_bytes <= 65536 && limits.response_buffer_bytes && limits.response_buffer_bytes <= 65536 &&
+        limits.max_receipt_records >= 2 && limits.max_receipt_records <= 1024 && limits.max_pending_output_records && limits.max_pending_output_records <= 4096;
+}
 bool valid_limits(const http3_request_limits& limits) {
-    return limits.max_active_requests && limits.max_active_requests <= limits.framing.stream_records && limits.body_buffer_bytes && limits.body_buffer_bytes <= 65536 &&
-           limits.response_buffer_bytes && limits.response_buffer_bytes <= 65536 && limits.max_receipt_records >= 2 && limits.max_receipt_records <= 1024 &&
-           limits.max_pending_output_records && limits.max_pending_output_records <= 4096;
+    return limits.max_active_requests && limits.max_active_requests <= limits.framing.stream_records && valid_queue_limits(limits) && valid_websocket_limits(limits.websocket);
+}
+bool convert_opening(std::span<const qpack_field> fields, http::request_head& head, http3_connect_metadata& connect, bool eligible) {
+    if (!http3_convert_request(fields, head, connect)) return false;
+    return head.request_method.id() != http::method_id::connect || (connect.protocol && eligible);
 }
 std::optional<std::size_t> expanded_size(std::span<const qpack_field> fields, std::size_t limit) {
     auto remaining = limit;
@@ -69,11 +80,6 @@ void http3_request_engine::state::stream::on_respond(const http::status& status,
 void http3_request_engine::state::stream::on_start_response(const http::status& status, const http::fields& fields) {
     owner.respond(transport, status.code(), fields, true);
 }
-websocket_upgrade_result http3_request_engine::state::stream::on_upgrade(const ws_upgrade_options&) {
-    websocket_upgrade_result out;
-    out.status = {http::outcome_code::not_supported, "HTTP/3 CONNECT unsupported"};
-    return out;
-}
 void http3_request_engine::state::stream::on_abort() {
     owner.reset(transport, 0x102);
 }
@@ -120,6 +126,10 @@ void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
     r.output_charge.release();
     r.scratch_position = r.scratch_size = r.receipt_count = 0;
     if (r.semantic) {
+        r.semantic->websocket.reset();
+        r.semantic->websocket_input_charge.release();
+        r.semantic->websocket_output_charge.release();
+        r.semantic->websocket_message_charge.release();
         r.semantic->handler.invalidate();
         r.semantic->request.disconnect(reason, "HTTP/3 request cancelled");
         r.semantic->body.discard();
@@ -286,13 +296,15 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
         return false;
     }
     http::request_head head;
-    if (!http3_convert_request(fields, head)) {
+    http3_connect_metadata connect;
+    if (!convert_opening(fields, head, connect, connection.connect_eligible(r.transport->id()))) {
         reset(r, 0x10e);
         return false;
     }
     std::optional<std::uint64_t> length;
     http3_content_length(head.head_fields, length);
     auto value = std::make_unique<stream>(*this, r, std::move(head));
+    value->connect = std::move(connect);
     value->head_charge = std::move(bytes);
     value->fields_charge = std::move(descriptors);
     value->storage_charge = std::move(memory);

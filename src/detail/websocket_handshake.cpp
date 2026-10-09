@@ -150,4 +150,13 @@ websocket_handshake_plan select_protocol(const http::fields& fields, const ws_up
     if (out.selected_subprotocol.empty() && options.require_subprotocol) return refuse("no matching subprotocol");
     return out;
 }
+websocket_handshake_plan extended_fields(const http::fields& fields, const ws_upgrade_options& options) {
+    if (fields.count("content-length") || fields.count("expect") || fields.count("trailer")) return refuse("finite body metadata conflicts with tunnel");
+    auto result = request_origin(fields, options);
+    if (!result.status.ok()) return result;
+    result = select_protocol(fields, options);
+    if (!result.status.ok()) return result;
+    auto version = request_version(fields);
+    return version.status.ok() ? result : version;
+}
 }  // namespace httpserver::detail::websocket_handshake

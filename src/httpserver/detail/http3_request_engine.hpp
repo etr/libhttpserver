@@ -14,6 +14,7 @@
 namespace httpserver::detail {
 struct http3_request_limits {
     http3_limits framing;
+    websocket::options websocket{16384, 65536, 65536, 16, 16};
     std::size_t max_active_requests = 128, body_buffer_bytes = 16384, response_buffer_bytes = 16384;
     std::size_t max_receipt_records = 64, max_pending_output_records = 128;
 };

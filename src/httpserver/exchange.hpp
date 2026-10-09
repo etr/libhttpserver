@@ -53,7 +53,7 @@ enum class exchange_state : std::uint8_t {
     head,       // complete head routed; decision pending
     admitted,   // body admission accepted; response still available
     responded,  // terminal: response committed to the engine
-    upgraded,   // terminal: connection ownership transferred
+    upgraded,   // terminal: ordered stream ownership transferred
     cancelled,  // disconnected before a terminal decision
 };
 
@@ -64,7 +64,7 @@ struct body_policy {
     std::uint64_t max_buffer_bytes = 0;
 };
 
-// HTTP/1.1 WebSocket policy. Subprotocols use server preference order;
+// WebSocket policy. Subprotocols use server preference order;
 // configured origins compare whole serialized values. These values are
 // owned by the lazy upgrade task and validated before output commitment.
 struct ws_upgrade_options {
@@ -77,8 +77,9 @@ struct ws_upgrade_options {
     websocket::options limits;
 };
 
-// Success is bounded 101 admission, not peer acknowledgement. Refusals
-// carry an ordinary HTTP response suggestion and leave the exchange open.
+// Success is bounded 101 (HTTP/1.1) or 2xx (HTTP/2 and HTTP/3) admission,
+// not peer acknowledgement. Refusals carry an ordinary HTTP response
+// suggestion and leave the exchange open.
 struct websocket_upgrade_result {
     http::outcome status;
     std::optional<websocket::session> session;
@@ -112,7 +113,7 @@ class exchange_sink {
     // override this to leave the response head open for DATA.
     virtual void on_start_response(const http::status& s, const http::fields& f) { on_respond(s, f); }
 
-    // Connection ownership transferred to the upgrade session.
+    // Selected ordered stream ownership transferred to the upgrade session.
     virtual websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) = 0;
 
     // Post-commit failure (e.g. a handler threw after responding):
@@ -308,7 +309,7 @@ class exchange {
     }
 
     // Upgrade decision: the protocol sink transfers the ordered stream to
-    // the session (one connection for HTTP/1.1, one stream for HTTP/2).
+    // the session (one connection for HTTP/1.1, one stream for HTTP/2 or HTTP/3, accepted with 2xx).
     // Lazy like other tasks: options are owned before first suspension.
     // Await immediately while the engine-owned exchange is alive.
     task<websocket_upgrade_result> upgrade(ws_upgrade_options options) {
@@ -321,7 +322,7 @@ class exchange {
                 "exchange: upgrade() is a head-time decision"};
             co_return result;
         }
-        if ((head_.request_protocol != http::protocol::http_1_1 && head_.request_protocol != http::protocol::http_2) || sink_ == nullptr) {
+        if ((head_.request_protocol != http::protocol::http_1_1 && head_.request_protocol != http::protocol::http_2 && head_.request_protocol != http::protocol::http_3) || sink_ == nullptr) {
             result.status = {http::outcome_code::not_supported,
                 "exchange: upgrade protocol unsupported"};
             co_return result;

@@ -18,6 +18,7 @@
 #include <httpserver/detail/http3_body_stream.hpp>
 #include <httpserver/detail/exchange_runner.hpp>
 #include <httpserver/detail/request_handler_frames.hpp>
+#include <httpserver/detail/websocket_driver.hpp>
 namespace httpserver::detail {
 namespace http3_request_helpers {
 using request_handler_frames::route_executor;
@@ -43,6 +44,9 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         http3_request_helpers::route_task handler;
         server::reservation head_charge, fields_charge, storage_charge, trailer_charge, sender_trailer_charge;
         http::fields trailers;
+        http3_connect_metadata connect;
+        std::shared_ptr<websocket_driver> websocket;
+        server::reservation websocket_input_charge, websocket_output_charge, websocket_message_charge;
         bool streaming = false;
         stream(state& s, record& r, http::request_head head);
         ~stream() override;
@@ -160,6 +164,9 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     bool read_scratch(record& r);
     bool stage_trailers(record& r, std::span<const qpack_field> fields);
     bool section(record& r, std::uint16_t status, const http::fields& fields, bool fin, bool trailers = false);
+    bool upgrade_available(const stream& value) const;
+    websocket_upgrade_result upgrade(stream& value, const ws_upgrade_options& options);
+    bool reserve_websocket(websocket::options& options, server::reservation& input, server::reservation& output, server::reservation& message);
     void respond(record& r, std::uint16_t status, const http::fields& fields, bool streaming);
     bool prepare_output(record& r);
     bool stream_output(record& r);

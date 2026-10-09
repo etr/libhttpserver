@@ -2348,3 +2348,9 @@ check_PROGRAMS += http3_drain
 http3_drain_SOURCES = unit/http3_drain_test.cpp
 http3_drain_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 http3_drain_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += http3_websocket_handshake
+http3_websocket_handshake_SOURCES = unit/http3_websocket_handshake_test.cpp
+http3_websocket_handshake_LDADD = $(http3_headers_LDADD)
+http3_websocket_handshake_LDFLAGS = $(http3_headers_LDFLAGS)
+EXTRA_DIST += unit/http3_websocket_fixture.hpp

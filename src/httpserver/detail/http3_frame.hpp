@@ -69,6 +69,7 @@ class http3_frame_parser final {
     std::uint64_t type() const { return type_; }
     std::uint64_t length() const { return length_; }
     std::uint64_t offset() const { return offset_; }
+    bool at_frame_start() const { return phase_ == phase::type && integer_size_ == 0; }
 
  private:
     enum class phase { type, length, admission, payload };

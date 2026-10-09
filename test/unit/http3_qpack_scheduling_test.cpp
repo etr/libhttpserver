@@ -338,7 +338,7 @@ LT_BEGIN_AUTO_TEST(http3_qpack_scheduling_suite, zero_admitted_capacity_keeps_re
     pause.signal(); f.executor.run_pending();
     LT_CHECK_EQ(f.pool.critical().budget.in_use(h3test::hs::resource::quic_reassembly_bytes), before);
     f.drain(); LT_CHECK_EQ(first_section(f.output[0])[0], 0U);
-    LT_CHECK(f.output[3] == h3test::bytes({0, 4, 4, 1, 0, 7, 0})); LT_CHECK(f.output[7] == h3test::bytes({2}));
+    LT_CHECK(f.output[3] == h3test::bytes({0, 4, 6, 1, 0, 7, 0, 8, 1})); LT_CHECK(f.output[7] == h3test::bytes({2}));
 LT_END_AUTO_TEST(zero_admitted_capacity_keeps_response_static_without_optional_output_storage)
 LT_BEGIN_AUTO_TEST(http3_qpack_scheduling_suite, resetting_blocked_request_sends_one_cancellation_and_never_dispatches)
     h3test::request_fixture f(limits()); local(f); peer(f); unsigned calls = 0;

@@ -2,6 +2,18 @@
 #include <algorithm>
 #include <httpserver/detail/http3_connection.hpp>
 namespace httpserver::detail {
+namespace {
+bool stage_setting(http3_peer_settings& staged, std::uint64_t key, std::uint64_t value) {
+    switch (key) {
+        case 1: staged.qpack_capacity = value; break;
+        case 6: staged.max_field_section = value; break;
+        case 7: staged.qpack_blocked = value; break;
+        case 8: staged.enable_connect_protocol = value == 1; return value <= 1;
+        default: break;
+    }
+    return true;
+}
+}  // namespace
 bool http3_connection::settings(std::span<const std::byte> payload, std::uint64_t id) {
     http3_peer_settings staged;
     std::array<std::uint64_t, 64> seen{};
@@ -19,9 +31,9 @@ bool http3_connection::settings(std::span<const std::byte> payload, std::uint64_
             fail(0x107, "SETTINGS identifier limit", id); return false;
         }
         seen[count++] = key;
-        if (key == 1) staged.qpack_capacity = value;
-        if (key == 6) staged.max_field_section = value;
-        if (key == 7) staged.qpack_blocked = value;
+        if (!stage_setting(staged, key, value)) {
+            fail(0x109, "Invalid ENABLE_CONNECT_PROTOCOL setting", id); return false;
+        }
     }
     if (!encoder_table_.initialize(data_.ancestors, static_cast<std::size_t>(std::min<std::uint64_t>(limits_.qpack_capacity, staged.qpack_capacity))).ok()) {
         fail(0x107, "Encoder table budget exhausted", id); return false;

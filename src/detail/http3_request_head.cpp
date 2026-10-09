@@ -14,6 +14,9 @@ bool http3_trailer_field(std::string_view name, std::string_view value) {
 bool http3_convert_request(std::span<const qpack_field> fields, http::request_head& head) {
     return multiplexed_head::convert(fields, head, http::protocol::http_3, nullptr);
 }
+bool http3_convert_request(std::span<const qpack_field> fields, http::request_head& head, http3_connect_metadata& connect) {
+    return multiplexed_head::convert(fields, head, http::protocol::http_3, &connect);
+}
 bool http3_convert_trailers(std::span<const qpack_field> fields, http::fields& out) {
     for (const auto& field : fields) {
         if (!http3_trailer_field(field.name, field.value)) return false;

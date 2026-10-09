@@ -316,7 +316,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-168 | [Implement QPACK blocked-section and critical-stream accounting](M12-http3-full/TASK-168.md) | M12 | Complete | TASK-160, TASK-167 |
 | TASK-169 | [Integrate dynamic QPACK with HTTP/3 request scheduling](M12-http3-full/TASK-169.md) | M12 | Complete | TASK-161, TASK-168 |
 | TASK-170 | [Implement staged HTTP/3 GOAWAY and graceful drain](M12-http3-full/TASK-170.md) | M12 | Complete | TASK-143, TASK-166, TASK-169 |
-| TASK-171 | [Implement HTTP/3 WebSocket Extended CONNECT negotiation](M12-http3-full/TASK-171.md) | M12 | Not Started | TASK-121, TASK-161, TASK-169 |
+| TASK-171 | [Implement HTTP/3 WebSocket Extended CONNECT negotiation](M12-http3-full/TASK-171.md) | M12 | In Progress | TASK-121, TASK-161, TASK-169 |
 | TASK-172 | [Implement WebSocket-over-HTTP/3 DATA and lifecycle adapter](M12-http3-full/TASK-172.md) | M12 | Not Started | TASK-166, TASK-170, TASK-171 |
 | TASK-173 | [Run required QUIC interop-runner matrix](M12-http3-full/TASK-173.md) | M12 | Not Started | TASK-163, TASK-164, TASK-165, TASK-166 |
 | TASK-174 | [Run independent HTTP/3 semantic client matrix](M12-http3-full/TASK-174.md) | M12 | Not Started | TASK-169, TASK-170 |

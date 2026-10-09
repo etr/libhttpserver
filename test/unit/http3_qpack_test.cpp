@@ -112,8 +112,17 @@ LT_BEGIN_AUTO_TEST(http3_qpack_suite, blocked_fin_reset_and_protected_input)
 LT_END_AUTO_TEST(blocked_fin_reset_and_protected_input)
 LT_BEGIN_AUTO_TEST(http3_qpack_suite, local_settings_advertise_admitted_limits)
     hd::quic_storage_pool pool(10000, 30000, budget()); hd::http3_connection c(pool.data(), pool.critical(), dynamic_limits());
-    auto expected = bytes({0, 4, 5, 1, 0x40, 0x80, 7, 2});
-    LT_CHECK(std::ranges::equal(c.local_prefix(hd::http3_role::control), expected));
+    hd::quic_cursor cursor(c.local_prefix(hd::http3_role::control));
+    LT_CHECK_EQ(cursor.varint(), 0U); LT_CHECK_EQ(cursor.varint(), 4U);
+    const auto length = cursor.varint(); LT_CHECK_EQ(length, cursor.remaining());
+    std::uint64_t capacity = 0, blocked = 0, connect = 0;
+    while (cursor.remaining()) {
+        const auto key = cursor.varint(); const auto value = cursor.varint();
+        if (key == 1) capacity = value;
+        if (key == 7) blocked = value;
+        if (key == 8) connect = value;
+    }
+    LT_CHECK_EQ(capacity, 128U); LT_CHECK_EQ(blocked, 2U); LT_CHECK_EQ(connect, 1U);
 LT_END_AUTO_TEST(local_settings_advertise_admitted_limits)
 LT_BEGIN_AUTO_TEST(http3_qpack_suite, instruction_allocation_failure_is_internal_and_does_not_publish)
     for (int stage = 0; stage < 3; ++stage) {

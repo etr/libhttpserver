@@ -19,13 +19,6 @@ websocket_handshake_plan negotiate_http2_websocket(const http::request_head& hea
     auto result = head_bounds(head.head_fields, max_bytes, max_fields);
     if (!result.status.ok()) return result;
     if (!valid_identity(head, connect)) return refuse("invalid WebSocket Extended CONNECT");
-    const auto& fields = head.head_fields;
-    if (fields.count("content-length") || fields.count("expect") || fields.count("trailer")) return refuse("finite body metadata conflicts with tunnel");
-    result = request_origin(fields, options);
-    if (!result.status.ok()) return result;
-    result = select_protocol(fields, options);
-    if (!result.status.ok()) return result;
-    auto version = request_version(fields);
-    return version.status.ok() ? result : version;
+    return extended_fields(head.head_fields, options);
 }
 }  // namespace httpserver::detail

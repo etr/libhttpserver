@@ -19,6 +19,7 @@ bool http3_connection::initialize_qpack() {
         };
         append(payload, 1); append(payload, limits_.qpack_capacity);
         append(payload, 7); append(payload, limits_.qpack_blocked_streams);
+        append(payload, 8); append(payload, 1);
         append(control_prefix_, 0); append(control_prefix_, 4); append(control_prefix_, payload.size());
         control_prefix_.insert(control_prefix_.end(), payload.begin(), payload.end());
         return true;
