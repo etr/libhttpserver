@@ -24,7 +24,7 @@ Provide dynamic QPACK with HTTP/3 request scheduling for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-008, PRD-V3N-REQ-017, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 Local implementation and focused verification are complete; runner/coordinator
 validation remains pending. Evidence: `docs/task-169-http3-qpack-scheduling.md`.
