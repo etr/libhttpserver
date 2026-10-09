@@ -122,3 +122,8 @@ __pycache__/
 
 !scripts/run-v3-http3-full-gates.py
 !test/integ/http3_full_gate_runner_test.py
+!scripts/run-v3-behavior-parity.py
+!test/integ/behavior_parity_runner_test.py
+!test/integ/behavior_parity_h2.py
+!test/integ/behavior_parity_h3.py
+!test/integ/behavior_parity_client_test.py

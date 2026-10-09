@@ -118,15 +118,21 @@ never pinned.
 
 | Documented v2 behavior | Documentation source | Transcript case | Baseline status | Migration note |
 |---|---|---|---|---|
-| `use_ssl(true)` with the test certificate serves HTTPS round-trips (200, expected bodies) | README.md §TLS (HTTPS) options; src/httpserver/create_webserver.hpp; docs/architecture/features.md | tls.tseq:get_hello_tls, tls.tseq:smoke_tls (curl-mediated) | pinned | |
-| Byte-level TLS record observation (handshake shape, record segmentation) | — | — | inventory-only | out of scope for the baseline harness by design; deferred to the v3 TLS engine (TASK-130..136, conformance TASK-146) |
+| `use_ssl(true)` with the test certificate serves HTTPS round-trips (200, expected bodies) | README.md §TLS (HTTPS) options; src/httpserver/create_webserver.hpp; docs/architecture/features.md | tls.tseq:get_hello_tls, tls.tseq:smoke_tls (curl-mediated) | pinned | TASK-179: both pins replay through HTTP/1.0/1.1 TLS, HTTP/2 TLS and HTTP/3 QUIC with independent clients; cleartext HTTPS is explicitly inapplicable. |
+| Byte-level TLS record observation (handshake shape, record segmentation) | — | — | inventory-only | TASK-179: provider record segmentation is not an application pin; fragmented authenticated I/O is verified by named TLS adapter checks, with provider/BIO evidence distinguished from real sockets. |
+
+
+| Certificate credentials validate chains and retain immutable generation snapshots | README.md TLS options; v3 TLS policy contracts | — | inventory-only | TASK-179: named provider/BIO and real TLS-owner outcomes in docs/task-179-behavior-parity.md; PSK remains HTTP/1 only. |
+| SNI selects a known host or the explicit default with selected ALPN preference | README.md TLS options; v3 TLS policy contracts | — | inventory-only | TASK-179: named provider/BIO and real TLS-owner outcomes in docs/task-179-behavior-parity.md; PSK remains HTTP/1 only. |
+| Client certificates enforce optional and required authentication with selected trust roots | README.md TLS options; v3 TLS policy contracts | — | inventory-only | TASK-179: named provider/BIO and real TLS-owner outcomes in docs/task-179-behavior-parity.md; PSK remains HTTP/1 only. |
+| External PSK authenticates HTTP/1 with bounded worker lookup and typed protocol restriction | README.md TLS options; v3 TLS policy contracts | — | inventory-only | TASK-179: named provider/BIO and real TLS-owner outcomes in docs/task-179-behavior-parity.md; PSK remains HTTP/1 only. |
 
 ## WebSocket
 
 | Documented v2 behavior | Documentation source | Transcript case | Baseline status | Migration note |
 |---|---|---|---|---|
-| Cleartext upgrade handshake answers `101 Switching Protocols` with `Upgrade: websocket` and the RFC 6455 §4.2.2 `Sec-WebSocket-Accept` (pinned exactly for the fixed client key `dGhlIHNhbXBsZSBub25jZQ==`) | docs/architecture/features.md (WebSocket); RFC 6455 §4.2.2 | websocket.tseq:upgrade_handshake_fixed_key | pinned (skips on builds without libmicrohttpd_ws) | |
-| Post-upgrade frame echo (text frames) | docs/architecture/features.md | — | inventory-only | TASK-121..123 own the native handshake/frame engine; TASK-128 owns conformance; only the handshake is pinned here |
+| Cleartext upgrade handshake answers `101 Switching Protocols` with `Upgrade: websocket` and the RFC 6455 §4.2.2 `Sec-WebSocket-Accept` (pinned exactly for the fixed client key `dGhlIHNhbXBsZSBub25jZQ==`) | docs/architecture/features.md (WebSocket); RFC 6455 §4.2.2 | websocket.tseq:upgrade_handshake_fixed_key | pinned (skips on builds without libmicrohttpd_ws) | TASK-179: native HTTP/1.1 TCP/TLS preserves the fixed-key 101; H2/H3 use Extended CONNECT numeric 200 with echo, close and same-connection sibling proof. |
+| Post-upgrade frame echo (text frames) | docs/architecture/features.md | — | inventory-only | TASK-179: independent masked text echo and close 1000 now execute on HTTP/1.1 TCP/TLS and H2/H3 Extended CONNECT; HTTP/1.0 applicability and mechanism migrations are explicit in the audit document. |
 
 ## SHOUTcast
 
@@ -203,7 +209,7 @@ native v3 headers coexist in the tree.
 | Raw query and query/form convenience arguments | `http1_parser`: `split_matrix_target_forms` preserves `request_head::raw_target`; form args use the dedicated forms adapters, path args use `exchange::path_args()`. Migration exception: the engine does not populate a v2 merged query/form/path map or offer `get_arg`; applications split raw target at `?` and opt into decoding/budgets (use `forms::decode_urlencoded` for query-style data). Raw query stays escaped, matching v2 `get_querystring()`. |
 | Request cookies / response cookies | Migration exception: use `head_fields.first("cookie")` with the standalone `cookie::parse_cookie_header()` helper (`cookie_render` parser tests), and `cookie::to_set_cookie_header()` appended to response `http::fields` once per cookie. v3 does not add v2 `get_cookie`/`with_cookie` conveniences; serialization is ordinary ordered fields. |
 | Request body and footers | `body_reader`, `http1_body_decoder`, `native_http1_e2e` collection/stream cases: bounded pull-based reads replace v2 `get_content`; decoded trailers are carried separately by body reader completion, replacing `get_footers`. Multipart disk sinks replace v2 uploaded-file map (TASK-117). |
-| TLS and WebSocket | **Deferred**, not passing native TASK-120 parity: TLS TASK-130..136 / gate TASK-146; WebSocket TASK-121..123 / gate TASK-128. The v2 transcript runner still executes their baseline pins when supported. |
+| TLS and WebSocket | TASK-179: both HTTPS pins run through HTTP/1.0/1.1 TLS, H2 TLS and H3 QUIC. Fixed-key HTTP/1.1 TCP/TLS WebSocket and H2/H3 Extended CONNECT verify echo, close and stream/connection lifecycle. HTTP/1.0 WebSocket is explicitly inapplicable. Named TLS selection/mTLS/PSK and frame suites supplement the transport observations; public encrypted listeners remain unavailable. |
 
 The half-close, partial-head timeout, volatile Date/auth values and MHD
 refusal artifacts above remain deliberate exceptions. TASK-120 introduces
@@ -225,3 +231,24 @@ Forwarded headers do not change this transport identity. The task-local native
 owner verifies two parked streams and a partially headed sibling across real
 protected-packet rebinding. Public HTTP/3 listener availability remains gated
 by subsequent milestones. See [TASK-164 evidence](../../../docs/task-164-quic-rebinding.md).
+
+## TASK-179 implementation audit status
+
+The executable audit now maps all original inventory/completion rows and the
+certificate, SNI, client-certificate and external-PSK contracts to 60 capabilities
+and 360 protocol outcomes. All 29 golden cases run through applicable native
+TCP/TLS/QUIC owners (168 observations); HTTP/1.0 WebSocket and cleartext HTTPS/TLS
+cells have explicit applicability notes. Supporting semantic, engine-frame,
+provider/BIO and real transport checks remain separately labeled.
+
+HTTP/2/3 now use the shared lifecycle dispatcher, preserving captures,
+405/Allow/default pages, hook composition and exactly-once cancellation. Native
+HTTP/1 TLS uses a private socket-owner adapter; HEAD persistence and TLS WebSocket
+reader handoff were repaired with failing regressions. This does not enable public
+TLS/H2/H3 listeners: prelisten rejection remains a documented release gap.
+
+See [TASK-179 evidence and precise migrations](../../../docs/task-179-behavior-parity.md)
+and the fail-closed `scripts/run-v3-behavior-parity.py` receipt checker. Exact
+observations, named executable evidence, migrations, source hashes and retained
+commands are generated in a fresh task-local build receipt directory. BSD/Windows
+checks remain CI/v3-PR owned.

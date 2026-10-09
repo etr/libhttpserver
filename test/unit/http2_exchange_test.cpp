@@ -12,6 +12,7 @@
 #include <httpserver/detail/http1_head_parser.hpp>
 #include "./http2_request_fixture.hpp"
 #include "./littletest.hpp"
+#include <parity/v3_dispatch_replay.hpp>
 namespace hd = httpserver::detail;
 namespace hs = httpserver::server;
 namespace http = httpserver::http;
@@ -76,7 +77,7 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, route_boundary_synthesizes_errors_and_r
     LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending(); LT_CHECK_EQ(calls, 2u);
     auto output = h2test::output(engine); auto resets = h2test::resets(output); LT_ASSERT_EQ(resets.size(), 1u);
     LT_CHECK_EQ(resets[0].stream, 7u); LT_CHECK_EQ(resets[0].code, 7u);
-    auto replies = h2test::responses(output); LT_ASSERT_EQ(replies.size(), 3u);
+    auto replies = h2test::responses(output, true); LT_ASSERT_EQ(replies.size(), 3u);
     LT_CHECK_EQ(replies[0].stream, 1u); LT_CHECK_EQ(replies[1].stream, 3u); LT_CHECK_EQ(replies[2].stream, 5u);
     LT_CHECK_EQ(replies[1].fields[0].value, "404"); LT_CHECK_EQ(replies[2].fields[0].value, "500");
 LT_END_AUTO_TEST(route_boundary_synthesizes_errors_and_refuses_connect)
@@ -387,6 +388,150 @@ LT_BEGIN_AUTO_TEST(http2_exchange_suite, peer_reset_cancels_parked_or_queued_res
         LT_CHECK(!engine.failure());
     }
 LT_END_AUTO_TEST(peer_reset_cancels_parked_or_queued_response_without_harming_sibling)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, parity_parameter_capture_and_method_miss)
+    auto budget = h2test::budget(); hs::route_registry routes;
+    LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    std::string capture;
+    LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/params/{id}", [&](exchange& x) -> task<void> {
+        for (const auto& arg : x.path_args()) capture = arg.value;
+        x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor);
+    hd::hpack_encoder encoder(budget); auto wire = h2test::preface();
+    h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get("/params/42"))));
+    auto post = h2test::get("/params/42"); post[0].value = "POST";
+    h2test::append(wire, h2test::frame(1, 5, 3, h2test::encode(encoder, post)));
+    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
+    auto bytes = h2test::output(engine); auto replies = h2test::responses(bytes, true);
+    LT_CHECK_EQ(capture, "42");
+    LT_ASSERT_EQ(replies.size(), 2u);
+    LT_CHECK_EQ(replies[1].fields[0].value, "405");
+    bool allow = false;
+    for (const auto& field : replies[1].fields) if (field.name == "allow" && field.value == "GET") allow = true;
+    LT_CHECK(allow);
+    std::string body;
+    for (const auto& frame : h2test::frames(bytes)) if (frame.type == 0 && frame.stream == 3) body.append(frame.payload.begin(), frame.payload.end());
+    LT_CHECK_EQ(body, "Method not Allowed");
+LT_END_AUTO_TEST(parity_parameter_capture_and_method_miss)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, parity_hook_mutation_short_circuit_and_custom_pages)
+    auto budget = h2test::budget();
+    auto routes = parity::v3_replay::build_routing_basic(budget);
+    unsigned admin_calls = 0;
+    LT_ASSERT(routes.route(http::method::known(http::method_id::del), "/admin", [&](exchange& x) -> task<void> {
+        ++admin_calls; x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    hs::hook_bus bus; parity::v3_replay::install_routing_hooks(bus);
+    hd::request_dispatch_context context{&bus, parity::v3_replay::custom_hook_pages(), nullptr};
+    httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor, {}, context);
+    hd::hpack_encoder encoder(budget); auto wire = h2test::preface();
+    std::vector<std::pair<std::string, std::string>> requests{{"GET", "/hello"}, {"DELETE", "/admin"}, {"GET", "/nope"}, {"POST", "/get_only"}};
+    for (unsigned i = 0; i < requests.size(); ++i) {
+        auto fields = h2test::get(requests[i].second); fields[0].value = requests[i].first;
+        h2test::append(wire, h2test::frame(1, 5, 1 + i * 2, h2test::encode(encoder, fields)));
+    }
+    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
+    auto bytes = h2test::output(engine); auto replies = h2test::responses(bytes, true);
+    LT_ASSERT_EQ(replies.size(), 4u); LT_CHECK_EQ(admin_calls, 0u);
+    const std::vector<std::string> statuses{"200", "403", "404", "405"};
+    const std::vector<std::string> bodies{"OK", "hooked403", "custom-not-found", "custom-not-allowed"};
+    for (unsigned i = 0; i < replies.size(); ++i) {
+        LT_CHECK_EQ(replies[i].fields[0].value, statuses[i]);
+        bool hook = false, allow = false;
+        for (const auto& field : replies[i].fields) {
+            if (field.name == "x-hook" && field.value == "after") hook = true;
+            if (field.name == "allow" && field.value == "GET") allow = true;
+        }
+        LT_CHECK_EQ(hook, i != 1);
+        if (i == 3) {
+            LT_CHECK(allow);
+        }
+        std::string body;
+        for (const auto& frame : h2test::frames(bytes)) if (frame.type == 0 && frame.stream == replies[i].stream) body.append(frame.payload.begin(), frame.payload.end());
+        LT_CHECK_EQ(body, bodies[i]);
+    }
+LT_END_AUTO_TEST(parity_hook_mutation_short_circuit_and_custom_pages)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, refused_head_suppresses_response_sent_and_fails_completion)
+    httpserver::server::hook_bus bus;
+    unsigned sent = 0, completed = 0; bool succeeded = true;
+    auto sent_hook = bus.add<httpserver::server::hook_phase::response_sent>([&](httpserver::server::response_sent_ctx&) { ++sent; return httpserver::server::hook_action::pass(); });
+    auto completed_hook = bus.add<httpserver::server::hook_phase::request_completed>([&](httpserver::server::request_completed_ctx& ctx) {
+        ++completed; succeeded = ctx.succeeded; return httpserver::server::hook_action::pass();
+    });
+    auto budget = h2test::budget(); hs::route_registry routes;
+    LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [](exchange& x) -> task<void> {
+        http::fields fields; fields.append("Connection", "close");
+        x.respond(http::status::from_code(200), fields); co_return;
+    }).ok());
+    hd::request_dispatch_context context{&bus, {}, nullptr};
+    httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor, {}, context);
+    hd::hpack_encoder encoder(budget); auto wire = h2test::preface();
+    h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())));
+    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
+    auto output = h2test::output(engine);
+    LT_CHECK_EQ(h2test::responses(output).size(), 0u); LT_CHECK_EQ(h2test::resets(output).size(), 1u);
+    LT_CHECK_EQ(sent, 0u); LT_CHECK_EQ(completed, 1u); LT_CHECK(!succeeded);
+LT_END_AUTO_TEST(refused_head_suppresses_response_sent_and_fails_completion)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, cancelled_parked_request_completes_exactly_once)
+    httpserver::server::hook_bus bus;
+    unsigned completed = 0, resumed = 0; bool succeeded = true;
+    auto completed_hook = bus.add<httpserver::server::hook_phase::request_completed>([&](httpserver::server::request_completed_ctx& ctx) {
+        ++completed; succeeded = ctx.succeeded; return httpserver::server::hook_action::pass();
+    });
+    httpserver::resume_signal parked;
+    auto budget = h2test::budget(); hs::route_registry routes;
+    LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
+        co_await parked.wait(); ++resumed; x.respond(http::status::from_code(204), {});
+    }).ok());
+    hd::request_dispatch_context context{&bus, {}, nullptr};
+    httpserver::manual_executor executor; hd::http2_request_engine engine(budget, routes, executor, {}, context);
+    hd::hpack_encoder encoder(budget); auto wire = h2test::preface();
+    h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())));
+    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending();
+    LT_ASSERT(h2test::feed(engine, h2test::frame(3, 0, 1, {0, 0, 0, 8})));
+    parked.signal(); executor.run_pending(); h2test::output(engine);
+    LT_CHECK_EQ(completed, 1u); LT_CHECK(!succeeded); LT_CHECK_EQ(resumed, 0u);
+LT_END_AUTO_TEST(cancelled_parked_request_completes_exactly_once)
+LT_BEGIN_AUTO_TEST(http2_exchange_suite, runtime_peer_refusal_resets_without_headers_and_releases_stream)
+    auto budget = h2test::budget(); hs::route_registry routes;
+    LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    unsigned calls = 0, refused = 0;
+    LT_ASSERT(routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
+        ++calls; x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    hs::peer_policy peers; hs::hook_bus hooks;
+    auto completed = hooks.add<hs::hook_phase::request_completed>([&](hs::request_completed_ctx& ctx) {
+        if (ctx.end.code() == http::outcome_code::peer_refused) {
+            ++refused; LT_CHECK(!ctx.succeeded);
+        }
+        return hs::hook_action::pass();
+    });
+    httpserver::net::peer_address peer{*httpserver::net::parse_address("127.0.0.1"), 4000};
+    hd::request_dispatch_context context{&hooks, {}, &peers};
+    httpserver::manual_executor executor;
+    hd::http2_request_limits limits; limits.max_streams = 1;
+    hd::http2_request_engine engine(budget, routes, executor, limits, context, 99, peer);
+    hd::hpack_encoder encoder(budget);
+    auto wire = h2test::preface();
+    h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())));
+    LT_ASSERT(h2test::feed(engine, wire)); executor.run_pending(); h2test::output(engine);
+    LT_ASSERT(peers.deny("127.0.0.1").ok());
+    LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 3, h2test::encode(encoder, h2test::get())))); executor.run_pending();
+    const auto refused_wire = h2test::frames(h2test::output(engine));
+    bool reset = false;
+    for (const auto& frame : refused_wire) {
+        if (frame.stream != 3) continue;
+        LT_CHECK_EQ(frame.type, 3);
+        reset = frame.type == 3 && frame.payload == std::vector<std::uint8_t>({0, 0, 0, 7});
+    }
+    LT_CHECK(reset); LT_CHECK_EQ(refused, 1u); LT_CHECK_EQ(calls, 1u);
+    LT_ASSERT(peers.remove_denied("127.0.0.1").ok());
+    LT_ASSERT(h2test::feed(engine, h2test::frame(1, 5, 5, h2test::encode(encoder, h2test::get())))); executor.run_pending();
+    const auto resumed = h2test::responses(h2test::output(engine), true);
+    LT_ASSERT_EQ(resumed.size(), 1u); LT_CHECK_EQ(resumed.front().fields.front().value, "204");
+    LT_CHECK_EQ(calls, 2u); LT_CHECK_EQ(refused, 1u);
+LT_END_AUTO_TEST(runtime_peer_refusal_resets_without_headers_and_releases_stream)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

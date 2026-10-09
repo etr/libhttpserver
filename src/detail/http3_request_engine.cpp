@@ -31,8 +31,9 @@ std::optional<std::size_t> expanded_size(std::span<const qpack_field> fields, st
 }
 }  // namespace
 http3_request_engine::http3_request_engine(quic_storage_lease data, quic_storage_lease critical, quic_flow_control& flow, quic_recovery& recovery,
-                                           const server::route_registry& routes, executor& owner, http3_request_limits limits, std::uint64_t id, net::peer_address peer)
-    : state_(std::make_shared<state>(std::move(data), std::move(critical), flow, recovery, routes, owner, limits, id, peer)) {
+                                           const server::route_registry& routes, executor& owner, http3_request_limits limits,
+                                           std::uint64_t id, net::peer_address peer, request_dispatch_context dispatch)
+    : state_(std::make_shared<state>(std::move(data), std::move(critical), flow, recovery, routes, owner, limits, id, peer, std::move(dispatch))) {
     state_->handlers->after_resume([weak = std::weak_ptr<state>(state_)] {
         if (auto s = weak.lock()) {
             state::pump_guard guard(*s);
@@ -61,7 +62,8 @@ http3_request_engine::state::~state() {
     leave_connection();
 }
 http3_request_engine::state::stream::stream(state& s, record& r, http::request_head head)
-    : owner(s), transport(r), body(s.data.budget), request(head, this, s.connection_id, &body, this, s.peer) {
+    : owner(s), transport(r), body(s.data.budget), request(head, &lifecycle, s.connection_id, &body, this, s.peer),
+      lifecycle(*this, s.bus(), request.head(), &response_refused) {
     body.on_consumed([this](std::size_t n) { owner.consumed(transport, n); });
 }
 http3_request_engine::state::stream::~stream() {
@@ -69,6 +71,7 @@ http3_request_engine::state::stream::~stream() {
     request.disconnect(http::outcome_code::connection_closed, "HTTP/3 exchange ended");
     body.fail(http::outcome_code::connection_closed);
     handler.clear();
+    complete_request(owner.bus(), request, lifecycle);
 }
 void http3_request_engine::state::stream::on_admit(const body_policy& policy) {
     const auto cap = policy.max_buffer_bytes ? std::min<std::uint64_t>(policy.max_buffer_bytes, owner.limits.body_buffer_bytes) : owner.limits.body_buffer_bytes;
@@ -172,6 +175,10 @@ void http3_request_engine::state::reap(record& r) {
         return;
     }
     auto& s = *r.semantic;
+    if (!r.cancelled && s.handler.done() && s.request.disconnected()
+            && s.request.disconnect_reason().code() == http::outcome_code::peer_refused) {
+        reset(r, 0x10b, http::outcome_code::peer_refused);
+    }
     if (!r.cancelled && s.handler.done() && s.streaming && !s.body.finished()) reset(r, 0x102);
     if (r.cancelled || retired(r)) {
         r.semantic.reset();
@@ -328,7 +335,7 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
     r.drain_unit.emplace(*scope);
     const auto id = r.transport->id();
     highest_accepted = highest_accepted ? std::max(*highest_accepted, id) : id;
-    r.semantic->handler.start(*handlers, run_route(routes, r.semantic->request));
+    r.semantic->handler.start(*handlers, dispatch_request(routes, bus(), dispatch_context.pages, r.semantic->lifecycle, r.semantic->request, dispatch_context.peers));
     return true;
 }
 bool http3_request_engine::state::stage_trailers(record& r, std::span<const qpack_field> fields) {

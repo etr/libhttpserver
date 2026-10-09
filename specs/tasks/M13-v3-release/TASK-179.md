@@ -9,9 +9,11 @@
 Provide v2-to-v3 behavior parity across all protocols for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Run executable v2 behavior corpus over all v3 protocol modes.
-- [ ] Classify each deviation as defect or explicit migration change.
-- [ ] Verify every PRD parity capability has a recorded outcome.
+- [x] Run executable v2 behavior corpus over all v3 protocol modes.
+- [x] Classify each deviation as defect or explicit migration change.
+- [x] Verify every PRD parity capability has a recorded outcome.
+
+**Implementation evidence:** [Complete six-protocol audit and migration outcomes](../../../docs/task-179-behavior-parity.md). All 29 golden cases execute through applicable native TCP/TLS/QUIC owners (168 observations); the inventory records 60 capabilities and 360 protocol outcomes. Local C++20 builds, focused checks, receipt contracts and distribution pass. Public TLS/H2/H3 listener integration remains an explicit release gap; nonlocal checks are CI/v3-PR owned. Implementation is ready for runner-owned validation; status remains In Progress until finalization.
 
 **Dependencies:**
 - Blocked by: TASK-128, TASK-145, TASK-178
@@ -24,4 +26,4 @@ Provide v2-to-v3 behavior parity across all protocols for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** In Progress

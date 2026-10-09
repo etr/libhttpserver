@@ -70,7 +70,8 @@ inline void pin_value_framing(http::fields& f, std::size_t body_size) {
 // The shared commit tail of the value-returning route adapters (the
 // sync route and the urlencoded form route): an invalid status ends
 // without a terminal decision (the runner synthesizes the 500),
-// framing is pinned when the handler framed nothing, an empty body
+// framing is pinned when the handler framed nothing, HEAD retains the
+// corresponding body length without writer traffic, an empty body
 // commits one-shot with no writer traffic, and a body commits the
 // head then streams the bytes and the end. A failure after the
 // committed head leaves the exchange terminal; the engine owns the
@@ -78,7 +79,8 @@ inline void pin_value_framing(http::fields& f, std::size_t body_size) {
 inline task<void> commit_sync_value(exchange& x, sync_response value) {
     if (!value.status.valid()) co_return;
     pin_value_framing(value.fields, value.body.size());
-    if (value.body.empty()) {
+    if (value.body.empty()
+            || x.head().request_method == http::method::known(http::method_id::head)) {
         static_cast<void>(x.respond(value.status, value.fields));
         co_return;
     }

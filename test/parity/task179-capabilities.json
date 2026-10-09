@@ -1,0 +1,2345 @@
+{
+  "v": 1,
+  "source": "specs/architecture/v3/v2-parity-inventory.md",
+  "capabilities": [
+    {
+      "id": "capability-001",
+      "behavior": "Exact-path GET returns 200 `text/plain` body with Content-Length framing, connection stays open",
+      "cases": [
+        "routing.tseq:get_hello"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-002",
+      "behavior": "Parameterized exact paths (`/params/{id}/name/{name}`) bind captures as request args",
+      "cases": [
+        "routing.tseq:parameterized_path"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-003",
+      "behavior": "`method_set` GET+HEAD serves HEAD as a headers-only response; the GET body length is still declared via `Content-Length` and no body bytes follow (RFC 7231 \u00a74.3.2)",
+      "cases": [
+        "routing.tseq:head_both_methods"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-004",
+      "behavior": "Unregistered method on a registered path answers 405 with `Allow: <methods>` and the fixed body `Method not Allowed`",
+      "cases": [
+        "routing.tseq:method_not_allowed"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-005",
+      "behavior": "Miss path answers 404 `text/plain` body `Not Found`",
+      "cases": [
+        "routing.tseq:not_found"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-006",
+      "behavior": "Two pipelined requests on one connection are answered in order; connection survives",
+      "cases": [
+        "routing.tseq:pipelined_keepalive"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-007",
+      "behavior": "Prefix families (`register_prefix`) match every path under a prefix; `\"\"`/`\"/\"` is the documented catch-all",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "server_routes_families",
+          "name": "prefix_family_matching",
+          "kind": "semantic"
+        },
+        {
+          "suite": "server_routes_families",
+          "name": "slash_catch_all",
+          "kind": "semantic"
+        }
+      ]
+    },
+    {
+      "id": "capability-008",
+      "behavior": "Three-tier lookup: the exact hash tier answers before the parameterized trie tier and the linear regex chain last \u2014 an exact literal beats a parameterized sibling regardless of registration order",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "server_routes_families",
+          "name": "same_depth_registration_order",
+          "kind": "semantic"
+        },
+        {
+          "suite": "server_routes_families",
+          "name": "family_precedence",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#routing-migrations",
+        "rationale": "Registration order replaces literal precedence; regex and constraint matching move into application handlers."
+      }
+    },
+    {
+      "id": "capability-009",
+      "behavior": "`route()` accepts a `std::regex` pattern matched after the exact and parameterized tiers fail (linear chain)",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "server_routes_families",
+          "name": "prefix_family_matching",
+          "kind": "semantic"
+        },
+        {
+          "suite": "server_routes_families",
+          "name": "named_captures_in_order",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#routing-migrations",
+        "rationale": "Registration order replaces literal precedence; regex and constraint matching move into application handlers."
+      }
+    },
+    {
+      "id": "capability-010",
+      "behavior": "`{name|regex}` constrains a parameter segment to the embedded regular expression",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "server_routes_families",
+          "name": "named_captures_in_order",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#routing-migrations",
+        "rationale": "Registration order replaces literal precedence; regex and constraint matching move into application handlers."
+      }
+    },
+    {
+      "id": "capability-011",
+      "behavior": "`after_handler` hook mutation (`with_header`) lands on the wire",
+      "cases": [
+        "hooks.tseq:get_hello_hook_header"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-012",
+      "behavior": "`before_handler` short-circuit answers its response and skips the resource handler",
+      "cases": [
+        "hooks.tseq:before_handler_403"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-013",
+      "behavior": "A short-circuiting `before_handler` also suppresses `after_handler` (no hook header on the 403)",
+      "cases": [
+        "hooks.tseq:before_handler_403"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-014",
+      "behavior": "`not_found_handler` supplies the 404 body; the handler owns the status code (v2 does not override it)",
+      "cases": [
+        "hooks.tseq:custom_404"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-015",
+      "behavior": "`method_not_allowed_handler` supplies the 405 body; handler owns the status; `Allow` still emitted",
+      "cases": [
+        "hooks.tseq:custom_405"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-016",
+      "behavior": "The lifecycle is an 11-phase bus: request_received, body_chunk, route_resolved, before_handler, handler_exception, after_handler, response_sent, request_completed, connection_opened, connection_closed, accept_decision",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "server_hooks",
+          "name": "registration_order_once_per_phase",
+          "kind": "semantic"
+        },
+        {
+          "suite": "server_hooks",
+          "name": "snapshot_during_firing",
+          "kind": "semantic"
+        },
+        {
+          "suite": "server_hooks",
+          "name": "admission_observes_verdict_and_peer",
+          "kind": "semantic"
+        },
+        {
+          "suite": "request_lifecycle",
+          "name": "exact_hit_firing_order",
+          "kind": "semantic"
+        },
+        {
+          "suite": "request_lifecycle",
+          "name": "refused_peer_settles_before_phases",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#hook-migrations",
+        "rationale": "Native request phases and page factories preserve pinned responses; omitted MHD phases, per-resource registration and alias surfaces have explicit adapters."
+      }
+    },
+    {
+      "id": "capability-017",
+      "behavior": "`http_resource::add_hook` attaches per-route hooks; server-wide hooks fire before per-route hooks, registration order within a scope",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "server_hooks",
+          "name": "registration_order_once_per_phase",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#hook-migrations",
+        "rationale": "Native request phases and page factories preserve pinned responses; omitted MHD phases, per-resource registration and alias surfaces have explicit adapters."
+      }
+    },
+    {
+      "id": "capability-018",
+      "behavior": "The alias setters `internal_error_handler`, `auth_handler` and `log_access` install bus-backed handlers",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "request_lifecycle",
+          "name": "throwing_exception_hook_contained",
+          "kind": "semantic"
+        },
+        {
+          "suite": "request_lifecycle",
+          "name": "handler_exception_supplies",
+          "kind": "semantic"
+        },
+        {
+          "suite": "request_lifecycle",
+          "name": "after_handler_mutation",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#hook-migrations",
+        "rationale": "Native request phases and page factories preserve pinned responses; omitted MHD phases, per-resource registration and alias surfaces have explicit adapters."
+      }
+    },
+    {
+      "id": "capability-019",
+      "behavior": "Missing credentials answer 401 with `WWW-Authenticate: Basic realm=\"<realm>\"`, empty body",
+      "cases": [
+        "auth_basic.tseq:no_credentials"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-020",
+      "behavior": "Valid Basic credentials admit the request (200)",
+      "cases": [
+        "auth_basic.tseq:valid_credentials"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-021",
+      "behavior": "Invalid credentials re-challenge 401 with the same header shape",
+      "cases": [
+        "auth_basic.tseq:invalid_credentials"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-022",
+      "behavior": "Unauthenticated request answers 401 with an RFC 7616 \u00a73.3 challenge: `realm`, `qop=\"auth\"`, `algorithm=MD5`, server-generated `nonce`/`opaque` (volatile, `<*>`-masked), `charset=UTF-8`",
+      "cases": [
+        "auth_digest.tseq:challenge_structure"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-023",
+      "behavior": "Full RFC 7616 round-trip against the server nonce admits the request (200)",
+      "cases": [
+        "auth_digest.tseq:roundtrip_digest"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-024",
+      "behavior": "`application/x-www-form-urlencoded` POST fields are parsed and visible to the resource",
+      "cases": [
+        "forms.tseq:urlencoded_echo"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-025",
+      "behavior": "`multipart/form-data` fields are parsed (MHD post processor) and visible to the resource; raw multipart body sent as a single segment exercises the parser under segmentation",
+      "cases": [
+        "forms.tseq:multipart_field"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-026",
+      "behavior": "MHD's post processor tolerates LWSP transport padding of any length after a multipart delimiter while scanning for the terminating CRLF",
+      "cases": [
+        "forms.tseq:multipart_field"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-027",
+      "behavior": "`http_response::file` streams the file body with `application/octet-stream` and Content-Length framing",
+      "cases": [
+        "file_resp.tseq:file_ok"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-028",
+      "behavior": "Empty file streams a 200 with `Content-Length: 0`",
+      "cases": [
+        "file_resp.tseq:file_empty"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-029",
+      "behavior": "A missing file does not throw at construction; failure is observable at dispatch as the sanitized 500 body `Internal Server Error` (CWE-209 fix: no exception text)",
+      "cases": [
+        "file_resp.tseq:file_missing"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-030",
+      "behavior": "Pipe / borrowed iovec / deferred response bodies",
+      "cases": [
+        "file_resp.tseq:pipe_body",
+        "file_resp.tseq:iovec_body",
+        "file_resp.tseq:deferred_body"
+      ],
+      "baseline": "pinned (TASK-120, recorded on v2)",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-031",
+      "behavior": "`default_policy(REJECT)` + `webserver::allow_ip(\"127.0.0.1\")` admits allow-listed peers normally (200)",
+      "cases": [
+        "ip_controls.tseq:allow_listed_loopback"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-032",
+      "behavior": "`deny_ip` refusal wire shape (connection closed before any HTTP response vs. an HTTP error) is policy-callback timing dependent in v2",
+      "cases": [],
+      "baseline": "MHD-artifact",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "native_http1_e2e",
+          "name": "reject_all_refuses_with_zero_bytes",
+          "kind": "tcp"
+        },
+        {
+          "suite": "native_http1_e2e",
+          "name": "runtime_deny_closes_next_request",
+          "kind": "tcp"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#peer-policy-migrations",
+        "rationale": "Typed native policy rules and request-boundary revalidation replace the MHD callback contract."
+      }
+    },
+    {
+      "id": "capability-033",
+      "behavior": "v2 evaluated the policy at accept only; established connections were never re-checked",
+      "cases": [],
+      "baseline": "delta",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "behavior-wire",
+          "name": "runtime_deny_refuses_next_request",
+          "kind": "tcp",
+          "modes": [
+            "h1.0-tcp"
+          ]
+        },
+        {
+          "suite": "behavior-wire",
+          "name": "runtime_deny_refuses_next_request",
+          "kind": "tcp",
+          "modes": [
+            "h1.1-tcp"
+          ]
+        },
+        {
+          "suite": "behavior-wire",
+          "name": "runtime_deny_refuses_next_request",
+          "kind": "tls",
+          "modes": [
+            "h1.0-tls"
+          ]
+        },
+        {
+          "suite": "behavior-wire",
+          "name": "runtime_deny_refuses_next_request",
+          "kind": "tls",
+          "modes": [
+            "h1.1-tls"
+          ]
+        },
+        {
+          "suite": "behavior-wire",
+          "name": "runtime_deny_refuses_next_request",
+          "kind": "tls",
+          "modes": [
+            "h2-tls"
+          ]
+        },
+        {
+          "suite": "behavior-wire",
+          "name": "runtime_deny_refuses_next_request",
+          "kind": "quic",
+          "modes": [
+            "h3-quic"
+          ]
+        },
+        {
+          "suite": "http2_exchange",
+          "name": "runtime_peer_refusal_resets_without_headers_and_releases_stream",
+          "kind": "engine-frame",
+          "modes": [
+            "h2-tls"
+          ]
+        },
+        {
+          "suite": "http3_exchange",
+          "name": "runtime_peer_refusal_resets_without_headers_and_releases_stream",
+          "kind": "engine-frame",
+          "modes": [
+            "h3-quic"
+          ]
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#peer-policy-migrations",
+        "rationale": "Typed native policy rules and request-boundary revalidation replace the MHD callback contract."
+      }
+    },
+    {
+      "id": "capability-034",
+      "behavior": "Pattern vocabulary: exact literals and wildcard octets; middle wildcards accepted (implementation accident)",
+      "cases": [],
+      "baseline": "delta",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "net_address",
+          "name": "middle_wildcards_are_rejected",
+          "kind": "semantic"
+        },
+        {
+          "suite": "net_address",
+          "name": "v4_cidr_including_bit_aligned",
+          "kind": "semantic"
+        },
+        {
+          "suite": "net_address",
+          "name": "v6_cidr_and_exact",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#peer-policy-migrations",
+        "rationale": "Typed native policy rules and request-boundary revalidation replace the MHD callback contract."
+      }
+    },
+    {
+      "id": "capability-035",
+      "behavior": "v2 `deny_ip`/`allow_ip` threw std::invalid_argument on a bad pattern",
+      "cases": [],
+      "baseline": "delta",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "peer_policy",
+          "name": "remove_is_idempotent_and_typed",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#peer-policy-migrations",
+        "rationale": "Typed native policy rules and request-boundary revalidation replace the MHD callback contract."
+      }
+    },
+    {
+      "id": "capability-036",
+      "behavior": "v2 fired accept_decision with a string reason (\"denied\"/\"not-on-allow-list\")",
+      "cases": [],
+      "baseline": "delta",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "server_hooks",
+          "name": "admission_observes_verdict_and_peer",
+          "kind": "semantic"
+        },
+        {
+          "suite": "peer_policy",
+          "name": "unspec_peer_rules",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#peer-policy-migrations",
+        "rationale": "Typed native policy rules and request-boundary revalidation replace the MHD callback contract."
+      }
+    },
+    {
+      "id": "capability-037",
+      "behavior": "`use_ssl(true)` with the test certificate serves HTTPS round-trips (200, expected bodies)",
+      "cases": [
+        "tls.tseq:get_hello_tls",
+        "tls.tseq:smoke_tls"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": false,
+          "rationale": "HTTPS cases require encrypted transport.",
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability"
+        },
+        "h1.1-tcp": {
+          "applicable": false,
+          "rationale": "HTTPS cases require encrypted transport.",
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability"
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-038",
+      "behavior": "Byte-level TLS record observation (handshake shape, record segmentation)",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS records require encrypted transport."
+        },
+        "h1.1-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS records require encrypted transport."
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "tls_io",
+          "name": "fragmented_handshake_and_full_duplex_plaintext",
+          "kind": "provider-bio"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#tls-capabilities",
+        "rationale": "TLS record segmentation is provider-owned and not a pinned application contract; fragmented authenticated I/O is verified."
+      }
+    },
+    {
+      "id": "capability-039",
+      "behavior": "Cleartext upgrade handshake answers `101 Switching Protocols` with `Upgrade: websocket` and the RFC 6455 \u00a74.2.2 `Sec-WebSocket-Accept` (pinned exactly for the fixed client key `dGhlIHNhbXBsZSBub25jZQ==`)",
+      "cases": [
+        "websocket.tseq:upgrade_handshake_fixed_key"
+      ],
+      "baseline": "pinned (skips on builds without libmicrohttpd_ws)",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": false,
+          "rationale": "The RFC 6455 Upgrade handshake requires HTTP/1.1.",
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability"
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": false,
+          "rationale": "The RFC 6455 Upgrade handshake requires HTTP/1.1.",
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability"
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-040",
+      "behavior": "Post-upgrade frame echo (text frames)",
+      "cases": [
+        "websocket.tseq:upgrade_handshake_fixed_key"
+      ],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": false,
+          "rationale": "The RFC 6455 Upgrade handshake requires HTTP/1.1.",
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability"
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": false,
+          "rationale": "The RFC 6455 Upgrade handshake requires HTTP/1.1.",
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability"
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-041",
+      "behavior": "`http_response::shoutCAST()` emits the `ICY 200 OK` wire status line (unobservable through curl) with normal framing and body",
+      "cases": [
+        "shoutcast.tseq:icy_status_line"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-042",
+      "behavior": "The same server answers ordinary `HTTP/1.1` for non-ICY responses",
+      "cases": [
+        "shoutcast.tseq:plain_get_still_http"
+      ],
+      "baseline": "pinned",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-043",
+      "behavior": "SHOUTcast token, ordinary isolation, known length, keepalive",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "native_http1_parity",
+          "name": "shoutcast_then_plain_same_connection",
+          "kind": "tcp"
+        },
+        {
+          "suite": "native_http1_parity",
+          "name": "immutable_icy_definition_concurrent_reuse",
+          "kind": "tcp"
+        },
+        {
+          "suite": "native_http1_parity",
+          "name": "icy_http10_and_head_keep_framing",
+          "kind": "tcp"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#protocol-translations",
+        "rationale": "Framing, pipelining correlation and WebSocket mechanisms follow the selected protocol; private owners do not enable public TLS listeners."
+      }
+    },
+    {
+      "id": "capability-044",
+      "behavior": "File success / empty / sanitized missing-file dispatch",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "response_definition",
+          "name": "file_send_missing_file_fails_pre_commit",
+          "kind": "semantic"
+        },
+        {
+          "suite": "response_definition",
+          "name": "file_send_reopens_per_send",
+          "kind": "semantic"
+        },
+        {
+          "suite": "response_definition",
+          "name": "file_send_truncated_mid_send_fails",
+          "kind": "semantic"
+        }
+      ]
+    },
+    {
+      "id": "capability-045",
+      "behavior": "Pipe, borrowed iovec, deferred bytes and framing",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "response_sources",
+          "name": "threaded_pipe_sends_single_winner",
+          "kind": "semantic"
+        },
+        {
+          "suite": "response_sources",
+          "name": "threaded_borrowed_sends_share_span",
+          "kind": "semantic"
+        },
+        {
+          "suite": "response_sources",
+          "name": "borrowed_lease_outlives_app_reference",
+          "kind": "semantic"
+        },
+        {
+          "suite": "response_definition",
+          "name": "threaded_factory_sends_run_concurrent_producers",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#request-and-source-migrations",
+        "rationale": "Use ordered fields, pull body readers, standalone decoders and explicit source ownership instead of v2 convenience maps/callback shapes."
+      }
+    },
+    {
+      "id": "capability-046",
+      "behavior": "HTTP/1.0 known-length keepalive, unknown-length close; HTTP/1.1 chunked",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "native_http1_e2e",
+          "name": "http10_get_closes_delimited",
+          "kind": "tcp"
+        },
+        {
+          "suite": "native_http1_e2e",
+          "name": "http10_keepalive_requested_honored",
+          "kind": "tcp"
+        },
+        {
+          "suite": "native_http1_e2e",
+          "name": "http11_two_gets_keepalive_chunked",
+          "kind": "tcp"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#protocol-translations",
+        "rationale": "Framing, pipelining correlation and WebSocket mechanisms follow the selected protocol; private owners do not enable public TLS listeners."
+      }
+    },
+    {
+      "id": "capability-047",
+      "behavior": "HEAD, empty/no-content/304, declared representation length",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "http1_response_mode",
+          "name": "head_applies_to_any_version",
+          "kind": "semantic"
+        },
+        {
+          "suite": "http1_response_mode",
+          "name": "no_content_strips_framing_fields",
+          "kind": "semantic"
+        },
+        {
+          "suite": "http1_response_mode",
+          "name": "not_modified_is_metadata_only",
+          "kind": "semantic"
+        },
+        {
+          "suite": "http2_exchange",
+          "name": "head_and_304_lengths_are_metadata_but_conflicting_lengths_reset",
+          "kind": "engine-frame"
+        }
+      ]
+    },
+    {
+      "id": "capability-048",
+      "behavior": "Ordered repeated request/response fields and trailers",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "response_definition",
+          "name": "send_appends_overlay_headers_after_base",
+          "kind": "semantic"
+        },
+        {
+          "suite": "response_definition",
+          "name": "send_delivers_overlay_trailers",
+          "kind": "semantic"
+        },
+        {
+          "suite": "http2_streaming",
+          "name": "request_and_response_trailers_follow_data_in_hpack_order",
+          "kind": "engine-frame"
+        },
+        {
+          "suite": "http3_streaming",
+          "name": "incremental_post_trailers_wait_for_fin_and_stream_response",
+          "kind": "engine-frame"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#request-and-source-migrations",
+        "rationale": "Use ordered fields, pull body readers, standalone decoders and explicit source ownership instead of v2 convenience maps/callback shapes."
+      }
+    },
+    {
+      "id": "capability-049",
+      "behavior": "Ordered pipelining / persistent connections",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "native_http1_e2e",
+          "name": "pipelined_gets_answered_in_order",
+          "kind": "tcp"
+        },
+        {
+          "suite": "http2_exchange",
+          "name": "concurrent_gets_share_http1_routing_without_head_of_line_blocking",
+          "kind": "engine-frame"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#protocol-translations",
+        "rationale": "Framing, pipelining correlation and WebSocket mechanisms follow the selected protocol; private owners do not enable public TLS listeners."
+      }
+    },
+    {
+      "id": "capability-050",
+      "behavior": "404 / 405 / 500 custom pages, hooks, error mapping",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "request_lifecycle",
+          "name": "throwing_factory_degrades_to_404",
+          "kind": "semantic"
+        },
+        {
+          "suite": "request_lifecycle",
+          "name": "throwing_factory_degrades_to_405",
+          "kind": "semantic"
+        },
+        {
+          "suite": "request_lifecycle",
+          "name": "invalid_status_factory_defaults",
+          "kind": "semantic"
+        },
+        {
+          "suite": "request_lifecycle",
+          "name": "empty_factory_defaults",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#hook-migrations",
+        "rationale": "Native request phases and page factories preserve pinned responses; omitted MHD phases, per-resource registration and alias surfaces have explicit adapters."
+      }
+    },
+    {
+      "id": "capability-051",
+      "behavior": "Routing families and capture args",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "server_routes_families",
+          "name": "named_captures_in_order",
+          "kind": "semantic"
+        },
+        {
+          "suite": "server_routes_families",
+          "name": "prefix_family_matching",
+          "kind": "semantic"
+        }
+      ]
+    },
+    {
+      "id": "capability-052",
+      "behavior": "Basic/Digest auth, forms, multipart and IP policy",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "urlencoded_decoder",
+          "name": "malformed_escapes_reject",
+          "kind": "semantic"
+        },
+        {
+          "suite": "urlencoded_decoder",
+          "name": "pairs_arrive_in_order",
+          "kind": "semantic"
+        },
+        {
+          "suite": "urlencoded_decoder",
+          "name": "field_cap_boundary",
+          "kind": "semantic"
+        },
+        {
+          "suite": "urlencoded_decoder",
+          "name": "byte_cap_boundary",
+          "kind": "semantic"
+        },
+        {
+          "suite": "forms_multipart",
+          "name": "decode_verdicts_are_typed",
+          "kind": "semantic"
+        },
+        {
+          "suite": "forms_multipart",
+          "name": "sink_failure_propagates",
+          "kind": "semantic"
+        },
+        {
+          "suite": "forms_multipart_files",
+          "name": "abort_removes_partial",
+          "kind": "semantic"
+        },
+        {
+          "suite": "forms_multipart_files",
+          "name": "file_lands_and_ledgers",
+          "kind": "semantic"
+        },
+        {
+          "suite": "forms_multipart_files",
+          "name": "keep_callback_once",
+          "kind": "semantic"
+        }
+      ]
+    },
+    {
+      "id": "capability-053",
+      "behavior": "Raw query and query/form convenience arguments",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "http_semantic_request_head",
+          "name": "raw_target_and_route_path_differ_explicitly",
+          "kind": "semantic"
+        },
+        {
+          "suite": "urlencoded_decoder",
+          "name": "plus_and_escape_decoding",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#request-and-source-migrations",
+        "rationale": "Use ordered fields, pull body readers, standalone decoders and explicit source ownership instead of v2 convenience maps/callback shapes."
+      }
+    },
+    {
+      "id": "capability-054",
+      "behavior": "Request cookies / response cookies",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "cookie_render",
+          "name": "parse_multi_semicolon_separated",
+          "kind": "semantic"
+        },
+        {
+          "suite": "cookie_render",
+          "name": "render_full_attribute_ordering",
+          "kind": "semantic"
+        },
+        {
+          "suite": "cookie_render",
+          "name": "render_guard_rejects_cr_in_parsed_value",
+          "kind": "semantic"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#request-and-source-migrations",
+        "rationale": "Use ordered fields, pull body readers, standalone decoders and explicit source ownership instead of v2 convenience maps/callback shapes."
+      }
+    },
+    {
+      "id": "capability-055",
+      "behavior": "Request body and footers",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "http1_body_source",
+          "name": "chunked_collect_returns_payload_and_trailers",
+          "kind": "semantic"
+        },
+        {
+          "suite": "http3_streaming",
+          "name": "semantic_route_reads_prefix_before_fin_and_separates_response_trailers",
+          "kind": "engine-frame"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#request-and-source-migrations",
+        "rationale": "Use ordered fields, pull body readers, standalone decoders and explicit source ownership instead of v2 convenience maps/callback shapes."
+      }
+    },
+    {
+      "id": "capability-056",
+      "behavior": "TLS and WebSocket",
+      "cases": [],
+      "baseline": "inventory-only",
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": true
+        },
+        "h1.1-tcp": {
+          "applicable": true
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      },
+      "tests": [
+        {
+          "suite": "tls_io_loopback",
+          "name": "poll_peer_roundtrip",
+          "kind": "tls"
+        },
+        {
+          "suite": "tls_io_loopback",
+          "name": "external_readiness_peer_roundtrip",
+          "kind": "tls"
+        },
+        {
+          "suite": "http2_websocket",
+          "name": "split_masked_messages_and_early_data_reach_one_stream_codec",
+          "kind": "engine-frame"
+        },
+        {
+          "suite": "http3_websocket",
+          "name": "masked_message_survives_every_wire_split",
+          "kind": "engine-frame"
+        }
+      ],
+      "migration": {
+        "reference": "docs/task-179-behavior-parity.md#protocol-translations",
+        "rationale": "Framing, pipelining correlation and WebSocket mechanisms follow the selected protocol; private owners do not enable public TLS listeners."
+      }
+    },
+    {
+      "id": "capability-057",
+      "behavior": "Certificate credentials validate chains and retain immutable generation snapshots",
+      "cases": [],
+      "baseline": "inventory-only",
+      "tests": [
+        {
+          "suite": "tls_policy_concurrency",
+          "name": "concurrent_certificate_generations_and_retirement",
+          "kind": "tls"
+        },
+        {
+          "suite": "tls_policy_concurrency",
+          "name": "managed_poll_rotation",
+          "kind": "tls"
+        }
+      ],
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS authentication requires encrypted transport."
+        },
+        "h1.1-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS authentication requires encrypted transport."
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-058",
+      "behavior": "SNI selects a known host or the explicit default with selected ALPN preference",
+      "cases": [],
+      "baseline": "inventory-only",
+      "tests": [
+        {
+          "suite": "tls_selection",
+          "name": "current_hello_selects_known_or_explicit_default_and_acknowledges_only_known",
+          "kind": "provider-bio"
+        },
+        {
+          "suite": "tls_selection",
+          "name": "alpn_uses_selected_server_preference_and_normal_http_protocols",
+          "kind": "provider-bio"
+        },
+        {
+          "suite": "tls_policy_hostile_profiles",
+          "name": "sni_exact_canonical_and_default_isolation",
+          "kind": "tls"
+        }
+      ],
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS authentication requires encrypted transport."
+        },
+        "h1.1-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS authentication requires encrypted transport."
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-059",
+      "behavior": "Client certificates enforce optional and required authentication with selected trust roots",
+      "cases": [],
+      "baseline": "inventory-only",
+      "tests": [
+        {
+          "suite": "tls_mtls",
+          "name": "initial_handshake_modes_and_presented_invalid_chains",
+          "kind": "provider-bio"
+        },
+        {
+          "suite": "tls_mtls",
+          "name": "selected_host_applies_mode_and_trust_store",
+          "kind": "provider-bio"
+        },
+        {
+          "suite": "tls_policy_hostile_profiles",
+          "name": "mtls_modes_reject_untrusted_expired_and_wrong_purpose",
+          "kind": "tls"
+        }
+      ],
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS authentication requires encrypted transport."
+        },
+        "h1.1-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS authentication requires encrypted transport."
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true
+        },
+        "h3-quic": {
+          "applicable": true
+        }
+      }
+    },
+    {
+      "id": "capability-060",
+      "behavior": "External PSK authenticates HTTP/1 with bounded worker lookup and typed protocol restriction",
+      "cases": [],
+      "baseline": "inventory-only",
+      "tests": [
+        {
+          "suite": "tls_psk",
+          "name": "concurrent_versions_and_identities_authenticate_and_exchange",
+          "kind": "provider-bio",
+          "modes": [
+            "h1.0-tls",
+            "h1.1-tls"
+          ]
+        },
+        {
+          "suite": "tls_psk",
+          "name": "psk_alpn_and_cipher_policies_negotiate_only_supported_http1_aead",
+          "kind": "provider-bio",
+          "modes": [
+            "h1.0-tls",
+            "h1.1-tls"
+          ]
+        },
+        {
+          "suite": "tls_psk_contract",
+          "name": "client_hello_retry_suspends_and_resumes",
+          "kind": "provider-bio",
+          "modes": [
+            "h1.0-tls",
+            "h1.1-tls"
+          ]
+        },
+        {
+          "suite": "tls_psk_runtime",
+          "name": "lookup_executes_off_owner_and_redacts_exceptions",
+          "kind": "semantic",
+          "modes": [
+            "h1.0-tls",
+            "h1.1-tls"
+          ]
+        },
+        {
+          "suite": "tls_policy_hostile_profiles",
+          "name": "psk_identity_host_key_and_exception_isolation",
+          "kind": "tls",
+          "modes": [
+            "h1.0-tls",
+            "h1.1-tls"
+          ]
+        },
+        {
+          "suite": "server_options_validate",
+          "name": "psk_limited_to_http1",
+          "kind": "semantic",
+          "modes": [
+            "h2-tls",
+            "h3-quic"
+          ]
+        }
+      ],
+      "cells": {
+        "h1.0-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS authentication requires encrypted transport."
+        },
+        "h1.1-tcp": {
+          "applicable": false,
+          "reference": "docs/task-179-behavior-parity.md#protocol-applicability",
+          "rationale": "TLS authentication requires encrypted transport."
+        },
+        "h1.0-tls": {
+          "applicable": true
+        },
+        "h1.1-tls": {
+          "applicable": true
+        },
+        "h2-tls": {
+          "applicable": true,
+          "migration": {
+            "reference": "docs/task-179-behavior-parity.md#tls-capabilities",
+            "rationale": "server_options::check_psk_protocols restricts external PSK to HTTP/1; H2/H3 negotiation is rejected before binding."
+          }
+        },
+        "h3-quic": {
+          "applicable": true,
+          "migration": {
+            "reference": "docs/task-179-behavior-parity.md#tls-capabilities",
+            "rationale": "server_options::check_psk_protocols restricts external PSK to HTTP/1; H2/H3 negotiation is rejected before binding."
+          }
+        }
+      }
+    }
+  ]
+}

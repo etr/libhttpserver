@@ -55,11 +55,15 @@ class tls_shutdown_operation final : public op_handle {
         : op_handle(std::make_shared<op_state>(io_op_kind::tls_shutdown, &owner, connection, timer_payload{deadline})) {}
 };
 // raw backend and executor outlive this adapter AND its retiring child completions.
-// One adapter owns one connection. Cancellation/timeout abort the entire session.
+enum class tls_read_cancel_policy { abort_session, preserve_session };
+// One adapter owns one connection. Timeouts and control/write cancellation abort
+// the session; socket owners can cancel a plaintext reader during upgrade handoff.
 class tls_io_backend final : public io_backend {
  public:
-    tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, std::shared_ptr<const tls_context> context, bool server, tls_handshake_context handshake = {});
-    tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, tls_credentials_selection selection, bool server, tls_handshake_context handshake = {});
+    tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, std::shared_ptr<const tls_context> context, bool server, tls_handshake_context handshake = {},
+        tls_read_cancel_policy read_cancel = tls_read_cancel_policy::abort_session);
+    tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, tls_credentials_selection selection, bool server, tls_handshake_context handshake = {},
+        tls_read_cancel_policy read_cancel = tls_read_cancel_policy::abort_session);
     ~tls_io_backend() override;
     void submit(op_state& op) override;
     // ok accepts a cancellation event; the operation result decides races.

@@ -10,6 +10,7 @@
 #define SRC_HTTPSERVER_DETAIL_HTTP2_REQUEST_ENGINE_HPP_
 #include <memory>
 #include <httpserver/detail/http2_connection.hpp>
+#include <httpserver/detail/request_lifecycle.hpp>
 #include <httpserver/concurrency/executor.hpp>
 #include <httpserver/server/routes.hpp>
 #include <httpserver/server/server.hpp>
@@ -34,7 +35,8 @@ struct http2_request_limits {
 class http2_request_engine {
  public:
     http2_request_engine(server::resource_budget budget, const server::route_registry& routes,
-                        executor& owner, http2_request_limits limits = {});
+                        executor& owner, http2_request_limits limits = {},
+                        request_dispatch_context dispatch = {}, std::uint64_t connection_id = 0, net::peer_address peer = {});
     ~http2_request_engine();
     http2_request_engine(const http2_request_engine&) = delete;
     http2_request_engine& operator=(const http2_request_engine&) = delete;
