@@ -154,7 +154,7 @@ http3_encoded_section http3_connection::encode_section(std::uint64_t id, std::sp
         http3_encoded_section result; result.owner = data_;
         if (!data_.budget.reserve(server::resource::quic_reassembly_bytes, 2 * limits_.headers.max_compressed_bytes, result.charge).ok())
             return {{qpack_state::limit_exceeded}, {}, {}, {}};
-        auto encoded = encoder_.encode_dynamic(fields, encoder_table_, encoder_table_.insert_count(), limits_.headers);
+        auto encoded = encoder_.encode_dynamic(fields, encoder_table_, encoder_table_.insert_count(), limits_.headers, false, peer_.qpack_capacity);
         if (!encoded.status.ok()) return {encoded.status, {}, {}, {}};
         if (encoded.required_insert_count > encoder_table_.known_received_count() &&
             !potentially_blocked(id) && outgoing_blocked() >= peer_.qpack_blocked) {

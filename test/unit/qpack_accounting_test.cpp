@@ -1,4 +1,5 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
+#include <string>
 #include "./http3_fixture.hpp"
 #include <httpserver/detail/quic_flow_control.hpp>
 #include <httpserver/detail/quic_recovery.hpp>
@@ -35,6 +36,51 @@ LT_BEGIN_AUTO_TEST(qpack_accounting_suite, section_fifo_shared_holds_and_cancell
     LT_CHECK(c.queue_encoder_instruction({hd::qpack_encoder_instruction_kind::capacity, 0}).ok());
     LT_CHECK_EQ(feed(c, 6, bytes({0x80})).error->wire_code, 0x202U);
 LT_END_AUTO_TEST(section_fifo_shared_holds_and_cancellation)
+LT_BEGIN_AUTO_TEST(qpack_accounting_suite, section_ack_releases_oldest_distinct_entry_and_insert_count)
+    hd::quic_storage_pool pool(10000, 30000, budget()); hd::http3_connection c(pool.data(), pool.critical(), limits()); peer(c);
+    LT_ASSERT(insert(c, "a"));
+    std::array<hd::qpack_field_view, 1> older{{{"x", "a"}}}, newer{{{"x", "b"}}};
+    auto first = c.encode_section(0, older); LT_ASSERT(first.status.ok());
+    LT_ASSERT(insert(c, "b"));
+    auto second = c.encode_section(0, newer); LT_ASSERT(second.status.ok());
+    LT_CHECK_EQ(static_cast<unsigned char>(first.value[0]), 2U);
+    LT_CHECK_EQ(static_cast<unsigned char>(second.value[0]), 3U);
+
+    LT_ASSERT(!feed(c, 6, bytes({0x80})).error);
+    // Each entry costs 34 bytes: shrinking evicts only the released oldest one.
+    LT_CHECK(c.queue_encoder_instruction({hd::qpack_encoder_instruction_kind::capacity, 34}).ok());
+    LT_CHECK(c.queue_encoder_instruction({hd::qpack_encoder_instruction_kind::capacity, 0}).state == hd::qpack_state::eviction_prohibited);
+    // ACK advanced to 1, so incrementing to 2 must still be valid.
+    LT_ASSERT(!feed(c, 6, bytes({1})).error);
+    LT_CHECK(c.queue_encoder_instruction({hd::qpack_encoder_instruction_kind::capacity, 0}).state == hd::qpack_state::eviction_prohibited);
+    LT_ASSERT(!feed(c, 6, bytes({0x80})).error);
+    LT_CHECK(c.queue_encoder_instruction({hd::qpack_encoder_instruction_kind::capacity, 0}).ok());
+LT_END_AUTO_TEST(section_ack_releases_oldest_distinct_entry_and_insert_count)
+LT_BEGIN_AUTO_TEST(qpack_accounting_suite, peer_maximum_controls_wire_wrap_without_enlarging_local_table)
+    hs::budget_limits bounds; bounds.set(hs::resource::qpack_table_bytes, 256);
+    auto root = hs::resource_budget::root(bounds); hd::quic_storage_pool pool(10000, 30000, root);
+    hd::http3_connection c(pool.data(), pool.critical(), limits());
+    LT_CHECK_EQ(root.in_use(hs::resource::qpack_table_bytes), 128U);
+    c.attach_stream(2); LT_ASSERT(!feed(c, 2, bytes({0, 4, 5, 1, 0x41, 0, 7, 2})).error);
+    c.attach_stream(6); LT_ASSERT(!feed(c, 6, bytes({3})).error); c.attach_stream(0);
+    LT_CHECK_EQ(root.in_use(hs::resource::qpack_table_bytes), 256U);
+    LT_CHECK(c.queue_encoder_instruction({hd::qpack_encoder_instruction_kind::capacity, 256}).state == hd::qpack_state::malformed);
+
+    // Independent peer uses its advertised maximum, but the sender's chosen capacity.
+    hd::qpack_dynamic_table decoder_table(hd::qpack_table_role::decoder);
+    LT_ASSERT(decoder_table.initialize(budget(), 256).ok()); LT_ASSERT(decoder_table.set_capacity(128).ok());
+    for (const auto* value : {"a", "b", "c", "d", "e", "f", "g", "h"}) {
+        LT_ASSERT(insert(c, value)); LT_ASSERT(!feed(c, 6, bytes({1})).error);
+        LT_ASSERT(decoder_table.insert("x", value).ok());
+    }
+    std::array<hd::qpack_field_view, 1> fields{{{"x", "h"}}};
+    auto section = c.encode_section(0, fields); LT_ASSERT(section.status.ok());
+    LT_CHECK(section.value == std::string("\x09\x00\x80", 3));
+    auto decoded = hd::qpack_decoder{}.decode_dynamic(hd::qpack_octets(section.value), decoder_table, limits().headers);
+    LT_CHECK(decoded.status.ok()); LT_CHECK_EQ(decoded.required_insert_count, 8U);
+    LT_ASSERT_EQ(decoded.fields.size(), 1U); LT_CHECK_EQ(decoded.fields[0].name, "x"); LT_CHECK_EQ(decoded.fields[0].value, "h");
+    LT_CHECK_EQ(root.in_use(hs::resource::qpack_table_bytes), 256U);
+LT_END_AUTO_TEST(peer_maximum_controls_wire_wrap_without_enlarging_local_table)
 LT_BEGIN_AUTO_TEST(qpack_accounting_suite, cancellation_does_not_advance_known_received)
     hd::quic_storage_pool pool(10000, 30000, budget()); hd::http3_connection c(pool.data(), pool.critical(), limits()); peer(c); LT_ASSERT(insert(c, "a"));
     std::array<hd::qpack_field_view, 1> fields{{{"x", "a"}}}; LT_ASSERT(c.encode_section(0, fields).status.ok());
@@ -97,6 +143,36 @@ LT_BEGIN_AUTO_TEST(qpack_accounting_suite, critical_ranges_protect_connection_cr
     flow.abandon_critical(encoder.id); LT_CHECK_EQ(flow.send_allowance(ordinary.id, 7, 8).bytes, 3U);
     LT_CHECK(flow.reserve_critical(ordinary.id, 7, 1).code == hd::quic_flow_code::stream_state_error);
 LT_END_AUTO_TEST(critical_ranges_protect_connection_credit_and_retransmit)
+LT_BEGIN_AUTO_TEST(qpack_accounting_suite, fin_returns_unused_critical_credit_once)
+    hd::quic_transport_parameters p; p.initial_max_data = 12; p.initial_max_stream_data_uni = 12;
+    p.initial_max_stream_data_bidi_remote = 12; p.initial_max_streams_uni = 2; p.initial_max_streams_bidi = 1;
+    hd::quic_flow_control flow(hd::quic_endpoint_role::server, p, p, 4, budget());
+    auto ending = flow.open_local(true); auto pending = flow.open_local(true); auto ordinary = flow.open_local(false);
+    LT_ASSERT(ending && pending && ordinary);
+    LT_ASSERT(flow.reserve_critical(ending.id, 0, 5)); LT_ASSERT(flow.reserve_critical(pending.id, 0, 2));
+    LT_ASSERT(flow.record_stream_sent(ending.id, 0, 2, false));
+    LT_CHECK_EQ(flow.send_allowance(ordinary.id, 0, 12).bytes, 5U); LT_CHECK_EQ(flow.sent(), 2U);
+
+    LT_ASSERT(flow.record_stream_sent(ending.id, 2, 0, true));
+    LT_CHECK_EQ(flow.send_allowance(ordinary.id, 0, 12).bytes, 8U); LT_CHECK_EQ(flow.sent(), 2U);
+    LT_ASSERT(flow.record_stream_sent(ending.id, 2, 0, true));
+    LT_CHECK_EQ(flow.send_allowance(ordinary.id, 0, 12).bytes, 8U); LT_CHECK_EQ(flow.sent(), 2U);
+LT_END_AUTO_TEST(fin_returns_unused_critical_credit_once)
+LT_BEGIN_AUTO_TEST(qpack_accounting_suite, reset_returns_unused_critical_credit_once)
+    hd::quic_transport_parameters p; p.initial_max_data = 12; p.initial_max_stream_data_uni = 12;
+    p.initial_max_stream_data_bidi_remote = 12; p.initial_max_streams_uni = 2; p.initial_max_streams_bidi = 1;
+    hd::quic_flow_control flow(hd::quic_endpoint_role::server, p, p, 4, budget());
+    auto ending = flow.open_local(true); auto pending = flow.open_local(true); auto ordinary = flow.open_local(false);
+    LT_ASSERT(ending && pending && ordinary);
+    LT_ASSERT(flow.reserve_critical(ending.id, 0, 5)); LT_ASSERT(flow.reserve_critical(pending.id, 0, 2));
+    LT_ASSERT(flow.record_stream_sent(ending.id, 0, 2, false));
+    LT_CHECK_EQ(flow.send_allowance(ordinary.id, 0, 12).bytes, 5U); LT_CHECK_EQ(flow.sent(), 2U);
+
+    LT_ASSERT(flow.record_reset_sent(ending.id, 2));
+    LT_CHECK_EQ(flow.send_allowance(ordinary.id, 0, 12).bytes, 8U); LT_CHECK_EQ(flow.sent(), 2U);
+    LT_ASSERT(flow.record_reset_sent(ending.id, 2));
+    LT_CHECK_EQ(flow.send_allowance(ordinary.id, 0, 12).bytes, 8U); LT_CHECK_EQ(flow.sent(), 2U);
+LT_END_AUTO_TEST(reset_returns_unused_critical_credit_once)
 LT_BEGIN_AUTO_TEST(qpack_accounting_suite, critical_stream_limit_and_retry_after_max_stream_data)
     hd::quic_transport_parameters p; p.initial_max_data = 10; p.initial_max_stream_data_uni = 1; p.initial_max_streams_uni = 1;
     hd::quic_flow_control flow(hd::quic_endpoint_role::server, p, p, 2, budget()); auto stream = flow.open_local(true); LT_ASSERT(stream);
