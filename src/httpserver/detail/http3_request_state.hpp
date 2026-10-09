@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 #include <utility>
+#include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/http3_request_engine.hpp>
 #include <httpserver/detail/http3_request_head.hpp>
 #include <httpserver/detail/http3_body_stream.hpp>
@@ -60,7 +61,8 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         quic_stream_state* transport = nullptr;
         http3_role local_role = http3_role::pending;
         bool local = false, cancelled = false, abandoned = false, receive_done = false, fin_retained = false, reset_settled = false;
-        bool event_recorded = false;
+        bool event_recorded = false, accepted = false;
+        std::optional<drain_scope::unit> drain_unit;
         std::optional<quic_stream_terminal> terminal;
         http3_request_action action;
         server::reservation charge, output_charge;
@@ -95,6 +97,21 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     std::array<record*, critical_output_records> critical_records{};
     std::size_t critical_next = 0;
     bool disconnected = false;
+    executor& owner;
+    enum class drain_phase { running, draining, finished };
+    struct drain_control { std::atomic<bool> cancel_requested{false}; };
+    std::shared_ptr<drain_scope> scope = std::make_shared<drain_scope>();
+    std::shared_ptr<drain_control> drain = std::make_shared<drain_control>();
+    drain_phase phase = drain_phase::running;
+    std::optional<time_point> deadline;
+    std::optional<std::uint64_t> highest_accepted;
+    std::optional<quic_close_frame> close_request;
+    bool connection_counted = true, drain_failed = false;
+    void leave_connection();
+    void interrupt_drain();
+    void check_drain(time_point now);
+    void finish_drain();
+    void retire_drain_request(record& r);
     state(quic_storage_lease d, quic_storage_lease c, quic_flow_control& f, quic_recovery& q, const server::route_registry& r, executor& e, http3_request_limits l,
           std::uint64_t id, net::peer_address p)
         : data(std::move(d)),
@@ -106,7 +123,8 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
           connection(data, critical, l.framing),
           handlers(std::make_shared<http3_request_helpers::route_executor>(e)),
           connection_id(id),
-          peer(p) {}
+          peer(p),
+          owner(e) { scope->enter(); }
     ~state();
     struct pump_guard {
         state& owner;

@@ -41,6 +41,7 @@ http3_request_engine::~http3_request_engine() {
 http3_request_engine::state::~state() {
     handlers->disable();
     records.clear();
+    leave_connection();
 }
 http3_request_engine::state::stream::stream(state& s, record& r, http::request_head head)
     : owner(s), transport(r), body(s.data.budget), request(head, this, s.connection_id, &body, this, s.peer) {
@@ -93,6 +94,7 @@ body_push_result http3_request_engine::state::stream::push_end(const http::field
 }
 void http3_request_engine::state::fail(http3_error failure) {
     if (error) return;
+    interrupt_drain();
     error = failure;
     disconnected = true;
     handlers->disable();
@@ -102,6 +104,8 @@ void http3_request_engine::state::fail(http3_error failure) {
 }
 void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
     if (r.cancelled) return;
+    if (r.drain_unit && phase == drain_phase::draining) drain_failed = true;
+    r.drain_unit.reset();
     r.cancelled = true;
     connection.cancel_unpublished(r.transport->id());
     r.output_token = 0;
@@ -143,18 +147,23 @@ bool http3_request_engine::state::retired(const record& r) const {
     return r.semantic->handler.done() && r.fin_retained && (r.receive_done || r.abandoned);
 }
 void http3_request_engine::state::reap(record& r) {
-    if (!r.semantic) return;
+    if (!r.semantic) {
+        retire_drain_request(r);
+        return;
+    }
     auto& s = *r.semantic;
     if (!r.cancelled && s.handler.done() && s.streaming && !s.body.finished()) reset(r, 0x102);
     if (r.cancelled || retired(r)) {
         r.semantic.reset();
         --active;
     }
+    retire_drain_request(r);
 }
 void http3_request_engine::state::reap() {
     if (handlers->running() || pumps) return;
     for (auto& [id, r] : records)
         reap(*r);
+    check_drain(std::chrono::steady_clock::now());
 }
 
 bool http3_request_engine::state::attach(quic_stream_state& transport, std::optional<http3_role> role) {
@@ -187,7 +196,9 @@ bool http3_request_engine::state::attach(quic_stream_state& transport, std::opti
     r->scratch.resize(scratch);
     r->receipts.resize(limits.max_receipt_records);
     r->information.reserve(output_records);
+    auto* added = r.get();
     register_record(std::move(r));
+    if (!role && !(id & 2) && phase != drain_phase::running) reset(*added, 0x10b);
     return true;
 }
 void http3_request_engine::state::register_record(std::unique_ptr<record> r) {
@@ -251,6 +262,10 @@ void http3_request_engine::state::consumed(record& r, std::size_t count) {
     flush_receipts(r);
 }
 bool http3_request_engine::state::head(record& r, std::span<const qpack_field> fields) {
+    if (phase != drain_phase::running) {
+        reset(r, 0x10b);
+        return false;
+    }
     if (active == limits.max_active_requests) {
         reset(r, 0x107);
         return false;
@@ -287,6 +302,10 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
     }
     r.semantic = std::move(value);
     ++active;
+    r.accepted = true;
+    r.drain_unit.emplace(*scope);
+    const auto id = r.transport->id();
+    highest_accepted = highest_accepted ? std::max(*highest_accepted, id) : id;
     r.semantic->handler.start(*handlers, run_route(routes, r.semantic->request));
     return true;
 }
@@ -518,6 +537,7 @@ void http3_request_engine::disconnect(http::outcome reason) {
     auto s = state_;
     state::pump_guard guard(*s);
     if (s->disconnected) return;
+    s->interrupt_drain();
     s->disconnected = true;
     s->handlers->disable();
     for (auto& [id, r] : s->records)
@@ -525,8 +545,10 @@ void http3_request_engine::disconnect(http::outcome reason) {
     s->connection.shutdown();
 }
 void http3_request_engine::begin_turn() {
-    state_->reap();
-    state_->connection.begin_turn();
+    auto s = state_;
+    state::pump_guard guard(*s);
+    s->check_drain(std::chrono::steady_clock::now());
+    s->connection.begin_turn();
 }
 const std::optional<http3_error>& http3_request_engine::failure() const {
     return state_->error;

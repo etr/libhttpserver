@@ -10,13 +10,13 @@
 #include <httpserver/detail/http3_request_engine.hpp>
 #include "./http3_fixture.hpp"
 namespace h3test {
-inline hd::quic_transport_parameters parameters(std::uint64_t send = 65536, std::uint64_t connection = 1048576) {
+inline hd::quic_transport_parameters parameters(std::uint64_t send = 65536, std::uint64_t connection = 1048576, std::uint64_t requests = 64) {
     hd::quic_transport_parameters p;
     p.initial_max_data = connection;
     p.initial_max_stream_data_bidi_local = send;
     p.initial_max_stream_data_bidi_remote = send;
     p.initial_max_stream_data_uni = send;
-    p.initial_max_streams_bidi = 64;
+    p.initial_max_streams_bidi = requests;
     p.initial_max_streams_uni = 8;
     return p;
 }
@@ -79,10 +79,11 @@ struct request_fixture {
         l.set(hs::resource::header_fields, 4096);
         return hs::resource_budget::root(l);
     }
-    explicit request_fixture(hd::http3_request_limits limits = {}, std::uint64_t send = 65536, hd::quic_recovery_config config = {}, std::uint64_t connection_send = 1048576)
+    explicit request_fixture(hd::http3_request_limits limits = {}, std::uint64_t send = 65536, hd::quic_recovery_config config = {},
+                             std::uint64_t connection_send = 1048576, std::uint64_t incoming_requests = 64)
         : root(large_budget()),
           pool(4194304, 1048576, root),
-          flow(hd::quic_endpoint_role::server, parameters(), parameters(send, connection_send), 128, pool.data()),
+          flow(hd::quic_endpoint_role::server, parameters(65536, 1048576, incoming_requests), parameters(send, connection_send), 128, pool.data()),
           recovery(config, pool.data(), pool.critical()) {
         if (!hs::route_registry::create(root, routes).ok()) throw std::runtime_error("route fixture failed");
         engine = std::make_unique<hd::http3_request_engine>(pool.data(), pool.critical(), flow, recovery, routes, executor, limits, 77);

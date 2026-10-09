@@ -243,7 +243,7 @@ void http3_connection::shutdown() {
     retained_bytes_ = blocked_streams_ = 0;
     for (auto& output : qpack_output_) std::vector<std::byte>().swap(output);
     std::vector<std::byte>().swap(control_prefix_);
-    output_charge_.release(); metadata_.release();
+    output_charge_.release(); metadata_.release(); goaway_charge_.release();
     encoder_table_.clear(); decoder_table_.clear();
 }
 }  // namespace httpserver::detail

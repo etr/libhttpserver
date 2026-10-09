@@ -2343,3 +2343,8 @@ check_PROGRAMS += http3_qpack_scheduling
 http3_qpack_scheduling_SOURCES = unit/http3_qpack_scheduling_test.cpp
 http3_qpack_scheduling_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 http3_qpack_scheduling_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += http3_drain
+http3_drain_SOURCES = unit/http3_drain_test.cpp
+http3_drain_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+http3_drain_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

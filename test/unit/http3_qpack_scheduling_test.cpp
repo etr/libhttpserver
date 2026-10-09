@@ -500,6 +500,36 @@ LT_BEGIN_AUTO_TEST(http3_qpack_scheduling_suite, recovery_byte_limits_admit_part
     LT_ASSERT(!f.output[0].empty());
     LT_CHECK(hd::qpack_decoder{}.decode_dynamic(first_section(f.output[0]), decoder, {65536, 65536, 256}).status.ok());
 LT_END_AUTO_TEST(recovery_byte_limits_admit_partial_encoder_and_response_ranges)
+LT_BEGIN_AUTO_TEST(http3_qpack_scheduling_suite, drain_cancels_blocked_initial_heads_but_keeps_accepted_trailers_and_feedback)
+    auto l = limits(); l.max_pending_output_records = 1;
+    h3test::request_fixture f(l); local(f); peer(f);
+    httpserver::resume_signal pause; unsigned calls = 0, completed = 0; std::string body;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::post), "/hello", [&](exchange& x) -> task<void> {
+        ++calls; x.admit_body({}); co_await pause.wait();
+        auto result = co_await x.body().collect(16); LT_CHECK(result.status.ok());
+        body.assign(reinterpret_cast<const char*>(result.data.data()), result.data.size());
+        LT_CHECK_EQ(*x.body().trailers().first("x-end"), "done");
+        ++completed; x.respond(http::status::from_code(204), {});
+    }).ok());
+    hd::qpack_dynamic_table table(hd::qpack_table_role::encoder);
+    LT_ASSERT(table.initialize(h3test::budget(), 256).ok()); LT_ASSERT(table.set_capacity(256).ok()); LT_ASSERT(table.insert("x-end", "done").ok());
+    auto initial = h3test::get("POST"); initial.push_back({"x-end", "done"});
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get("POST")))); f.executor.run_pending();
+    auto wire = h3test::data("body"); auto trailers = dynamic_head(table, {{"x-end", "done"}}); wire.insert(wire.end(), trailers.begin(), trailers.end());
+    LT_ASSERT(f.feed(0, wire, true)); f.open(4); LT_ASSERT(f.feed(4, dynamic_head(table, initial), true));
+    LT_CHECK_EQ(f.root.in_use(h3test::hs::resource::blocked_headers), 2U);
+    httpserver::server::drain_ticket ticket;
+    LT_ASSERT(f.engine->begin_drain(std::chrono::steady_clock::now() + std::chrono::hours(1), ticket).ok());
+    LT_CHECK_EQ(f.root.in_use(h3test::hs::resource::blocked_headers), 1U);
+    auto rejected = f.engine->take_action(); LT_ASSERT(rejected); LT_ASSERT(rejected->reset); LT_CHECK_EQ(rejected->reset->error, 0x10bU);
+    LT_ASSERT(f.feed(6, instruction({hd::qpack_encoder_instruction_kind::capacity, 256})));
+    LT_ASSERT(f.feed(6, instruction({hd::qpack_encoder_instruction_kind::insert_literal, 0, false, "x-end", "done"})));
+    pause.signal(); f.executor.run_pending(); f.drain(8);
+    LT_CHECK_EQ(calls, 1U); LT_CHECK_EQ(completed, 1U); LT_CHECK_EQ(body, "body"); LT_CHECK_EQ(f.fins[0], 1U);
+    LT_CHECK(f.output[11].size() > 1U); LT_CHECK_EQ(f.root.in_use(h3test::hs::resource::blocked_headers), 0U);
+    LT_CHECK(!f.engine->failure()); LT_ASSERT(f.engine->take_connection_close());
+    httpserver::server::drain_result result; LT_ASSERT(ticket.wait(result).ok()); LT_CHECK(result.status == httpserver::server::drain_status::completed);
+LT_END_AUTO_TEST(drain_cancels_blocked_initial_heads_but_keeps_accepted_trailers_and_feedback)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

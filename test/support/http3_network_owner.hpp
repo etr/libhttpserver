@@ -42,6 +42,7 @@ class connection final : public hd::datagram_sink {
     const statistics& stats() const { return stats_; }
     const std::string& failure() const { return failure_; }
     bool connected() const { return connected_; }
+    httpserver::http::outcome begin_drain(clock_type::time_point deadline, hs::drain_ticket& out);
     void request_close(const hd::quic_close_frame& frame, clock_type::time_point now);
     hd::quic_lifecycle_state state() const { return lifecycle_.state(); }
     unsigned close_notifications() const { return close_notifications_; }
@@ -55,6 +56,7 @@ class connection final : public hd::datagram_sink {
     std::optional<transmission> prepare_probe(clock_type::time_point now, const hd::quic_cid& destination);
     void drive_tls();
     bool active() const { return lifecycle_.state() == hd::quic_lifecycle_state::active; }
+    void check_drain(clock_type::time_point now);
     void terminal_changed(clock_type::time_point now);
     void retire_terminal(clock_type::time_point now);
     void cache_close();

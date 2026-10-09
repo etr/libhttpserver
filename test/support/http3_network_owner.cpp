@@ -124,6 +124,7 @@ void connection::on_datagram(std::shared_ptr<const hd::io_datagram> packet) noex
             return;
         }
         const auto now = clock_type::now();
+        check_drain(now);
         bool accounted = false;
         if (*path == identity_->application_path()) {
             close_blocked_ = false;
@@ -421,6 +422,7 @@ void connection::retain_output() {
 void connection::tick(clock_type::time_point now) {
     if (!failure_.empty()) return;
     try {
+        check_drain(now);
         if (lifecycle_.expire(now, recovery_.current_pto())) terminal_changed(now);
         if (!active()) {
             retire_terminal(now);
@@ -437,11 +439,13 @@ void connection::tick(clock_type::time_point now) {
         }
         require(!executor_.pending(), "handler turn capacity");
         retain_output();
+        check_drain(now);
     } catch (const std::exception& e) {
         failure_ = e.what();
     }
 }
 std::optional<transmission> connection::prepare(clock_type::time_point now) {
+    check_drain(now);
     if (pending_ || pending_control_ || close_pending_ || !failure_.empty()) return {};
     if (!active()) return prepare_close(now);
     if (!flow_) return {};
@@ -648,6 +652,8 @@ std::optional<clock_type::time_point> connection::deadline() const {
     auto deadline = recovery_.next_deadline();
     auto due = recovery_.next_send_deadline();
     auto identity_due = identity_->deadline();
+    const auto drain_due = engine_ ? engine_->drain_deadline() : std::nullopt;
+    if (drain_due && (!due || *drain_due < *due)) due = drain_due;
     const auto idle_due = lifecycle_.deadline(recovery_.current_pto());
     if (idle_due && (!due || *idle_due < *due)) due = idle_due;
     if (identity_due && (!due || *identity_due < *due)) due = identity_due;
