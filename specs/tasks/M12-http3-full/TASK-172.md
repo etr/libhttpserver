@@ -24,7 +24,7 @@ Provide WebSocket-over-HTTP/3 DATA and lifecycle adapter for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-011, PRD-V3N-REQ-012, PRD-V3N-REQ-013, PRD-V3N-REQ-033
 **Related Decisions:** DR-V3-008
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation Notes:**
 - See [DATA and lifecycle behavior and verification](../../../docs/task-172-http3-websocket-data-lifecycle.md). Runner-owned validation and finalization remain pending.
