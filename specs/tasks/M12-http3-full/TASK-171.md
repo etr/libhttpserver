@@ -24,7 +24,7 @@ Provide HTTP/3 WebSocket Extended CONNECT negotiation for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-011, PRD-V3N-REQ-012
 **Related Decisions:** DR-V3-001, DR-V3-003
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:**
 
