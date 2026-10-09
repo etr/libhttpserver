@@ -27,6 +27,8 @@ struct peer {
     std::shared_ptr<h3net::connection> server;
     std::array<std::byte, 8> server_cid{std::byte{1}};
     std::array<std::byte, 1> client_cid{std::byte{7}};
+    std::size_t client_cid_width = 1;
+    std::string file_root;
     std::array<std::uint64_t, 3> numbers{}, copied{}, delivered{};
     std::array<std::optional<std::uint64_t>, 3> largest;
     std::array<std::vector<std::byte>, 3> crypto;
@@ -41,12 +43,16 @@ struct peer {
     std::map<std::uint64_t, std::vector<std::byte>> issued;
     hd::quic_key_observer observer = nullptr;
     void* observer_argument = nullptr;
-    explicit peer(std::uint64_t udp_ceiling = 65527, hd::quic_key_observer inspect_keys = nullptr, void* argument = nullptr)
-        : observer(inspect_keys), observer_argument(argument) {
-        require(registry.replace(quic_test::credentials()).ok(), "credentials");
+    explicit peer(std::uint64_t udp_ceiling = 65527, hd::quic_key_observer inspect_keys = nullptr, void* argument = nullptr,
+                  const std::string& files = {}, bool empty_cid = false)
+        : tls(quic_test::client_context(), "a.example", {files.empty() ? "h3" : "hq-interop"}, nullptr, false),
+          client_cid_width(empty_cid ? 0 : 1), file_root(files), observer(inspect_keys), observer_argument(argument) {
+        auto credentials = quic_test::credentials();
+        if (!file_root.empty()) credentials.hosts[0].alpn = {"hq-interop"};
+        require(registry.replace(credentials).ok(), "credentials");
         auto p = h3test::parameters();
         p.max_udp_payload_size = udp_ceiling;
-        p.initial_source_cid = client_cid;
+        p.initial_source_cid = std::span(client_cid).first(client_cid_width);
         p.active_connection_id_limit = 4;
         std::array<std::byte, 1024> bytes{};
         auto encoded = hd::encode_quic_transport_parameters(p, hd::quic_endpoint_role::client, bytes);
@@ -90,11 +96,11 @@ struct peer {
         hd::quic_packet_write write;
         write.kind = kind;
         write.destination = server_cid;
-        if (level != 2) write.source = client_cid;
+        if (level != 2) write.source = std::span(client_cid).first(client_cid_width);
         write.packet_number = numbers[level]++;
         write.packet_number_width = 4;
         if (level != 2) write.length_width = 2;
-        write.payload = std::span(plain).first(level == 0 ? 1161 : std::max(at, std::size_t{4}));
+        write.payload = std::span(plain).first(level == 0 ? 1162 - client_cid_width : std::max(at, std::size_t{4}));
         auto result = std::make_shared<hd::io_datagram>();
         result->peer = from;
         result->socket_id = 1;
@@ -117,7 +123,7 @@ struct peer {
                     auto pending = admission->receive(bytes, 0);
                     facts = admission->inspect(pending.pending);
                     require(static_cast<bool>(facts), "Initial admission");
-                    server = std::make_shared<h3net::connection>(registry.acquire()->select_default(), *facts, routes, executor, 77, policy, std::string{}, observer, observer_argument);
+                    server = std::make_shared<h3net::connection>(registry.acquire()->select_default(), *facts, routes, executor, 77, policy, file_root, observer, observer_argument);
                     registration = admission->routes().register_cid(facts->destination, listener.datagrams(), server);
                     require(static_cast<bool>(registration), "initial route");
                     server->adopt_routes(admission->routes(), listener.datagrams(), *registration, server);
@@ -127,12 +133,12 @@ struct peer {
         }
     }
     std::vector<hd::quic_frame> decode(const h3net::transmission& sent, std::array<std::byte, 1600>& plain, unsigned& level, std::uint64_t& number) {
-        auto envelope = hd::parse_quic_envelope(sent.bytes, client_cid.size());
+        auto envelope = hd::parse_quic_envelope(sent.bytes, client_cid_width);
         require(envelope.code == hd::quic_codec_code::ok, "server envelope");
         level = envelope.value.kind == hd::quic_packet_kind::initial ? 0 : envelope.value.kind == hd::quic_packet_kind::handshake ? 1 : 2;
         install_keys();
         std::array<std::byte, 1600> scratch{};
-        auto opened = keys.open_packet(static_cast<hd::quic_key_level>(level), sent.bytes, client_cid.size(), largest[level], true, plain, scratch);
+        auto opened = keys.open_packet(static_cast<hd::quic_key_level>(level), sent.bytes, client_cid_width, largest[level], true, plain, scratch);
         require(opened.code == hd::quic_crypto_code::ok, "open server packet");
         number = opened.header.packet_number;
         largest[level] = std::max(number, largest[level].value_or(0));
@@ -187,7 +193,7 @@ struct peer {
         auto bytes = std::span(sent.bytes);
         unsigned packets = 0;
         while (!bytes.empty()) {
-            auto envelope = hd::parse_quic_envelope(bytes, client_cid.size());
+            auto envelope = hd::parse_quic_envelope(bytes, client_cid_width);
             require(envelope.code == hd::quic_codec_code::ok, "coalesced envelope");
             h3net::transmission one{{bytes.begin(), bytes.begin() + envelope.consumed}, sent.peer};
             ++packets;

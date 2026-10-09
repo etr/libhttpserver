@@ -2369,3 +2369,5 @@ check_PROGRAMS += http3_websocket_lifecycle
 http3_websocket_lifecycle_SOURCES = unit/http3_websocket_lifecycle_test.cpp
 http3_websocket_lifecycle_LDADD = $(http3_headers_LDADD)
 http3_websocket_lifecycle_LDFLAGS = $(http3_headers_LDFLAGS)
+
+EXTRA_DIST += interop/quic/task173-matrix.json

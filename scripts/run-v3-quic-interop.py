@@ -17,15 +17,38 @@ PROVIDER_RELEASE = "3.5.9"
 PROVIDER_ARCHIVE_SHA256 = "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a"
 SIMULATOR = "martenseemann/quic-network-simulator@sha256:c23d82a55caffe681b1bdae65d4d30d23e1283141a414a7f02ee56cf15f9c6b9"
 
-def validate_results(document):
+def load_matrix(name="task163"):
+    if name == "task173":
+        path = Path(__file__).resolve().parents[1] / "test/interop/quic/task173-matrix.json"
+        return json.loads(path.read_text())
+    if name != "task163":
+        raise ValueError("unknown interoperability matrix")
+    return {"server": "libhttpserver", "peers": {"quic-go": {"image": CLIENT, "url": "https://github.com/quic-go/quic-go", "stack": "quic-go"}},
+            "cases": ["handshake", "transfer"]}
+
+
+def validate_results(document, matrix=None):
+    matrix = matrix or load_matrix()
     try:
-        if document.get("servers") != ["libhttpserver"] or document.get("clients") != ["quic-go"]:
+        if len({peer["stack"] for peer in matrix["peers"].values()}) != len(matrix["peers"]):
+            return False
+        peers = document["clients"]
+        if document["servers"] != [matrix["server"]] or not isinstance(peers, list):
+            return False
+        if len(peers) != len(matrix["peers"]) or set(peers) != set(matrix["peers"]):
             return False
         rows = document["results"]
-        if len(rows) != 1 or len(rows[0]) != 2:
+        if not isinstance(rows, list) or len(rows) != len(peers):
             return False
-        return {cell["name"] for cell in rows[0]} == {"handshake", "transfer"} and all(cell["result"] == "succeeded" for cell in rows[0])
-    except (KeyError, TypeError):
+        for cells in rows:
+            if not isinstance(cells, list) or len(cells) != len(matrix["cases"]):
+                return False
+            if {cell["name"] for cell in cells} != set(matrix["cases"]):
+                return False
+            if any(cell["result"] != "succeeded" for cell in cells):
+                return False
+        return True
+    except (KeyError, TypeError, AttributeError):
         return False
 
 
@@ -89,31 +112,70 @@ def pcapng_records(data):
     return records
 
 
-def validate_artifacts(logs):
+def validate_artifacts(logs, matrix=None):
+    matrix = matrix or load_matrix()
     inventory = {}
-    for case in ("handshake", "transfer"):
-        root = Path(logs) / "libhttpserver_quic-go" / case
+    for peer, case in ((peer, case) for peer in matrix["peers"] for case in matrix["cases"]):
+        root = Path(logs) / (matrix["server"] + "_" + peer) / case
         key = root / "server/keys.log"
         lines = key.read_text().splitlines()
         labels = set()
         for line in lines:
             fields = line.split()
-            if len(fields) != 3 or len(fields[1]) != 64:
+            if len(fields) != 3 or len(fields[1]) != 64 or len(fields[2]) not in (64, 96):
                 raise ValueError("malformed NSS key material")
             bytes.fromhex(fields[1])
             bytes.fromhex(fields[2])
             labels.add(fields[0])
         if not {"SERVER_TRAFFIC_SECRET_0", "CLIENT_TRAFFIC_SECRET_0"} <= labels or key.stat().st_mode & 0o077:
             raise ValueError("NSS key material missing or permissions unsafe")
-        captures = list((root / "sim").glob("*.pcap"))
-        if not captures:
-            raise ValueError("simulator packet capture missing")
+        captures = [root / "sim" / name for name in ("trace_node_left.pcap", "trace_node_right.pcap")]
         for path in captures + [root / "server/packets.pcap"]:
             inventory[str(path)] = capture_records(path)
         output = (root / "output.txt").read_text()
         if "interop endpoint failure:" in output or "READY 443" not in output:
             raise ValueError("endpoint failure or missing readiness")
     return inventory
+
+
+def validate_closure_rows(text, application_error=0):
+    close = None
+    for line in text.splitlines():
+        fields = line.split("\t")
+        if len(fields) != 5:
+            raise ValueError("malformed closure witness")
+        number, source, kinds, transport, application = fields
+        frames = {int(value, 0) for value in kinds.split(",") if value}
+        if source == "193.167.0.100" and frames & {0x1c, 0x1d}:
+            transport_codes = [int(value, 0) for value in transport.split(",") if value]
+            application_codes = [int(value, 0) for value in application.split(",") if value]
+            if (0x1c in frames and not transport_codes) or (0x1d in frames and not application_codes):
+                raise ValueError("peer closure error code missing")
+            if any(transport_codes) or any(code != application_error for code in application_codes):
+                raise ValueError("peer closure has an unexpected error code")
+            code = application_codes[0] if application_codes else 0
+            close = close or {"frame": int(number), "source": source, "error_code": code}
+        if close and source == "193.167.100.100" and frames & set(range(8, 16)):
+            raise ValueError("server STREAM after authenticated peer closure")
+    if close is None:
+        raise ValueError("authenticated zero-error peer CONNECTION_CLOSE missing")
+    return close
+
+
+def validate_closure_artifacts(logs, matrix):
+    witnesses = {}
+    for peer in matrix["peers"]:
+        root = Path(logs) / (matrix["server"] + "_" + peer) / matrix["categories"]["closure"]
+        command = ["tshark", "-r", str(root / "sim/trace_node_right.pcap"),
+                   "-o", "tls.keylog_file:" + str(root / "server/keys.log"),
+                   "-d", "udp.port==443,quic", "--disable-protocol", "http3",
+                   "-Y", "quic.header_form == 0 && quic.frame_type", "-T", "fields",
+                   "-e", "frame.number", "-e", "ip.src", "-e", "quic.frame_type",
+                   "-e", "quic.cc.error_code", "-e", "quic.cc.error_code.app"]
+        rows = subprocess.check_output(command, text=True, timeout=120)
+        (root / "closure-witness.tsv").write_text(rows)
+        witnesses[peer] = {"command": command, **validate_closure_rows(rows, matrix["peers"][peer].get("closure_application_error", 0))}
+    return witnesses
 
 
 def run_bounded(command, cwd, stdout, stderr, timeout):
@@ -155,7 +217,7 @@ def compose_config(text, direct_routing_compat=False):
 
 def provenance(image):
     root = Path(__file__).resolve().parents[1]
-    sources = ["src/detail/tls_session.cpp", "src/detail/quic_tls_session.cpp", "test/Makefile.am", "test/support/http3_network_owner.cpp", "test/support/http3_network_owner.hpp", "test/support/quic_interop_files.cpp", "test/support/quic_interop_files.hpp", "test/integ/quic_interop_endpoint.cpp", "test/interop/quic/run_endpoint.sh", "test/interop/quic/Dockerfile", "test/interop/quic/Dockerfile.native", "scripts/run-v3-quic-interop.py"]
+    sources = ["src/detail/quic_send_schedule.cpp", "src/detail/quic_connection_identity.cpp", "test/unit/quic_owner_peer.hpp", "test/unit/quic_interop_tls_test.cpp", "src/detail/tls_session.cpp", "src/detail/quic_tls_session.cpp", "test/Makefile.am", "test/support/http3_network_owner.cpp", "test/support/http3_network_lifecycle.cpp", "test/interop/quic/task173-matrix.json", "test/support/http3_network_owner.hpp", "test/support/quic_interop_files.cpp", "test/support/quic_interop_files.hpp", "test/integ/quic_interop_endpoint.cpp", "test/interop/quic/run_endpoint.sh", "test/interop/quic/Dockerfile", "test/interop/quic/Dockerfile.native", "scripts/run-v3-quic-interop.py"]
     commands = {"docker": ["docker", "version"], "compose": ["docker", "compose", "version"], "tshark": ["tshark", "--version"], "python_packages": [sys.executable, "-m", "pip", "freeze"], "endpoint_sha256": ["docker", "run", "--rm", "--network", "none", "--entrypoint", "sha256sum", image, "/quic_interop_endpoint"]}
     return {"provider_release": PROVIDER_RELEASE, "provider_archive_sha256": PROVIDER_ARCHIVE_SHA256, "source_sha256": {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in sources}, "tools": {name: subprocess.check_output(command, text=True, timeout=30).strip() for name, command in commands.items()}}
 
@@ -166,30 +228,46 @@ def main(argv=None):
     parser.add_argument("--output", required=True)
     parser.add_argument("--server-image", required=True)
     parser.add_argument("--docker-direct-routing-compat", action="store_true", help="Docker 28+ compatibility on the two task-owned runner networks only")
-    parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--matrix", choices=("task163", "task173"), default="task163")
+    parser.add_argument("--timeout", type=int, default=1200)
     args = parser.parse_args(argv)
+    matrix = load_matrix(args.matrix)
     output = Path(args.output).resolve()
     preflight(args.runner_dir, output)
-    images = {image: json.loads(subprocess.check_output(["docker", "image", "inspect", image], text=True))[0]["Id"] for image in (args.server_image, CLIENT, SIMULATOR)}
+    images = {image: json.loads(subprocess.check_output(["docker", "image", "inspect", image], text=True))[0]["Id"] for image in [args.server_image, SIMULATOR] + [peer["image"] for peer in matrix["peers"].values()]}
     inputs = provenance(images[args.server_image])
     output.mkdir(mode=0o700, parents=True)
     runner = output / "runner"
     shutil.copytree(args.runner_dir, runner, ignore=shutil.ignore_patterns(".git", "__pycache__"))
-    registry = {"libhttpserver": {"image": images[args.server_image], "url": "https://github.com/etr/libhttpserver", "role": "server"}, "quic-go": {"image": CLIENT, "url": "https://github.com/quic-go/quic-go", "role": "client"}}
+    registry = {matrix["server"]: {"image": images[args.server_image], "url": "https://github.com/etr/libhttpserver", "role": "server"}}
+    registry.update({name: {"image": peer["image"], "url": peer["url"], "role": "client"} for name, peer in matrix["peers"].items()})
     (runner / "implementations_quic.json").write_text(json.dumps(registry, indent=2))
     compose = runner / "docker-compose.yml"
     compose.write_text(compose_config(compose.read_text(), args.docker_direct_routing_compat))
-    command = [sys.executable, "run.py", "-s", "libhttpserver", "-c", "quic-go", "-t", "handshake,transfer", "-n", "libhttpserver", "-l", str(output / "runner-logs"), "-j", str(output / "results.json")]
-    manifest = {"runner_commit": RUNNER_COMMIT, "images": images, "docker_direct_routing_compat": args.docker_direct_routing_compat, "command": command, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(), "passed": False, "provenance": inputs}
+    command = [sys.executable, "run.py", "-s", "libhttpserver", "-c", ",".join(matrix["peers"]), "-t", ",".join(matrix["cases"]), "-n", "libhttpserver", "-l", str(output / "runner-logs"), "-j", str(output / "results.json")]
+    manifest = {"matrix": matrix, "runner_commit": RUNNER_COMMIT, "images": images, "docker_direct_routing_compat": args.docker_direct_routing_compat, "command": command, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(), "passed": False, "provenance": inputs}
     try:
         code = run_bounded(command, runner, output / "stdout.log", output / "stderr.log", args.timeout)
         manifest["returncode"] = code
-        if code or not validate_results(json.loads((output / "results.json").read_text())):
-            raise ValueError("required upstream handshake/transfer cells did not succeed")
-        manifest["capture_records"] = validate_artifacts(output / "runner-logs")
+        if code or not validate_results(json.loads((output / "results.json").read_text()), matrix):
+            raise ValueError("required upstream matrix cells did not succeed")
+        manifest["capture_records"] = validate_artifacts(output / "runner-logs", matrix)
+        if args.matrix == "task173":
+            manifest["closure_witnesses"] = validate_closure_artifacts(output / "runner-logs", matrix)
         manifest["passed"] = True
+    except Exception as error:
+        manifest["failure"] = str(error)
+        raise
     finally:
-        subprocess.run(["docker", "compose", "--env-file", "empty.env", "down", "--timeout", "5"], cwd=runner, capture_output=True, timeout=60)
+        try:
+            cleanup_env = {**os.environ, "SERVER": images[args.server_image], "CLIENT": next(iter(matrix["peers"].values()))["image"]}
+            cleanup_env.update({name: str(output) for name in ("SERVER_WWW", "CLIENT_WWW", "SERVER_DOWNLOADS", "CLIENT_DOWNLOADS", "SERVER_LOGS", "CLIENT_LOGS", "CERTS")})
+            cleanup = subprocess.run(["docker", "compose", "--env-file", "empty.env", "down", "--timeout", "5"], cwd=runner, env=cleanup_env, capture_output=True, timeout=30)
+            manifest["cleanup_returncode"] = cleanup.returncode
+            if cleanup.returncode:
+                manifest["cleanup_failure"] = str(cleanup.stderr)
+        except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+            manifest["cleanup_failure"] = str(error)
         manifest["artifacts"] = {str(path.relative_to(output)): {"bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in output.rglob("*") if path.is_file() and "runner" not in path.relative_to(output).parts}
         (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return 0

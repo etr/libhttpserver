@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <sys/stat.h>
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>  // NOLINT(build/c++17): C++20 tests.
 #include <fstream>
@@ -7,6 +8,7 @@
 #include <string>
 #include <vector>
 #include "./quic_tls_peer.hpp"
+#include "./quic_owner_peer.hpp"
 #include "test/support/http3_network_owner.hpp"
 #include "./littletest.hpp"
 LT_BEGIN_SUITE(interop_tls_suite)
@@ -119,6 +121,73 @@ LT_BEGIN_AUTO_TEST(interop_tls_suite, secret_export_rejects_symlinks_and_fails_c
     unsetenv("SSLKEYLOGFILE");
     std::filesystem::remove_all(root);
 LT_END_AUTO_TEST(secret_export_rejects_symlinks_and_fails_closed_at_size_bound)
+LT_BEGIN_AUTO_TEST(interop_tls_suite, hq_empty_peer_cid_rebinding_after_server_cid_rotation)
+    setenv("LIBHTTPSERVER_INTEROP_TEST_MODE", "1", 1);
+    const auto root = std::filesystem::temp_directory_path() / "task173-hq-cid-rebind";
+    std::filesystem::create_directories(root);
+    const std::string content(65536, 'x');
+    std::ofstream(root / "file").write(content.data(), content.size());
+    owner_test::peer f(65527, nullptr, nullptr, root.string(), true);
+    f.connect();
+    f.drain(20);
+    LT_ASSERT(f.issued.contains(1));
+    LT_ASSERT_EQ(f.issued[1].size(), f.server_cid.size());
+    std::copy(f.issued[1].begin(), f.issued[1].end(), f.server_cid.begin());
+    const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+    f.send(ping, f.address);
+    f.drain(10);
+    const std::string request = "GET /file\r\n";
+    const std::array<hd::quic_frame, 1> get{hd::quic_stream_frame{0, 0, std::as_bytes(std::span(request)), true}};
+    for (auto stream : {0u, 4u, 8u}) {
+        auto requests = get;
+        std::get<hd::quic_stream_frame>(requests[0]).stream = stream;
+        f.send(requests, f.address);
+    }
+    unsigned old_packets = 0;
+    for (unsigned turn = 0; turn < 100; ++turn) {
+        auto sent = f.prepare();
+        if (!sent) continue;
+        f.server->emitted(true, f.now);
+        ++old_packets;  // Deliberately strand the old-path flight without ACKs.
+    }
+    LT_CHECK(old_packets >= 2);
+    auto candidate = f.address;
+    candidate.peer.port = 5000;
+    f.send(ping, candidate);
+    bool saw_challenge = false;
+    for (unsigned turn = 0; turn < 20; ++turn) {
+        auto sent = f.prepare();
+        if (!sent) continue;
+        f.server->emitted(true, f.now);
+        if (sent->peer != candidate) continue;  // The old NAT mapping is gone.
+        std::array<std::byte, 1600> plain{};
+        unsigned level = 0;
+        std::uint64_t number = 0;
+        auto frames = f.decode(*sent, plain, level, number);
+        for (const auto& frame : frames) if (const auto* challenge = std::get_if<hd::quic_path_frame>(&frame); challenge && !challenge->response) {
+            saw_challenge = true;
+            const std::array<hd::quic_frame, 2> response{hd::quic_path_frame{true, challenge->data}, hd::quic_padding_frame{1100}};
+            f.send(response, candidate);
+        }
+        if (saw_challenge && sent->bytes.size() == 1200) break;
+    }
+    LT_CHECK(saw_challenge);
+    f.address = candidate;
+    for (unsigned turn = 0; turn < 1000 && !(f.fins[0] && f.fins[4] && f.fins[8]); ++turn) if (auto sent = f.prepare()) {
+        f.server->emitted(true, f.now);
+        const auto before = f.output[0].size();
+        f.accept(*sent);
+        if (f.output[0].size() > before) LT_CHECK(sent->peer == candidate);
+    }
+    const auto expected = std::as_bytes(std::span(content));
+    for (auto stream : {0u, 4u, 8u}) {
+        LT_CHECK(f.output[stream] == std::vector<std::byte>(expected.begin(), expected.end()));
+        LT_CHECK(f.fins[stream]);
+    }
+    LT_CHECK(f.server->failure().empty());
+    std::filesystem::remove_all(root);
+    unsetenv("LIBHTTPSERVER_INTEROP_TEST_MODE");
+LT_END_AUTO_TEST(hq_empty_peer_cid_rebinding_after_server_cid_rotation)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -342,6 +342,7 @@ quic_identity_result quic_connection_identity::receive(const quic_authenticated_
     bool nonprobing = std::any_of(frames.begin(), frames.end(), [](const auto& f) { return !probing(f); });
     if (nonprobing && (!s.newest || packet.number > *s.newest)) {
         s.newest = packet.number;
+        path.incoming = packet.destination;
         s.intent = index;
         if (*index != s.active) {
             if (!path.budget->validated()) path.challenge_due = !path.sent_challenge;
