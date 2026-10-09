@@ -9,9 +9,9 @@
 Provide HTTP/3 framing, QPACK and blocked streams for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Generate H3 frame, control-stream and QPACK instruction permutations.
-- [ ] Fuzz blocked-section cancellation and decoded-size limits.
-- [ ] Assert bounded memory/work and typed errors.
+- [x] Generate H3 frame, control-stream and QPACK instruction permutations.
+- [x] Fuzz blocked-section cancellation and decoded-size limits.
+- [x] Assert bounded memory/work and typed errors.
 
 **Dependencies:**
 - Blocked by: TASK-169, TASK-170
@@ -24,4 +24,6 @@ Provide HTTP/3 framing, QPACK and blocked streams for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-017, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** [Local replay and sanitizer receipts](../../../docs/task-177-http3-fuzz-evidence.md)

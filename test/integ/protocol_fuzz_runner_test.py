@@ -67,6 +67,78 @@ class FuzzRunnerTest(unittest.TestCase):
                 self.assertIn(expected, result.stderr)
                 self.assertFalse(pathlib.Path(build, 'probe.cpp').exists())
 
+    def test_http3_and_qpack_missing_compiler_is_fatal(self):
+        for target in ('http3_engine', 'qpack'):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as build:
+                result = subprocess.run([
+                    'bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                    '--build-dir', build, '--targets', target,
+                    '--compiler', '/missing/compiler'], capture_output=True,
+                    text=True, timeout=10)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('libFuzzer compiler unavailable', result.stderr)
+
+    def test_http3_and_qpack_require_tls_off_before_compilation(self):
+        for target in ('http3_engine', 'qpack'):
+            for config in (None, '#define NATIVE_V3_TLS 1\n'):
+                with self.subTest(target=target, config=config), tempfile.TemporaryDirectory() as build:
+                    args = ['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                            '--build-dir', build, '--targets', target, '--compiler', '/usr/bin/true']
+                    if config is not None:
+                        pathlib.Path(build, 'config.h').write_text(config)
+                        args += ['--native-config-dir', build]
+                    result = subprocess.run(args, capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn('TLS-off', result.stderr)
+                    self.assertFalse(pathlib.Path(build, 'probe.cpp').exists())
+
+    def test_http3_qpack_build_and_invocation_contract(self):
+        # This probe verifies shell arguments; the real sanitizer runs are separate.
+        import json
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            location = pathlib.Path(directory)
+            compiler = location / 'compiler.py'
+            compiler.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+if '--version' in sys.argv:
+    print('test argument recorder'); sys.exit(0)
+with open(os.environ['FUZZ_ARGUMENT_LOG'], 'a') as log:
+    log.write(json.dumps(sys.argv[1:]) + '\\n')
+output = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
+output.write_text("#!/usr/bin/env python3\\nimport json, os, sys\\nwith open(os.environ['FUZZ_RUN_LOG'], 'a') as log: log.write(json.dumps(sys.argv) + '\\\\n')\\n")
+output.chmod(0o755)
+''')
+            compiler.chmod(0o755)
+            config = location / 'native'
+            config.mkdir()
+            (config / 'config.h').write_text('/* TLS disabled */\n')
+            build = location / 'fuzz'
+            environment = dict(os.environ, FUZZ_ARGUMENT_LOG=str(location / 'compile.jsonl'),
+                               FUZZ_RUN_LOG=str(location / 'run.jsonl'))
+            result = subprocess.run([
+                'bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                '--build-dir', str(build), '--targets', 'http3_engine qpack',
+                '--compiler', str(compiler), '--native-config-dir', str(config),
+                '--runs', '9', '--seconds', '2'], env=environment,
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            builds = [json.loads(line) for line in (location / 'compile.jsonl').read_text().splitlines()]
+            runs = [json.loads(line) for line in (location / 'run.jsonl').read_text().splitlines()]
+            for target, macro, length in [('http3_engine', '-DHTTP3_ENGINE_LIBFUZZER', 4096),
+                                          ('qpack', '-DQPACK_LIBFUZZER', 512)]:
+                arguments = next(args for args in builds if macro in args)
+                self.assertIn('-fsanitize=fuzzer,address,undefined', arguments)
+                self.assertIn(str(ROOT / 'src/detail/http3_connection.cpp'), arguments)
+                self.assertTrue((build / target / 'sources.list').is_file())
+                invocation = next(args for args in runs if args[0] == str(build / target / 'fuzz'))
+                for flag in ('-runs=9', '-max_total_time=2', '-timeout=5', '-rss_limit_mb=512',
+                             '-seed=128', '-max_len=' + str(length)):
+                    self.assertIn(flag, invocation)
+                self.assertEqual(invocation[1], str(build / target / 'seeds'))
+                self.assertTrue(list((build / target / 'seeds').glob('*.seed')))
+                self.assertTrue((build / target / 'reproduce.sh').is_file())
+
     def test_requested_unavailable_compiler_fails(self):
         with tempfile.TemporaryDirectory() as build:
             result = subprocess.run(['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),

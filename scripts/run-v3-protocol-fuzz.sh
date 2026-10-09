@@ -17,13 +17,13 @@ done
 [ -n "$build" ] || { echo 'required: --build-dir' >&2; exit 2; }
 [ -n "${targets//[[:space:]]/}" ] || { echo 'empty fuzz target selection' >&2; exit 2; }
 for target in $targets; do
-    case "$target" in http1_head|http1_body|websocket_codec|hpack|http2_engine|quic_parser|quic_state|quic_recovery|quic_tls_callbacks) ;; *) echo "unknown fuzz target: $target" >&2; exit 2 ;; esac
+    case "$target" in http1_head|http1_body|websocket_codec|hpack|http2_engine|quic_parser|quic_state|quic_recovery|quic_tls_callbacks|http3_engine|qpack) ;; *) echo "unknown fuzz target: $target" >&2; exit 2 ;; esac
 done
 command -v "$compiler" >/dev/null || { echo 'libFuzzer compiler unavailable' >&2; exit 1; }
 provider_cflags=() provider_libs=()
 for target in $targets; do
     case "$target" in
-        quic_state|quic_recovery)
+        quic_state|quic_recovery|http3_engine|qpack)
             [ -f "$native_config/config.h" ] || { echo "$target fuzz requires --native-config-dir with a configured TLS-off build" >&2; exit 1; }
             if grep -q '^#define NATIVE_V3_TLS' "$native_config/config.h"; then
                 echo "$target fuzz requires a TLS-off native configuration" >&2; exit 1
@@ -71,6 +71,8 @@ for target in $targets; do
     # Only copies are writable by libFuzzer; source fixtures remain immutable.
     max_len=65536
     case "$target" in
+        http3_engine) cp "$root"/test/data/http3/*.seed "$build/$target/seeds/"; max_len=4096 ;;
+        qpack) cp "$root"/test/data/qpack/seeds/*.seed "$build/$target/seeds/"; max_len=512 ;;
         quic_parser) cp "$root"/test/data/quic/parser/*.seed "$build/$target/seeds/"; max_len=4096 ;;
         quic_recovery) cp "$root"/test/data/quic/recovery/*.seed "$build/$target/seeds/"; max_len=4096 ;;
         quic_tls_callbacks) cp "$root"/test/data/quic/callbacks/*.seed "$build/$target/seeds/"; max_len=4096 ;;
@@ -107,6 +109,8 @@ PY
         target_flags+=(-DQUIC_TLS_CALLBACKS_LIBFUZZER -I"$root/test" -I"$native_config" "${provider_cflags[@]}")
         printf '%s\n' "${provider_cflags[@]}" "${provider_libs[@]}" > "$build/$target/provider.log"
     fi
+    if [ "$target" = http3_engine ]; then target_flags+=(-DHTTP3_ENGINE_LIBFUZZER -I"$root/test" -I"$native_config"); fi
+    if [ "$target" = qpack ]; then target_flags+=(-DQPACK_LIBFUZZER -I"$root/test" -I"$native_config"); fi
     if [ "$target" = hpack ]; then target_flags+=(-DHPACK_LIBFUZZER -I"$root/test"); fi
     if [ "$target" = http2_engine ]; then
         [ -f "$native_config/config.h" ] || { echo 'HTTP/2 fuzz requires --native-config-dir with a configured TLS-off build' >&2; exit 1; }
@@ -115,7 +119,7 @@ PY
         fi
         target_flags+=(-DHTTP2_ENGINE_LIBFUZZER -I"$root/test" -I"$native_config")
     fi
-    if [ "$target" = http2_engine ] || [ "$target" = quic_state ] || [ "$target" = quic_recovery ] || [ "$target" = quic_tls_callbacks ]; then
+    if [ "$target" = http3_engine ] || [ "$target" = qpack ] || [ "$target" = http2_engine ] || [ "$target" = quic_state ] || [ "$target" = quic_recovery ] || [ "$target" = quic_tls_callbacks ]; then
         # Compile configured native project sources with the same instrumentation;
         # linking an ordinary library would leave the engine uninstrumented.
         python3 - "$root/src/Makefile.am" "$target" > "$build/$target/sources.list" <<'PYTHON'
