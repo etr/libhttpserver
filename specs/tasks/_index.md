@@ -323,7 +323,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-175 | [Build independent WebSocket-over-HTTP/3 client harness](M12-http3-full/TASK-175.md) | M12 | Complete | TASK-172 |
 | TASK-176 | [Fuzz QUIC recovery and TLS callback event sequences](M12-http3-full/TASK-176.md) | M12 | Complete | TASK-166 |
 | TASK-177 | [Fuzz HTTP/3 framing, QPACK and blocked streams](M12-http3-full/TASK-177.md) | M12 | Complete | TASK-169, TASK-170 |
-| TASK-178 | [Gate full HTTP/3 and WebSocket-over-H3 conformance](M12-http3-full/TASK-178.md) | M12 | Not Started | TASK-173, TASK-174, TASK-175, TASK-176, TASK-177 |
+| TASK-178 | [Gate full HTTP/3 and WebSocket-over-H3 conformance](M12-http3-full/TASK-178.md) | M12 | Complete | TASK-173, TASK-174, TASK-175, TASK-176, TASK-177 |
 | TASK-179 | [Audit v2-to-v3 behavior parity across all protocols](M13-v3-release/TASK-179.md) | M13 | Not Started | TASK-128, TASK-145, TASK-178 |
 | TASK-180 | [Verify hierarchical resource limits and slow-peer plateaus across engines](M13-v3-release/TASK-180.md) | M13 | Not Started | TASK-128, TASK-145, TASK-178 |
 | TASK-181 | [Expose bounded diagnostic callbacks and counters](M13-v3-release/TASK-181.md) | M13 | Not Started | TASK-108, TASK-145, TASK-178 |

@@ -78,6 +78,18 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("com.docker.network.bridge.gateway_mode_ipv4: 'nat-unprotected'", compatible)
         self.assertIn("com.docker.network.bridge.gateway_mode_ipv6: 'nat-unprotected'", compatible)
 
+    def test_simulator_selects_realtime_before_scenario_initialization(self):
+        compose = ("services:\n  sim:\n    environment:\n"
+                   "      - SCENARIO=$SCENARIO\n  client:\n    environment:\n"
+                   "      - ROLE=client\n  server:\n    environment:\n      - ROLE=server\n")
+        setting = "NS_GLOBAL_VALUE=SimulatorImplementationType=ns3::RealtimeSimulatorImpl"
+        for compatible in (False, True):
+            configured = interop.compose_config(compose, compatible)
+            self.assertEqual(configured.count(setting), 1)
+            self.assertIn(setting, configured.split("  client:")[0])
+            self.assertIn("      - SCENARIO=$SCENARIO\n", configured)
+            self.assertEqual(configured.split("  client:")[1], compose.split("  client:")[1])
+
     def test_missing_artifacts_never_pass(self):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaises((ValueError, FileNotFoundError)):

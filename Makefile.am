@@ -692,3 +692,9 @@ EXTRA_DIST += docs/task-173-quic-interop-evidence.md
 EXTRA_DIST += docs/task-174-http3-semantic-matrix.md
 
 EXTRA_DIST += scripts/run-v3-http3-websocket-gates.py docs/task-175-http3-websocket-harness.md
+
+EXTRA_DIST += scripts/run-v3-http3-full-gates.py docs/task-178-http3-full-conformance.md
+# Explicit tools/builds are required; see the evidence document for FULL_HTTP3_ARGS.
+check-v3-http3-full:
+	@python3 $(top_srcdir)/scripts/run-v3-http3-full-gates.py $(FULL_HTTP3_ARGS)
+.PHONY: check-v3-http3-full

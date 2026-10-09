@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "stages": [
+    "native-off",
+    "native-on",
+    "sanitized-off",
+    "sanitized-on",
+    "quic-interop",
+    "http3-interop",
+    "websocket-interop",
+    "fuzz-off",
+    "fuzz-on"
+  ],
+  "coverage": [
+    {
+      "id": "framing",
+      "rfc": "9114",
+      "sections": "7.2",
+      "suite": "http3_frame",
+      "stage": "native-off",
+      "source": "test/unit/http3_frame_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "settings",
+      "rfc": "9114",
+      "sections": "7.2.4",
+      "suite": "http3_settings",
+      "stage": "native-off",
+      "source": "test/unit/http3_settings_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "critical-streams",
+      "rfc": "9114",
+      "sections": "6.2",
+      "suite": "http3_connection",
+      "stage": "native-off",
+      "source": "test/unit/http3_connection_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "semantics",
+      "rfc": "9114",
+      "sections": "4",
+      "suite": "http3_exchange",
+      "stage": "native-off",
+      "source": "test/unit/http3_exchange_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": [
+        {
+          "stage": "http3-interop",
+          "suite": "task174",
+          "source": "scripts/run-v3-http3-gates.py"
+        }
+      ]
+    },
+    {
+      "id": "trailers",
+      "rfc": "9114",
+      "sections": "4.1",
+      "suite": "http3_streaming",
+      "stage": "native-off",
+      "source": "test/unit/http3_streaming_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": [
+        {
+          "stage": "http3-interop",
+          "suite": "task174",
+          "source": "test/integ/http3_semantic_aioquic.py"
+        }
+      ]
+    },
+    {
+      "id": "cancellation",
+      "rfc": "9114",
+      "sections": "4.1.1",
+      "suite": "http3_cancellation",
+      "stage": "native-off",
+      "source": "test/unit/http3_cancellation_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "goaway",
+      "rfc": "9114",
+      "sections": "5.2, 7.2.6",
+      "suite": "http3_drain",
+      "stage": "native-off",
+      "source": "test/unit/http3_drain_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": [
+        {
+          "stage": "http3-interop",
+          "suite": "task174",
+          "source": "test/integ/http3-client-go/semantic.go"
+        }
+      ]
+    },
+    {
+      "id": "qpack-codecs",
+      "rfc": "9204",
+      "sections": "4",
+      "suite": "qpack_primitives",
+      "stage": "native-off",
+      "source": "test/unit/qpack_primitives_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "qpack-dynamic",
+      "rfc": "9204",
+      "sections": "2.2, 4.3",
+      "suite": "qpack_dynamic_corpus",
+      "stage": "native-off",
+      "source": "test/unit/qpack_dynamic_corpus_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "qpack-blocking",
+      "rfc": "9204",
+      "sections": "2.1.2, 2.2",
+      "suite": "http3_qpack_scheduling",
+      "stage": "native-off",
+      "source": "test/unit/http3_qpack_scheduling_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "qpack-limits",
+      "rfc": "9204",
+      "sections": "2.1.1, 3",
+      "suite": "qpack_accounting",
+      "stage": "native-off",
+      "source": "test/unit/qpack_accounting_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "ws-negotiation",
+      "rfc": "9220",
+      "sections": "3, 4",
+      "suite": "http3_websocket_handshake",
+      "stage": "native-off",
+      "source": "test/unit/http3_websocket_handshake_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-011",
+        "PRD-V3N-REQ-012",
+        "PRD-V3N-REQ-013"
+      ],
+      "supporting_evidence": [
+        {
+          "stage": "websocket-interop",
+          "suite": "websocket",
+          "source": "scripts/run-v3-http3-websocket-gates.py"
+        }
+      ]
+    },
+    {
+      "id": "ws-tunnels",
+      "rfc": "9220",
+      "sections": "4",
+      "suite": "http3_websocket",
+      "stage": "native-off",
+      "source": "test/unit/http3_websocket_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-011",
+        "PRD-V3N-REQ-012",
+        "PRD-V3N-REQ-013"
+      ],
+      "supporting_evidence": [
+        {
+          "stage": "websocket-interop",
+          "suite": "websocket",
+          "source": "test/integ/http3_websocket_aioquic.py"
+        }
+      ]
+    },
+    {
+      "id": "malformed",
+      "rfc": "9114",
+      "sections": "8",
+      "suite": "http3_fuzz_replay",
+      "stage": "native-off",
+      "source": "test/unit/http3_fuzz_replay_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": [
+        {
+          "stage": "native-off",
+          "suite": "quic_fuzz_replay",
+          "source": "test/unit/quic_fuzz_replay_test.cpp"
+        },
+        {
+          "stage": "native-off",
+          "suite": "websocket_conformance",
+          "source": "test/conformance/websocket"
+        }
+      ]
+    },
+    {
+      "id": "slow-peers",
+      "rfc": "9220",
+      "sections": "4",
+      "suite": "http3_websocket_flow",
+      "stage": "native-off",
+      "source": "test/unit/http3_websocket_flow_test.cpp",
+      "kind": "deterministic transcript",
+      "requirements": [
+        "PRD-V3N-REQ-011",
+        "PRD-V3N-REQ-012",
+        "PRD-V3N-REQ-013"
+      ],
+      "supporting_evidence": [
+        {
+          "stage": "native-off",
+          "suite": "http3_qpack_scheduling",
+          "source": "test/unit/http3_qpack_scheduling_test.cpp"
+        },
+        {
+          "stage": "native-off",
+          "suite": "http3_drain",
+          "source": "test/unit/http3_drain_test.cpp"
+        },
+        {
+          "stage": "http3-interop",
+          "suite": "task174",
+          "source": "scripts/run-v3-http3-gates.py"
+        },
+        {
+          "stage": "websocket-interop",
+          "suite": "websocket",
+          "source": "scripts/run-v3-http3-websocket-gates.py"
+        }
+      ]
+    },
+    {
+      "id": "transport",
+      "rfc": "9000",
+      "sections": "8, 9, 10, 13",
+      "suite": "task173",
+      "stage": "quic-interop",
+      "source": "test/interop/quic/task173-matrix.json",
+      "kind": "independent network witness",
+      "requirements": [
+        "PRD-V3N-REQ-008"
+      ],
+      "supporting_evidence": []
+    },
+    {
+      "id": "fuzz",
+      "rfc": "9204",
+      "sections": "2, 3, 4",
+      "suite": "qpack",
+      "stage": "fuzz-off",
+      "source": "test/data/qpack/seeds/README.md",
+      "kind": "fuzz exploration",
+      "requirements": [
+        "PRD-V3N-REQ-007"
+      ],
+      "supporting_evidence": []
+    }
+  ],
+  "exclusions": [
+    {
+      "id": "early-data",
+      "reason": "0-RTT is disabled by the architecture; handshake receipts require early_data=false. See specs/architecture."
+    },
+    {
+      "id": "ws-extensions",
+      "reason": "WebSocket extensions are unsupported; RFC 9220 CONNECT and baseline RFC 6455 framing remain required. Extension refusal is tested by http3_websocket_handshake."
+    }
+  ],
+  "quic_exclusions": {
+    "handshakeloss": "Loss category uses the unchanged transferloss predicate; extreme-loss 50-connection multiconnect is outside this bounded matrix.",
+    "rebind-addr": "Rebinding category uses rebind-port, including PATH_CHALLENGE/PATH_RESPONSE predicates.",
+    "closure": "Pinned runner has no dedicated closure predicate; transfer needs an additional authenticated zero-error CONNECTION_CLOSE witness. Transfer success alone cannot satisfy closure.",
+    "aioquic": "Pinned aioquic 1.3.0 passed five cases but timed out on repeated port rebinding; simulator captures show no client packet after translation. Required rebinding remains covered by picoquic, not waived."
+  }
+}

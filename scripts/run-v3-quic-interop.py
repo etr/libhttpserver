@@ -16,6 +16,7 @@ CLIENT = "martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45
 PROVIDER_RELEASE = "3.5.9"
 PROVIDER_ARCHIVE_SHA256 = "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a"
 SIMULATOR = "martenseemann/quic-network-simulator@sha256:c23d82a55caffe681b1bdae65d4d30d23e1283141a414a7f02ee56cf15f9c6b9"
+SIMULATOR_GLOBAL_VALUES = "SimulatorImplementationType=ns3::RealtimeSimulatorImpl"
 
 def load_matrix(name="task163"):
     if name == "task173":
@@ -210,6 +211,9 @@ def preflight(runner, output):
 
 def compose_config(text, direct_routing_compat=False):
     text = text.replace("image: martenseemann/quic-network-simulator\n", "image: " + SIMULATOR + "\n")
+    # Select real time during ns-3 global initialization, before a scenario can
+    # instantiate the default discrete-event simulator and finish immediately.
+    text = text.replace("      - SCENARIO=$SCENARIO\n", "      - SCENARIO=$SCENARIO\n      - NS_GLOBAL_VALUE=" + SIMULATOR_GLOBAL_VALUES + "\n")
     if direct_routing_compat:
         text = text.replace("com.docker.network.bridge.enable_ip_masquerade: 'false'", "com.docker.network.bridge.enable_ip_masquerade: 'false'\n      com.docker.network.bridge.gateway_mode_ipv4: 'nat-unprotected'\n      com.docker.network.bridge.gateway_mode_ipv6: 'nat-unprotected'")
     return text
@@ -245,7 +249,7 @@ def main(argv=None):
     compose = runner / "docker-compose.yml"
     compose.write_text(compose_config(compose.read_text(), args.docker_direct_routing_compat))
     command = [sys.executable, "run.py", "-s", "libhttpserver", "-c", ",".join(matrix["peers"]), "-t", ",".join(matrix["cases"]), "-n", "libhttpserver", "-l", str(output / "runner-logs"), "-j", str(output / "results.json")]
-    manifest = {"matrix": matrix, "runner_commit": RUNNER_COMMIT, "images": images, "docker_direct_routing_compat": args.docker_direct_routing_compat, "command": command, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(), "passed": False, "provenance": inputs}
+    manifest = {"matrix": matrix, "runner_commit": RUNNER_COMMIT, "images": images, "docker_direct_routing_compat": args.docker_direct_routing_compat, "simulator_global_values": SIMULATOR_GLOBAL_VALUES, "command": command, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(), "passed": False, "provenance": inputs}
     try:
         code = run_bounded(command, runner, output / "stdout.log", output / "stderr.log", args.timeout)
         manifest["returncode"] = code
