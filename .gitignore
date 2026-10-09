@@ -116,3 +116,6 @@ __pycache__/
 /build-task172-san/
 
 !test/integ/http3_semantic_aioquic.py
+
+!test/integ/http3_websocket*.py
+!scripts/run-v3-http3-websocket-gates.py

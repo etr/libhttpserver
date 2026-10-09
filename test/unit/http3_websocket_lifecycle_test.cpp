@@ -175,6 +175,22 @@ LT_BEGIN_AUTO_TEST(h3_ws_lifecycle_suite, drain_deadline_cancels_credit_blocked_
     f.engine->check_drain(deadline + std::chrono::seconds(1)); LT_CHECK_EQ(calls, 1U);
     h::server::drain_result result; LT_ASSERT(ticket.wait(result).ok()); LT_CHECK(result.status == h::server::drain_status::deadline_expired);
 LT_END_AUTO_TEST(drain_deadline_cancels_credit_blocked_tunnel_and_ignores_late_completion)
+LT_BEGIN_AUTO_TEST(h3_ws_lifecycle_suite, peer_request_cancelled_preserves_close_reason_in_both_frame_orders)
+    for (bool stop_first : {false, true}) {
+        fixture f; LT_ASSERT(f.settings()); LT_ASSERT(f.request()); f.drain();
+        unsigned calls = 0; h::websocket::close_info info;
+        LT_ASSERT(f.sessions[0].on_close([&](auto value) { ++calls; info = std::move(value); }).ok());
+        auto received = f.take();
+        if (stop_first) f.engine->stop_sending(0, 0x10c);
+        LT_ASSERT(f.flow.receive(*f.streams[0], h::detail::quic_reset_stream_frame{0, 0x10c, f.incoming[0]})); f.pump(0);
+        if (!stop_first) f.engine->stop_sending(0, 0x10c);
+        f.executor.run_pending(); LT_CHECK_EQ(calls, 1U);
+        LT_CHECK(info.status.code() == http::outcome_code::cancelled); LT_CHECK(!info.clean);
+        LT_ASSERT(received->has_value()); LT_CHECK((*received)->status.code() == http::outcome_code::cancelled);
+        LT_ASSERT(f.request(4, h3test::get(), true)); LT_CHECK_EQ(f.reply(4).heads[0][0].value, "204");
+        f.engine->disconnect({http::outcome_code::connection_closed, "test disconnect"}); LT_CHECK_EQ(calls, 1U);
+    }
+LT_END_AUTO_TEST(peer_request_cancelled_preserves_close_reason_in_both_frame_orders)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

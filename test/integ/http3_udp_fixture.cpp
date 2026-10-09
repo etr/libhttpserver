@@ -25,6 +25,7 @@
 #include <httpserver/detail/io_poll_backend.hpp>
 #include "../support/http3_network_owner.hpp"
 #include "../support/http3_semantic_routes.hpp"
+#include "../support/http3_websocket_routes.hpp"
 #include "../unit/io_udp_backend_contract.hpp"
 namespace {
 namespace h = httpserver;
@@ -107,6 +108,7 @@ struct fixture {
     };
     std::map<std::pair<std::uint64_t, std::uint64_t>, progress> observations;
     std::map<const h::exchange*, std::uint64_t> semantic_streams;
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::shared_ptr<h3wstest::observation>> websocket;
     std::future<h::server::drain_result> drain;
     std::uint64_t drain_connection = 0;
     std::uint16_t port = 0;
@@ -170,6 +172,14 @@ struct fixture {
             snapshot(kind, x.connection_id(), stream);
             if (std::string_view(kind) == "finished") semantic_streams.erase(&x);
         });
+        h3wstest::install(routes, [this](h::exchange& x) {
+            if (websocket.size() >= 16) throw std::runtime_error("WebSocket observation bound");
+            const auto id = x.connection_id(), stream = connections.at(id)->current_stream();
+            auto state = std::make_shared<h3wstest::observation>();
+            websocket.emplace(std::pair{id, stream}, state);
+            state->emit = [this, id, stream](const char* kind) { ws_snapshot(kind, id, stream); };
+            return state;
+        });
         auto socket = io_udp_contract::udp_socket();
         if (socket == hd::pollsys::k_invalid_socket) throw std::runtime_error("UDP bind failed");
         port = io_udp_contract::endpoint(socket).peer.port;
@@ -193,6 +203,17 @@ struct fixture {
         std::cout << "{\"event\":\"" << kind << "\",\"sequence\":" << ++sequence << ",\"connection\":" << id << ",\"stream\":" << stream << ",\"read_bytes\":" << p.read << ",\"started\":" << p.started
                   << ",\"completed\":" << p.completed << ",\"finished\":" << p.finished << "}" << std::endl;
     }
+    void ws_snapshot(const char* kind, std::uint64_t id, std::uint64_t stream) {
+        const auto& s = *websocket.at({id, stream});
+        std::cout << "{\"event\":\"" << kind << "\",\"sequence\":" << ++sequence
+                  << ",\"connection\":" << id << ",\"stream\":" << stream
+                  << ",\"received\":" << s.received << ",\"received_bytes\":" << s.received_bytes << ",\"kind\":" << s.kind
+                  << ",\"accepted\":" << s.accepted << ",\"blocked\":" << s.blocked << ",\"resumed\":" << s.resumed
+                  << ",\"waiting\":" << (s.waiting ? "true" : "false") << ",\"close_count\":" << s.close_count
+                  << ",\"reason\":\"" << s.reason << "\",\"code\":" << (s.code ? std::to_string(*s.code) : "null")
+                  << ",\"clean\":" << (s.clean ? "true" : "false") << ",\"retired\":" << (s.retired ? "true" : "false")
+                  << ",\"subprotocol\":\"" << s.subprotocol << "\"}" << std::endl;
+    }
     void command(const std::string& line) {
         std::istringstream input(line);
         std::string name;
@@ -206,6 +227,8 @@ struct fixture {
             }
         } else if (name == "reset") {
             if (!holds.empty()) throw std::runtime_error("reset with active held request");
+        } else if (name == "ws_snapshot") {
+            ws_snapshot("ws_snapshot", id, stream);
         } else if (name == "snapshot") {
             snapshot("snapshot", id, stream);
         } else if (name == "drain") {

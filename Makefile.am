@@ -689,3 +689,5 @@ EXTRA_DIST += docs/task-172-http3-websocket-data-lifecycle.md
 EXTRA_DIST += docs/task-173-quic-interop-evidence.md
 
 EXTRA_DIST += docs/task-174-http3-semantic-matrix.md
+
+EXTRA_DIST += scripts/run-v3-http3-websocket-gates.py docs/task-175-http3-websocket-harness.md

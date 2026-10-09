@@ -2382,3 +2382,9 @@ check_PROGRAMS += http3_semantic_h1
 http3_semantic_h1_SOURCES = unit/http3_semantic_h1_test.cpp parity/response_frame.cpp
 http3_semantic_h1_LDADD =
 EXTRA_DIST += support/http3_semantic_h1.hpp
+
+check_PROGRAMS += http3_websocket_harness
+http3_websocket_harness_SOURCES = unit/http3_websocket_harness_test.cpp
+http3_websocket_harness_LDADD = $(http3_headers_LDADD)
+http3_websocket_harness_LDFLAGS = $(http3_headers_LDFLAGS)
+EXTRA_DIST += support/http3_websocket_routes.hpp integ/http3_websocket_wire.py integ/http3_websocket_client_test.py integ/http3_websocket_aioquic.py integ/http3_websocket_gate_runner_test.py
