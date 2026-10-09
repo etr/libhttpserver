@@ -196,6 +196,44 @@ LT_BEGIN_AUTO_TEST(flow_storage_suite, scheduled_emission_is_allocation_free_and
     }
     LT_CHECK(root.in_use(resource) == 0);
 LT_END_AUTO_TEST(scheduled_emission_is_allocation_free_and_returns_scheduler_budget)
+LT_BEGIN_AUTO_TEST(flow_storage_suite, fixed_datagram_metadata_is_charged_even_with_no_packet_capacity)
+    hd::quic_recovery_config config;
+    config.max_receive_ranges = config.max_sent_packets = config.max_information = config.max_retained_bytes = 0;
+    hs::budget_limits limits;
+    limits.set(resource, sizeof(hd::quic_send_plan));
+    auto root = hs::resource_budget::root(limits);
+    hd::quic_recovery recovery(config, root);
+    LT_CHECK(recovery.begin_datagram().code == hd::quic_recovery_code::no_memory);
+    LT_CHECK(root.in_use(resource) == 0);
+LT_END_AUTO_TEST(fixed_datagram_metadata_is_charged_even_with_no_packet_capacity)
+LT_BEGIN_AUTO_TEST(flow_storage_suite, coalesced_commit_is_allocation_free_under_connection_envelope)
+    auto root = hs::resource_budget::root({});
+    {
+        hd::quic_recovery recovery({}, root);
+        hd::quic_transport_parameters parameters;
+        hd::quic_flow_control flow(hd::quic_endpoint_role::server, parameters, parameters, 4, root);
+        std::array<std::array<std::byte, 1200>, 3> output{};
+        std::array<hd::quic_datagram_emission, 3> emitted{};
+        for (unsigned i = 0; i < 3; ++i)
+            LT_ASSERT(recovery.retain_crypto(static_cast<hd::quic_pn_space>(i), 0, std::span(output[i]).first(10)));
+        LT_ASSERT(recovery.begin_datagram());
+        for (unsigned i = 0; i < 3; ++i) {
+            auto plan = recovery.prepare_datagram_packet(static_cast<hd::quic_pn_space>(i), output[i], {}, {400, 40}, flow);
+            LT_ASSERT(plan);
+            emitted[i] = {plan.token, 400, true, true};
+        }
+        allocation_countdown = 0;
+        bool success = false;
+        try {
+            success = static_cast<bool>(recovery.commit_datagram(emitted, {}));
+        } catch (const std::bad_alloc&) {
+            success = false;
+        }
+        allocation_countdown = -1;
+        LT_CHECK(success && recovery.bytes_in_flight() == 1200);
+    }
+    LT_CHECK(root.in_use(resource) == 0);
+LT_END_AUTO_TEST(coalesced_commit_is_allocation_free_under_connection_envelope)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

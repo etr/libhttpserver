@@ -51,7 +51,7 @@ quic_recovery_code quic_recovery::implementation::send_admission(quic_pn_space s
     if (!s) return quic_recovery_code::invalid;
     if (s->discarded) return quic_recovery_code::discarded;
     if (admission != quic_recovery_code::ok) return admission;
-    if (pending) return quic_recovery_code::busy;
+    if (pending || (datagram_active && !datagram_staging)) return quic_recovery_code::busy;
     if (s->next_number > k_quic_max_integer || !next_token) return quic_recovery_code::capacity;
     return quic_recovery_code::ok;
 }
@@ -67,7 +67,7 @@ bool quic_recovery::implementation::valid_emission(std::size_t bytes, bool elici
     if (!bytes || bytes > 65535 || (eliciting && !flight)) return false;
     return !pending->prepared || (pending->ack_eliciting == eliciting && bytes >= pending->payload_bytes);
 }
-bool quic_recovery::preparation_pending() const { return impl_->pending.has_value(); }
+bool quic_recovery::preparation_pending() const { return impl_->pending.has_value() || impl_->datagram_active; }
 quic_recovery_result quic_recovery::abandon_packet(std::uint64_t token) {
     if (!impl_->pending || impl_->pending->token != token) return {quic_recovery_code::invalid};
     impl_->pending.reset();
@@ -142,7 +142,7 @@ quic_recovery_events quic_recovery::receive_ack(quic_pn_space space, const quic_
     impl_->acknowledge_congestion_runs(space, ranges);
     impl_->send_due.reset();
     impl_->sample_ack(*s, ranges, ack, now, space);
-    auto result = impl_->acknowledge_packets(*s, ranges, space);
+    auto result = impl_->acknowledge_packets(*s, ranges, space, now);
     if (!result.acknowledged_packets) return result;
     s->largest_acked = std::max(s->largest_acked.value_or(0), ack.largest);
     result.lost_bytes = impl_->detect_loss(*s, now);
@@ -159,7 +159,7 @@ bool quic_recovery::implementation::sample_ack(const space_state& s, std::span<c
     bool newly_eliciting = false, newly_acknowledged = false;
     std::optional<time_point> sample_sent;
     for (const auto& p : s.sent) {
-        if (p.path_epoch != path_epoch || p.acknowledged || !covers(ranges, p.number)) continue;
+        if (p.path_epoch != path_epoch || p.acknowledged || (p.pmtu_probe && !p.in_flight) || !covers(ranges, p.number)) continue;
         newly_acknowledged = true;
         newly_eliciting |= p.ack_eliciting;
         if (p.number == ack.largest) sample_sent = p.sent_at;
@@ -168,13 +168,23 @@ bool quic_recovery::implementation::sample_ack(const space_state& s, std::span<c
     if (sample_sent && newly_eliciting) update_rtt(recovery_elapsed(now, *sample_sent), ack.delay, space);
     return newly_eliciting;
 }
-quic_recovery_events quic_recovery::implementation::acknowledge_packets(space_state& s, std::span<const quic_ack_range> ranges, quic_pn_space space) {
+quic_recovery_events quic_recovery::implementation::acknowledge_packets(space_state& s, std::span<const quic_ack_range> ranges, quic_pn_space space, time_point now) {
     quic_recovery_events result;
     for (auto& p : s.sent) {
         if (p.acknowledged || !covers(ranges, p.number)) continue;
         update_information(p.content, information_status::delivered);
         retire_acknowledged_receive(s, p);
         note_congestion_outcome(p, outcome::acknowledged);
+        if (p.path_epoch == path_epoch && !p.pmtu_probe) {
+            mtu.progress();
+            p.datagram_delivered = true;
+            if (p.datagram_bytes != p.wire_bytes) for (auto& other : spaces) {
+                auto constituent = std::lower_bound(other.sent.begin(), other.sent.end(), p.datagram_id,
+                    [](const auto& packet, auto id) { return packet.sequence < id; });
+                if (constituent != other.sent.end() && constituent->datagram_id == p.datagram_id) constituent->datagram_delivered = true;
+            }
+        }
+        if (p.path_epoch == path_epoch && p.pmtu_probe && mtu.acknowledge(p.sequence, now)) sync_mtu(now);
         p.acknowledged = true;
         ++result.acknowledged_packets;
         if (p.in_flight) {
@@ -218,7 +228,7 @@ std::size_t quic_recovery::implementation::detect_loss(space_state& s, time_poin
         if (!p.in_flight || p.number > *s.largest_acked) continue;
         auto deadline = recovery_after(p.sent_at, delay);
         if (*s.largest_acked - p.number >= 3 || deadline <= now) {
-            if (p.path_epoch == path_epoch) newest = newest ? std::max(*newest, p.sent_at) : p.sent_at;
+            if (p.path_epoch == path_epoch && !p.pmtu_probe) newest = newest ? std::max(*newest, p.sent_at) : p.sent_at;
             lost += p.wire_bytes;
             in_flight -= p.wire_bytes;
             p.in_flight = false;

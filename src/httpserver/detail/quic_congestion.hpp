@@ -18,6 +18,7 @@ class quic_congestion final {
  public:
     using time_point = std::chrono::steady_clock::time_point;
     explicit quic_congestion(std::size_t max_datagram_size = 1200);
+    void set_datagram_size(std::size_t bytes);
     void acknowledge(std::size_t bytes, time_point sent, bool limited);
     void lose(time_point newest_sent, time_point now, bool persistent);
     quic_congestion_snapshot snapshot() const { return {window_, 2 * datagram_, threshold_, recovery_}; }

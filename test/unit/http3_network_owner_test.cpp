@@ -394,6 +394,77 @@ LT_BEGIN_AUTO_TEST(network_owner_suite, forwarded_fresh_packet_before_original_k
     }
     LT_ASSERT(f.server->failure().empty()); LT_CHECK(f.fins[0]); LT_CHECK_EQ(calls, 1u);
 LT_END_AUTO_TEST(forwarded_fresh_packet_before_original_keeps_old_path_stream_progress)
+LT_BEGIN_AUTO_TEST(network_owner_suite, negotiated_ceiling_bounds_standalone_protected_pmtu_probes)
+    owner_test::peer f(1328);
+    f.connect();
+    bool saw_probe = false;
+    for (unsigned turn = 0; turn < 30; ++turn) if (auto sent = f.prepare()) {
+        LT_CHECK(sent->bytes.size() <= 1328);
+        f.server->emitted(true, f.now);
+        if (sent->bytes.size() == 1328) {
+            std::array<std::byte, 1600> plain{};
+            unsigned level = 0;
+            std::uint64_t number = 0;
+            auto frames = f.decode(*sent, plain, level, number);
+            LT_CHECK(level == 2);
+            LT_CHECK(std::any_of(frames.begin(), frames.end(), [](const auto& frame) { return std::holds_alternative<hd::quic_ping_frame>(frame); }));
+            saw_probe = true;
+        }
+        f.accept(*sent);
+    }
+    LT_CHECK(saw_probe && f.server->failure().empty());
+LT_END_AUTO_TEST(negotiated_ceiling_bounds_standalone_protected_pmtu_probes)
+LT_BEGIN_AUTO_TEST(network_owner_suite, peer_minimum_ceiling_prevents_large_protected_probes)
+    owner_test::peer f(1200);
+    f.connect();
+    for (unsigned turn = 0; turn < 20; ++turn) if (auto sent = f.prepare()) {
+        LT_CHECK(sent->bytes.size() <= 1200);
+        f.server->emitted(true, f.now);
+        f.accept(*sent);
+    }
+    LT_CHECK(f.server->failure().empty());
+LT_END_AUTO_TEST(peer_minimum_ceiling_prevents_large_protected_probes)
+LT_BEGIN_AUTO_TEST(network_owner_suite, protected_handshake_coalesces_ready_spaces_with_one_initial_minimum)
+    owner_test::peer f;
+    f.connect();
+    LT_CHECK(f.coalesced_datagrams > 0 && f.server->failure().empty());
+LT_END_AUTO_TEST(protected_handshake_coalesces_ready_spaces_with_one_initial_minimum)
+LT_BEGIN_AUTO_TEST(network_owner_suite, failed_second_packet_protection_abandons_all_prepared_spaces)
+    auto root = httpserver::server::resource_budget::root({});
+    hd::quic_recovery recovery({}, root);
+    hd::quic_transport_parameters params;
+    hd::quic_flow_control flow(hd::quic_endpoint_role::server, params, params, 4, root);
+    hd::quic_key_state keys;
+    std::array<std::byte, 8> cid{std::byte{1}};
+    LT_ASSERT(keys.install_initial(hd::quic_endpoint_role::server, cid) == hd::quic_crypto_code::ok);
+    std::array<std::byte, 1200> one{}, two{}, output{}, scratch{};
+    LT_ASSERT(recovery.retain_crypto(hd::quic_pn_space::initial, 0, std::span(one).first(10)));
+    LT_ASSERT(recovery.retain_crypto(hd::quic_pn_space::handshake, 0, std::span(two).first(10)));
+    LT_ASSERT(recovery.receive_packet(hd::quic_pn_space::initial, 0, true, {}));
+    LT_ASSERT(recovery.begin_datagram());
+    auto a = recovery.prepare_datagram_packet(hd::quic_pn_space::initial, one, {}, {600, 40}, flow);
+    auto b = recovery.prepare_datagram_packet(hd::quic_pn_space::handshake, two, {}, {600, 40}, flow);
+    LT_ASSERT(a && b);
+    hd::quic_packet_write write;
+    write.destination = cid;
+    write.packet_number_width = 4;
+    write.length_width = 2;
+    write.packet_number = a.packet_number;
+    write.payload = std::span(one).first(a.bytes);
+    auto protected_initial = keys.protect_packet(hd::quic_key_level::initial, write, output, scratch);
+    LT_CHECK(protected_initial.code == hd::quic_crypto_code::ok);
+    write.kind = hd::quic_packet_kind::handshake;
+    write.packet_number = b.packet_number;
+    write.payload = std::span(two).first(b.bytes);
+    auto missing_keys = keys.protect_packet(hd::quic_key_level::handshake, write, output, scratch);
+    LT_CHECK(missing_keys.code != hd::quic_crypto_code::ok);
+    LT_ASSERT(recovery.abandon_datagram());
+    LT_CHECK(recovery.bytes_in_flight() == 0 && flow.sent() == 0 && recovery.ack_deadline(hd::quic_pn_space::initial));
+    LT_ASSERT(recovery.begin_datagram());
+    auto next = recovery.prepare_datagram_packet(hd::quic_pn_space::initial, one, {}, {1200, 40}, flow);
+    LT_CHECK(next && next.packet_number > a.packet_number);
+    LT_ASSERT(recovery.abandon_datagram());
+LT_END_AUTO_TEST(failed_second_packet_protection_abandons_all_prepared_spaces)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

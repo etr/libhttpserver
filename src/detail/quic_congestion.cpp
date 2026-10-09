@@ -13,6 +13,10 @@ quic_congestion::quic_congestion(std::size_t datagram) : datagram_(datagram), wi
     if (datagram < 1200 || datagram > 65535) throw std::invalid_argument("Invalid QUIC datagram size");
     window_ = std::min(10 * datagram, std::max(std::size_t{14720}, 2 * datagram));
 }
+void quic_congestion::set_datagram_size(std::size_t bytes) {
+    datagram_ = bytes;
+    window_ = std::max(window_, 2 * datagram_);
+}
 void quic_congestion::acknowledge(std::size_t bytes, time_point sent, bool limited) {
     if (limited || (recovery_ && sent <= *recovery_)) return;
     if (window_ < threshold_) {

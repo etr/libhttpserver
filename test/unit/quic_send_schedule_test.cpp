@@ -131,7 +131,7 @@ LT_BEGIN_AUTO_TEST(schedule_suite, data_reserve_preserves_control_and_ack_only_p
     LT_ASSERT(r.receive_packet(space::application, 0, true, {}));
     p = r.prepare_scheduled_packet(space::application, out, hd::quic_recovery::time_point {} + 10s, {1200, 40}, f);
     LT_ASSERT(p && !p.ack_eliciting);
-    LT_ASSERT(r.commit_sent(p.token, hd::quic_recovery::time_point {} + 10s, 1200, false, false));
+    LT_ASSERT(r.commit_sent(p.token, hd::quic_recovery::time_point {} + 10s, p.bytes + 40, false, false));
     LT_CHECK(r.bytes_in_flight() == 12000);
 LT_END_AUTO_TEST(data_reserve_preserves_control_and_ack_only_progress)
 LT_BEGIN_AUTO_TEST(schedule_suite, persistent_duration_requires_sampled_lost_endpoints_and_no_ack_separator)
@@ -199,7 +199,7 @@ LT_BEGIN_AUTO_TEST(schedule_suite, padded_ack_packets_charge_pacing_but_ack_only
     LT_ASSERT(r.receive_packet(space::application, 4, true, {}));
     auto p = r.prepare_scheduled_packet(space::application, out, {}, {1200, 40}, f);
     LT_ASSERT(p && !p.ack_eliciting);
-    LT_ASSERT(r.commit_sent(p.token, {}, 1200, false, false));
+    LT_ASSERT(r.commit_sent(p.token, {}, p.bytes + 40, false, false));
 LT_END_AUTO_TEST(padded_ack_packets_charge_pacing_but_ack_only_bypasses_it)
 LT_BEGIN_AUTO_TEST(schedule_suite, fair_three_streams_flow_skip_control_preference_and_metadata_release)
     auto b = budget();

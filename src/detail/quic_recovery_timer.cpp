@@ -8,7 +8,7 @@ void earlier(std::optional<quic_recovery_timer>& timer, quic_recovery_timer cand
 }
 template<class Space>
 bool outstanding_eliciting(const Space& s) {
-    return std::any_of(s.sent.begin(), s.sent.end(), [](const auto& p) { return p.in_flight && p.ack_eliciting; });
+    return std::any_of(s.sent.begin(), s.sent.end(), [](const auto& p) { return p.in_flight && p.ack_eliciting && !p.pmtu_probe; });
 }
 }  // namespace
 recovery_duration quic_recovery::implementation::pto_duration(quic_pn_space space) const {
@@ -68,6 +68,7 @@ void quic_recovery::set_environment(quic_recovery_environment environment, time_
 }
 std::optional<quic_recovery_timer> quic_recovery::next_deadline() const {
     auto result = impl_->recovery_timer();
+    if (auto due = impl_->mtu.deadline()) earlier(result, {quic_recovery_timer::kind::path_mtu, quic_pn_space::application, *due});
     if (!impl_->environment.send_permitted) return result;
     for (std::size_t i = 0; i < impl_->spaces.size(); ++i) {
         const auto& s = impl_->spaces[i];
@@ -88,12 +89,14 @@ std::array<bool, 3> quic_recovery::implementation::due_acks(time_point now) cons
 quic_recovery_events quic_recovery::expire(time_point now) {
     quic_recovery_events result;
     result.acknowledge_spaces = impl_->due_acks(now);
+    result.lost_bytes = impl_->expire_mtu(now);
     auto timer = impl_->recovery_timer();
     if (!timer || timer->deadline > now) return result;
     if (timer->action == quic_recovery_timer::kind::detect_loss) {
         for (auto& s : impl_->spaces)
             if (s.loss_due && *s.loss_due <= now) result.lost_bytes += impl_->detect_loss(s, now);
     } else {
+        impl_->failed_mtu_opportunity(timer->space, now);
         result.probe_space = timer->space;
         result.probes = outstanding_eliciting(*impl_->state(timer->space)) ? 2 : 1;
         impl_->probe_grants[static_cast<unsigned>(timer->space)] = result.probes;

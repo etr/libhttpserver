@@ -44,6 +44,8 @@ class connection final : public hd::datagram_sink {
  private:
     void receive_packet(std::span<const std::byte> packet, const hd::quic_path_identity& path, std::size_t credit, bool& accounted, clock_type::time_point now);
     void apply(const hd::quic_frame& frame, hd::quic_pn_space space, clock_type::time_point now);
+    std::optional<transmission> prepare_datagram(clock_type::time_point now, const hd::quic_cid& destination);
+    std::optional<transmission> prepare_probe(clock_type::time_point now, const hd::quic_cid& destination);
     void drive_tls();
     void admit_h3();
     hd::quic_stream_state& stream(std::uint64_t id);
@@ -76,9 +78,13 @@ class connection final : public hd::datagram_sink {
     std::array<std::uint64_t, 3> retired_{};
     std::array<unsigned, 3> probes_{};
     std::optional<hd::quic_send_plan> pending_;
+    std::array<hd::quic_send_plan, 3> pending_plans_;
+    std::array<hd::quic_datagram_emission, 3> pending_packets_;
+    std::array<hd::quic_pn_space, 3> pending_spaces_;
+    std::size_t pending_count_ = 0;
+    bool pending_batch_ = false;
     std::optional<hd::quic_identity_control> pending_control_;
     std::shared_ptr<hd::quic_amplification_budget> pending_budget_;
-    hd::quic_pn_space pending_space_ = hd::quic_pn_space::initial;
     std::optional<hd::quic_amplification_budget::reservation> debit_;
     std::size_t pending_bytes_ = 0;
     bool connected_ = false, initial_delivered_ = false, initial_discarded_ = false;
