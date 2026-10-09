@@ -191,6 +191,7 @@ struct quic_recovery::implementation {
     std::optional<quic_recovery_timer> loss_timer() const;
     std::optional<quic_recovery_timer> probe_timer() const;
     recovery_duration pto_duration(quic_pn_space space) const;
+    recovery_duration base_pto_duration(quic_pn_space space) const;
     void repeat_receipt(space_state& s, quic_receipt receipt, bool eliciting, time_point now);
     void insert_received(space_state& s, std::uint64_t number);
     void note_ack_work(space_state& s, quic_pn_space space, bool gap, bool reordered, time_point now);

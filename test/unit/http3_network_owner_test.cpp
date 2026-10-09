@@ -8,6 +8,7 @@
 #include "../support/http3_network_owner.hpp"
 #include "./quic_tls_peer.hpp"
 #include "./quic_owner_peer.hpp"
+#include "./quic_crypto_test_support.hpp"
 #include "./littletest.hpp"
 namespace {
 std::shared_ptr<hd::io_datagram> initial(quic_test::peer& peer, std::uint64_t number = 0, std::size_t offset = 0) {
@@ -465,6 +466,451 @@ LT_BEGIN_AUTO_TEST(network_owner_suite, failed_second_packet_protection_abandons
     LT_CHECK(next && next.packet_number > a.packet_number);
     LT_ASSERT(recovery.abandon_datagram());
 LT_END_AUTO_TEST(failed_second_packet_protection_abandons_all_prepared_spaces)
+LT_BEGIN_AUTO_TEST(network_owner_suite, peer_close_preempts_stream_work_retains_routes_and_expires_silently)
+    owner_test::peer peer;
+    peer.connect();
+    LT_CHECK(!peer.server->has_keys(hd::quic_key_level::initial));
+    LT_CHECK(!peer.server->has_keys(hd::quic_key_level::handshake));
+    const std::array<hd::quic_frame, 2> close{hd::quic_ping_frame{}, hd::quic_close_frame{true, 42, 0, {}}};
+    auto packet = peer.packet(close, peer.address);
+    peer.server->on_datagram(packet);
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::draining);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+    LT_CHECK(!peer.server->has_keys(hd::quic_key_level::application));
+    LT_CHECK(peer.admission->routes().dispatch(packet).code == hd::datagram_dispatch_code::routed);
+    peer.executor.run_pending();
+    LT_CHECK(!peer.server->prepare(peer.now));
+    auto endpoint = peer.server->deadline();
+    LT_ASSERT(endpoint);
+    peer.server->tick(*endpoint - std::chrono::nanoseconds(1));
+    LT_CHECK(peer.admission->routes().dispatch(packet).code == hd::datagram_dispatch_code::routed);
+    peer.server->tick(*endpoint);
+    peer.executor.run_pending();
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::closed);
+    LT_CHECK(!peer.server->deadline());
+    LT_CHECK(peer.admission->routes().dispatch(packet).code == hd::datagram_dispatch_code::retired);
+    peer.server->tick(*endpoint);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+LT_END_AUTO_TEST(peer_close_preempts_stream_work_retains_routes_and_expires_silently)
+LT_BEGIN_AUTO_TEST(network_owner_suite, local_close_is_protected_bounded_and_survives_failed_send)
+    owner_test::peer peer;
+    peer.connect();
+    std::array<std::byte, 500> reason;
+    reason.fill(std::byte{7});
+    peer.server->request_close({true, 42, 0, reason}, peer.now);
+    reason.fill(std::byte{9});
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::closing);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    auto terminal = peer.server->prepare(peer.now);
+    LT_ASSERT(terminal);
+    LT_ASSERT(peer.server->deadline());
+    LT_CHECK(*peer.server->deadline() > peer.now);
+    std::array<std::byte, 1600> plain{};
+    unsigned level;
+    std::uint64_t number;
+    auto frames = peer.decode(*terminal, plain, level, number);
+    LT_CHECK_EQ(level, 2u);
+    LT_ASSERT(!frames.empty());
+    auto* close = std::get_if<hd::quic_close_frame>(&frames.front());
+    LT_ASSERT(close);
+    LT_CHECK(close->application && close->error == 42);
+    LT_CHECK_EQ(close->reason.size(), hd::quic_connection_lifecycle::max_reason);
+    LT_CHECK(close->reason.front() == std::byte{7});
+    LT_CHECK(std::all_of(frames.begin() + 1, frames.end(), [](const auto& f) { return std::holds_alternative<hd::quic_padding_frame>(f); }));
+    peer.server->emitted(false, peer.now);
+    auto retry = peer.server->prepare(peer.now);
+    LT_ASSERT(retry);
+    LT_CHECK(retry->bytes == terminal->bytes);
+    peer.server->emitted(true, peer.now);
+    LT_CHECK(!peer.server->prepare(peer.now));
+    LT_CHECK(peer.server->has_keys(hd::quic_key_level::application));
+    auto endpoint = peer.server->deadline();
+    const std::array<hd::quic_frame, 1> received{hd::quic_ping_frame{}};
+    peer.send(received, peer.address);
+    LT_CHECK(!peer.server->prepare(peer.now));
+    LT_ASSERT(endpoint);
+    peer.server->tick(*endpoint);
+    LT_CHECK(!peer.server->prepare(*endpoint));
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+LT_END_AUTO_TEST(local_close_is_protected_bounded_and_survives_failed_send)
+LT_BEGIN_AUTO_TEST(network_owner_suite, early_application_close_converts_and_idle_expiry_is_silent)
+    owner_test::peer peer;
+    peer.deliver_crypto();
+    const auto now = h3net::clock_type::now();
+    peer.server->request_close({true, 42, 0, {}}, now);
+    LT_CHECK(!peer.server->has_keys(hd::quic_key_level::application));
+    auto terminal = peer.server->prepare(now);
+    LT_ASSERT(terminal);
+    std::array<std::byte, 1600> plain{};
+    unsigned level;
+    std::uint64_t number;
+    auto envelope = hd::parse_quic_envelope(terminal->bytes, peer.client_cid.size());
+    LT_ASSERT(envelope.code == hd::quic_codec_code::ok);
+    h3net::transmission first{{envelope.value.packet.begin(), envelope.value.packet.end()}, terminal->peer};
+    auto frames = peer.decode(first, plain, level, number);
+    LT_CHECK_EQ(level, 0u);
+    auto* close = std::get_if<hd::quic_close_frame>(&frames.front());
+    LT_ASSERT(close);
+    LT_CHECK(!close->application && close->error == 0x0c && close->reason.empty());
+    peer.server->emitted(true, now);
+    owner_test::peer idle;
+    idle.connect();
+    idle.server->tick(h3net::clock_type::now() + std::chrono::seconds(200));
+    LT_CHECK(idle.server->state() == hd::quic_lifecycle_state::closed);
+    LT_CHECK(idle.server->failure().empty());
+    LT_CHECK_EQ(idle.server->close_notifications(), 1u);
+    LT_CHECK(!idle.server->deadline());
+LT_END_AUTO_TEST(early_application_close_converts_and_idle_expiry_is_silent)
+LT_BEGIN_AUTO_TEST(network_owner_suite, stateless_reset_routes_whole_unknown_cid_datagram_and_stops_work)
+    owner_test::peer peer;
+    peer.connect();
+    peer.drain(10);
+    std::array<std::byte, 1> cid{std::byte{8}};
+    std::array<std::byte, 16> token{std::byte{19}};
+    const std::array<hd::quic_frame, 1> advertisement{hd::quic_new_connection_id_frame{1, 1, cid, token}};
+    peer.send(advertisement, peer.address);
+    peer.client_cid = cid;
+    auto reset = std::make_shared<hd::io_datagram>();
+    reset->bytes.resize(40, std::byte{0x40});
+    std::copy(token.begin(), token.end(), reset->bytes.end() - 16);
+    reset->peer = peer.address;
+    reset->socket_id = 1;
+    LT_CHECK(peer.admission->routes().dispatch(reset).code == hd::datagram_dispatch_code::unknown);
+    auto sent = peer.prepare();
+    LT_ASSERT(sent);
+    peer.server->emitted(false, peer.now);
+    LT_CHECK(peer.admission->routes().dispatch(reset).code == hd::datagram_dispatch_code::unknown);
+    sent = peer.prepare();
+    LT_ASSERT(sent);
+    peer.server->emitted(true, peer.now);
+    LT_CHECK(peer.admission->routes().dispatch(reset).code == hd::datagram_dispatch_code::routed);
+    peer.executor.run_pending();
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::draining);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+    LT_CHECK(!peer.server->prepare(peer.now));
+    auto endpoint = peer.server->deadline();
+    LT_ASSERT(endpoint);
+    peer.server->tick(*endpoint);
+    LT_CHECK(peer.admission->routes().dispatch(reset).code == hd::datagram_dispatch_code::unknown);
+LT_END_AUTO_TEST(stateless_reset_routes_whole_unknown_cid_datagram_and_stops_work)
+LT_BEGIN_AUTO_TEST(network_owner_suite, terminal_claim_cancels_multiple_suspended_handlers_before_packet_streams)
+    owner_test::peer peer;
+    httpserver::resume_signal pause;
+    unsigned started = 0, settled = 0;
+    LT_ASSERT(peer.routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+        [&](httpserver::exchange& x) -> httpserver::task<void> {
+            ++started;
+            co_await pause.wait();
+            ++settled;
+            co_await x.writer().finish();
+        }).ok());
+    peer.connect();
+    auto head = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 2> requests{hd::quic_stream_frame{0, 0, head, true}, hd::quic_stream_frame{4, 0, head, true}};
+    peer.send(requests, peer.address);
+    LT_CHECK_EQ(started, 2u);
+    const std::array<hd::quic_frame, 2> close{hd::quic_stream_frame{8, 0, head, true}, hd::quic_close_frame{true, 42, 0, {}}};
+    peer.send(close, peer.address);
+    peer.executor.run_pending();
+    LT_CHECK_EQ(started, 2u);
+    const auto callbacks = settled;
+    pause.signal();
+    peer.executor.run_pending();
+    peer.send(requests, peer.address);
+    peer.server->tick(h3net::clock_type::now());
+    LT_CHECK_EQ(started, 2u);
+    LT_CHECK_EQ(settled, callbacks);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+LT_END_AUTO_TEST(terminal_claim_cancels_multiple_suspended_handlers_before_packet_streams)
+LT_BEGIN_AUTO_TEST(network_owner_suite, pending_udp_completion_keeps_ownership_until_terminal_retirement)
+    for (auto outcome : {hd::quic_identity_emission::unsent, hd::quic_identity_emission::sent, hd::quic_identity_emission::ambiguous}) {
+        owner_test::peer peer;
+        peer.connect();
+        const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+        peer.send(ping, peer.address);
+        auto sent = peer.prepare();
+        LT_ASSERT(sent);
+        peer.server->request_close({false, 17, 0, {}}, peer.now);
+        LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+        LT_CHECK(!peer.server->prepare(peer.now));
+        peer.server->emitted(outcome, peer.now);
+        auto terminal = peer.server->prepare(peer.now);
+        LT_ASSERT(terminal);
+        peer.server->emitted(true, peer.now);
+        LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+        LT_CHECK(peer.server->failure().empty());
+    }
+LT_END_AUTO_TEST(pending_udp_completion_keeps_ownership_until_terminal_retirement)
+LT_BEGIN_AUTO_TEST(network_owner_suite, draining_key_disposal_is_observable_and_repeated_ticks_do_not_release_twice)
+    cleanse_receipt receipt;
+    owner_test::peer peer(65527, cleanse_receipt::observe, &receipt);
+    peer.connect();
+    const auto before = receipt.releases;
+    const std::array<hd::quic_frame, 1> close{hd::quic_close_frame{true, 42, 0, {}}};
+    peer.send(close, peer.address);
+    LT_CHECK(receipt.releases > before);
+    LT_CHECK(receipt.clean);
+    auto endpoint = peer.server->deadline();
+    LT_ASSERT(endpoint);
+    const auto releases = receipt.releases;
+    peer.server->tick(*endpoint);
+    peer.server->tick(*endpoint);
+    peer.server.reset();
+    peer.executor.run_pending();
+    LT_CHECK_EQ(receipt.releases, releases);
+LT_END_AUTO_TEST(draining_key_disposal_is_observable_and_repeated_ticks_do_not_release_twice)
+LT_BEGIN_AUTO_TEST(network_owner_suite, close_cancels_pending_body_reads_and_response_production)
+    for (unsigned mode : {0u, 1u}) {
+        owner_test::peer peer;
+        unsigned started = 0, after = 0;
+        httpserver::resume_signal pause;
+        LT_ASSERT(peer.routes.route(httpserver::http::method::known(httpserver::http::method_id::post), "/hello",
+            [&](httpserver::exchange& x) -> httpserver::task<void> {
+                ++started;
+                if (mode == 0) {
+                    x.admit_body({});
+                    co_await x.body().collect(16);
+                } else {
+                    x.start_response(httpserver::http::status::from_code(200), {});
+                    co_await pause.wait();
+                }
+                ++after;
+                co_await x.writer().finish();
+            }).ok());
+        peer.connect();
+        auto head = h3test::headers(h3test::get("POST"));
+        const std::array<hd::quic_frame, 2> requests{hd::quic_stream_frame{0, 0, head, false}, hd::quic_stream_frame{4, 0, head, false}};
+        peer.send(requests, peer.address);
+        LT_CHECK_EQ(started, 2u);
+        peer.server->request_close({true, 42, 0, {}}, peer.now);
+        peer.executor.run_pending();
+        pause.signal();
+        peer.executor.run_pending();
+        peer.server->tick(peer.now);
+        LT_CHECK_EQ(after, 0u);
+        LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+        LT_CHECK(peer.server->failure().empty());
+    }
+LT_END_AUTO_TEST(close_cancels_pending_body_reads_and_response_production)
+LT_BEGIN_AUTO_TEST(network_owner_suite, closing_to_draining_preserves_endpoint_and_retained_aliases)
+    owner_test::peer peer;
+    peer.connect();
+    peer.drain(10);
+    LT_ASSERT(!peer.issued.empty());
+    peer.server->request_close({true, 42, 0, {}}, peer.now);
+    auto terminal = peer.server->prepare(peer.now);
+    LT_ASSERT(terminal);
+    peer.server->emitted(true, peer.now);
+    auto endpoint = peer.server->deadline();
+    const std::array<hd::quic_frame, 1> close{hd::quic_close_frame{true, 99, 0, {}}};
+    peer.send(close, peer.address);
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::draining);
+    LT_CHECK(peer.server->deadline() == endpoint);
+    LT_CHECK(!peer.server->has_keys(hd::quic_key_level::application));
+    auto alias = std::make_shared<hd::io_datagram>();
+    alias->bytes.push_back(std::byte{0x40});
+    alias->bytes.insert(alias->bytes.end(), peer.issued.begin()->second.begin(), peer.issued.begin()->second.end());
+    alias->bytes.resize(40);
+    alias->peer = peer.address;
+    alias->socket_id = 1;
+    LT_ASSERT(endpoint);
+    peer.server->tick(*endpoint - std::chrono::nanoseconds(1));
+    LT_CHECK(peer.admission->routes().dispatch(alias).code == hd::datagram_dispatch_code::routed);
+    peer.server->tick(*endpoint);
+    peer.executor.run_pending();
+    LT_CHECK(peer.admission->routes().dispatch(alias).code == hd::datagram_dispatch_code::retired);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+LT_END_AUTO_TEST(closing_to_draining_preserves_endpoint_and_retained_aliases)
+LT_BEGIN_AUTO_TEST(network_owner_suite, unresolved_send_destruction_never_claims_proven_unsent)
+    owner_test::peer peer;
+    peer.deliver_crypto();
+    const auto now = h3net::clock_type::now();
+    peer.server->tick(now);
+    auto pending = peer.server->prepare(now);
+    LT_ASSERT(pending);
+    auto budget = peer.facts->budget;
+    const auto debit = budget->debited();
+    LT_CHECK(debit > 0);
+    peer.admission->routes().remove(*peer.registration);
+    peer.registration.reset();
+    peer.server.reset();
+    peer.executor.run_pending();
+    LT_CHECK_EQ(budget->debited(), debit);
+LT_END_AUTO_TEST(unresolved_send_destruction_never_claims_proven_unsent)
+LT_BEGIN_AUTO_TEST(network_owner_suite, terminal_output_waits_for_amplification_capacity)
+    owner_test::peer peer;
+    peer.deliver_crypto();
+    auto budget = peer.facts->budget;
+    auto held = budget->reserve_send(budget->received() * 3);
+    LT_ASSERT(held);
+    const auto now = h3net::clock_type::now();
+    peer.server->request_close({true, 42, 0, {}}, now);
+    LT_CHECK(!peer.server->prepare(now));
+    LT_ASSERT(peer.server->deadline());
+    LT_CHECK(*peer.server->deadline() > now);
+    budget->cancel_unsent(*held);
+    auto terminal = peer.server->prepare(now);
+    LT_ASSERT(terminal);
+    LT_CHECK_EQ(terminal->bytes.size(), 1200u);
+    peer.server->emitted(hd::quic_identity_emission::ambiguous, now);
+    LT_CHECK_EQ(budget->debited(), 1200u);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+LT_END_AUTO_TEST(terminal_output_waits_for_amplification_capacity)
+LT_BEGIN_AUTO_TEST(network_owner_suite, delayed_duplicate_completion_after_close_is_harmless)
+    owner_test::peer peer;
+    peer.connect();
+    peer.server->request_close({}, peer.now);
+    auto close = peer.server->prepare(peer.now);
+    LT_ASSERT(close);
+    peer.server->emitted(true, peer.now);
+    const auto sent = peer.server->stats().emitted;
+    peer.server->emitted(true, peer.now);
+    auto endpoint = peer.server->deadline();
+    LT_ASSERT(endpoint);
+    peer.server->tick(*endpoint);
+    peer.server->emitted(hd::quic_identity_emission::ambiguous, *endpoint);
+    LT_CHECK_EQ(peer.server->stats().emitted, sent);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+LT_END_AUTO_TEST(delayed_duplicate_completion_after_close_is_harmless)
+LT_BEGIN_AUTO_TEST(network_owner_suite, known_cid_reset_checks_complete_datagram_after_authentication_failure)
+    owner_test::peer peer;
+    peer.connect();
+    peer.drain(10);
+    std::array<std::byte, 1> cid{std::byte{8}};
+    std::array<std::byte, 16> token{std::byte{19}};
+    const std::array<hd::quic_frame, 1> advertisement{hd::quic_new_connection_id_frame{1, 1, cid, token}};
+    peer.send(advertisement, peer.address);
+    peer.client_cid = cid;
+    auto sent = peer.prepare();
+    LT_ASSERT(sent);
+    peer.server->emitted(hd::quic_identity_emission::ambiguous, peer.now);
+    auto reset = std::make_shared<hd::io_datagram>();
+    reset->bytes.push_back(std::byte{0x40});
+    reset->bytes.insert(reset->bytes.end(), peer.server_cid.begin(), peer.server_cid.end());
+    reset->bytes.resize(80);
+    std::copy(token.begin(), token.end(), reset->bytes.end() - 16);
+    reset->peer = peer.address;
+    reset->socket_id = 1;
+    auto wrong = std::make_shared<hd::io_datagram>(*reset);
+    wrong->bytes.back() ^= std::byte{1};
+    LT_CHECK(peer.admission->routes().dispatch(wrong).code == hd::datagram_dispatch_code::routed);
+    peer.executor.run_pending();
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::active);
+    LT_CHECK(peer.admission->routes().dispatch(reset).code == hd::datagram_dispatch_code::routed);
+    peer.executor.run_pending();
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::draining);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+LT_END_AUTO_TEST(known_cid_reset_checks_complete_datagram_after_authentication_failure)
+LT_BEGIN_AUTO_TEST(network_owner_suite, terminal_retirement_releases_request_metadata_while_owner_retains_cids)
+    owner_test::peer peer;
+    httpserver::resume_signal pause;
+    LT_ASSERT(peer.routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+        [&](httpserver::exchange&) -> httpserver::task<void> { co_await pause.wait(); }).ok());
+    peer.connect();
+    auto budget = peer.server->application_storage_budget();
+    const auto baseline = budget.in_use(httpserver::server::resource::quic_reassembly_bytes);
+    auto head = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 2> requests{hd::quic_stream_frame{0, 0, head, true}, hd::quic_stream_frame{4, 0, head, true}};
+    peer.send(requests, peer.address);
+    LT_CHECK(budget.in_use(httpserver::server::resource::quic_reassembly_bytes) > baseline);
+    peer.server->request_close({}, peer.now);
+    peer.executor.run_pending();
+    LT_CHECK(budget.in_use(httpserver::server::resource::quic_reassembly_bytes) < baseline);
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::closing);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    pause.signal();
+    peer.executor.run_pending();
+    LT_CHECK(peer.server->failure().empty());
+LT_END_AUTO_TEST(terminal_retirement_releases_request_metadata_while_owner_retains_cids)
+LT_BEGIN_AUTO_TEST(network_owner_suite, handler_initiated_close_defers_storage_retirement_until_receive_turn_finishes)
+    owner_test::peer peer;
+    unsigned started = 0;
+    LT_ASSERT(peer.routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+        [&](httpserver::exchange&) -> httpserver::task<void> {
+            ++started;
+            peer.server->request_close({}, h3net::clock_type::now());
+            co_return;
+        }).ok());
+    peer.connect();
+    auto head = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 2> requests{hd::quic_stream_frame{0, 0, head, true}, hd::quic_stream_frame{4, 0, head, true}};
+    peer.send(requests, peer.address);
+    peer.executor.run_pending();
+    LT_CHECK_EQ(started, 1u);
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::closing);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+    LT_CHECK(peer.server->prepare(h3net::clock_type::now()));
+LT_END_AUTO_TEST(handler_initiated_close_defers_storage_retirement_until_receive_turn_finishes)
+LT_BEGIN_AUTO_TEST(network_owner_suite, immediate_post_handshake_close_uses_confirmed_pto_ack_delay)
+    owner_test::peer peer;
+    for (unsigned turn = 0; turn < 100; ++turn) {
+        peer.deliver_crypto();
+        if (peer.server->connected()) break;  // Close before the next recovery timer turn.
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        peer.now = h3net::clock_type::now();
+        peer.server->tick(peer.now);
+        if (auto sent = peer.server->prepare(peer.now)) {
+            peer.server->emitted(true, peer.now);
+            peer.accept(*sent);
+        }
+    }
+    LT_ASSERT(peer.server->connected());
+    const auto now = h3net::clock_type::now();
+    peer.server->request_close({}, now);
+    auto close = peer.server->prepare(now);
+    LT_ASSERT(close);
+    peer.server->emitted(true, now);
+    auto endpoint = peer.server->deadline();
+    LT_ASSERT(endpoint);
+    LT_CHECK(*endpoint >= now + std::chrono::milliseconds(75));
+LT_END_AUTO_TEST(immediate_post_handshake_close_uses_confirmed_pto_ack_delay)
+LT_BEGIN_AUTO_TEST(network_owner_suite, reset_route_capacity_failure_retires_actual_send_before_local_close)
+    owner_test::peer peer;
+    peer.limits.max_routes = 2;
+    peer.admission = std::make_unique<hd::quic_server_admission>(peer.limits);
+    peer.connect();
+    peer.drain(10);
+    struct ignored_sink final : hd::datagram_sink {
+        void on_datagram(std::shared_ptr<const hd::io_datagram>) noexcept override {}
+    };
+    auto ignored = std::make_shared<ignored_sink>();
+    for (unsigned n : {99u, 100u}) {
+        std::array<std::byte, 16> token{std::byte(n)};
+        LT_ASSERT(peer.admission->routes().register_reset(token, peer.address, peer.listener.datagrams(), ignored));
+    }
+    std::array<std::byte, 1> cid{std::byte{8}};
+    std::array<std::byte, 16> token{std::byte{19}};
+    const std::array<hd::quic_frame, 1> advertisement{hd::quic_new_connection_id_frame{1, 1, cid, token}};
+    peer.send(advertisement, peer.address);
+    peer.client_cid = cid;
+    std::optional<h3net::transmission> sent;
+    for (unsigned turn = 0; turn < 20 && !sent; ++turn) sent = peer.prepare();
+    LT_ASSERT(sent);
+    const auto emitted = peer.server->stats().emitted;
+    peer.server->emitted(true, peer.now);
+    LT_CHECK_EQ(peer.server->stats().emitted, emitted + 1);
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::closing);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(peer.server->failure().empty());
+    auto terminal = peer.server->prepare(peer.now);
+    LT_ASSERT(terminal);
+    std::array<std::byte, 1600> plain{};
+    unsigned level;
+    std::uint64_t number;
+    auto frames = peer.decode(*terminal, plain, level, number);
+    auto* close = std::get_if<hd::quic_close_frame>(&frames.front());
+    LT_ASSERT(close);
+    LT_CHECK(!close->application && close->error == 0x01);
+    peer.server->emitted(true, peer.now);
+LT_END_AUTO_TEST(reset_route_capacity_failure_retires_actual_send_before_local_close)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

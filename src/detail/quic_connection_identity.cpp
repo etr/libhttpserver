@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <memory>
 #include <utility>
+#include <httpserver/detail/secure_compare.hpp>
 #include <httpserver/detail/quic_connection_identity.hpp>
 namespace httpserver::detail {
 namespace {
@@ -23,7 +24,13 @@ quic_identity_code recovery_code(quic_recovery_code code) {
 }
 }  // namespace
 struct quic_connection_identity::state {
+    struct reset_use {
+        datagram_endpoint remote;
+        bool used = false;
+        std::optional<quic_datagram_dispatch::reset_registration> route;
+    };
     struct cid_record {
+        std::array<reset_use, max_paths> uses{};
         quic_cid cid;
         std::array<std::byte, 16> reset{};
         std::uint64_t sequence = 0;
@@ -48,6 +55,7 @@ struct quic_connection_identity::state {
     std::array<retirement, max_pending_retirements> retirements{};
     std::array<path_record, max_paths> paths{};
     std::size_t local_used = 1, peer_used = 1, active = 0;
+    bool stopped = false;
     std::uint64_t floor = 0, peer_limit = 2;
     std::optional<std::uint64_t> newest;
     std::optional<std::size_t> intent;
@@ -77,6 +85,45 @@ struct quic_connection_identity::state {
         paths[0].budget = std::move(admitted);
         paths[0].incoming = local_cid;
         paths[0].mtu_validated = true;
+    }
+    bool can_issue() const { return !stopped && routes && owner; }
+    bool can_receive(const quic_authenticated_path& packet) const {
+        return !stopped && packet.authenticated && packet.fresh && packet.number <= k_quic_max_integer;
+    }
+    bool can_prepare(std::size_t overhead) const { return !stopped && !pending && overhead + 9 <= 1200; }
+    void discard_reset_uses(cid_record& cid) {
+        for (auto& use : cid.uses) {
+            if (routes && use.route) routes->remove(*use.route);
+            use = {};
+        }
+    }
+    quic_identity_result register_reset_use(cid_record& cid, reset_use& use, const datagram_endpoint& remote) {
+        if (routes) {
+            try {
+                use.route = routes->register_reset(cid.reset, remote, *owner, forwarder);
+            } catch (const std::bad_alloc&) {
+                return {quic_identity_code::no_memory};
+            }
+            if (!use.route) return {quic_identity_code::capacity};
+        }
+        use.remote = remote;
+        use.used = true;
+        return {};
+    }
+    void expire_path(std::size_t i, time_point now) {
+        auto& p = paths[i];
+        if (!p.budget || (pending && pending->path == i)) return;
+        if (i != active && p.abandon_due && now >= *p.abandon_due) {
+            if (intent == i) intent.reset();
+            p = {};
+            return;
+        }
+        if (p.retry_due && now >= *p.retry_due) {
+            p.sent_challenge.reset();
+            p.sent_until.reset();
+            p.retry_due.reset();
+            p.challenge_due = p.attempts < 3;
+        }
     }
     std::size_t peer_count() const {
         return std::count_if(peer.begin(), peer.begin() + peer_used, [](const auto& c) { return c.active; });
@@ -149,7 +196,10 @@ struct quic_connection_identity::state {
             }
         floor = new_floor;
         for (auto& c : peer)
-            if (c.sequence < floor) c.active = false;
+            if (c.sequence < floor) {
+                c.active = false;
+                discard_reset_uses(c);
+            }
         auto replacement = std::find_if(peer.begin(), peer.begin() + peer_used, [](const auto& c) { return c.active; });
         if (replacement == peer.begin() + peer_used) return {quic_identity_code::protocol};
         for (std::size_t i = 0; i < paths.size(); ++i) {
@@ -185,9 +235,7 @@ quic_connection_identity::quic_connection_identity(quic_cid local, quic_cid peer
 quic_connection_identity::~quic_connection_identity() {
     auto& s = *state_;
     if (s.pending) complete_control(s.pending->control.token, quic_identity_emission::unsent, {});
-    if (s.routes)
-        for (auto& c : s.local)
-            if (c.route) s.routes->remove(*c.route);
+    detach_routes();
 }
 quic_identity_result quic_connection_identity::attach_routes(quic_datagram_dispatch& routes, io_connection_owner::datagram_port owner, std::shared_ptr<datagram_sink> forwarder,
                                                              quic_datagram_dispatch::cid_registration initial) {
@@ -202,7 +250,7 @@ quic_identity_result quic_connection_identity::attach_routes(quic_datagram_dispa
 void quic_connection_identity::set_peer_active_limit(std::uint64_t limit) { state_->peer_limit = std::min<std::uint64_t>(limit, max_active_cids); }
 quic_identity_result quic_connection_identity::issue_cid() {
     auto& s = *state_;
-    if (!s.routes || !s.owner) return {quic_identity_code::busy};
+    if (!s.can_issue()) return {quic_identity_code::busy};
     const auto active_count = std::count_if(s.local.begin(), s.local.end(), [](const auto& c) { return c.active; });
     if (s.local_used == max_cid_history || active_count >= s.peer_limit) return {quic_identity_code::capacity};
     state::cid_record c;
@@ -230,7 +278,7 @@ quic_identity_result quic_connection_identity::issue_cid() {
 }
 quic_identity_result quic_connection_identity::receive(const quic_authenticated_path& packet, std::span<const quic_frame> frames, time_point now) {
     auto& s = *state_;
-    if (!packet.authenticated || !packet.fresh || packet.number > k_quic_max_integer) return {quic_identity_code::dropped};
+    if (!s.can_receive(packet)) return {quic_identity_code::dropped};
     if (s.pending || s.recovery.preparation_pending()) return {quic_identity_code::busy};
     // The caller parsed all frame shapes before passing their borrowed views.
     for (const auto& frame : frames)
@@ -329,7 +377,7 @@ quic_identity_result quic_connection_identity::receive(const quic_authenticated_
 }
 std::optional<quic_identity_control> quic_connection_identity::prepare_control(time_point now, std::size_t overhead) {
     auto& s = *state_;
-    if (s.pending || overhead + 9 > 1200) return {};
+    if (!s.can_prepare(overhead)) return {};
     expire(now);
     for (unsigned pass = 0; pass < 2; ++pass)
         for (std::size_t n = 0; n < max_paths; ++n) {
@@ -379,6 +427,15 @@ quic_identity_result quic_connection_identity::complete_control(std::uint64_t to
         auto result = s.recovery.commit_sent(token, now, prepared.control.wire_bytes, true, true, generation);
         if (!result) return {recovery_code(result.code)};
         p.budget->complete_send(prepared.debit);
+        auto eligible = peer_cid_emitted(prepared.control.destination, prepared.control.path.peer, outcome);
+        if (!eligible) {
+            s.pending.reset();
+            return eligible;
+        }
+        if (s.stopped) {
+            s.pending.reset();
+            return {};
+        }
         if (prepared.control.response) {
             p.response.reset();
         } else {
@@ -401,28 +458,69 @@ void quic_connection_identity::information_completed(const quic_information_comp
 }
 void quic_connection_identity::expire(time_point now) {
     auto& s = *state_;
-    for (std::size_t i = 0; i < max_paths; ++i) {
-        auto& p = s.paths[i];
-        if (!p.budget || (s.pending && s.pending->path == i)) continue;
-        if (i != s.active && p.abandon_due && now >= *p.abandon_due) {
-            if (s.intent == i) s.intent.reset();
-            p = {};
-            continue;
-        }
-        if (p.retry_due && now >= *p.retry_due) {
-            p.sent_challenge.reset();
-            p.sent_until.reset();
-            p.retry_due.reset();
-            p.challenge_due = p.attempts < 3;
-        }
-    }
+    if (s.stopped) return;
+    for (std::size_t i = 0; i < max_paths; ++i) s.expire_path(i, now);
 }
 std::optional<quic_connection_identity::time_point> quic_connection_identity::deadline() const {
     std::optional<time_point> result;
+    if (state_->stopped) return result;
     for (const auto& p : state_->paths)
         for (auto due : {p.retry_due, p.abandon_due})
             if (due && (!result || *due < *result)) result = due;
     return result;
+}
+quic_identity_result quic_connection_identity::peer_cid_emitted(const quic_cid& cid, const datagram_endpoint& remote, quic_identity_emission outcome) {
+    auto& s = *state_;
+    if (outcome == quic_identity_emission::unsent || s.stopped) return {};
+    auto found = std::find_if(s.peer.begin(), s.peer.begin() + s.peer_used, [&](const auto& c) { return c.active && c.cid == cid; });
+    if (found == s.peer.begin() + s.peer_used) return {quic_identity_code::dropped};
+    if (!found->token_known) return {};
+    for (const auto& use : found->uses) if (use.used && use.remote == remote) return {};
+    auto use = std::find_if(found->uses.begin(), found->uses.end(), [](const auto& item) { return !item.used; });
+    if (use == found->uses.end()) return {quic_identity_code::capacity};
+    return s.register_reset_use(*found, *use, remote);
+}
+bool quic_connection_identity::matches_reset(std::span<const std::byte> datagram, const datagram_endpoint& remote) const {
+    if (datagram.size() < 21) return false;
+    const std::string_view trailing(reinterpret_cast<const char*>(datagram.data() + datagram.size() - 16), 16);
+    bool match = false;
+    for (const auto& c : state_->peer) {
+        const std::string_view token(reinterpret_cast<const char*>(c.reset.data()), 16);
+        const bool equal = constant_time_equal(trailing, token);
+        bool associated = false;
+        for (const auto& use : c.uses) associated |= use.used && use.remote == remote;
+        match |= equal && c.active && c.token_known && associated;
+    }
+    return match;
+}
+void quic_connection_identity::stop() {
+    auto& s = *state_;
+    if (s.stopped) return;
+    s.stopped = true;
+    s.intent.reset();
+    for (auto& p : s.paths) {
+        p.challenge_due = false;
+        p.response.reset();
+        p.sent_challenge.reset();
+        p.retry_due.reset();
+        p.sent_until.reset();
+        p.abandon_due.reset();
+    }
+    for (auto& c : s.local) if (c.advertisement) s.recovery.cancel_information(c.advertisement);
+    for (auto& r : s.retirements) if (r.information) s.recovery.cancel_information(r.information);
+}
+void quic_connection_identity::detach_routes() {
+    auto& s = *state_;
+    if (s.routes) {
+        for (auto& c : s.local) {
+            if (c.route) s.routes->remove(*c.route);
+            c.route.reset();
+        }
+    }
+    for (auto& c : s.peer) s.discard_reset_uses(c);
+    s.routes = nullptr;
+    s.owner.reset();
+    s.forwarder.reset();
 }
 const quic_path_identity& quic_connection_identity::application_path() const { return state_->paths[state_->active].budget->path(); }
 std::shared_ptr<quic_amplification_budget> quic_connection_identity::application_budget() const { return state_->paths[state_->active].budget; }

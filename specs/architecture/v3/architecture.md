@@ -124,6 +124,17 @@ copied peer. The bounded TLS network owner exercises this private production
 seam; public H3 listener enablement remains a later gate. See
 [the rebinding evidence](../../../docs/task-164-quic-rebinding.md).
 
+TASK-166 adds private owner-serialized idle/terminal arbitration with bounded owned
+close reasons. Terminal claim cancels H3 requests and provider work once, freezes
+identity/path activity, and retains local aliases until the three-PTO endpoint.
+Possibly submitted UDP work retains its storage and debit until completion. Closing
+uses bounded cached protected close output; draining emits nothing. Peer reset
+eligibility requires actual CID use on a remote endpoint, with generation-safe
+bounded dispatch fallback for unrelated destination CIDs. Final expiry clears keys
+and explicitly detaches aliases without requiring owner destruction. The caller
+retains owner lifetime through protocol expiry and pending completions. See
+[the lifecycle contract](../../../docs/task-166-quic-lifecycle.md).
+
 The WebSocket codec consumes an ordered full-duplex byte stream. HTTP/1.1 uses Upgrade; HTTP/2 and HTTP/3 use negotiated Extended CONNECT on one stream. It validates masking, fragmentation, UTF-8, control frames, ping/pong, message limits, and close handshake. A typed session reports accepted/backpressured/closed on `try_send`; pending sends can await `writable()`. The close notification fires once with the best available reason. Extensions are not negotiated in v3.0. A WebSocket on HTTP/2 or HTTP/3 does not take over other streams.
 
 ### 3.4 I/O, concurrency, and external loop

@@ -677,3 +677,5 @@ EXTRA_DIST += scripts/run-v3-quic-interop.py docs/task-163-quic-interop-evidence
 EXTRA_DIST += .dockerignore
 
 EXTRA_DIST += docs/task-165-quic-datagram-sizing.md
+
+EXTRA_DIST += docs/task-166-quic-lifecycle.md

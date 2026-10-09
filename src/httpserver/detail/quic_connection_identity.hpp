@@ -51,6 +51,11 @@ class quic_connection_identity final {
     // Promotion owns the initial registration until this explicit adoption.
     quic_identity_result attach_routes(quic_datagram_dispatch& routes, io_connection_owner::datagram_port owner, std::shared_ptr<datagram_sink> weak_forwarder,
                                        quic_datagram_dispatch::cid_registration initial);
+    // Only possibly emitted CIDs authorize resets on that remote endpoint.
+    quic_identity_result peer_cid_emitted(const quic_cid& cid, const datagram_endpoint& remote, quic_identity_emission outcome);
+    bool matches_reset(std::span<const std::byte> datagram, const datagram_endpoint& remote) const;
+    void stop();
+    void detach_routes();
     void set_peer_active_limit(std::uint64_t limit);
     quic_identity_result issue_cid();
     quic_identity_result receive(const quic_authenticated_path& packet, std::span<const quic_frame> frames, time_point now);

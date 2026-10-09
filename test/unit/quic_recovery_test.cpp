@@ -346,6 +346,21 @@ LT_BEGIN_AUTO_TEST(recovery_suite, peer_maximum_ack_delay_accepts_transport_para
     } catch (const std::invalid_argument&) { rejected = true; }
     LT_CHECK(rejected);
 LT_END_AUTO_TEST(peer_maximum_ack_delay_accepts_transport_parameter_range)
+LT_BEGIN_AUTO_TEST(recovery_suite, lifecycle_pto_has_no_path_validation_floor)
+    hd::quic_recovery recovery({}, httpserver::server::resource_budget::root({}));
+    LT_CHECK(recovery.current_pto() == 999ms);
+    hd::quic_recovery_environment environment;
+    environment.handshake_confirmed = true;
+    recovery.set_environment(environment, {});
+    LT_CHECK(recovery.current_pto() == 1024ms);
+    send(recovery, space::application);
+    LT_CHECK(recovery.expire(time_point() + 1024ms).probes == 2);
+    LT_CHECK(recovery.pto_count() == 1 && recovery.current_pto() == 1024ms);
+    LT_ASSERT(recovery.next_deadline());
+    LT_CHECK(recovery.next_deadline()->deadline == time_point() + 3072ms);
+    LT_CHECK(recovery.expire(time_point() + 3072ms).probes == 2);
+    LT_CHECK(recovery.pto_count() == 2 && recovery.current_pto() == 1024ms);
+LT_END_AUTO_TEST(lifecycle_pto_has_no_path_validation_floor)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

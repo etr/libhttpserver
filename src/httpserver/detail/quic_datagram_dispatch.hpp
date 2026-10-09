@@ -5,6 +5,8 @@
 #ifndef SRC_HTTPSERVER_DETAIL_QUIC_DATAGRAM_DISPATCH_HPP_
 #define SRC_HTTPSERVER_DETAIL_QUIC_DATAGRAM_DISPATCH_HPP_
 #include <utility>
+#include <array>
+#include <vector>
 #include <cstddef>
 #include <deque>
 #include <unordered_set>
@@ -35,6 +37,15 @@ class quic_datagram_dispatch final {
         std::string key_;
         std::weak_ptr<route> route_;
     };
+    class reset_registration {
+     private:
+        friend class quic_datagram_dispatch;
+        explicit reset_registration(const std::shared_ptr<route>& target) : route_(target) {}
+        std::weak_ptr<route> route_;
+    };
+    std::optional<reset_registration> register_reset(const std::array<std::byte, 16>& token, const datagram_endpoint& remote,
+        io_connection_owner::datagram_port owner, std::shared_ptr<datagram_sink> sink);
+    bool remove(const reset_registration& registration);
     explicit quic_datagram_dispatch(std::optional<std::size_t> short_cid_length = std::nullopt,
                                     std::size_t max_cids = 4096);
     ~quic_datagram_dispatch();
@@ -53,6 +64,8 @@ class quic_datagram_dispatch final {
         std::shared_ptr<datagram_delivery> delivery;
     };
     static std::string key(const quic_cid& cid);
+    std::shared_ptr<route> lookup_cid(const quic_cid& cid, datagram_dispatch_code& missing) const;
+    std::shared_ptr<route> lookup_reset(const io_datagram& packet) const;
     const std::optional<std::size_t> short_cid_length_;
     const std::size_t max_cids_;
     mutable std::mutex mu_;
@@ -61,6 +74,12 @@ class quic_datagram_dispatch final {
     // than this history return unknown, without exhausting a long-lived listener.
     std::unordered_set<std::string> retired_;
     std::deque<std::string> retired_order_;
+    struct reset_route {
+        std::array<std::byte, 16> token;
+        datagram_endpoint remote;
+        std::shared_ptr<route> target;
+    };
+    std::vector<reset_route> resets_;
 };
 }  // namespace detail
 }  // namespace httpserver

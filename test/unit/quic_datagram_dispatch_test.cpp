@@ -259,6 +259,54 @@ LT_BEGIN_AUTO_TEST(dispatch_suite, coalesced_long_header_datagram_is_delivered_w
     LT_CHECK_EQ(sink->packets.size(), std::size_t{1});
     LT_CHECK(sink->packets.front()->bytes == expected);
 LT_END_AUTO_TEST(coalesced_long_header_datagram_is_delivered_whole)
+LT_BEGIN_AUTO_TEST(dispatch_suite, unknown_cid_reset_fallback_is_bounded_affine_and_generation_safe)
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    hd::quic_datagram_dispatch dispatch(2, 1);
+    auto sink = std::make_shared<collecting_sink>();
+    sink->expected = &ex;
+    auto reset = packet(99);
+    reset->bytes.resize(40, std::byte{0x40});
+    std::array<std::byte, 16> token{std::byte{19}};
+    std::copy(token.begin(), token.end(), reset->bytes.end() - 16);
+    auto handle = dispatch.register_reset(token, reset->peer, owner.datagrams(), sink);
+    LT_ASSERT(handle);
+    LT_CHECK(!dispatch.register_reset(token, reset->peer, owner.datagrams(), sink));
+    auto wrong = std::make_shared<hd::io_datagram>(*reset);
+    ++wrong->peer.peer.port;
+    LT_CHECK(dispatch.dispatch(wrong).code == hd::datagram_dispatch_code::unknown);
+    LT_CHECK(dispatch.dispatch(reset).code == hd::datagram_dispatch_code::routed);
+    LT_CHECK(sink->packets.empty());
+    LT_CHECK(dispatch.remove(*handle));
+    ex.run_pending();
+    LT_CHECK(sink->packets.empty());
+    auto replacement = dispatch.register_reset(token, reset->peer, owner.datagrams(), sink);
+    LT_ASSERT(replacement);
+    LT_CHECK(!dispatch.remove(*handle));
+    LT_CHECK(dispatch.dispatch(reset).code == hd::datagram_dispatch_code::routed);
+    ex.run_pending();
+    LT_CHECK_EQ(sink->packets.size(), 1u);
+    LT_CHECK(sink->executor_affinity);
+    reset->bytes.back() ^= std::byte{1};
+    LT_CHECK(dispatch.dispatch(reset).code == hd::datagram_dispatch_code::unknown);
+LT_END_AUTO_TEST(unknown_cid_reset_fallback_is_bounded_affine_and_generation_safe)
+LT_BEGIN_AUTO_TEST(dispatch_suite, duplicate_reset_registration_cannot_redirect_an_existing_owner)
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    hd::quic_datagram_dispatch dispatch(2, 3);
+    auto first = std::make_shared<collecting_sink>(), other = std::make_shared<collecting_sink>();
+    std::array<std::byte, 16> token{std::byte{19}};
+    auto reset = packet(99);
+    reset->bytes.resize(40);
+    std::copy(token.begin(), token.end(), reset->bytes.end() - 16);
+    auto initial = dispatch.register_reset(token, reset->peer, owner.datagrams(), first);
+    LT_ASSERT(initial);
+    LT_CHECK(!dispatch.register_reset(token, reset->peer, owner.datagrams(), other));
+    LT_CHECK(dispatch.dispatch(reset).code == hd::datagram_dispatch_code::routed);
+    ex.run_pending();
+    LT_CHECK_EQ(first->packets.size(), 1u);
+    LT_CHECK(other->packets.empty());
+LT_END_AUTO_TEST(duplicate_reset_registration_cannot_redirect_an_existing_owner)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

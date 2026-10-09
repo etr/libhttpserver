@@ -461,6 +461,73 @@ LT_BEGIN_AUTO_TEST(identity_suite, peer_retirement_discards_candidate_using_reti
     const std::array<hd::quic_frame, 1> late{hd::quic_path_frame{true, probe->data}};
     LT_CHECK(!f.receive(path(), 3, late).activated);
 LT_END_AUTO_TEST(peer_retirement_discards_candidate_using_retired_cid_without_reusing_active_cid)
+LT_BEGIN_AUTO_TEST(identity_suite, resets_require_actual_cid_use_remote_match_and_live_identity)
+    fixture f;
+    auto remote = path().peer;
+    auto peer = cid(8);
+    std::array<std::byte, 16> token{std::byte{19}};
+    const std::array<hd::quic_frame, 1> advertised{hd::quic_new_connection_id_frame{1, 1, std::span(peer.bytes).first(peer.size), token}};
+    LT_ASSERT(f.receive(path(), 1, advertised));
+    std::vector<std::byte> datagram(40, std::byte{0x40});
+    std::copy(token.begin(), token.end(), datagram.end() - 16);
+    LT_CHECK(!f.identity.matches_reset(datagram, remote));
+    LT_ASSERT(f.identity.peer_cid_emitted(peer, remote, hd::quic_identity_emission::unsent));
+    LT_CHECK(!f.identity.matches_reset(datagram, remote));
+    LT_ASSERT(f.identity.peer_cid_emitted(peer, remote, hd::quic_identity_emission::ambiguous));
+    LT_CHECK(f.identity.matches_reset(datagram, remote));
+    LT_CHECK(!f.identity.matches_reset(datagram, path(4001).peer));
+    datagram.back() = std::byte{1};
+    LT_CHECK(!f.identity.matches_reset(datagram, remote));
+    datagram.back() = token.back();
+    LT_CHECK(!f.identity.matches_reset(std::span(datagram).last(20), remote));
+    for (unsigned i = 1; i < hd::quic_connection_identity::max_paths; ++i)
+        LT_CHECK(f.identity.peer_cid_emitted(peer, path(4000 + i).peer, hd::quic_identity_emission::sent));
+    LT_CHECK(f.identity.peer_cid_emitted(peer, path(5000).peer, hd::quic_identity_emission::sent).code == hd::quic_identity_code::capacity);
+    auto replacement = cid(9);
+    std::array<std::byte, 16> replacement_token{std::byte{20}};
+    const std::array<hd::quic_frame, 1> retired{hd::quic_new_connection_id_frame{2, 2, std::span(replacement.bytes).first(replacement.size), replacement_token}};
+    LT_ASSERT(f.receive(path(), 2, retired));
+    LT_CHECK(!f.identity.matches_reset(datagram, remote));
+    LT_CHECK(f.identity.peer_cid_emitted(peer, remote, hd::quic_identity_emission::sent).code == hd::quic_identity_code::dropped);
+LT_END_AUTO_TEST(resets_require_actual_cid_use_remote_match_and_live_identity)
+LT_BEGIN_AUTO_TEST(identity_suite, stop_retains_aliases_until_explicit_endpoint_detachment)
+    fixture f;
+    httpserver::manual_executor ex;
+    hd::io_connection_owner owner(ex);
+    hd::quic_datagram_dispatch dispatch(8);
+    auto delivery = std::make_shared<sink>();
+    auto initial = dispatch.register_cid(cid(1), owner.datagrams(), delivery);
+    LT_ASSERT(initial);
+    LT_ASSERT(f.identity.attach_routes(dispatch, owner.datagrams(), delivery, *initial));
+    LT_ASSERT(f.identity.issue_cid());
+    f.identity.stop();
+    LT_CHECK(!f.identity.issue_cid());
+    LT_CHECK(!f.identity.deadline());
+    auto packet = std::make_shared<hd::io_datagram>();
+    packet->bytes.resize(30);
+    packet->bytes[0] = std::byte{0x40};
+    packet->bytes[1] = std::byte{1};
+    LT_CHECK(dispatch.dispatch(packet).code == hd::datagram_dispatch_code::routed);
+    f.identity.detach_routes();
+    f.identity.detach_routes();
+    ex.run_pending();
+    LT_CHECK_EQ(delivery->packets, 0u);
+    LT_CHECK(dispatch.dispatch(packet).code == hd::datagram_dispatch_code::retired);
+LT_END_AUTO_TEST(stop_retains_aliases_until_explicit_endpoint_detachment)
+LT_BEGIN_AUTO_TEST(identity_suite, detaching_unregistered_identity_removes_reset_eligibility)
+    fixture f;
+    auto peer = cid(8);
+    std::array<std::byte, 16> token{std::byte{19}};
+    const std::array<hd::quic_frame, 1> frame{hd::quic_new_connection_id_frame{1, 1, std::span(peer.bytes).first(peer.size), token}};
+    LT_ASSERT(f.receive(path(), 1, frame));
+    LT_ASSERT(f.identity.peer_cid_emitted(peer, path().peer, hd::quic_identity_emission::sent));
+    std::vector<std::byte> reset(21);
+    std::copy(token.begin(), token.end(), reset.end() - 16);
+    LT_CHECK(f.identity.matches_reset(reset, path().peer));
+    f.identity.stop();
+    f.identity.detach_routes();
+    LT_CHECK(!f.identity.matches_reset(reset, path().peer));
+LT_END_AUTO_TEST(detaching_unregistered_identity_removes_reset_eligibility)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

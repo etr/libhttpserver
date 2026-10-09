@@ -332,6 +332,34 @@ LT_BEGIN_AUTO_TEST(state_suite, application_read_installation_failure_is_transac
     std::array<std::byte, 128> clear{}, scratch{};
     LT_CHECK(state.open_packet(level::application, wire, 0, {}, true, clear, scratch).code == code::ok);
 LT_END_AUTO_TEST(application_read_installation_failure_is_transactional)
+LT_BEGIN_AUTO_TEST(state_suite, clearing_current_previous_next_and_dummy_keys_releases_once)
+    cleanse_receipt receipt;
+    std::size_t released = 0;
+    {
+        hd::quic_key_state receiver({}, cleanse_receipt::observe, &receipt), sender;
+        auto secret = traffic_secret();
+        LT_ASSERT(receiver.install_traffic_secret(level::application, direction::read, cipher_suite, secret) == code::ok);
+        LT_ASSERT(receiver.install_traffic_secret(level::application, direction::write, cipher_suite, secret) == code::ok);
+        LT_ASSERT(sender.install_traffic_secret(level::application, direction::write, cipher_suite, secret) == code::ok);
+        LT_ASSERT(sender.advance_write_keys(true, true) == code::ok);
+        auto next = seal(sender, 1);
+        std::array<std::byte, 128> plain{}, scratch{};
+        LT_ASSERT(receiver.open_packet(level::application, next, 0, {}, true, plain, scratch).code == code::ok);
+        LT_ASSERT(receiver.prepare_next_application_keys(direction::read) == code::ok);
+        LT_ASSERT(receiver.prepare_next_application_keys(direction::write) == code::ok);
+        const auto before = receipt.releases;
+        receiver.clear();
+        // Five full key sets and a dummy set without a traffic secret.
+        LT_CHECK_EQ(receipt.releases - before, 23u);
+        LT_CHECK(receipt.clean);
+        released = receipt.releases;
+        receiver.clear();
+        for (auto key_level : {level::initial, level::handshake, level::application}) receiver.discard_level(key_level);
+        LT_CHECK_EQ(receipt.releases, released);
+        LT_CHECK(receiver.install_traffic_secret(level::application, direction::read, cipher_suite, secret) == code::invalid_key_transition);
+    }
+    LT_CHECK_EQ(receipt.releases, released);
+LT_END_AUTO_TEST(clearing_current_previous_next_and_dummy_keys_releases_once)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

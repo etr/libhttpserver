@@ -11,11 +11,15 @@ bool outstanding_eliciting(const Space& s) {
     return std::any_of(s.sent.begin(), s.sent.end(), [](const auto& p) { return p.in_flight && p.ack_eliciting && !p.pmtu_probe; });
 }
 }  // namespace
-recovery_duration quic_recovery::implementation::pto_duration(quic_pn_space space) const {
+recovery_duration quic_recovery::implementation::base_pto_duration(quic_pn_space space) const {
     auto variance = std::max(recovery_scale(rtt.variation, 4), recovery_duration(std::chrono::milliseconds(1)));
     auto duration = recovery_sum(rtt.smoothed, variance);
     if (space == quic_pn_space::application && environment.handshake_confirmed)
         duration = recovery_sum(duration, config.peer_max_ack_delay);
+    return duration;
+}
+recovery_duration quic_recovery::implementation::pto_duration(quic_pn_space space) const {
+    auto duration = base_pto_duration(space);
     for (unsigned i = 0; i < pto_count; ++i) duration = recovery_scale(duration, 2);
     return duration;
 }
@@ -106,6 +110,9 @@ quic_recovery_events quic_recovery::expire(time_point now) {
     return result;
 }
 unsigned quic_recovery::pto_count() const { return impl_->pto_count; }
+std::chrono::steady_clock::duration quic_recovery::current_pto() const {
+    return impl_->base_pto_duration(impl_->environment.handshake_confirmed ? quic_pn_space::application : quic_pn_space::handshake);
+}
 std::chrono::steady_clock::duration quic_recovery::path_probe_interval() const {
     return std::max(std::chrono::steady_clock::duration(std::chrono::seconds(1)), impl_->pto_duration(quic_pn_space::application));
 }
