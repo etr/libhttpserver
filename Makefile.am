@@ -698,3 +698,6 @@ EXTRA_DIST += scripts/run-v3-http3-full-gates.py docs/task-178-http3-full-confor
 check-v3-http3-full:
 	@python3 $(top_srcdir)/scripts/run-v3-http3-full-gates.py $(FULL_HTTP3_ARGS)
 .PHONY: check-v3-http3-full
+
+EXTRA_DIST += docs/task-179-behavior-parity.md
+EXTRA_DIST += scripts/run-v3-behavior-parity.py

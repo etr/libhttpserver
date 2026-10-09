@@ -92,24 +92,22 @@ class lifecycle_sink final : public exchange_sink {
     // True after a post-commit abort was forwarded.
     bool aborted() const noexcept { return aborted_; }
 
+    bool begin_completion() noexcept {
+        if (completed_) return false;
+        completed_ = true;
+        return true;
+    }
+
     void on_admit(const body_policy& policy) override {
         inner_.on_admit(policy);
     }
 
     void on_respond(const http::status& s, const http::fields& f) override {
-        // Zero-cost-when-unused: the mutable copies exist exactly when
-        // after_handler can run (the provenance allows it AND hooks
-        // are registered); every other commit forwards the originals
-        // untouched -- no status/fields copy on the hot path.
-        if (next_ != provenance::pre_handler
-                && bus_.any_hooks(server::hook_phase::after_handler)) {
-            http::status final_status = s;
-            http::fields final_fields = f;
-            fire_after(final_status, final_fields);
-            forward(final_status, final_fields);
-        } else {
-            forward(s, f);
-        }
+        commit(s, f, false);
+    }
+
+    void on_start_response(const http::status& s, const http::fields& f) override {
+        commit(s, f, true);
     }
 
     websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override {
@@ -125,6 +123,19 @@ class lifecycle_sink final : public exchange_sink {
     }
 
  private:
+    void commit(const http::status& s, const http::fields& f, bool streaming) {
+        // Mutable copies exist only when after_handler can run.
+        if (next_ != provenance::pre_handler
+                && bus_.any_hooks(server::hook_phase::after_handler)) {
+            http::status final_status = s;
+            http::fields final_fields = f;
+            fire_after(final_status, final_fields);
+            forward(final_status, final_fields, streaming);
+        } else {
+            forward(s, f, streaming);
+        }
+    }
+
     // The commit tail shared by both branches: forwards the head and,
     // only when the engine accepted it (a refused head -- the framer
     // rejected a field, say -- set the engine's refusal flag), records
@@ -132,8 +143,9 @@ class lifecycle_sink final : public exchange_sink {
     // accepted the committed head"). A refusal suppresses
     // response_sent and is recorded so the request_completed tail can
     // report the failure verdict.
-    void forward(const http::status& s, const http::fields& f) {
-        inner_.on_respond(s, f);
+    void forward(const http::status& s, const http::fields& f, bool streaming) {
+        if (streaming) inner_.on_start_response(s, f);
+        else inner_.on_respond(s, f);
         if (engine_refusal_ != nullptr && *engine_refusal_) {
             refused_ = true;
             return;
@@ -170,6 +182,7 @@ class lifecycle_sink final : public exchange_sink {
     bool responded_ = false;
     bool refused_ = false;
     bool aborted_ = false;
+    bool completed_ = false;
     std::uint16_t status_ = 0;
 };
 

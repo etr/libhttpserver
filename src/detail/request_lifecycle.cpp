@@ -359,7 +359,8 @@ http::outcome end_reason_of(const exchange& x, const lifecycle_sink& sink) {
 }
 
 void fire_completed(const server::hook_bus& bus, const exchange& x,
-                    const lifecycle_sink& sink) {
+                    lifecycle_sink& sink) {
+    if (!sink.begin_completion()) return;
     if (!bus.any_hooks(server::hook_phase::request_completed)) return;
     const bool settled_clean = x.terminal() && !x.disconnected()
         && !sink.aborted() && !sink.refused()
@@ -380,6 +381,11 @@ std::string refusal_detail(server::peer_refusal reason) {
 }
 
 }  // namespace
+
+void complete_request(const server::hook_bus& bus, const exchange& x,
+                      lifecycle_sink& sink) {
+    fire_completed(bus, x, sink);
+}
 
 task<void> dispatch_request(const server::route_registry& routes,
                             const server::hook_bus& bus,

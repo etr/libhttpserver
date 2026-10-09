@@ -11,6 +11,7 @@
 #include <httpserver/detail/quic_flow_control.hpp>
 #include <httpserver/detail/quic_recovery.hpp>
 #include <httpserver/exchange.hpp>
+#include <httpserver/detail/request_lifecycle.hpp>
 namespace httpserver::detail {
 struct http3_request_limits {
     http3_limits framing;
@@ -30,7 +31,7 @@ struct http3_request_action {
 class http3_request_engine final {
  public:
     http3_request_engine(quic_storage_lease data, quic_storage_lease critical, quic_flow_control& flow, quic_recovery& recovery, const server::route_registry& routes,
-                         executor& owner, http3_request_limits limits = {}, std::uint64_t connection_id = 0, net::peer_address peer = {});
+                         executor& owner, http3_request_limits limits = {}, std::uint64_t connection_id = 0, net::peer_address peer = {}, request_dispatch_context dispatch = {});
     ~http3_request_engine();
     http3_request_engine(const http3_request_engine&) = delete;
     http3_request_engine& operator=(const http3_request_engine&) = delete;

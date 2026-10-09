@@ -645,6 +645,29 @@ LT_BEGIN_AUTO_TEST(route_sync_suite, sync_route_serves_bodyless_request)
     LT_CHECK(x.state() == exchange_state::responded);
 LT_END_AUTO_TEST(sync_route_serves_bodyless_request)
 
+LT_BEGIN_AUTO_TEST(route_sync_suite, head_value_keeps_length_without_writer_traffic)
+    for (const auto version : {http::protocol::http_1_0, http::protocol::http_1_1,
+                               http::protocol::http_2, http::protocol::http_3}) {
+        manual_executor ex;
+        capturing_sink sink;
+        fake::scripted_body_sink responses;
+        exchange x(make_head(http::method::known(http::method_id::head), "/both", version),
+                   &sink, 0, nullptr, &responses);
+        srv::sync_response value;
+        value.status = http::status::from_code(200);
+        value.body = bytes("both-ok");
+        int done = 0;
+        spawn(ex, srv::detail::commit_sync_value(x, std::move(value)),
+              [&done](task_result<void>) { ++done; });
+        drain(ex);
+        LT_CHECK_EQ(done, 1);
+        LT_CHECK_EQ(sink.respond_calls, 1);
+        LT_CHECK_EQ(sink.responded.first("Content-Length").value_or(""), std::string_view("7"));
+        LT_CHECK_EQ(responses.push_calls(), 0);
+        LT_CHECK_EQ(responses.end_calls(), 0);
+    }
+LT_END_AUTO_TEST(head_value_keeps_length_without_writer_traffic)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

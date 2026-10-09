@@ -57,6 +57,18 @@ struct error_page_factories {
     std::shared_ptr<const factory> method_not_allowed;
 };
 
+// The bus and policy outlive the engine; page factories retain ownership.
+struct request_dispatch_context {
+    const server::hook_bus* hooks = nullptr;
+    error_page_factories pages;
+    const server::peer_policy* peers = nullptr;
+};
+
+// Also called when an adapter retires a queued or parked handler frame.
+// The sink guards the notification against a completed dispatcher tail.
+void complete_request(const server::hook_bus& bus, const exchange& x,
+                      lifecycle_sink& sink);
+
 // Dispatches one complete request head through the pipeline over @p x:
 // request_received (short-circuit capable) -> resolve -> route_
 // resolved (hit and miss alike) -> the miss/method-miss/hit branch

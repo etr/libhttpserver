@@ -109,6 +109,7 @@ bool http3_request_engine::state::section(record& r, std::uint16_t status, const
 void http3_request_engine::state::respond(record& r, std::uint16_t status, const http::fields& fields, bool streaming) {
     if (r.cancelled || disconnected || !r.semantic) return;
     auto& s = *r.semantic;
+    s.response_refused = true;
     std::optional<std::uint64_t> length;
     bool forbidden = false;
     if (!response_policy(status, fields, s.request.head().request_method.id(), streaming, length, forbidden)) {
@@ -125,6 +126,7 @@ void http3_request_engine::state::respond(record& r, std::uint16_t status, const
         return;
     }
     abandon(r);
+    s.response_refused = false;
 }
 bool http3_request_engine::state::stream_output(record& r) {
     if (!r.semantic || !r.semantic->streaming) return false;

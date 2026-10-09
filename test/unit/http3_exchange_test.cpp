@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <vector>
+#include <memory>
 #include <stdexcept>
 #include <atomic>
 #include <string>
@@ -7,6 +8,7 @@
 #include "./http3_route_parity_fixture.hpp"
 #include "./http3_request_fixture.hpp"
 #include "./littletest.hpp"
+#include <parity/v3_dispatch_replay.hpp>
 namespace http = httpserver::http;
 using httpserver::exchange;
 using httpserver::task;
@@ -245,6 +247,133 @@ LT_BEGIN_AUTO_TEST(http3_exchange_suite, identical_get_post_handlers_observe_sem
         LT_CHECK_EQ(observed[1], observed[2]);
     }
 LT_END_AUTO_TEST(identical_get_post_handlers_observe_semantic_parity_over_three_real_engines)
+LT_BEGIN_AUTO_TEST(http3_exchange_suite, parity_parameter_capture_and_method_miss)
+    h3test::request_fixture f;
+    std::string capture;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/params/{id}", [&](exchange& x) -> task<void> {
+        for (const auto& arg : x.path_args()) capture = arg.value;
+        x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    f.open(0); f.open(4);
+    LT_ASSERT(f.feed(0, h3test::headers(h3test::get("GET", "/params/42")), true));
+    LT_ASSERT(f.feed(4, h3test::headers(h3test::get("POST", "/params/42")), true));
+    f.executor.run_pending(); f.drain();
+    auto response = h3test::decode_response(f.output[4]);
+    LT_CHECK_EQ(capture, "42");
+    LT_ASSERT_EQ(response.heads.size(), 1u);
+    LT_CHECK_EQ(response.heads[0][0].value, "405");
+    bool allow = false;
+    for (const auto& field : response.heads[0]) if (field.name == "allow" && field.value == "GET") allow = true;
+    LT_CHECK(allow);
+    LT_CHECK_EQ(response.body, "Method not Allowed");
+LT_END_AUTO_TEST(parity_parameter_capture_and_method_miss)
+LT_BEGIN_AUTO_TEST(http3_exchange_suite, parity_hook_mutation_short_circuit_and_custom_pages)
+    httpserver::server::hook_bus bus;
+    parity::v3_replay::install_routing_hooks(bus);
+    h3test::request_fixture f;
+    f.routes = parity::v3_replay::build_routing_basic(f.root);
+    unsigned admin_calls = 0;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::del), "/admin", [&](exchange& x) -> task<void> {
+        ++admin_calls; x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    httpserver::detail::request_dispatch_context context{&bus, parity::v3_replay::custom_hook_pages(), nullptr};
+    f.engine = std::make_unique<httpserver::detail::http3_request_engine>(f.pool.data(), f.pool.critical(), f.flow, f.recovery, f.routes, f.executor,
+        httpserver::detail::http3_request_limits{}, 77, httpserver::net::peer_address{}, context);
+    std::vector<std::pair<std::string, std::string>> requests{{"GET", "/hello"}, {"DELETE", "/admin"}, {"GET", "/nope"}, {"POST", "/get_only"}};
+    for (unsigned i = 0; i < requests.size(); ++i) {
+        f.open(i * 4); LT_ASSERT(f.feed(i * 4, h3test::headers(h3test::get(requests[i].first, requests[i].second)), true));
+    }
+    f.executor.run_pending(); f.drain(); LT_CHECK_EQ(admin_calls, 0u);
+    const std::vector<std::string> statuses{"200", "403", "404", "405"};
+    const std::vector<std::string> bodies{"OK", "hooked403", "custom-not-found", "custom-not-allowed"};
+    for (unsigned i = 0; i < requests.size(); ++i) {
+        auto response = h3test::decode_response(f.output[i * 4]);
+        LT_ASSERT_EQ(response.heads.size(), 1u); LT_CHECK_EQ(response.heads[0][0].value, statuses[i]);
+        bool hook = false, allow = false;
+        for (const auto& field : response.heads[0]) {
+            if (field.name == "x-hook" && field.value == "after") hook = true;
+            if (field.name == "allow" && field.value == "GET") allow = true;
+        }
+        LT_CHECK_EQ(hook, i != 1);
+        if (i == 3) {
+            LT_CHECK(allow);
+        }
+        LT_CHECK_EQ(response.body, bodies[i]); LT_CHECK_EQ(f.fins[i * 4], 1u);
+    }
+LT_END_AUTO_TEST(parity_hook_mutation_short_circuit_and_custom_pages)
+LT_BEGIN_AUTO_TEST(http3_exchange_suite, refused_head_suppresses_response_sent_and_fails_completion)
+    httpserver::server::hook_bus bus;
+    unsigned sent = 0, completed = 0; bool succeeded = true;
+    auto sent_hook = bus.add<httpserver::server::hook_phase::response_sent>([&](httpserver::server::response_sent_ctx&) { ++sent; return httpserver::server::hook_action::pass(); });
+    auto completed_hook = bus.add<httpserver::server::hook_phase::request_completed>([&](httpserver::server::request_completed_ctx& ctx) {
+        ++completed; succeeded = ctx.succeeded; return httpserver::server::hook_action::pass();
+    });
+    h3test::request_fixture f;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [](exchange& x) -> task<void> {
+        http::fields fields; fields.append("Connection", "close");
+        x.respond(http::status::from_code(200), fields); co_return;
+    }).ok());
+    httpserver::detail::request_dispatch_context context{&bus, {}, nullptr};
+    f.engine = std::make_unique<httpserver::detail::http3_request_engine>(f.pool.data(), f.pool.critical(), f.flow, f.recovery, f.routes, f.executor,
+        httpserver::detail::http3_request_limits{}, 77, httpserver::net::peer_address{}, context);
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true)); f.executor.run_pending(); f.drain();
+    LT_CHECK(f.output[0].empty());
+    auto action = f.engine->take_action(); LT_ASSERT(action); LT_CHECK(action->reset.has_value());
+    LT_CHECK_EQ(sent, 0u); LT_CHECK_EQ(completed, 1u); LT_CHECK(!succeeded);
+LT_END_AUTO_TEST(refused_head_suppresses_response_sent_and_fails_completion)
+LT_BEGIN_AUTO_TEST(http3_exchange_suite, cancelled_parked_request_completes_exactly_once)
+    httpserver::server::hook_bus bus;
+    unsigned completed = 0, resumed = 0; bool succeeded = true;
+    auto completed_hook = bus.add<httpserver::server::hook_phase::request_completed>([&](httpserver::server::request_completed_ctx& ctx) {
+        ++completed; succeeded = ctx.succeeded; return httpserver::server::hook_action::pass();
+    });
+    httpserver::resume_signal parked;
+    h3test::request_fixture f;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
+        co_await parked.wait(); ++resumed; x.respond(http::status::from_code(204), {});
+    }).ok());
+    httpserver::detail::request_dispatch_context context{&bus, {}, nullptr};
+    f.engine = std::make_unique<httpserver::detail::http3_request_engine>(f.pool.data(), f.pool.critical(), f.flow, f.recovery, f.routes, f.executor,
+        httpserver::detail::http3_request_limits{}, 77, httpserver::net::peer_address{}, context);
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true)); f.executor.run_pending();
+    f.engine->terminal(0, {httpserver::detail::quic_terminal_kind::reset, 8}); f.drain();
+    parked.signal(); f.executor.run_pending(); f.drain();
+    LT_CHECK_EQ(completed, 1u); LT_CHECK(!succeeded); LT_CHECK_EQ(resumed, 0u);
+LT_END_AUTO_TEST(cancelled_parked_request_completes_exactly_once)
+LT_BEGIN_AUTO_TEST(http3_exchange_suite, runtime_peer_refusal_resets_without_headers_and_releases_stream)
+    h3test::request_fixture f;
+    unsigned calls = 0, refused = 0;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
+        ++calls; x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    httpserver::server::peer_policy peers; httpserver::server::hook_bus hooks;
+    auto completed = hooks.add<httpserver::server::hook_phase::request_completed>([&](httpserver::server::request_completed_ctx& ctx) {
+        if (ctx.end.code() == http::outcome_code::peer_refused) {
+            ++refused; LT_CHECK(!ctx.succeeded);
+        }
+        return httpserver::server::hook_action::pass();
+    });
+    httpserver::net::peer_address peer{*httpserver::net::parse_address("127.0.0.1"), 4000};
+    httpserver::detail::request_dispatch_context context{&hooks, {}, &peers};
+    httpserver::detail::http3_request_limits limits; limits.max_active_requests = 1;
+    f.engine = std::make_unique<httpserver::detail::http3_request_engine>(f.pool.data(), f.pool.critical(), f.flow, f.recovery, f.routes, f.executor,
+        limits, 99, peer, context);
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true)); f.executor.run_pending(); f.drain();
+    LT_ASSERT(peers.deny("127.0.0.1").ok());
+    f.open(4); LT_ASSERT(f.feed(4, h3test::headers(h3test::get()), true)); f.executor.run_pending(); f.drain();
+    LT_CHECK(f.output[4].empty());
+    const auto action = f.engine->take_action();
+    LT_CHECK(action.has_value());
+    if (action) {
+        LT_ASSERT(action->reset); LT_CHECK_EQ(action->reset->error, 0x10bu);
+    }
+    LT_CHECK_EQ(calls, 1u); LT_CHECK_EQ(refused, 1u);
+    LT_ASSERT(peers.remove_denied("127.0.0.1").ok());
+    f.open(8); LT_ASSERT(f.feed(8, h3test::headers(h3test::get()), true)); f.executor.run_pending(); f.drain();
+    const auto resumed = h3test::decode_response(f.output[8]);
+    LT_ASSERT_EQ(resumed.heads.size(), 1u); LT_CHECK_EQ(resumed.heads.front().front().value, "204");
+    LT_CHECK_EQ(calls, 2u); LT_CHECK_EQ(refused, 1u);
+LT_END_AUTO_TEST(runtime_peer_refusal_resets_without_headers_and_releases_stream)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

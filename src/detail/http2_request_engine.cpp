@@ -32,8 +32,8 @@ bool valid_request_limits(const http2_request_limits& limits) {
 }
 }  // namespace
 http2_request_engine::http2_request_engine(server::resource_budget budget, const server::route_registry& routes,
-                                          executor& owner, http2_request_limits limits)
-    : state_(std::make_shared<state>(budget, routes, owner, limits)) {
+                                          executor& owner, http2_request_limits limits, request_dispatch_context dispatch, std::uint64_t id, net::peer_address peer)
+    : state_(std::make_shared<state>(budget, routes, owner, limits, std::move(dispatch), id, peer)) {
     state_->handlers->after_resume([weak = std::weak_ptr<state>(state_)] {
         if (auto state = weak.lock()) state->retire_cancelled();
     });

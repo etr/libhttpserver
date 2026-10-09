@@ -13,6 +13,7 @@
 #include <vector>
 #include <utility>
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/lifecycle_sink.hpp>
 #include <httpserver/detail/http3_request_engine.hpp>
 #include <httpserver/detail/http3_request_head.hpp>
 #include <httpserver/detail/http3_body_stream.hpp>
@@ -40,7 +41,9 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         state& owner;
         record& transport;
         http3_body_stream body;
+        bool response_refused = false;
         exchange request;
+        lifecycle_sink lifecycle;
         http3_request_helpers::route_task handler;
         server::reservation head_charge, fields_charge, storage_charge, trailer_charge, sender_trailer_charge;
         http::fields trailers;
@@ -87,6 +90,9 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     quic_flow_control& flow;
     quic_recovery& recovery;
     const server::route_registry& routes;
+    request_dispatch_context dispatch_context;
+    server::hook_bus empty_bus;
+    const server::hook_bus& bus() const { return dispatch_context.hooks ? *dispatch_context.hooks : empty_bus; }
     http3_request_limits limits;
     http3_connection connection;
     std::shared_ptr<http3_request_helpers::route_executor> handlers;
@@ -118,12 +124,13 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     void retire_drain_request(record& r);
     void drain_requests();
     state(quic_storage_lease d, quic_storage_lease c, quic_flow_control& f, quic_recovery& q, const server::route_registry& r, executor& e, http3_request_limits l,
-          std::uint64_t id, net::peer_address p)
+          std::uint64_t id, net::peer_address p, request_dispatch_context context)
         : data(std::move(d)),
           critical(std::move(c)),
           flow(f),
           recovery(q),
           routes(r),
+          dispatch_context(std::move(context)),
           limits(l),
           connection(data, critical, l.framing),
           handlers(std::make_shared<http3_request_helpers::route_executor>(e)),

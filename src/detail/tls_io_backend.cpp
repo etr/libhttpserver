@@ -55,9 +55,11 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
     std::atomic<std::uint64_t> sequence{1};
     std::shared_ptr<request> control, reader, writer;
     std::shared_ptr<op_state> raw_read, raw_write;
-    explicit core(io_backend& transport, executor& executor, std::uint64_t id, tls_credentials_selection selection, bool server, tls_handshake_context handshake)
+    const tls_read_cancel_policy read_cancel;
+    explicit core(io_backend& transport, executor& executor, std::uint64_t id, tls_credentials_selection selection, bool server, tls_handshake_context handshake,
+        tls_read_cancel_policy cancellation)
         : raw(transport), ex(executor), connection(id), child_owner(executor), session(std::make_unique<tls_session>(std::move(selection), server, handshake)),
-          handshake_runtime(session->handshake_runtime()) {}
+          handshake_runtime(session->handshake_runtime()), read_cancel(cancellation) {}
     void enqueue(executor::handler event, const std::shared_ptr<op_state>& tracked = nullptr) {
         bool schedule = false;
         {
@@ -199,7 +201,11 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
     bool cancel_target(const std::shared_ptr<op_state>& target) {
         for (auto* slot : {&control, &reader, &writer}) {
             if (*slot && (*slot)->op == target) {
-                abort(outcome_code::cancelled, target);
+                if (slot == &reader && read_cancel == tls_read_cancel_policy::preserve_session) {
+                    finish(reader, reader->complete ? reader->result : io_result{outcome_code::cancelled});
+                } else {
+                    abort(outcome_code::cancelled, target);
+                }
                 return true;
             }
         }
@@ -447,12 +453,13 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
     }
 };
 tls_io_backend::tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection,
-                               std::shared_ptr<const tls_context> context, bool server, tls_handshake_context handshake) {
-    core_ = std::make_shared<core>(raw, ex, connection, tls_credentials_selection{nullptr, std::move(context)}, server, handshake);
+                               std::shared_ptr<const tls_context> context, bool server, tls_handshake_context handshake, tls_read_cancel_policy read_cancel) {
+    core_ = std::make_shared<core>(raw, ex, connection, tls_credentials_selection{nullptr, std::move(context)}, server, handshake, read_cancel);
 }
 
-tls_io_backend::tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, tls_credentials_selection selection, bool server, tls_handshake_context handshake)
-    : core_(std::make_shared<core>(raw, ex, connection, std::move(selection), server, handshake)) {}
+tls_io_backend::tls_io_backend(io_backend& raw, executor& ex, std::uint64_t connection, tls_credentials_selection selection, bool server, tls_handshake_context handshake,
+    tls_read_cancel_policy read_cancel)
+    : core_(std::make_shared<core>(raw, ex, connection, std::move(selection), server, handshake, read_cancel)) {}
 tls_io_backend::~tls_io_backend() {
     close();
 }
@@ -474,12 +481,7 @@ outcome_code tls_io_backend::request_cancel(op_state& op) {
         }
     }
     self->enqueue([self, state = op.shared_from_this()] {
-        for (auto* slot : {&self->control, &self->reader, &self->writer}) {
-            if (*slot && (*slot)->op == state) {
-                self->abort(outcome_code::cancelled, state);
-                return;
-            }
-        }
+        self->cancel_target(state);
     });
     return outcome_code::ok;
 }

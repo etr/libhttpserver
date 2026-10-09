@@ -109,7 +109,7 @@ void run(unsigned version) {
             if (frame.type == 0) body.append(frame.payload.begin(), frame.payload.end());
         require(h2test::feed(h2, h2test::frame(1, 5, 3, h2test::encode(encoder, {{":method", "GET"}, {":scheme", "https"}, {":authority", "localhost"}, {":path", "/missing"}}))));
         f.executor.run_pending();
-        auto missing_responses = h2test::responses(h2test::output(h2));
+        auto missing_responses = h2test::responses(h2test::output(h2), true);
         require(missing_responses.size() == 1);
         missing = std::stoul(missing_responses.front().fields.front().value);
     }

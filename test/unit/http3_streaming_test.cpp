@@ -375,10 +375,13 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, single_retention_slot_rotates_to_ready
         co_await x.writer().finish();
         finished = true;
     }).ok());
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/ready", [](exchange& x) -> task<void> {
+        x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
     f.open(0);
     f.open(4);
     LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true));
-    LT_ASSERT(f.feed(4, h3test::headers(h3test::get("GET", "/missing")), true));
+    LT_ASSERT(f.feed(4, h3test::headers(h3test::get("GET", "/ready")), true));
     f.executor.run_pending();
     f.drain(32, 4);
     LT_CHECK_EQ(f.fins[4], 1u);

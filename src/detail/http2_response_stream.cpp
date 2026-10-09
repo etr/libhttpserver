@@ -54,6 +54,7 @@ void http2_request_engine::state::respond(std::uint32_t id, std::uint16_t status
     if (connection.failure()) return;
     const auto found = streams.find(id);
     if (found == streams.end() || found->second->reset_pending) return;
+    found->second->response_refused = true;
     const auto expanded = response_size(status, fields);
     if (!expanded || !prepare_response(*found->second, status, fields, streaming)) {
         reset(id, http2_error_code::internal_error); return;
@@ -68,6 +69,7 @@ void http2_request_engine::state::respond(std::uint32_t id, std::uint16_t status
         return;
     }
     pending.push_back(std::move(value));
+    found->second->response_refused = false;
 }
 bool http2_request_engine::state::encode_next() {
     auto value = std::move(pending.front()); pending.pop_front();

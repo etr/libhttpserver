@@ -1529,6 +1529,22 @@ native_http1_parity_SOURCES = integ/native_http1_parity_test.cpp \
 	parity/transcript.cpp parity/response_frame.cpp parity/normalize.cpp
 native_http1_parity_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"' -DPARITY_DATA_ROOT='"$(top_srcdir)/test"'
 
+check_PROGRAMS += behavior_replay
+behavior_replay_SOURCES = unit/behavior_replay_test.cpp parity/case_wire.cpp parity/transcript.cpp
+behavior_replay_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"'
+behavior_replay_LDADD = $(top_builddir)/src/libhttpserver.la
+noinst_HEADERS += parity/behavior_replay.hpp
+noinst_HEADERS += parity/v3_behavior_profiles.hpp
+noinst_HEADERS += parity/behavior_observation.hpp
+EXTRA_DIST += parity/task179-capabilities.json integ/behavior_parity_runner_test.py
+TESTS += integ/behavior_parity_runner_test.py
+
+check_PROGRAMS += v3_behavior_parity
+v3_behavior_parity_SOURCES = unit/v3_behavior_parity_test.cpp parity/transcript.cpp parity/case_wire.cpp parity/response_frame.cpp parity/normalize.cpp
+v3_behavior_parity_CPPFLAGS = $(AM_CPPFLAGS) $(V3_TLS_CFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"' -DPARITY_DATA_ROOT='"$(top_srcdir)/test"'
+v3_behavior_parity_LDADD = $(top_builddir)/src/libhttpserver_v3core.la $(V3_TLS_LIBS)
+v3_behavior_parity_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
 # TASK-121: transport-neutral protocol tests link the native archive only.
 websocket_codec_SOURCES = unit/websocket_codec_test.cpp
 websocket_codec_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
@@ -1784,6 +1800,12 @@ websocket_upgrade_decision_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 websocket_utf8_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 if NATIVE_V3_TLS
+check_PROGRAMS += native_http1_tls_parity
+native_http1_tls_parity_SOURCES = integ/native_http1_tls_parity_test.cpp \
+  parity/transcript.cpp parity/response_frame.cpp parity/normalize.cpp parity/case_wire.cpp
+native_http1_tls_parity_CPPFLAGS = $(tls_io_loopback_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"' -DPARITY_DATA_ROOT='"$(top_srcdir)/test"'
+native_http1_tls_parity_LDADD = $(tls_io_LDADD)
+native_http1_tls_parity_LDFLAGS = $(tls_io_LDFLAGS)
 check_PROGRAMS += tls_policy_concurrency tls_policy_hostile_profiles
 tls_policy_concurrency_SOURCES = unit/tls_policy_concurrency_test.cpp
 tls_policy_concurrency_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
@@ -1995,7 +2017,7 @@ EXTRA_DIST += conformance/http2-engine/zero-head.wire
 if NATIVE_V3_TLS
 noinst_PROGRAMS += http2_tls_fixture
 http2_tls_fixture_SOURCES = integ/http2_tls_fixture.cpp
-http2_tls_fixture_CPPFLAGS = $(V3_TLS_CFLAGS) $(AM_CPPFLAGS) -DTLS_TEST_DIR='"$(abs_top_srcdir)/test"'
+http2_tls_fixture_CPPFLAGS = $(V3_TLS_CFLAGS) $(AM_CPPFLAGS) -DTLS_TEST_DIR='"$(abs_top_srcdir)/test"' -DPARITY_DATA_ROOT='"$(abs_top_srcdir)/test"'
 http2_tls_fixture_LDADD = $(tls_io_LDADD)
 http2_tls_fixture_LDFLAGS = $(tls_io_LDFLAGS)
 endif
@@ -2261,7 +2283,7 @@ endif
 if NATIVE_V3_TLS
 noinst_PROGRAMS += http3_udp_fixture
 http3_udp_fixture_SOURCES = integ/http3_udp_fixture.cpp support/http3_network_owner.cpp support/http3_network_lifecycle.cpp support/quic_interop_files.cpp
-http3_udp_fixture_CPPFLAGS = $(http3_network_owner_CPPFLAGS)
+http3_udp_fixture_CPPFLAGS = $(http3_network_owner_CPPFLAGS) -DPARITY_DATA_ROOT='"$(abs_top_srcdir)/test"'
 http3_udp_fixture_LDADD = $(tls_io_LDADD)
 http3_udp_fixture_LDFLAGS = $(tls_io_LDFLAGS)
 endif
@@ -2490,3 +2512,6 @@ TESTS += integ/http3_full_gate_runner_test.py
 TEST_EXTENSIONS = .py
 PY_LOG_COMPILER = python3
 EXTRA_DIST += integ/http3_full_gate_runner_test.py conformance/http3/full-gates.json
+EXTRA_DIST += integ/behavior_parity_h2.py
+EXTRA_DIST += integ/behavior_parity_h3.py
+EXTRA_DIST += integ/behavior_parity_client_test.py

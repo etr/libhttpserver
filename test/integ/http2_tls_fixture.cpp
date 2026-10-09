@@ -21,9 +21,11 @@
 #include <cstdint>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/detail/tls_session.hpp>
+#include <httpserver/detail/io_poll_sys.hpp>
 #include <httpserver/exchange.hpp>
 #include "../unit/http2_request_fixture.hpp"
 #include "../unit/tls_credentials_fixture.hpp"
+#include <parity/v3_behavior_profiles.hpp>
 namespace {
 namespace h = httpserver;
 namespace hd = h::detail;
@@ -47,13 +49,15 @@ struct connection {
     h::manual_executor executor;
     hd::tls_session tls;
     std::vector<std::unique_ptr<h::websocket::session>> sessions;
+    std::unique_ptr<parity::behavior_profile> behavior;
     std::unique_ptr<hd::http2_request_engine> engine;
     std::vector<std::byte> ciphertext;
     std::vector<std::uint8_t> inspect;
     std::size_t sent = 0, total = 0, magic = 24;
     bool connected = false, terminal = false;
     clock_type::time_point deadline = clock_type::now() + std::chrono::seconds(15);
-    connection(int socket, hd::tls_credentials_selection selection, counters& c, h::resume_signal& a, h::resume_signal& b)
+    connection(int socket, hd::tls_credentials_selection selection, counters& c, h::resume_signal& a, h::resume_signal& b,
+               const std::string& profile)
         : fd(socket), counts(c), hold(a), upload(b), tls(std::move(selection), true) {
         if (!h::server::route_registry::create(budget, routes).ok()) throw std::runtime_error("routes refused");
         for (auto method : {h::http::method_id::get, h::http::method_id::post}) {
@@ -110,7 +114,19 @@ struct connection {
         });
         hd::http2_request_limits limits;
         limits.max_streams = 16;
-        engine = std::make_unique<hd::http2_request_engine>(budget, routes, executor, limits);
+        hd::request_dispatch_context dispatch;
+        if (!profile.empty()) {
+            behavior = std::make_unique<parity::behavior_profile>(budget);
+            behavior->install(profile, PARITY_DATA_ROOT);
+            routes = std::move(behavior->routes);
+            dispatch = behavior->context();
+        }
+        sockaddr_storage address{};
+        socklen_t size = sizeof(address);
+        if (getpeername(fd, reinterpret_cast<sockaddr*>(&address), &size)) throw std::runtime_error("transport peer snapshot");
+        h::net::peer_address peer;
+        hd::pollsys::fill_peer(address, peer);
+        engine = std::make_unique<hd::http2_request_engine>(budget, routes, executor, limits, dispatch, 1, peer);
     }
     ~connection() { engine.reset(); executor.run_pending(); close(fd); }
     void observe(std::span<const std::uint8_t> bytes) {
@@ -200,9 +216,12 @@ struct connection {
     }
 };
 }  // namespace
-int main() {
+int main(int argc, char** argv) {
     try {
         signal(SIGPIPE, SIG_IGN);
+        std::string profile;
+        if (argc == 3 && std::string_view(argv[1]) == "--behavior-profile") profile = argv[2];
+        else if (argc != 1) throw std::runtime_error("usage: http2_tls_fixture [--behavior-profile profile]");
         hd::tls_credentials_registry registry;
         if (!registry.replace(tls_test::credentials()).ok()) throw std::runtime_error("TLS credentials");
         int listener = socket(AF_INET, SOCK_STREAM, 0);
@@ -244,7 +263,7 @@ int main() {
                 int fd = accept(listener, nullptr, nullptr);
                 if (fd >= 0) {
                     fcntl(fd, F_SETFL, O_NONBLOCK); ++accepted;
-                    peers.push_back(std::make_unique<connection>(fd, registry.acquire()->select_default(), counts, hold, upload));
+                    peers.push_back(std::make_unique<connection>(fd, registry.acquire()->select_default(), counts, hold, upload, profile));
                 }
             }
         }

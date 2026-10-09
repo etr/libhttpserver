@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/lifecycle_sink.hpp>
 #include <httpserver/detail/http2_request_engine.hpp>
 #include <httpserver/detail/http2_request_head.hpp>
 #include <httpserver/detail/http2_body_stream.hpp>
@@ -75,12 +76,15 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         server::reservation count_charge, bytes_charge, fields_charge, trailer_charge, trailer_fields_charge, metadata_charge;
         std::optional<drain_scope::unit> drain_unit;
         http2_body_stream body;
+        bool response_refused = false;
+        lifecycle_sink lifecycle;
         exchange request;
         route_task handler;
         std::int64_t credit_queued = 0;
         bool response_started = false, send_ended = false, reset_pending = false, headers_sent = false;
         stream(state& s, std::uint32_t n, http::request_head h)
-            : owner(s), id(n), head(std::move(h)), body(s.budget), request(head, this, 0, &body, this) {}
+            : owner(s), id(n), head(std::move(h)), body(s.budget), lifecycle(*this, s.bus(), head, &response_refused),
+              request(head, &lifecycle, s.connection_id, &body, this, s.peer) {}
         void on_admit(const body_policy& policy) override {
             const auto n = policy.max_buffer_bytes ? std::min<std::uint64_t>(policy.max_buffer_bytes, owner.limits.body_buffer_bytes) : owner.limits.body_buffer_bytes;
             if (!body.admit(n)) owner.reset(id, http2_error_code::refused_stream);
@@ -106,6 +110,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         ~stream() override {
             request.disconnect(http::outcome_code::connection_closed, "HTTP/2 stream ended");
             body.fail(http::outcome_code::connection_closed); handler.clear();
+            complete_request(owner.bus(), request, lifecycle);
         }
     };
     struct response {
@@ -141,6 +146,11 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     }
     server::resource_budget budget;
     const server::route_registry& routes;
+    request_dispatch_context dispatch_context;
+    server::hook_bus empty_bus;
+    std::uint64_t connection_id;
+    net::peer_address peer;
+    const server::hook_bus& bus() const { return dispatch_context.hooks ? *dispatch_context.hooks : empty_bus; }
     executor& owner;
     std::shared_ptr<route_executor> handlers;
     http2_request_limits limits;
@@ -166,8 +176,9 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     bool active_end = false;
     bool connect_eligible = false, end_stream = false, control_exposed = false, closed_headers = false;
     std::optional<http2_error_code> rejected;
-    state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l)
-        : budget(b), routes(r), owner(e), handlers(std::make_shared<route_executor>(e)), limits(l), connection(b, l.connection, receive_settings(l.max_streams), true) { scope->enter(); }
+    state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l, request_dispatch_context d, std::uint64_t id, net::peer_address p)
+        : budget(b), routes(r), dispatch_context(std::move(d)), connection_id(id), peer(p), owner(e),
+          handlers(std::make_shared<route_executor>(e)), limits(l), connection(b, l.connection, receive_settings(l.max_streams), true) { scope->enter(); }
     ~state() {
         handlers->disable();
         for (auto& [id, value] : streams) cancel_websocket(*value, {http::outcome_code::connection_closed, "HTTP/2 engine destroyed"});
@@ -221,6 +232,10 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         }
         for (auto it = streams.begin(); it != streams.end();) {
             auto& value = *it->second;
+            if (!value.reset_pending && value.handler.done() && value.request.disconnected()
+                    && value.request.disconnect_reason().code() == http::outcome_code::peer_refused) {
+                reset(value.id, http2_error_code::refused_stream);
+            }
             if (incomplete(value)) {
                 reset(value.id, http2_error_code::internal_error);
             }
@@ -424,7 +439,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         accepted_stream = std::max(accepted_stream, id);
         accepted->drain_unit.emplace(*scope);
         connection.processed_stream(id);
-        accepted->handler.start(*handlers, run_route(routes, accepted->request));
+        accepted->handler.start(*handlers, dispatch_request(routes, bus(), dispatch_context.pages, accepted->lifecycle, accepted->request, dispatch_context.peers));
         return {};
     }
     std::optional<http2_error> admit_opening(http2_connection::time_point now) {

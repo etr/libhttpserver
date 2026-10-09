@@ -44,9 +44,10 @@ hd::quic_pn_space packet_space(hd::quic_packet_kind kind) {
 }
 }  // namespace
 connection::connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes, httpserver::manual_executor& executor, std::uint64_t id,
-                       const hs::peer_policy& policy, const std::string& file_root, hd::quic_key_observer observer, void* observer_argument)
+                       const hs::peer_policy& policy, const std::string& file_root, hd::quic_key_observer observer, void* observer_argument,
+                       hd::request_dispatch_context dispatch)
     : facts_(std::move(facts)), root_(budget()), pool_(4194304, 1048576, root_), keys_({}, observer, observer_argument), recovery_(recovery_config(), pool_.data(), pool_.critical()),
-      routes_(routes), executor_(executor), id_(id) {
+      routes_(routes), executor_(executor), dispatch_(std::move(dispatch)), id_(id) {
     if (!file_root.empty()) {
         files_ = std::make_unique<hqnet::files>(file_root);
         expires_ = clock_type::now() + std::chrono::seconds(120);
@@ -334,7 +335,7 @@ void connection::admit_h3() {
     hd::http3_request_limits limits;
     limits.max_active_requests = 16;
     engine_ = std::make_unique<hd::http3_request_engine>(pool_.data(), pool_.critical(), *flow_, recovery_, routes_, executor_, limits, id_,
-                                                         facts_.initial->peer.peer);
+                                                         facts_.initial->peer.peer, dispatch_);
     for (auto role : {hd::http3_role::control, hd::http3_role::qpack_encoder, hd::http3_role::qpack_decoder}) {
         auto opened = flow_->open_local(true);
         require(static_cast<bool>(opened), "local critical open");

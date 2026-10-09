@@ -27,6 +27,7 @@
 #include "../support/http3_semantic_routes.hpp"
 #include "../support/http3_websocket_routes.hpp"
 #include "../unit/io_udp_backend_contract.hpp"
+#include <parity/v3_behavior_profiles.hpp>
 namespace {
 namespace h = httpserver;
 namespace hd = h::detail;
@@ -100,6 +101,7 @@ struct fixture {
     h::server::resource_budget root = h::server::resource_budget::root({});
     h::server::route_registry routes;
     h::server::peer_policy policy;
+    std::unique_ptr<parity::behavior_profile> behavior;
     std::map<std::uint64_t, std::shared_ptr<h3net::connection>> connections;
     std::vector<hd::quic_datagram_dispatch::cid_registration> registrations;
     std::map<std::pair<std::uint64_t, std::uint64_t>, std::shared_ptr<h::resume_signal>> holds;
@@ -119,7 +121,7 @@ struct fixture {
     std::shared_ptr<h3net::connection> sending;
     std::shared_ptr<hd::quic_admission_reply> reply;
     std::optional<h3net::transmission> sent;
-    fixture(const char* certificate, const char* key, const char* pcap) : packets(pcap) {
+    fixture(const char* certificate, const char* key, const char* pcap, const std::string& profile = {}) : packets(pcap) {
         hd::tls_host_credentials host;
         host.host = "localhost";
         host.certificate_chain_pem = read_file(certificate);
@@ -180,6 +182,15 @@ struct fixture {
             state->emit = [this, id, stream](const char* kind) { ws_snapshot(kind, id, stream); };
             return state;
         });
+        if (!profile.empty()) {
+            behavior = std::make_unique<parity::behavior_profile>(root);
+            behavior->install(profile, PARITY_DATA_ROOT);
+            routes = std::move(behavior->routes);
+            if (profile == "ip_controls") {
+                policy.set_mode(h::server::peer_policy_mode::reject_all);
+                if (!policy.allow("127.0.0.1").ok()) throw std::runtime_error("loopback policy");
+            }
+        }
         auto socket = io_udp_contract::udp_socket();
         if (socket == hd::pollsys::k_invalid_socket) throw std::runtime_error("UDP bind failed");
         port = io_udp_contract::endpoint(socket).peer.port;
@@ -301,7 +312,9 @@ struct fixture {
                 auto facts = admission.inspect(outcome.pending);
                 if (!facts) throw std::runtime_error("admission facts missing");
                 const auto id = connections.size() + 1;
-                auto connection = std::make_shared<h3net::connection>(credentials.acquire()->select_default(), *facts, routes, executor, id, policy);
+                auto context = behavior ? behavior->context() : hd::request_dispatch_context{};
+                auto connection = std::make_shared<h3net::connection>(credentials.acquire()->select_default(), *facts, routes, executor, id, policy,
+                    std::string{}, nullptr, nullptr, std::move(context));
                 connections.emplace(id, connection);
                 auto promoted = admission.promote(outcome.pending, listener.datagrams(), connection, std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count());
                 if (!promoted) throw std::runtime_error("CID promotion refused");
@@ -362,8 +375,9 @@ struct fixture {
 }  // namespace
 int main(int argc, char** argv) {
     try {
-        if (argc != 4) throw std::runtime_error("usage: http3_udp_fixture certificate key packets.pcap");
-        fixture f(argv[1], argv[2], argv[3]);
+        if (argc != 4 && !(argc == 6 && std::string_view(argv[4]) == "--behavior-profile"))
+            throw std::runtime_error("usage: http3_udp_fixture certificate key packets.pcap [--behavior-profile profile]");
+        fixture f(argv[1], argv[2], argv[3], argc == 6 ? argv[5] : "");
         std::cout << "READY " << f.port << std::endl;
         const auto deadline = clock_type::now() + std::chrono::seconds(120);
         do {
