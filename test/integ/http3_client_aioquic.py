@@ -88,11 +88,18 @@ async def main(args):
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
     config.quic_logger = QuicFileLogger(args.log_dir)
     cases = []
+    semantic = getattr(args, "matrix", "smoke") == "task174"
+    protocol_type = Client
+    if semantic:
+        from http3_semantic_aioquic import SemanticClient, uploads, draining
+        protocol_type = SemanticClient
+        config.max_stream_data = 4096
+        config.max_data = 16777216
     key_path = Path(args.log_dir) / 'tls.keys'
     key_fd = os.open(key_path, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)
     with os.fdopen(key_fd, 'w') as keys:
         config.secrets_log_file = keys
-        async with connect('127.0.0.1', args.port, configuration=config, create_protocol=Client, wait_connected=True) as client:
+        async with connect('127.0.0.1', args.port, configuration=config, create_protocol=protocol_type, wait_connected=True) as client:
             h = client.handshake
             cases.append({'case': 'handshake', 'alpn': h.alpn_protocol, 'quic_version': client._quic._version, 'tls_version': 'TLSv1.3', 'verified': config.verify_mode == ssl.CERT_REQUIRED, 'early_data': h.early_data_accepted})
             for name, method, path, body in [('get', 'GET', '/hello', b''), ('post', 'POST', '/echo', UPLOAD)]:
@@ -119,7 +126,9 @@ async def main(args):
                 code = failure.event.error_code
             observed = await control('wait', event='cancelled', stream=cancelled['stream'])
             sibling = await asyncio.wait_for(client.request('GET', '/hello')['done'], 15)
-            cases.append({'case': 'cancellation', 'stream': cancelled['stream'], 'type': 'StreamReset', 'code': code, 'sibling_status': response(sibling)['status'], 'server_cancelled': observed['event'] == 'cancelled'})
+            cases.append({'case': 'cancellation', 'stream': cancelled['stream'], 'type': 'StreamReset', 'code': code, 'sibling_status': response(sibling)['status'], 'server_cancelled': observed['event'] == 'cancelled', 'sibling_stream': sibling['stream'], 'sibling_connection': observed['connection']})
+            if semantic:
+                await uploads(client, cases)
             missing = await asyncio.wait_for(client.request('GET', '/missing')['done'], 15)
             cases.append({'case': 'missing', 'status': response(missing)['status']})
         wrong = QuicConfiguration(is_client=True, alpn_protocols=['h3'], supported_versions=[1], server_name='localhost')
@@ -137,12 +146,19 @@ async def main(args):
             event = attempts[0].termination
             assert event and event.error_code in (298, 304), 'verification TLS alert required'
             cases.append({'case': 'tls_failure', 'type': 'ConnectionTerminated', 'code': event.error_code, 'response': False})
+        if semantic:
+            async with connect('127.0.0.1', args.port, configuration=config, create_protocol=protocol_type, wait_connected=True) as client:
+                await draining(client, cases)
     receipt = {'client': 'aioquic', 'version': aioquic.__version__, 'cases': cases}
+    if semantic:
+        receipt["matrix"] = "task174"
     print(json.dumps({'receipt': receipt}), flush=True)
 
 
 if __name__ == '__main__':
+    sys.modules['http3_client_aioquic'] = sys.modules[__name__]
     parser = argparse.ArgumentParser()
+    parser.add_argument('--matrix', choices=['smoke', 'task174'], default='smoke')
     parser.add_argument('--port', type=int, required=True)
     parser.add_argument('--ca', required=True)
     parser.add_argument('--log-dir', required=True)

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed receipt tests: these do not replace the independent network gate."""
 import copy
+import inspect
+import hashlib
 import importlib.util
 from pathlib import Path
 import unittest
@@ -23,7 +25,7 @@ class Receipts(unittest.TestCase):
             {'case': 'get', 'status': 200, 'body_hex': b'http3 fixture'.hex(), 'stream': 0},
             {'case': 'post', 'status': 200, 'body_hex': gate.UPLOAD.hex(), 'stream': 4},
             {'case': 'concurrency', 'held_stream': 8, 'health_stream': 12, 'health_status': 204, 'hold_status': 200, 'health_before_release': True, 'connection': 1},
-            {'case': 'cancellation', 'stream': 16, 'type': 'StreamReset', 'code': 268, 'sibling_status': 200, 'server_cancelled': True},
+            {'case': 'cancellation', 'stream': 16, 'sibling_stream': 20, 'sibling_connection': 1, 'type': 'StreamReset', 'code': 268, 'sibling_status': 200, 'server_cancelled': True},
             {'case': 'tls_failure', 'type': 'ConnectionTerminated', 'code': 298, 'response': False},
             {'case': 'missing', 'status': 404} ]}
 
@@ -66,6 +68,14 @@ class Receipts(unittest.TestCase):
             self.assertIsNotNone(process.process.poll())
             self.assertFalse(any(thread.is_alive() for thread in process.threads))
 
+    def test_primary_failure_survives_fixture_teardown_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary);fixture=path/'fixture'
+            fixture.write_text('#!/bin/sh\nprintf "READY invalid\\n"\nexit 3\n');fixture.chmod(0o700)
+            with self.assertRaisesRegex(gate.GateFailure,'invalid fixture readiness'):
+                gate.run_client('aioquic',fixture,[],path,path/'evidence')
+            self.assertTrue((path/'evidence/exits.json').is_file())
+
     def test_failed_preflight_preserves_existing_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory);manifest=path/'manifest.json';manifest.write_text('retained evidence')
@@ -73,5 +83,75 @@ class Receipts(unittest.TestCase):
             self.assertEqual(result.returncode,1)
             self.assertEqual(manifest.read_text(),'retained evidence')
 
+
+class SemanticReceipts(unittest.TestCase):
+    def semantic(self):
+        r = Receipts().good()
+        r['matrix'] = 'task174'
+        r['cases'] += [
+            {'case': 'streaming', 'stream': 24, 'connection': 1, 'prefix_bytes': 6, 'before_fin': True, 'headers': [['x-request-trailer','yes']], 'status': 200, 'body_hex': gate.UPLOAD.hex(), 'trailers': [['x-reply','done']], 'fin_count': 1},
+            {'case': 'slow_producer', 'stream': 28, 'connection': 1, 'prefix_bytes': 6, 'before_fin': True, 'sibling_stream': 32, 'sibling_connection': 1, 'sibling_status': 204, 'headers': [['x-request-trailer','yes']], 'status': 200, 'body_hex': gate.UPLOAD.hex(), 'trailers': [['x-reply','done']], 'fin_count': 1},
+            {'case': 'slow_consumer', 'stream': 36, 'connection': 1, 'sibling_stream': 40, 'sibling_connection': 1, 'sibling_status': 204, 'credit': 4096, 'offset': 4096, 'withheld': True, 'started': 100, 'completed': 99, 'resumed': True, 'status': 200, 'body_bytes': 524288, 'body_sha256': hashlib.sha256(bytes(range(256))*2048).hexdigest(), 'trailers': [['x-reply','done']], 'fin_count': 1},
+            {'case': 'goaway', 'connection': 2, 'accepted_stream': 0, 'late_stream': 4, 'ids': [(1<<62)-4,4], 'rejection': 267, 'accepted_status': 200, 'close_code': 256, 'drain_complete': True},
+        ]
+        return r
+
+    def test_semantic_mode_rejects_a_smoke_receipt(self):
+        self.assertIn('matrix', inspect.signature(gate.validate_receipt).parameters)
+        with self.assertRaises(gate.GateFailure):
+            gate.validate_receipt(Receipts().good(), 'aioquic', 'task174')
+
+    def test_semantic_missing_stages_are_rejected(self):
+        self.assertIn('matrix', inspect.signature(gate.validate_receipt).parameters)
+        original=self.semantic()
+        for case in ['streaming','slow_producer','slow_consumer','goaway']:
+            r=copy.deepcopy(original);r['cases']=[c for c in r['cases'] if c['case']!=case]
+            with self.subTest(case=case), self.assertRaises(gate.GateFailure):
+                gate.validate_receipt(r,'aioquic','task174')
+
+    def test_valid_semantic_receipt_is_accepted(self):
+        gate.validate_receipt(self.semantic(),'aioquic','task174')
+
+    def test_false_streaming_backpressure_and_goaway_claims_fail_closed(self):
+        variants = {
+            'cancellation': [('sibling_connection',2),('sibling_stream',16)],
+            'streaming': [('before_fin',False),('prefix_bytes',0),('body_hex','00'),('trailers',[]),('fin_count',2),('stream',0),('headers',[])],
+            'slow_producer': [('sibling_connection',2),('before_fin',False),('sibling_stream',28),('sibling_status',500)],
+            'slow_consumer': [('withheld',False),('resumed',False),('started',99),('offset',4000),('body_sha256','wrong'),('body_bytes',0)],
+            'goaway': [('ids',[4]),('ids',[4,(1<<62)-4]),('ids',[(1<<62)-4,8]),('rejection',268),('close_code',0),('drain_complete',False),('accepted_status',500)]}
+        for name,changes in variants.items():
+            for field,value in changes:
+                r=self.semantic();next(c for c in r['cases'] if c['case']==name)[field]=value
+                with self.subTest(case=name,field=field),self.assertRaises(gate.GateFailure):
+                    gate.validate_receipt(r,'aioquic','task174')
+
+class ParityContract(unittest.TestCase):
+    def observation(self, protocol):
+        return {'protocol':protocol,'status':200,'body_hex':gate.UPLOAD.hex(),'headers':[['x-method','POST'],['x-target','/items/../semantic?x=1'],['x-route','/semantic'],['x-host','localhost'],['x-repeat','a'],['x-repeat','b']],'trailers':[['x-reply','done']],'missing_status':404}
+
+    def test_actual_h1_h2_results_are_required(self):
+        self.assertTrue(hasattr(gate,'validate_parity'), 'semantic parity validation is missing')
+        rows=[self.observation('h1'),self.observation('h2')]
+        gate.validate_parity(rows)
+        for value in [[], rows[:1], rows+rows[:1], [{**rows[0],'protocol':[]},rows[1]], [{**rows[0],'status':500},rows[1]], [{**rows[0],'headers':list(reversed(rows[0]['headers']))},rows[1]]]:
+            with self.assertRaises(gate.GateFailure):gate.validate_parity(value)
+
+    def test_received_goaway_payload_is_decoded_and_not_inferred_from_server_logs(self):
+        self.assertTrue(hasattr(gate,'decode_goaway'), 'received-wire GOAWAY decoder is missing')
+        self.assertEqual(gate.decode_goaway('0x7\tfffffffffffffffc\n0x7\t04\n'),[(1<<62)-4,4])
+        for value in ['', '0x7\tff\n', '0x7\t0004\n','0x7\t04\n0x7\t08\n']:
+            with self.assertRaises(gate.GateFailure):gate.decode_goaway(value)
+
+class FlowWitness(unittest.TestCase):
+    def test_credit_exhaustion_sibling_and_resume_need_native_frame_order(self):
+        self.assertTrue(hasattr(gate,'flow_witness'), 'native flow-control validation is missing')
+        events=[
+            {'name':'transport:packet_received','data':{'frames':[{'frame_type':'stream','stream_id':36,'offset':0,'length':4096}]}},
+            {'name':'transport:packet_received','data':{'frames':[{'frame_type':'stream','stream_id':40,'offset':0,'length':3,'fin':True}]}},
+            {'name':'transport:packet_sent','data':{'frames':[{'frame_type':'max_stream_data','stream_id':36,'maximum':8192}]}},
+            {'name':'transport:packet_received','data':{'frames':[{'frame_type':'stream','stream_id':36,'offset':4096,'length':524288,'fin':True}]}}]
+        gate.flow_witness(events,36,40)
+        for variant in [events[:2],events[1:], [events[0],events[2],events[1],events[3]],events[:-1]]:
+            with self.assertRaises(gate.GateFailure):gate.flow_witness(variant,36,40)
 
 if __name__ == '__main__': unittest.main()

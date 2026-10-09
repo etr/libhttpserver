@@ -2371,3 +2371,9 @@ http3_websocket_lifecycle_LDADD = $(http3_headers_LDADD)
 http3_websocket_lifecycle_LDFLAGS = $(http3_headers_LDFLAGS)
 
 EXTRA_DIST += interop/quic/task173-matrix.json
+
+noinst_PROGRAMS += http3_semantic_parity_fixture
+http3_semantic_parity_fixture_SOURCES = integ/http3_semantic_parity_fixture.cpp parity/response_frame.cpp
+http3_semantic_parity_fixture_LDADD = $(http3_headers_LDADD)
+http3_semantic_parity_fixture_LDFLAGS = $(http3_headers_LDFLAGS)
+EXTRA_DIST += support/http3_semantic_routes.hpp integ/http3_semantic_aioquic.py integ/http3-client-go/semantic.go integ/http3-client-go/semantic_test.go

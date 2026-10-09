@@ -44,7 +44,7 @@ struct peer {
     hd::quic_key_observer observer = nullptr;
     void* observer_argument = nullptr;
     explicit peer(std::uint64_t udp_ceiling = 65527, hd::quic_key_observer inspect_keys = nullptr, void* argument = nullptr,
-                  const std::string& files = {}, bool empty_cid = false)
+                  const std::string& files = {}, bool empty_cid = false, std::optional<std::uint64_t> receive_window = {})
         : tls(quic_test::client_context(), "a.example", {files.empty() ? "h3" : "hq-interop"}, nullptr, false),
           client_cid_width(empty_cid ? 0 : 1), file_root(files), observer(inspect_keys), observer_argument(argument) {
         auto credentials = quic_test::credentials();
@@ -52,6 +52,7 @@ struct peer {
         require(registry.replace(credentials).ok(), "credentials");
         auto p = h3test::parameters();
         p.max_udp_payload_size = udp_ceiling;
+        if (receive_window) p.initial_max_stream_data_bidi_local = *receive_window;
         p.initial_source_cid = std::span(client_cid).first(client_cid_width);
         p.active_connection_id_limit = 4;
         std::array<std::byte, 1024> bytes{};

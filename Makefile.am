@@ -687,3 +687,5 @@ EXTRA_DIST += docs/task-170-http3-drain.md
 EXTRA_DIST += docs/task-172-http3-websocket-data-lifecycle.md
 
 EXTRA_DIST += docs/task-173-quic-interop-evidence.md
+
+EXTRA_DIST += docs/task-174-http3-semantic-matrix.md

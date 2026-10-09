@@ -319,7 +319,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-171 | [Implement HTTP/3 WebSocket Extended CONNECT negotiation](M12-http3-full/TASK-171.md) | M12 | Complete | TASK-121, TASK-161, TASK-169 |
 | TASK-172 | [Implement WebSocket-over-HTTP/3 DATA and lifecycle adapter](M12-http3-full/TASK-172.md) | M12 | Complete | TASK-166, TASK-170, TASK-171 |
 | TASK-173 | [Run required QUIC interop-runner matrix](M12-http3-full/TASK-173.md) | M12 | Complete | TASK-163, TASK-164, TASK-165, TASK-166 |
-| TASK-174 | [Run independent HTTP/3 semantic client matrix](M12-http3-full/TASK-174.md) | M12 | Not Started | TASK-169, TASK-170 |
+| TASK-174 | [Run independent HTTP/3 semantic client matrix](M12-http3-full/TASK-174.md) | M12 | In Progress | TASK-169, TASK-170 |
 | TASK-175 | [Build independent WebSocket-over-HTTP/3 client harness](M12-http3-full/TASK-175.md) | M12 | Not Started | TASK-172 |
 | TASK-176 | [Fuzz QUIC recovery and TLS callback event sequences](M12-http3-full/TASK-176.md) | M12 | Not Started | TASK-166 |
 | TASK-177 | [Fuzz HTTP/3 framing, QPACK and blocked streams](M12-http3-full/TASK-177.md) | M12 | Not Started | TASK-169, TASK-170 |
