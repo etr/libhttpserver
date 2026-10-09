@@ -9,9 +9,9 @@
 Provide dynamic QPACK with HTTP/3 request scheduling for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Negotiate dynamic capacities and connect QPACK to H3 streams.
-- [ ] Resume blocked headers without starving critical streams.
-- [ ] Release references on reset, cancellation and drain.
+- [x] Negotiate dynamic capacities and connect QPACK to H3 streams.
+- [x] Resume blocked headers without starving critical streams.
+- [x] Release references on reset, cancellation and drain.
 
 **Dependencies:**
 - Blocked by: TASK-161, TASK-168
@@ -24,4 +24,8 @@ Provide dynamic QPACK with HTTP/3 request scheduling for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-008, PRD-V3N-REQ-017, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
+
+Local implementation and focused verification are complete; runner/coordinator
+validation remains pending. Evidence: `docs/task-169-http3-qpack-scheduling.md`.
+Nonlocal platform and native-provider network checks remain CI/v3 PR work.

@@ -96,3 +96,7 @@ __pycache__/
 
 # TASK-168 local C++20 verification build.
 /build-task168/
+
+# TASK-169 local verification builds.
+/build-task169/
+/build-task169-san/

@@ -2338,3 +2338,8 @@ check_PROGRAMS += qpack_accounting
 qpack_accounting_SOURCES = unit/qpack_accounting_test.cpp
 qpack_accounting_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 qpack_accounting_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += http3_qpack_scheduling
+http3_qpack_scheduling_SOURCES = unit/http3_qpack_scheduling_test.cpp
+http3_qpack_scheduling_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+http3_qpack_scheduling_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

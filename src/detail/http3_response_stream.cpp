@@ -23,6 +23,19 @@ bool response_length(const http::fields& fields, std::optional<std::uint64_t>& l
         if (lower(field.name) == "content-length") normalized.append("content-length", field.value);
     return http3_content_length(normalized, length);
 }
+quic_information_result retain_prefix(quic_recovery& recovery, quic_stream_frame& frame, quic_stream_retention retention) {
+    for (;;) {
+        auto result = recovery.retain_stream(frame, retention);
+        if (result || frame.data.size() <= 1) return result;
+        if (result.code != quic_recovery_code::capacity && result.code != quic_recovery_code::no_memory) return result;
+        // Refusal admits no bytes. Halving bounds retries by the prefix width.
+        frame.data = frame.data.first(frame.data.size() / 2);
+        frame.fin = false;
+    }
+}
+bool retention_available(bool local, std::size_t count, std::size_t cap, bool pending) {
+    return count < cap && (!local || !pending);
+}
 bool no_content(std::uint16_t status) {
     return status == 204 || status == 205;
 }
@@ -74,14 +87,23 @@ bool http3_request_engine::state::section(record& r, std::uint16_t status, const
     values.reserve(count);
     if (!trailers) values.push_back({":status", std::to_string(status)});
     if (!append_fields(values, fields, trailers)) return false;
-    auto encoded = qpack_encoder{}.encode_section(values, cap);
+    std::vector<qpack_field_view> views;
+    views.reserve(values.size());
+    for (const auto& field : values) views.push_back(field.view());
+    auto encoded = connection.encode_response_section(r.transport->id(), views);
     if (!encoded.status.ok()) return false;
-    integer(section.bytes, 1);
-    integer(section.bytes, encoded.value.size());
-    auto bytes = std::as_bytes(std::span(encoded.value));
-    section.bytes.insert(section.bytes.end(), bytes.begin(), bytes.end());
-    section.fin = fin;
-    r.sections.push_back(std::move(section));
+    try {
+        integer(section.bytes, 1);
+        integer(section.bytes, encoded.value.size());
+        auto bytes = std::as_bytes(std::span(encoded.value));
+        section.bytes.insert(section.bytes.end(), bytes.begin(), bytes.end());
+        section.fin = fin;
+        section.token = encoded.token;
+        r.sections.push_back(std::move(section));
+    } catch (...) {
+        connection.cancel_section(encoded.token);
+        throw;
+    }
     return true;
 }
 void http3_request_engine::state::respond(record& r, std::uint16_t status, const http::fields& fields, bool streaming) {
@@ -135,24 +157,26 @@ bool http3_request_engine::state::prepare_output(record& r) {
     r.output = std::move(section.bytes);
     r.output_charge = std::move(section.charge);
     r.output_fin = section.fin;
+    r.output_token = section.token;
     r.sections.pop_front();
     return true;
 }
 bool http3_request_engine::state::submit(record& r, std::span<const std::byte> bytes, bool fin) {
     auto& count = r.local ? retained_critical : retained;
     const auto cap = r.local ? critical_output_records : limits.max_pending_output_records;
-    if (count == cap) return false;
+    if (!retention_available(r.local, count, cap, !r.information.empty())) return false;
     auto allowance = flow.send_allowance(r.transport->id(), r.retained_offset, bytes.size());
     if (!allowance || (!allowance.bytes && !bytes.empty())) return false;
     auto candidate = bytes.first(allowance.bytes);
     fin = fin && candidate.size() == bytes.size();
     const auto retention = r.local ? quic_stream_retention::critical : quic_stream_retention::ordinary;
-    auto result = recovery.retain_stream({r.transport->id(), r.retained_offset, candidate, fin}, retention);
+    quic_stream_frame frame{r.transport->id(), r.retained_offset, candidate, fin};
+    auto result = retain_prefix(recovery, frame, retention);
     if (!result) return false;
     r.information.push_back(result.id);
     ++count;
-    r.retained_offset += candidate.size();
-    r.fin_retained = fin;
+    r.retained_offset += frame.data.size();
+    r.fin_retained = frame.fin;
     return true;
 }
 bool http3_request_engine::state::local_output(record& r) {
@@ -180,9 +204,12 @@ bool http3_request_engine::state::output(record& r) {
     if (r.cancelled || r.fin_retained) return false;
     if (r.local) return local_output(r);
     if (!prepare_output(r) || r.cancelled) return false;
+    reserve_critical_output();
     const auto before = r.retained_offset;
     const auto start = r.output_position;
     if (!submit(r, std::span(r.output).subspan(start), r.output_fin)) return false;
+    connection.publish_section(r.output_token);
+    r.output_token = 0;
     r.output_position += r.retained_offset - before;
     retire_output(r, start);
     return true;
@@ -197,13 +224,34 @@ void http3_request_engine::state::ordinary_output() {
     }
 }
 
+void http3_request_engine::state::reserve_critical_output() {
+    for (std::size_t n = 0; n < critical_records.size(); ++n) {
+        auto* r = critical_records[(critical_next + n) % critical_records.size()];
+        if (!r || r->cancelled) continue;
+        const auto id = r->transport->id();
+        const auto bytes = connection.local_prefix(r->local_role).size();
+        auto allowance = flow.send_allowance(id, r->retained_offset, bytes);
+        if (allowance) flow.reserve_critical(id, r->retained_offset, allowance.bytes);
+    }
+}
+void http3_request_engine::state::critical_output() {
+    const auto start = critical_next;
+    for (std::size_t n = 0; n < critical_records.size(); ++n) {
+        const auto slot = (start + n) % critical_records.size();
+        auto* r = critical_records[slot];
+        if (r && output(*r)) critical_next = (slot + 1) % critical_records.size();
+    }
+}
+
 http3_progress http3_request_engine::pump_output() {
     auto s = state_;
     state::pump_guard guard(*s);
     if (s->error) return http3_progress::failed;
+    if (s->disconnected) return http3_progress::input;
     try {
-        for (auto& [id, r] : s->records)
-            if (r->local) s->output(*r);
+        s->receive_pending();
+        s->reserve_critical_output();
+        s->critical_output();
         s->ordinary_output();
     } catch (const std::bad_alloc&) {
         s->fail(h3_error(0x107, "Response allocation failed"));

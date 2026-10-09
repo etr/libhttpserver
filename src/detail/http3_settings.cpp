@@ -41,7 +41,7 @@ std::optional<http3_error> http3_connection::attach_local_stream(http3_role role
     return {};
 }
 std::span<const std::byte> http3_connection::local_prefix(http3_role role) const {
-    if (error_) return {};
+    if (error_ || stopped_) return {};
     if (role == http3_role::control) return std::span(control_prefix_).subspan(prefix_positions_[0]);
     if (role == http3_role::qpack_encoder) {
         if (!prefix_positions_[1]) return encoder_prefix_;
