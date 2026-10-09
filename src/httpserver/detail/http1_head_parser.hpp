@@ -61,6 +61,7 @@
 #include <utility>
 
 #include <httpserver/detail/http1_head_limits.hpp>
+#include <httpserver/detail/resource_charge.hpp>
 #include <httpserver/detail/http1_target.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/outcome.hpp>
@@ -103,8 +104,9 @@ enum class http1_head_state : std::uint8_t {
 // there without the parser owning keep-alive policy.
 class http1_head_parser {
  public:
-    explicit http1_head_parser(const http1_head_budget& budget) noexcept
-        : budget_(budget) { }
+    explicit http1_head_parser(const http1_head_budget& budget, server::resource_budget scope = {}) noexcept
+        : budget_(budget), bytes_charge_(scope, server::resource::header_bytes),
+          fields_charge_(scope, server::resource::header_fields) { }
 
     // Buffers more octets. Never loses bytes: after a complete head,
     // further octets accumulate as residue until take() consumes the
@@ -125,7 +127,7 @@ class http1_head_parser {
     // and returns to the empty state (immediately re-entering complete
     // when a pipelined head is already fully buffered). Valid only in
     // the complete state.
-    http::request_head take();
+    http::request_head take(resource_charge* bytes = nullptr, resource_charge* fields = nullptr);
 
     // Octets buffered past the head terminator; nonzero only in the
     // complete state.
@@ -172,6 +174,7 @@ class http1_head_parser {
     bool parse_field_line(std::string_view line);
 
     http1_head_budget budget_;
+    resource_charge bytes_charge_, fields_charge_;
     std::string buffer_;
     http::request_head head_;
     http::outcome failure_;
@@ -255,6 +258,8 @@ inline bool http1_head_parser::admit(std::string_view bytes) {
         return fail(http::outcome_code::limit_exceeded,
                     "header_bytes budget exhausted");
     }
+    if (!bytes_charge_.grow(3 * bytes.size()))
+        return fail(http::outcome_code::limit_exceeded, "shared header_bytes capacity exhausted");
     const std::size_t base = buffer_.size();
     buffer_.append(bytes);
     // S5: in a well-formed head every LF is the second byte of a CRLF
@@ -289,10 +294,15 @@ inline bool http1_head_parser::admit(std::string_view bytes) {
     return true;
 }
 
-inline http::request_head http1_head_parser::take() {
+inline http::request_head http1_head_parser::take(resource_charge* bytes, resource_charge* fields) {
+    auto retained_bytes = bytes_charge_.take(3 * head_end_);
+    auto retained_fields = fields_charge_.take(fields_charge_.units());
+    if (bytes) *bytes = std::move(retained_bytes);
+    if (fields) *fields = std::move(retained_fields);
     http::request_head out = std::move(head_);
     head_ = http::request_head();
     buffer_.erase(0, head_end_);
+    if (buffer_.empty()) std::string().swap(buffer_);
     head_end_ = 0;
     next_scan_ = 0;
     lf_count_ = 0;
@@ -314,7 +324,9 @@ inline std::string_view http1_head_parser::residue_view() const noexcept {
 
 inline void http1_head_parser::consume_residue(std::size_t n) {
     if (state_ != http1_head_state::complete) return;
-    buffer_.erase(head_end_, std::min(n, buffer_.size() - head_end_));
+    const auto consumed = std::min(n, buffer_.size() - head_end_);
+    buffer_.erase(head_end_, consumed);
+    bytes_charge_.shrink(3 * consumed);
 }
 
 inline bool http1_head_parser::fail(http::outcome_code code,
@@ -464,6 +476,8 @@ inline bool http1_head_parser::parse_field_line(std::string_view line) {
         return fail(http::outcome_code::limit_exceeded,
                     "header_fields budget exhausted");
     }
+    if (!fields_charge_.grow(1))
+        return fail(http::outcome_code::limit_exceeded, "shared header_fields capacity exhausted");
     head_.head_fields.append(name, value);
     return true;
 }

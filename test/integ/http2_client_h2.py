@@ -26,8 +26,8 @@ def masked(opcode, data):
 
 
 class Client:
-    def __init__(self, fixture):
-        self.proc = subprocess.Popen([fixture], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    def __init__(self, fixture, fixture_args=()):
+        self.proc = subprocess.Popen([fixture, *fixture_args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=None, text=True, bufsize=1)
         self.sock = None
 

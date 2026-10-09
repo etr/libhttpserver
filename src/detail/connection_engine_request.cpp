@@ -85,12 +85,17 @@ task<bool> connection_engine::serve_one(
     // parked behind the complete head. Both belong to this exchange's
     // body (or, with no framing, to the next head).
     http::request_head head;
+    resource_charge head_bytes, head_fields;
+    server::reservation stream_seat;
+    if (!self->budget_.reserve(server::resource::streams, 1, stream_seat).ok()) {
+        self->emit_error(503); co_return false;
+    }
     std::string seed;
     {
         std::lock_guard<std::mutex> lock(self->mu_);
         seed.assign(self->parser_.residue_view());
         self->parser_.consume_residue(self->parser_.residue_size());
-        head = self->parser_.take();
+        head = self->parser_.take(&head_bytes, &head_fields);
         self->head_routed_ = true;
         seed.append(self->pending_tail_);
         self->pending_tail_.clear();
@@ -110,7 +115,9 @@ task<bool> connection_engine::serve_one(
         // The decoder exists now (the exchange ctor needs its pointer)
         // but stays unfed: the seed parks as this exchange's early
         // bytes until the handler admits the body.
-        self->stage_body(mode, std::move(seed));
+        if (!self->stage_body(mode, std::move(seed))) {
+            self->emit_error(413); co_return false;
+        }
     } else {
         // No framing: every seed byte belongs to the next pipelined
         // head. Park it where the settle recycle and the head-phase
@@ -254,6 +261,7 @@ void connection_engine::settle_exchange_state(bool& keep,
     }
     if (gate_ != body_gate::draining) gate_ = body_gate::none;
     std::string().swap(early_bytes_);
+    release_tail_charge_locked();
     if (!keep) close_after_drain_ = true;
 }
 

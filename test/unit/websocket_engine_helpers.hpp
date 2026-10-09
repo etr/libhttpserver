@@ -57,6 +57,12 @@ struct connection_engine_test_access {
         }
         return result;
     }
+    static std::size_t retained_tail_capacity(connection_engine& engine) {
+        std::lock_guard lock(engine.mu_);
+        const auto inline_bytes = std::string().capacity();
+        return (engine.pending_tail_.capacity() > inline_bytes ? engine.pending_tail_.capacity() : 0) +
+               (engine.early_bytes_.capacity() > inline_bytes ? engine.early_bytes_.capacity() : 0);
+    }
     static bool http_idle(connection_engine& engine) {
         std::lock_guard lock(engine.mu_);
         return engine.current_ == nullptr && !engine.head_routed_;

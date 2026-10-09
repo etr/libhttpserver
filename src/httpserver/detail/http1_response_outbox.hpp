@@ -83,6 +83,7 @@
 #include <httpserver/http/status.hpp>
 #include <httpserver/response_writer.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/detail/resource_charge.hpp>
 
 namespace httpserver {
 
@@ -182,8 +183,8 @@ struct http1_outbox_budget {
 class http1_response_outbox {
  public:
     explicit http1_response_outbox(
-        http1_outbox_budget budget = http1_outbox_budget())
-        : budget_(budget) { }
+        http1_outbox_budget budget = http1_outbox_budget(), server::resource_budget scope = {})
+        : budget_(budget), storage_charge_(scope, server::resource::response_queue_bytes) { }
 
     http1_response_outbox(const http1_response_outbox&) = delete;
     http1_response_outbox& operator=(const http1_response_outbox&) = delete;
@@ -237,6 +238,10 @@ class http1_response_outbox {
             consumed = std::min(n, front.bytes_.size() - front.offset_);
             front.offset_ += consumed;
             queued_bytes_ -= consumed;
+            storage_charge_.shrink(consumed);
+            if (front.offset_ == front.bytes_.size()) {
+                std::string().swap(front.bytes_); front.offset_ = 0;
+            }
             if (front.ended_ && front.offset_ == front.bytes_.size()) {
                 // Popped even for a zero consume: the call doubles as
                 // the "advance past the completed front" step.
@@ -292,6 +297,14 @@ class http1_response_outbox {
                                 io_connection_owner& owner,
                                 std::uint64_t connection);
 
+    // All transport and route loops have retired before this terminal cleanup.
+    void retire() {
+        std::lock_guard<std::mutex> lock(mu_);
+        slots_.clear(); queued_bytes_ = 0;
+        storage_charge_.shrink(storage_charge_.units());
+        abandoned_ = true;
+    }
+
     // Connection teardown: every sink — parked or not — fails with
     // connection_closed, parked waiters complete with failed, and slots
     // opened later fail at open(). Idempotent.
@@ -317,6 +330,16 @@ class http1_response_outbox {
  private:
     friend class http1_response_sink;
 
+    bool charge_fields(const http::fields& fields, std::size_t fixed) {
+        std::size_t bytes = 0;
+        for (const auto& field : fields.entries()) {
+            if (field.name.size() > budget_.max_head_bytes || field.value.size() > budget_.max_head_bytes ||
+                field.name.size() + field.value.size() + 4 > budget_.max_head_bytes - std::min(bytes, budget_.max_head_bytes)) return false;
+            bytes += field.name.size() + field.value.size() + 4;
+        }
+        return storage_charge_.grow(bytes + fixed);
+    }
+
     // Shared push path of the body_sink seam. Partial copies are the
     // norm: the framer takes the remaining budget as its output bound
     // and the copied delta is what counts against the budget.
@@ -338,10 +361,19 @@ class http1_response_outbox {
             budget_.max_queue_bytes
             - std::min(queued_bytes_, budget_.max_queue_bytes);
         if (room == 0) return body_push_result{body_push::full, 0};
+        if (sink.offset_) {
+            sink.bytes_.erase(0, sink.offset_); sink.offset_ = 0;
+        }
+        const auto before_charge = storage_charge_.units();
+        if (!storage_charge_.grow(std::min(room, from.size() + 24))) {
+            static_cast<void>(sink.fail_locked({http::outcome_code::limit_exceeded, "shared response storage exhausted"}));
+            return failed_result();
+        }
         const std::size_t before = sink.bytes_.size();
         const http::outcome framed =
             sink.framer_->push_body(sink.bytes_, from, room);
         const std::size_t copied = sink.bytes_.size() - before;
+        storage_charge_.shrink(storage_charge_.units() - before_charge - copied);
         if (!framed.ok()) {
             static_cast<void>(sink.fail_locked(framed));
             return body_push_result{body_push::failed, 0};
@@ -366,9 +398,15 @@ class http1_response_outbox {
             budget_.max_queue_bytes
             - std::min(queued_bytes_, budget_.max_queue_bytes);
         if (room == 0) return body_push_result{body_push::full, 0};
+        const auto before_charge = storage_charge_.units();
+        if (!charge_fields(trailers, 5)) {
+            static_cast<void>(sink.fail_locked({http::outcome_code::limit_exceeded, "shared response trailers exhausted"}));
+            return failed_result();
+        }
         const std::size_t before = sink.bytes_.size();
         const http::outcome framed =
             sink.framer_->finish_body(sink.bytes_, trailers);
+        storage_charge_.shrink(storage_charge_.units() - before_charge - (sink.bytes_.size() - before));
         if (!framed.ok()) {
             static_cast<void>(sink.fail_locked(framed));
             return body_push_result{body_push::failed, 0};
@@ -426,6 +464,7 @@ class http1_response_outbox {
     }
 
     http1_outbox_budget budget_;
+    resource_charge storage_charge_;
     mutable std::mutex mu_;
     std::deque<std::unique_ptr<http1_response_sink>> slots_;
     std::size_t queued_bytes_ = 0;  // guarded by mu_
@@ -458,6 +497,8 @@ inline http::outcome http1_response_sink::commit_upgrade(
     const auto protocol_head = protocol.empty() ? 0 : protocol_prefix.size() + 2;
     if (fixed + protocol_head > cap || protocol.size() > cap - fixed - protocol_head)
         return {http::outcome_code::limit_exceeded, "upgrade head exceeds available output capacity"};
+    if (!owner_->storage_charge_.grow(fixed + protocol_head + protocol.size()))
+        return {http::outcome_code::limit_exceeded, "shared upgrade head capacity exhausted"};
     std::string wire(prefix); wire += accept; wire += "\r\n";
     if (!protocol.empty()) {
         wire += protocol_prefix; wire += protocol; wire += "\r\n";
@@ -487,18 +528,23 @@ inline http::outcome http1_response_sink::start(
     framer_ = std::make_unique<http1_response_framer>(clock);
     started_ = true;
     const std::size_t before_head = bytes_.size();
+    const auto before_charge = owner_->storage_charge_.units();
+    if (!owner_->charge_fields(f, 256)) return fail_locked({http::outcome_code::limit_exceeded, "shared response head capacity exhausted"});
     const http::outcome head = framer_->start_head(bytes_, request, s, f);
     if (!head.ok()) {
-        bytes_.clear();
+        bytes_.resize(before_head);
+        owner_->storage_charge_.shrink(owner_->storage_charge_.units() - before_charge);
         return fail_locked(head);
     }
     if (bytes_.size() > owner_->budget_.max_head_bytes) {
-        bytes_.clear();
+        bytes_.resize(before_head);
+        owner_->storage_charge_.shrink(owner_->storage_charge_.units() - before_charge);
         return fail_locked(http::outcome(
             http::outcome_code::limit_exceeded,
             "http1_response_sink: serialized response head exceeds the"
             " head budget"));
     }
+    owner_->storage_charge_.shrink(owner_->storage_charge_.units() - before_charge - (bytes_.size() - before_head));
     owner_->queued_bytes_ += bytes_.size() - before_head;
     return http::outcome::okay();
 }
@@ -511,8 +557,11 @@ inline http::outcome http1_response_sink::interim(std::uint16_t code) {
         // the right serializer here.
         framer_ = std::make_unique<http1_response_framer>();
     }
+    const auto before_charge = owner_->storage_charge_.units();
+    if (!owner_->storage_charge_.grow(64)) return fail_locked({http::outcome_code::limit_exceeded, "shared interim capacity exhausted"});
     const std::size_t before_bytes = bytes_.size();
     const http::outcome appended = framer_->interim_head(bytes_, code);
+    owner_->storage_charge_.shrink(owner_->storage_charge_.units() - before_charge - (bytes_.size() - before_bytes));
     if (!appended.ok()) return appended;
     owner_->queued_bytes_ += bytes_.size() - before_bytes;
     return http::outcome::okay();

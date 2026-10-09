@@ -63,7 +63,8 @@ http2_connection::http2_connection(server::resource_budget budget, http2_limits 
         fail(e);
         return;
     }
-    if (!budget.reserve(server::resource::response_queue_bytes, limits_.control_bytes, control_charge_).ok()) {
+    if (!budget.reserve(server::resource::connections, 1, seat_).ok() ||
+        !budget.reserve(server::resource::response_queue_bytes, limits_.control_bytes, control_charge_).ok()) {
         fail(overload());
         return;
     }

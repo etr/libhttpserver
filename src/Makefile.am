@@ -198,3 +198,5 @@ noinst_HEADERS += httpserver/detail/http3_websocket_handshake.hpp
 libhttpserver_v3core_la_SOURCES += detail/http3_websocket_handshake.cpp detail/http3_websocket_handshake_stream.cpp
 
 libhttpserver_v3core_la_SOURCES += detail/http3_websocket_stream.cpp
+
+noinst_HEADERS += httpserver/detail/resource_charge.hpp

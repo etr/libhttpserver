@@ -57,6 +57,32 @@ websocket_upgrade_result http1_exchange_sink::on_upgrade(const ws_upgrade_option
     limits.output_bytes = std::min(limits.output_bytes, cap.output_bytes);
     limits.incoming_messages = std::min(limits.incoming_messages, cap.incoming_messages);
     limits.outgoing_messages = std::min(limits.outgoing_messages, cap.outgoing_messages);
+    // Queue allocation and empty-message metadata use the same envelopes as
+    // multiplexed WebSockets. These reservations belong to the live upgrade.
+    const auto input_fixed = 16384 + 4096 + 256 * limits.incoming_messages;
+    const auto wire_headroom = 256 + plan.selected_subprotocol.size();
+    const auto output_fixed = 4096 + (8192 + 256) * (limits.outgoing_messages + 3);
+    auto free = [&](server::resource kind) {
+        return engine_->budget_.capacity(kind) - engine_->budget_.in_use(kind);
+    };
+    if (free(server::resource::body_buffer_bytes) <= input_fixed ||
+        free(server::resource::response_queue_bytes) <= output_fixed + wire_headroom) {
+        out.status = {http::outcome_code::limit_exceeded, "WebSocket queue storage exhausted"}; return out;
+    }
+    limits.incoming_bytes = std::min(limits.incoming_bytes, (free(server::resource::body_buffer_bytes) - input_fixed) / 5);
+    limits.output_bytes = std::min(limits.output_bytes, (free(server::resource::response_queue_bytes) - output_fixed - wire_headroom) / 4);
+    if (limits.output_bytes <= 10) {
+        out.status = {http::outcome_code::limit_exceeded, "WebSocket output storage exhausted"}; return out;
+    }
+    limits.max_message_bytes = std::min({limits.max_message_bytes, limits.incoming_bytes,
+        limits.output_bytes - 10, free(server::resource::ws_message_bytes)});
+    server::reservation input, output, message;
+    if (!limits.max_message_bytes ||
+        !engine_->budget_.reserve(server::resource::body_buffer_bytes, 5 * limits.incoming_bytes + input_fixed, input).ok() ||
+        !engine_->budget_.reserve(server::resource::response_queue_bytes, 4 * limits.output_bytes + output_fixed, output).ok() ||
+        !engine_->budget_.reserve(server::resource::ws_message_bytes, limits.max_message_bytes, message).ok()) {
+        out.status = {http::outcome_code::limit_exceeded, "WebSocket shared storage admission refused"}; return out;
+    }
     out.status = limits.validate();
     if (!out.status.ok()) return out;
     auto driver = std::make_shared<websocket_driver>(limits);
@@ -79,6 +105,10 @@ websocket_upgrade_result http1_exchange_sink::on_upgrade(const ws_upgrade_option
         engine_->pending_tail_ = std::move(tail);
         engine_->early_bytes_.clear();
         engine_->websocket_ = driver;
+        engine_->websocket_input_charge_ = std::move(input);
+        engine_->websocket_output_charge_ = std::move(output);
+        engine_->websocket_message_charge_ = std::move(message);
+        engine_->release_tail_charge_locked();
         engine_->phase_ = connection_engine::stream_phase::upgrade_pending_flush;
         engine_->upgrade_anchor_ = std::chrono::steady_clock::now();
         engine_->gate_ = connection_engine::body_gate::none;
@@ -108,7 +138,8 @@ void connection_engine::feed_websocket_tail() {
         websocket_tail_offset_ += fed.consumed;
         websocket_codec_blocked_ = fed.blocked && fed.status.ok();
         if (websocket_tail_offset_ == pending_tail_.size()) {
-            pending_tail_.clear();
+            std::string().swap(pending_tail_);
+            release_tail_charge_locked();
             websocket_tail_offset_ = 0;
         }
     }

@@ -32,7 +32,8 @@ http3_connection::http3_connection(quic_storage_lease data, quic_storage_lease c
     if (!valid_limits(limits_)) {
         fail(0x107, "Decoded HEADERS storage bounds invalid", 0); return;
     }
-    if (!critical_.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(http3_peer_settings) + 512, metadata_).ok())
+    if (!critical_.budget.reserve(server::resource::connections, 1, seat_).ok() ||
+        !critical_.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(http3_peer_settings) + 512, metadata_).ok())
         fail(0x107, "Critical connection storage exhausted", 0);
     begin_turn();
     if (!error_) initialize_qpack();
@@ -40,6 +41,11 @@ http3_connection::http3_connection(quic_storage_lease data, quic_storage_lease c
 std::optional<http3_error> http3_connection::fail(std::uint64_t code, std::string_view diagnostic, std::uint64_t id) {
     if (!error_) error_ = h3_error(code, diagnostic, id);
     return error_;
+}
+void http3_connection::retire_request(std::uint64_t id) {
+    auto it = streams_.find(id);
+    if (it != streams_.end() && it->second->role == http3_role::request)
+        it->second->stream_charge.release();
 }
 std::optional<http3_error> http3_connection::attach_stream(std::uint64_t id) {
     if (error_) return error_;

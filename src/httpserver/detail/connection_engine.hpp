@@ -315,7 +315,7 @@ class connection_engine final
     // fed only at the admission transition (TASK-109's bounded
     // pre-admission posture). A seed framing failure surfaces at that
     // transition, not here.
-    void stage_body(const http1_body_mode& mode, std::string seed);
+    bool stage_body(const http1_body_mode& mode, std::string seed);
 
     // The admission transition (called from the exchange sink): feeds
     // the parked early bytes to the decoder, flips the gate, and wakes
@@ -417,6 +417,8 @@ class connection_engine final
     const server::hook_bus& hooks_;
     io_connection_owner owner_;
     const server::resource_budget& budget_;
+    resource_charge tail_charge_;
+    void release_tail_charge_locked();
     drain_scope& scope_;
     connection_engine_config config_;
     const std::uint64_t id_;
@@ -472,7 +474,7 @@ class connection_engine final
     bool close_after_drain_ = false;
     bool started_ = false;
     int live_loops_ = 0;
-    server::reservation seat_;
+    server::reservation seat_, websocket_input_charge_, websocket_output_charge_, websocket_message_charge_;
 };
 
 // Engine-side exchange_sink: the one decision seam between a routed

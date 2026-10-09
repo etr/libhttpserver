@@ -26,8 +26,8 @@ struct fixture : h3test::request_fixture {
     bool repeat = false;
     std::function<void()> before_upgrade, after_upgrade;
     http::outcome_code second = http::outcome_code::ok, response_after = http::outcome_code::ok;
-    explicit fixture(h::detail::http3_request_limits limits = {}, std::uint64_t send = 65536, std::uint64_t connection_send = 1048576)
-        : request_fixture(limits, send, {}, connection_send) {
+    explicit fixture(h::detail::http3_request_limits limits = {}, std::uint64_t send = 65536, std::uint64_t connection_send = 1048576, h::server::resource_budget enclosing = {})
+        : request_fixture(limits, send, {}, connection_send, 64, std::move(enclosing)) {
         routes.route(http::method::known(http::method_id::connect), "/chat", [this](h::exchange& x) -> h::task<void> {
             auto pending = x.upgrade(options);
             if (before_upgrade) before_upgrade();

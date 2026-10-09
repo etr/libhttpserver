@@ -9,9 +9,9 @@
 Provide hierarchical resource limits and slow-peer plateaus across engines for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Stress header, body, connection, stream and WS budgets on all engines.
-- [ ] Measure memory/CPU plateaus with slow peers.
-- [ ] Verify reservation release and control-plane progress after cancellation.
+- [x] Stress header, body, connection, stream and WS budgets on all engines.
+- [x] Measure memory/CPU plateaus with slow peers.
+- [x] Verify reservation release and control-plane progress after cancellation.
 
 **Dependencies:**
 - Blocked by: TASK-128, TASK-145, TASK-178
@@ -22,6 +22,8 @@ Provide hierarchical resource limits and slow-peer plateaus across engines for l
 - C++20 build and focused tests pass.
 
 **Related Requirements:** PRD-V3N-REQ-014, PRD-V3N-REQ-016, PRD-V3N-REQ-021, PRD-V3N-REQ-027
-**Related Decisions:** DR-V3-001
+**Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation Evidence:** [Resource limits and slow-peer receipts](../../../docs/task-180-resource-limits.md). Local implementation checks pass; final completion/publication remains runner-owned.

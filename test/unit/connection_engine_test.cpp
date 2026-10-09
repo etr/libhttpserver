@@ -820,8 +820,9 @@ LT_END_AUTO_TEST(suspension_after_admit_times_out_once)
 // phase at exactly the cap.
 LT_BEGIN_AUTO_TEST(connection_engine_suite, early_bytes_bounded_no_loss)
     srv::budget_limits limits;
-    limits.set(srv::resource::body_buffer_bytes, 2048);
+    limits.set(srv::resource::body_buffer_bytes, 65536);
     scenario s(limits);
+    s.config.body.max_staged_bytes = 2048;
     static_cast<void>(s.registry.route(
         http::method::known(http::method_id::post), "/late_admit",
         late_admit_handler));
@@ -907,8 +908,9 @@ LT_END_AUTO_TEST(undrained_length_body_drains_and_reuses)
 LT_BEGIN_AUTO_TEST(connection_engine_suite,
                    admitted_undrained_fully_arrived_reuses)
     srv::budget_limits limits;
-    limits.set(srv::resource::body_buffer_bytes, 2048);
+    limits.set(srv::resource::body_buffer_bytes, 65536);
     scenario s(limits);
+    s.config.body.max_staged_bytes = 2048;
     static_cast<void>(s.registry.route(
         http::method::known(http::method_id::post), "/admit_ignore",
         admit_ignore_handler));

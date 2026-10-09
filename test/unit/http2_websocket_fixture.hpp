@@ -38,7 +38,8 @@ struct fixture {
     std::vector<h::websocket::session> sessions;
     h::ws_upgrade_options options;
     unsigned refusals = 0;
-    explicit fixture(h::detail::http2_request_limits limits = {}) {
+    explicit fixture(h::detail::http2_request_limits limits = {}, h::server::resource_budget enclosing = {}) {
+        if (enclosing.valid()) budget = std::move(enclosing);
         if (!h::server::route_registry::create(budget, routes).ok()) throw std::runtime_error("routes");
         routes.route(http::method::known(http::method_id::connect), "/chat", [this](h::exchange& x) -> h::task<void> {
             auto upgraded = co_await x.upgrade(options);

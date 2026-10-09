@@ -57,8 +57,18 @@ struct connection {
     bool connected = false, terminal = false;
     clock_type::time_point deadline = clock_type::now() + std::chrono::seconds(15);
     connection(int socket, hd::tls_credentials_selection selection, counters& c, h::resume_signal& a, h::resume_signal& b,
-               const std::string& profile)
+               const std::string& profile, h::server::resource_budget enclosing, bool probe)
         : fd(socket), counts(c), hold(a), upload(b), tls(std::move(selection), true) {
+        if (probe) deadline = clock_type::now() + std::chrono::seconds(60);
+        if (enclosing.valid()) {
+            h::server::budget_limits limits;
+            for (unsigned i = 0; i < h::server::resource_count; ++i) {
+                auto kind = static_cast<h::server::resource>(i);
+                limits.set(kind, enclosing.capacity(kind));
+            }
+            limits.set(h::server::resource::connections, 1);
+            if (!enclosing.child(limits, budget).ok()) throw std::runtime_error("child budget refused");
+        }
         if (!h::server::route_registry::create(budget, routes).ok()) throw std::runtime_error("routes refused");
         for (auto method : {h::http::method_id::get, h::http::method_id::post}) {
             routes.route(h::http::method::known(method), "/", [](h::exchange& x) -> h::task<void> {
@@ -219,9 +229,10 @@ struct connection {
 int main(int argc, char** argv) {
     try {
         signal(SIGPIPE, SIG_IGN);
+        const bool probe = argc == 2 && std::string_view(argv[1]) == "--resource-probe";
         std::string profile;
         if (argc == 3 && std::string_view(argv[1]) == "--behavior-profile") profile = argv[2];
-        else if (argc != 1) throw std::runtime_error("usage: http2_tls_fixture [--behavior-profile profile]");
+        else if (argc != 1 && !probe) throw std::runtime_error("usage: http2_tls_fixture [--behavior-profile profile]");
         hd::tls_credentials_registry registry;
         if (!registry.replace(tls_test::credentials()).ok()) throw std::runtime_error("TLS credentials");
         int listener = socket(AF_INET, SOCK_STREAM, 0);
@@ -230,6 +241,7 @@ int main(int argc, char** argv) {
         socklen_t length = sizeof(address); getsockname(listener, reinterpret_cast<sockaddr*>(&address), &length);
         fcntl(listener, F_SETFL, O_NONBLOCK); fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
         std::cout << "READY " << ntohs(address.sin_port) << std::endl;
+        auto enclosing = h2test::budget();
         counters counts; h::resume_signal hold, upload;
         std::vector<std::unique_ptr<connection>> peers;
         std::string commands; unsigned accepted = 0;
@@ -245,13 +257,26 @@ int main(int argc, char** argv) {
                 else commands.append(input, n);
                 while (commands.find('\n') != std::string::npos) {
                     auto end = commands.find('\n'); auto command = commands.substr(0, end); commands.erase(0, end + 1);
-                    if (command == "STOP") running = false;
-                    else if (command == "RELEASE") hold.signal();
-                    else if (command == "UPLOAD") upload.signal();
-                    else if (command == "STATS")
+                    if (command == "STOP") {
+                        running = false;
+                    } else if (command == "RELEASE") {
+                        hold.signal();
+                    } else if (command == "UPLOAD") {
+                        upload.signal();
+                    } else if (command == "STATS") {
                         std::cout << "STATS " << counts.started << ' ' << counts.completed << ' ' << counts.cancelled
                                   << ' ' << counts.uploaded << ' ' << counts.data << std::endl;
-                    else throw std::runtime_error("unknown fixture command");
+                    } else if (command == "BUDGETS") {
+                        std::cout << '{';
+                        for (auto kind : {h::server::resource::connections, h::server::resource::streams, h::server::resource::header_bytes,
+                                          h::server::resource::body_buffer_bytes, h::server::resource::response_queue_bytes}) {
+                            if (kind != h::server::resource::connections) std::cout << ',';
+                            std::cout << '\"' << h::server::to_string(kind) << "\":" << enclosing.in_use(kind);
+                        }
+                        std::cout << '}' << std::endl;
+                    } else {
+                        throw std::runtime_error("unknown fixture command");
+                    }
                 }
                 if (commands.size() > 4096) throw std::runtime_error("command limit");
             }
@@ -263,7 +288,7 @@ int main(int argc, char** argv) {
                 int fd = accept(listener, nullptr, nullptr);
                 if (fd >= 0) {
                     fcntl(fd, F_SETFL, O_NONBLOCK); ++accepted;
-                    peers.push_back(std::make_unique<connection>(fd, registry.acquire()->select_default(), counts, hold, upload, profile));
+                    peers.push_back(std::make_unique<connection>(fd, registry.acquire()->select_default(), counts, hold, upload, profile, enclosing, probe));
                 }
             }
         }

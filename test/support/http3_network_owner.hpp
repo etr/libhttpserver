@@ -29,7 +29,7 @@ class connection final : public hd::datagram_sink {
  public:
     connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes, httpserver::manual_executor& executor, std::uint64_t id,
                const hs::peer_policy& policy, const std::string& file_root = {}, hd::quic_key_observer observer = nullptr, void* observer_argument = nullptr,
-               hd::request_dispatch_context dispatch = {});
+               hd::request_dispatch_context dispatch = {}, hs::resource_budget enclosing = {});
     ~connection();
     void adopt_routes(hd::quic_datagram_dispatch& routes, hd::io_connection_owner::datagram_port owner, hd::quic_datagram_dispatch::cid_registration initial, std::weak_ptr<connection> self);
     void on_datagram(std::shared_ptr<const hd::io_datagram> packet) noexcept override;

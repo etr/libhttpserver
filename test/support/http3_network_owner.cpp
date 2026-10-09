@@ -45,8 +45,9 @@ hd::quic_pn_space packet_space(hd::quic_packet_kind kind) {
 }  // namespace
 connection::connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes, httpserver::manual_executor& executor, std::uint64_t id,
                        const hs::peer_policy& policy, const std::string& file_root, hd::quic_key_observer observer, void* observer_argument,
-                       hd::request_dispatch_context dispatch)
-    : facts_(std::move(facts)), root_(budget()), pool_(4194304, 1048576, root_), keys_({}, observer, observer_argument), recovery_(recovery_config(), pool_.data(), pool_.critical()),
+                       hd::request_dispatch_context dispatch, hs::resource_budget enclosing)
+    : facts_(std::move(facts)), root_(enclosing.valid() ? enclosing : budget()), pool_(4194304, 1048576, root_), keys_({}, observer, observer_argument),
+      recovery_(recovery_config(), pool_.data(), pool_.critical()),
       routes_(routes), executor_(executor), dispatch_(std::move(dispatch)), id_(id) {
     if (!file_root.empty()) {
         files_ = std::make_unique<hqnet::files>(file_root);
