@@ -39,75 +39,13 @@ namespace httpserver::detail {
 // The connection owner serializes table mutations; the decoder retains none.
 class qpack_decoder {
  public:
-    qpack_section_result decode(std::span<const std::uint8_t> input, qpack_section_limits limits) const {
-        try {
-            return decode_allocated(input, limits);
-        } catch (const std::bad_alloc&) {
-            return {{qpack_state::limit_exceeded}, {}};
-        } catch (const std::length_error&) {
-            return {{qpack_state::limit_exceeded}, {}};
-        }
-    }
-    // Owners with precharged storage distinguish allocation failure from peer
-    // limits. Wire validation remains the same allocation-free first pass.
-    qpack_section_result decode_allocated(std::span<const std::uint8_t> input, qpack_section_limits limits) const {
-        if (input.size() > limits.max_compressed_bytes) return {{qpack_state::limit_exceeded}, {}};
-        std::size_t count = 0;
-        auto status = process(input, limits, nullptr, count);
-        if (!status.ok()) return {complete(status), {}};
-        qpack_section_result result;
-        result.fields.reserve(count);
-        status = process(input, limits, &result.fields, count);
-        if (!status.ok()) return {complete(status), {}};
-        return result;
-    }
-
-    qpack_section_result decode_dynamic(std::span<const std::uint8_t> input, const qpack_dynamic_table& table,
-                                        qpack_section_limits limits) const {
-        if (!table.initialized() || table.role() != qpack_table_role::decoder) return {{qpack_state::invalid_argument}, {}};
-        if (input.size() > limits.max_compressed_bytes) return {{qpack_state::limit_exceeded}, {}};
-        const auto section = dynamic_prefix(input, table);
-        if (!section.status.ok()) return {complete(section.status), {}, section.required};
-        if (section.required > table.insert_count()) return {{qpack_state::inserts_unavailable}, {}, section.required};
-        try {
-            std::size_t count = 0;
-            auto status = process(input, limits, nullptr, count, &table);
-            if (!status.ok()) return {complete(status), {}, section.required};
-            qpack_section_result result;
-            result.required_insert_count = section.required;
-            result.fields.reserve(count);
-            status = process(input, limits, &result.fields, count, &table);
-            if (!status.ok()) return {complete(status), {}, section.required};
-            return result;
-        } catch (const std::bad_alloc&) {
-            return {{qpack_state::limit_exceeded}, {}, section.required};
-        } catch (const std::length_error&) {
-            return {{qpack_state::limit_exceeded}, {}, section.required};
-        }
-    }
-
- private:
-    struct wire_field {
-        const qpack_static_entry* entry = nullptr;
-        const qpack_dynamic_entry* dynamic = nullptr;
-        std::span<const std::uint8_t> name_wire;
-        std::span<const std::uint8_t> value_wire;
-        std::size_t name_size = 0;
-        std::size_t value_size = 0;
-        std::size_t consumed = 0;
-        bool indexed = false;
-        bool never_indexed = false;
-    };
-    static qpack_status complete(qpack_status status) noexcept {
-        return status.state == qpack_state::incomplete ? qpack_status{qpack_state::malformed} : status;
-    }
     struct section_prefix {
         qpack_status status;
         std::uint64_t required = 0;
         std::uint64_t base = 0;
         std::size_t consumed = 0;
     };
-    static section_prefix dynamic_prefix(std::span<const std::uint8_t> input, const qpack_dynamic_table& table) noexcept {
+    static section_prefix inspect_prefix(std::span<const std::uint8_t> input, const qpack_dynamic_table& table) noexcept {
         const auto encoded = qpack_decode_integer(input, 8, {});
         if (!encoded.status.ok()) return {encoded.status};
         std::uint64_t required = 0;
@@ -139,6 +77,68 @@ class qpack_decoder {
             base = required + delta.value;
         }
         return {{}, required, base, encoded.consumed + delta.consumed};
+    }
+    qpack_section_result decode(std::span<const std::uint8_t> input, qpack_section_limits limits) const {
+        try {
+            return decode_allocated(input, limits);
+        } catch (const std::bad_alloc&) {
+            return {{qpack_state::limit_exceeded}, {}};
+        } catch (const std::length_error&) {
+            return {{qpack_state::limit_exceeded}, {}};
+        }
+    }
+    // Owners with precharged storage distinguish allocation failure from peer
+    // limits. Wire validation remains the same allocation-free first pass.
+    qpack_section_result decode_allocated(std::span<const std::uint8_t> input, qpack_section_limits limits) const {
+        if (input.size() > limits.max_compressed_bytes) return {{qpack_state::limit_exceeded}, {}};
+        std::size_t count = 0;
+        auto status = process(input, limits, nullptr, count);
+        if (!status.ok()) return {complete(status), {}};
+        qpack_section_result result;
+        result.fields.reserve(count);
+        status = process(input, limits, &result.fields, count);
+        if (!status.ok()) return {complete(status), {}};
+        return result;
+    }
+
+    qpack_section_result decode_dynamic(std::span<const std::uint8_t> input, const qpack_dynamic_table& table,
+                                        qpack_section_limits limits) const {
+        if (!table.initialized() || table.role() != qpack_table_role::decoder) return {{qpack_state::invalid_argument}, {}};
+        if (input.size() > limits.max_compressed_bytes) return {{qpack_state::limit_exceeded}, {}};
+        try {
+            return decode_dynamic_allocated(input, table, limits, inspect_prefix(input, table));
+        } catch (const std::bad_alloc&) { return {{qpack_state::limit_exceeded}, {}};
+        } catch (const std::length_error&) { return {{qpack_state::limit_exceeded}, {}}; }
+    }
+    qpack_section_result decode_dynamic_allocated(std::span<const std::uint8_t> input, const qpack_dynamic_table& table,
+                                                 qpack_section_limits limits, section_prefix section) const {
+        if (!section.status.ok()) return {complete(section.status), {}, section.required};
+        if (section.required > table.insert_count()) return {{qpack_state::inserts_unavailable}, {}, section.required};
+        std::size_t count = 0;
+        auto status = process(input, limits, nullptr, count, &table, &section);
+        if (!status.ok()) return {complete(status), {}, section.required};
+        qpack_section_result result;
+        result.required_insert_count = section.required;
+        result.fields.reserve(count);
+        status = process(input, limits, &result.fields, count, &table, &section);
+        if (!status.ok()) return {complete(status), {}, section.required};
+        return result;
+    }
+
+ private:
+    struct wire_field {
+        const qpack_static_entry* entry = nullptr;
+        const qpack_dynamic_entry* dynamic = nullptr;
+        std::span<const std::uint8_t> name_wire;
+        std::span<const std::uint8_t> value_wire;
+        std::size_t name_size = 0;
+        std::size_t value_size = 0;
+        std::size_t consumed = 0;
+        bool indexed = false;
+        bool never_indexed = false;
+    };
+    static qpack_status complete(qpack_status status) noexcept {
+        return status.state == qpack_state::incomplete ? qpack_status{qpack_state::malformed} : status;
     }
     static qpack_integer_result prefix(std::span<const std::uint8_t> input) noexcept {
         const auto required = qpack_decode_integer(input, 8, {});
@@ -228,10 +228,12 @@ class qpack_decoder {
         return out;
     }
     static qpack_status process(std::span<const std::uint8_t> input, qpack_section_limits limits,
-                                std::vector<qpack_field>* output, std::size_t& count, const qpack_dynamic_table* table = nullptr) {
+                                std::vector<qpack_field>* output, std::size_t& count, const qpack_dynamic_table* table = nullptr, const section_prefix* frozen = nullptr) {
         section_prefix section;
-        if (table) {
-            section = dynamic_prefix(input, *table);
+        if (frozen) {
+            section = *frozen;
+        } else if (table) {
+            section = inspect_prefix(input, *table);
         } else {
             const auto legacy = prefix(input);
             section = {legacy.status, 0, 0, legacy.consumed};

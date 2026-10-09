@@ -142,6 +142,12 @@ class qpack_dynamic_table {
         return {};
     }
     qpack_status insert(std::string_view name, std::string_view value) {
+        try {
+            return insert_allocated(name, value);
+        } catch (const std::bad_alloc&) { return {qpack_state::limit_exceeded};
+        } catch (const std::length_error&) { return {qpack_state::limit_exceeded}; }
+    }
+    qpack_status insert_allocated(std::string_view name, std::string_view value) {
         if (!initialized_) return {qpack_state::invalid_argument};
         if (name.size() > SIZE_MAX - 32 || value.size() > SIZE_MAX - 32 - name.size() || inserts_ == qpack_integer_maximum) {
             return {qpack_state::limit_exceeded};
@@ -150,21 +156,15 @@ class qpack_dynamic_table {
         if (size > capacity_) return {qpack_state::malformed};
         const auto status = can_evict_to(capacity_ - size);
         if (!status.ok()) return status;
-        try {
-            // A prepared node owns borrowed input before its source is evicted;
-            // list splice and FIFO removal cannot throw during commit.
-            std::list<qpack_dynamic_entry> prepared;
-            prepared.push_back({std::string(name), std::string(value), inserts_, size, 0});
-            evict_to(capacity_ - size);
-            entries_.splice(entries_.end(), prepared);
-            bytes_ += size;
-            ++inserts_;
-            return {};
-        } catch (const std::bad_alloc&) {
-            return {qpack_state::limit_exceeded};
-        } catch (const std::length_error&) {
-            return {qpack_state::limit_exceeded};
-        }
+        // A prepared node owns borrowed input before its source is evicted;
+        // list splice and FIFO removal cannot throw during commit.
+        std::list<qpack_dynamic_entry> prepared;
+        prepared.push_back({std::string(name), std::string(value), inserts_, size, 0});
+        evict_to(capacity_ - size);
+        entries_.splice(entries_.end(), prepared);
+        bytes_ += size;
+        ++inserts_;
+        return {};
     }
     qpack_status duplicate(std::uint64_t relative) {
         const auto* source = encoder_relative(relative);

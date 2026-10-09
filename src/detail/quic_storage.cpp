@@ -6,7 +6,7 @@
 namespace httpserver::detail {
 struct quic_storage_state {
     server::reservation envelope;
-    server::resource_budget data, critical;
+    server::resource_budget data, critical, ancestors;
 };
 quic_storage_pool::quic_storage_pool(std::size_t data_bytes, std::size_t critical_bytes, server::resource_budget ancestors) {
     const auto maximum = server::max_capacity(server::resource::quic_reassembly_bytes);
@@ -22,9 +22,10 @@ quic_storage_pool::quic_storage_pool(std::size_t data_bytes, std::size_t critica
     // ancestors see exactly one envelope charge and data cannot spend its reserve.
     state->data = server::resource_budget::root(data_limits);
     state->critical = server::resource_budget::root(critical_limits);
+    state->ancestors = ancestors;
     state->envelope = std::move(envelope);
     state_ = std::move(state);
 }
-quic_storage_lease quic_storage_pool::data() const { return {state_, state_->data}; }
-quic_storage_lease quic_storage_pool::critical() const { return {state_, state_->critical}; }
+quic_storage_lease quic_storage_pool::data() const { return {state_, state_->data, state_->ancestors}; }
+quic_storage_lease quic_storage_pool::critical() const { return {state_, state_->critical, state_->ancestors}; }
 }  // namespace httpserver::detail

@@ -12,6 +12,7 @@ struct quic_storage_state;
 struct quic_storage_lease {
     std::shared_ptr<quic_storage_state> owner;
     server::resource_budget budget;
+    server::resource_budget ancestors;
 };
 class quic_storage_pool final {
  public:

@@ -23,6 +23,9 @@ bool http3_connection::settings(std::span<const std::byte> payload, std::uint64_
         if (key == 6) staged.max_field_section = value;
         if (key == 7) staged.qpack_blocked = value;
     }
+    if (!encoder_table_.initialize(data_.ancestors, static_cast<std::size_t>(std::min<std::uint64_t>(limits_.qpack_capacity, staged.qpack_capacity))).ok()) {
+        fail(0x107, "Encoder table budget exhausted", id); return false;
+    }
     staged.received = true; peer_ = staged;
     return true;
 }
@@ -40,15 +43,26 @@ std::optional<http3_error> http3_connection::attach_local_stream(http3_role role
 std::span<const std::byte> http3_connection::local_prefix(http3_role role) const {
     if (error_) return {};
     if (role == http3_role::control) return std::span(control_prefix_).subspan(prefix_positions_[0]);
-    if (role == http3_role::qpack_encoder) return std::span(encoder_prefix_).subspan(prefix_positions_[1]);
-    if (role == http3_role::qpack_decoder) return std::span(decoder_prefix_).subspan(prefix_positions_[2]);
+    if (role == http3_role::qpack_encoder) {
+        if (!prefix_positions_[1]) return encoder_prefix_;
+        return qpack_output_[0];
+    }
+    if (role == http3_role::qpack_decoder) {
+        if (!prefix_positions_[2]) return decoder_prefix_;
+        return qpack_output_[1];
+    }
     return {};
 }
 bool http3_connection::advance_local_prefix(http3_role role, std::size_t count) {
     if (role < http3_role::control || role > http3_role::qpack_decoder) return false;
     const auto slot = static_cast<std::size_t>(role) - static_cast<std::size_t>(http3_role::control);
     if (count > local_prefix(role).size()) return false;
-    prefix_positions_[slot] += count;
+    if (slot == 0 || prefix_positions_[slot] == 0) {
+        prefix_positions_[slot] += count;
+    } else {
+        auto& output = qpack_output_[slot - 1];
+        output.erase(output.begin(), output.begin() + count);
+    }
     return true;
 }
 }  // namespace httpserver::detail

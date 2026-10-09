@@ -42,6 +42,7 @@ struct qpack_dynamic_bytes_result {
     std::string value;
     std::size_t consumed = 0;
     qpack_reference_hold references;
+    std::uint64_t required_insert_count = 0;
 };
 class qpack_encoder {
  public:
@@ -60,7 +61,8 @@ class qpack_encoder {
     }
 
     qpack_dynamic_bytes_result encode_dynamic(std::span<const qpack_field_view> fields, qpack_dynamic_table& table,
-                                              std::uint64_t base, qpack_section_limits limits, bool huffman = false) const {
+                                              std::uint64_t base, qpack_section_limits limits, bool huffman = false,
+                                              std::optional<std::uint64_t> peer_maximum_capacity = std::nullopt) const {
         if (!table.initialized() || table.role() != qpack_table_role::encoder || base > qpack_integer_maximum) {
             return {{qpack_state::invalid_argument}, {}, 0, {}};
         }
@@ -79,7 +81,9 @@ class qpack_encoder {
                     required = std::max(required, *dynamic + 1);
                 }
             }
-            const auto max_entries = table.maximum_capacity() / 32;
+            // Wire modulo follows the peer's advertised maximum, independently
+            // of the locally admitted table storage. Legacy callers use the table maximum.
+            const auto max_entries = peer_maximum_capacity.value_or(table.maximum_capacity()) / 32;
             if (required && max_entries == 0) return {{qpack_state::invalid_argument}, {}, 0, {}};
             const auto encoded_required = required ? (required % (2 * max_entries)) + 1 : 0;
             auto prefix_bytes = qpack_encode_integer(encoded_required, 8, 0, {}, limits.max_compressed_bytes);
@@ -95,6 +99,7 @@ class qpack_encoder {
             qpack_dynamic_bytes_result result;
             status = table.acquire(indexes, limits.max_fields, result.references);
             if (!status.ok()) return {status, {}, 0, {}};
+            result.required_insert_count = required;
             result.value = std::move(wire);
             result.consumed = result.value.size();
             return result;

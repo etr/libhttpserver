@@ -4,9 +4,12 @@
 #endif
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP3_CONNECTION_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP3_CONNECTION_HPP_
+#include <list>
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
+#include <httpserver/detail/qpack_instructions.hpp>
 #include <httpserver/detail/http3_frame.hpp>
 #include <httpserver/detail/qpack_decoder.hpp>
 #include <httpserver/detail/qpack_encoder.hpp>
@@ -15,6 +18,12 @@ namespace httpserver::detail {
 struct http3_peer_settings {
     bool received = false;
     std::uint64_t qpack_capacity = 0, qpack_blocked = 0, max_field_section = k_quic_max_integer;
+};
+struct http3_encoded_section {
+    qpack_status status;
+    quic_storage_lease owner;
+    server::reservation charge;
+    std::string value;
 };
 // Serialized server-side connection core. QUIC owns opening/reassembly and
 // delivers ordered bytes plus terminal notifications. No packet pump here.
@@ -31,6 +40,8 @@ class http3_connection final {
     const http3_peer_settings& peer_settings() const { return peer_; }
     std::span<const std::byte> local_prefix(http3_role role) const;
     bool advance_local_prefix(http3_role role, std::size_t count);
+    qpack_status queue_encoder_instruction(const qpack_encoder_instruction& instruction);
+    http3_encoded_section encode_section(std::uint64_t id, std::span<const qpack_field_view> fields);
     void begin_turn() { frames_left_ = limits_.frames_per_turn; }
 
  private:
@@ -40,7 +51,11 @@ class http3_connection final {
         std::array<std::byte, 10> scratch{};
         std::size_t scratch_size = 0;
         unsigned request_stage = 0;
-        bool closed = false;
+        bool closed = false, blocked = false;
+        std::size_t retained_bytes = 0;
+        qpack_decoder::section_prefix section;
+        server::reservation blocked_charge, instruction_charge;
+        std::vector<std::uint8_t> instruction;
         server::reservation descriptor, stream_charge, fields_charge;
         std::optional<http3_frame_parser> parser;
         std::vector<qpack_field> fields;
@@ -62,15 +77,34 @@ class http3_connection final {
     bool settings(std::span<const std::byte> payload, std::uint64_t id);
     std::size_t uni_input(stream& s, std::span<const std::byte> input, std::uint64_t id);
     bool qpack_input(stream& s, std::byte byte, std::uint64_t id);
+    bool unblock_sections();
+    bool queue_feedback(qpack_decoder_instruction instruction);
+    void release_retained(stream& s);
+    bool initialize_qpack();
+    bool admit_qpack_output();
+    bool apply_decoder_instruction(qpack_decoder_instruction instruction);
+    struct outgoing_section {
+        std::uint64_t stream = 0, required = 0;
+        server::reservation charge;
+        qpack_reference_hold references;
+    };
+    bool potentially_blocked(std::uint64_t id) const;
+    std::size_t outgoing_blocked() const;
     quic_storage_lease data_, critical_;
     http3_limits limits_;
     server::reservation metadata_;
     std::map<std::uint64_t, std::unique_ptr<stream>> streams_;
     std::array<bool, 3> critical_seen_{};
     http3_peer_settings peer_;
+    qpack_dynamic_table decoder_table_{qpack_table_role::decoder}, encoder_table_{qpack_table_role::encoder};
+    std::list<outgoing_section> outgoing_;
+    server::reservation output_charge_;
+    std::array<std::vector<std::byte>, 2> qpack_output_;
+    std::size_t retained_bytes_ = 0, blocked_streams_ = 0;
+    std::uint64_t reported_inserts_ = 0;
     qpack_decoder decoder_;
     qpack_encoder encoder_;
-    std::array<std::byte, 7> control_prefix_{std::byte{0}, std::byte{4}, std::byte{4}, std::byte{1}, std::byte{0}, std::byte{7}, std::byte{0}};
+    std::vector<std::byte> control_prefix_;
     std::array<std::byte, 1> encoder_prefix_{std::byte{2}}, decoder_prefix_{std::byte{3}};
     std::array<std::optional<std::uint64_t>, 3> local_ids_{};
     std::array<std::size_t, 3> prefix_positions_{};

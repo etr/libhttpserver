@@ -14,7 +14,11 @@ bool is_frame(std::uint64_t type, std::initializer_list<std::uint64_t> types) {
 bool valid_limits(const http3_limits& limits) {
     const auto maximum = server::max_capacity(server::resource::quic_reassembly_bytes);
     if (limits.headers.max_fields > maximum / sizeof(qpack_field)) return false;
-    return limits.headers.max_expanded_bytes <= maximum - limits.headers.max_fields * sizeof(qpack_field);
+    return limits.headers.max_compressed_bytes <= maximum / 2 && limits.headers.max_expanded_bytes <= maximum - limits.headers.max_fields * sizeof(qpack_field) &&
+        limits.qpack_capacity <= k_quic_max_integer && limits.qpack_capacity <= server::max_capacity(server::resource::qpack_table_bytes) &&
+        limits.qpack_blocked_streams <= k_quic_max_integer && limits.qpack_retained_bytes <= maximum &&
+        limits.qpack_instruction_bytes > 0 && limits.qpack_instruction_bytes <= maximum / 3 &&
+        limits.qpack_output_bytes >= 10 && limits.qpack_output_bytes <= maximum / 2;
 }
 http3_progress progress_for(bool error, bool ready, std::size_t frames_left) {
     if (error) return http3_progress::failed;
@@ -30,6 +34,7 @@ http3_connection::http3_connection(quic_storage_lease data, quic_storage_lease c
     }
     if (!critical_.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(http3_peer_settings) + 512, metadata_).ok())
         fail(0x107, "Critical connection storage exhausted", 0);
+    if (!error_) initialize_qpack();
 }
 std::optional<http3_error> http3_connection::fail(std::uint64_t code, std::string_view diagnostic, std::uint64_t id) {
     if (!error_) error_ = h3_error(code, diagnostic, id);
@@ -68,30 +73,9 @@ bool http3_connection::classify(stream& s, std::uint64_t type, std::uint64_t id)
     if (type == 0) s.parser.emplace(data_, critical_, limits_, s.offset);
     return true;
 }
-bool http3_connection::qpack_input(stream& s, std::byte byte, std::uint64_t id) {
-    const auto b = std::to_integer<unsigned>(byte);
-    const bool encoder = s.role == http3_role::qpack_encoder;
-    if (!s.scratch_size && encoder) {
-        if (b == 0x20) return true;  // Setting capacity to zero is legal.
-        fail(0x201, "Dynamic encoder instruction unsupported", id); return false;
-    }
-    if (!s.scratch_size && (b & 0xc0) != 0x40) {
-        fail(0x202, "Decoder instruction lacks dynamic reference", id); return false;
-    }
-    s.scratch[s.scratch_size++] = byte;
-    const auto wire = std::span(reinterpret_cast<const std::uint8_t*>(s.scratch.data()), s.scratch_size);
-    const auto decoded = qpack_decode_integer(wire, 6, {});
-    if (decoded.status.ok()) {
-        s.scratch_size = 0; return true;
-    }
-    if (decoded.status.state != qpack_state::incomplete || s.scratch_size == s.scratch.size()) {
-        fail(0x202, "Malformed Stream Cancellation", id); return false;
-    }
-    return true;
-}
 std::size_t http3_connection::uni_input(stream& s, std::span<const std::byte> input, std::uint64_t id) {
     std::size_t count = 0;
-    while (count < input.size() && !s.parser && !error_) {
+    while (count < input.size() && !s.parser && !error_ && frames_left_) {
         const auto byte = input[count++]; ++s.offset;
         if (s.role == http3_role::discard) continue;
         if (s.role != http3_role::pending) {
@@ -119,7 +103,13 @@ bool http3_connection::admit_request(stream& s, std::uint64_t id) {
     if (is_frame(type, {3, 4, 5, 7, 13}) || (type == 0 && s.request_stage != 1) || (type == 1 && s.request_stage == 2)) {
         fail(0x105, "Unexpected request frame", id); return false;
     }
-    if (type == 1) ++s.request_stage;
+    if (type == 1) {
+        if (s.parser->length() > limits_.qpack_retained_bytes - retained_bytes_) {
+            fail(0x107, "Retained HEADERS byte limit", id); return false;
+        }
+        s.retained_bytes = static_cast<std::size_t>(s.parser->length()); retained_bytes_ += s.retained_bytes;
+        ++s.request_stage;
+    }
     return true;
 }
 bool http3_connection::admit(stream& s, std::uint64_t id) {
@@ -143,15 +133,34 @@ bool http3_connection::process_control(const http3_event& e, std::uint64_t id) {
     return true;
 }
 bool http3_connection::decode_fields(stream& s, std::uint64_t id) {
+    const auto payload = s.event.payload;
+    const auto wire = std::span(reinterpret_cast<const std::uint8_t*>(payload.data()), payload.size());
+    if (!s.blocked) {
+        s.section = decoder_.inspect_prefix(wire, decoder_table_);
+        if (!s.section.status.ok()) {
+            fail(0x200, "Invalid QPACK prefix", id); return false;
+        }
+    }
+    if (s.section.required > decoder_table_.insert_count()) {
+        if (blocked_streams_ >= limits_.qpack_blocked_streams ||
+            !data_.ancestors.reserve(server::resource::blocked_headers, 1, s.blocked_charge).ok()) {
+            fail(0x107, "Blocked HEADERS count limit", id); return false;
+        }
+        ++blocked_streams_; s.blocked = true; return true;
+    }
     const auto overhead = limits_.headers.max_fields * sizeof(qpack_field);
     const auto charge = std::max<std::size_t>(1, limits_.headers.max_expanded_bytes + overhead);
     if (!data_.budget.reserve(server::resource::quic_reassembly_bytes, charge, s.fields_charge).ok()) {
         fail(0x107, "Expanded HEADERS storage exhausted", id); return false;
     }
-    const auto payload = s.event.payload;
-    auto decoded = decoder_.decode_allocated({reinterpret_cast<const std::uint8_t*>(payload.data()), payload.size()}, limits_.headers);
+    auto decoded = decoder_.decode_dynamic_allocated(wire, decoder_table_, limits_.headers, s.section);
     if (!decoded.status.ok()) {
-        s.fields_charge.release(); fail(decoded.status.state == qpack_state::limit_exceeded ? 0x107 : 0x200, "Static QPACK field section rejected", id); return false;
+        s.fields_charge.release(); fail(decoded.status.state == qpack_state::limit_exceeded ? 0x107 : 0x200, "QPACK field section rejected", id); return false;
+    }
+    if (s.section.required && !queue_feedback({qpack_decoder_instruction_kind::section_acknowledgment, id})) return false;
+    reported_inserts_ = std::max(reported_inserts_, s.section.required);
+    if (s.blocked) {
+        s.blocked = false; --blocked_streams_; s.blocked_charge.release();
     }
     s.fields = std::move(decoded.fields); s.event.fields = s.fields;
     return true;
@@ -162,7 +171,7 @@ bool http3_connection::process(stream& s, std::uint64_t id) {
     if (!is_frame(e.type, {0, 1})) return true;
     s.event = e;
     if (e.type == 1 && !decode_fields(s, id)) return false;
-    s.ready = true;
+    s.ready = !s.blocked;
     return true;
 }
 http3_feed_result http3_connection::feed(std::uint64_t id, std::span<const std::byte> input, std::uint64_t offset) {
@@ -170,6 +179,7 @@ http3_feed_result http3_connection::feed(std::uint64_t id, std::span<const std::
     const auto it = streams_.find(id);
     if (it == streams_.end()) return {http3_progress::failed, 0, fail(0x103, "Stream was not attached", id)};
     auto& s = *it->second;
+    if (s.blocked) return {http3_progress::input, 0, {}};
     if (s.closed) return {http3_progress::failed, 0, fail(0x103, "Bytes after terminal stream", id)};
     if (s.ready) return {http3_progress::event, 0, {}};
     if (!h3_ordered_extent(offset, input.size(), s.offset))
@@ -184,13 +194,13 @@ http3_feed_result http3_connection::feed(std::uint64_t id, std::span<const std::
 std::size_t http3_connection::feed_frames(stream& s, std::span<const std::byte> input, std::uint64_t id) {
     if (!s.parser || error_) return 0;
     std::size_t consumed = 0;
-    while (!s.ready && frames_left_) {
+    while (!s.ready && !s.blocked && frames_left_) {
         const auto r = s.parser->feed(input, s.offset);
         consumed += r.consumed; s.offset += r.consumed; input = input.subspan(r.consumed);
         if (!handle_frame(s, r, id)) break;
     }
     if (error_) {
-        s.parser.reset(); std::vector<qpack_field>().swap(s.fields); s.fields_charge.release();
+        s.parser.reset(); std::vector<qpack_field>().swap(s.fields); s.fields_charge.release(); release_retained(s);
     }
     return consumed;
 }
@@ -212,8 +222,8 @@ bool http3_connection::handle_frame(stream& s, const http3_feed_result& result, 
     if (result.progress != http3_progress::event) return false;
     --frames_left_;
     if (!process_safe(s, id)) return false;
-    if (!s.ready) s.parser->release_event();
-    return !s.ready;
+    if (!s.ready && !s.blocked) s.parser->release_event();
+    return !s.ready && !s.blocked;
 }
 const http3_event* http3_connection::event(std::uint64_t id) const {
     const auto it = streams_.find(id);
@@ -223,7 +233,7 @@ void http3_connection::release_event(std::uint64_t id) {
     const auto it = streams_.find(id);
     if (it == streams_.end() || !it->second->ready) return;
     auto& s = *it->second;
-    s.ready = false; s.event = {}; std::vector<qpack_field>().swap(s.fields); s.fields_charge.release(); s.parser->release_event();
+    s.ready = false; s.event = {}; std::vector<qpack_field>().swap(s.fields); s.fields_charge.release(); s.parser->release_event(); release_retained(s);
 }
 std::uint64_t http3_connection::offset(std::uint64_t id) const {
     const auto it = streams_.find(id); return it == streams_.end() ? 0 : it->second->offset;
@@ -239,7 +249,9 @@ std::optional<http3_error> http3_connection::terminal(std::uint64_t id, quic_str
     if (terminal.kind == quic_terminal_kind::eof && clean_terminal(s, id)) return error_;
     s.closed = true; s.scratch = {}; s.scratch_size = 0;
     if (terminal.kind == quic_terminal_kind::reset) {
-        release_event(id); s.parser.reset();
+        const bool undecoded = s.blocked || (limits_.qpack_capacity && s.retained_bytes && !s.ready);
+        if (undecoded && !queue_feedback({qpack_decoder_instruction_kind::stream_cancellation, id})) return error_;
+        release_event(id); s.parser.reset(); release_retained(s);
     }
     return {};
 }

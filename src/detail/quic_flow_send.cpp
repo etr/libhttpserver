@@ -2,12 +2,32 @@
 #include <algorithm>
 #include "./quic_flow_internal.hpp"
 namespace httpserver::detail {
+quic_flow_result quic_flow_control::reserve_critical(std::uint64_t id, std::uint64_t offset, std::size_t length) {
+    if (offset > k_quic_max_integer || length > k_quic_max_integer - offset) return {quic_flow_code::frame_encoding_error};
+    auto* value = impl_->find(id);
+    const auto identity = quic_stream_id(id);
+    if (!value || value->retired || value->reset_sent || !identity || !identity->unidirectional ||
+        identity->initiator != impl_->ids.local_role()) return {quic_flow_code::stream_state_error};
+    const auto end = offset + length;
+    if (end > value->send_limit || end > value->sent_final.value_or(k_quic_max_integer)) return {quic_flow_code::blocked};
+    const auto needed = end > value->sent ? end - value->sent : 0;
+    const auto available = impl_->send_limit - impl_->sent - impl_->reserved + value->reserved;
+    if (needed > available) return {quic_flow_code::blocked};
+    impl_->reserved = impl_->reserved - value->reserved + needed;
+    value->reserved = needed;
+    return {};
+}
+void quic_flow_control::abandon_critical(std::uint64_t id) {
+    if (auto* value = impl_->find(id)) {
+        impl_->reserved -= value->reserved; value->reserved = 0;
+    }
+}
 quic_flow_allowance quic_flow_control::send_allowance(std::uint64_t id, std::uint64_t offset, std::size_t requested) const {
     if (offset > k_quic_max_integer || requested > k_quic_max_integer - offset) return {{quic_flow_code::frame_encoding_error}};
     auto* value = impl_->find(id);
     if (!value || value->retired || !quic_stream_sender_allowed(id, true, impl_->ids.local_role())) return {{quic_flow_code::stream_state_error}};
     if (value->reset_sent) return {{quic_flow_code::stream_state_error}};
-    const auto ceiling = std::min({value->send_limit, flow_add(value->sent, impl_->send_limit - impl_->sent), value->sent_final.value_or(k_quic_max_integer)});
+    const auto ceiling = std::min({value->send_limit, flow_add(value->sent, impl_->send_limit - impl_->sent - impl_->reserved + value->reserved), value->sent_final.value_or(k_quic_max_integer)});
     if (offset > ceiling || (requested && offset == ceiling)) return {{quic_flow_code::blocked}};
     const auto bytes = std::min<std::uint64_t>(requested, ceiling - offset);
     return {{}, static_cast<std::size_t>(bytes)};
@@ -32,9 +52,14 @@ quic_flow_result quic_flow_control::record_stream_sent(std::uint64_t id, std::ui
     if (!checked) return checked;
     auto* value = impl_->find(id);
     const auto end = offset + length;
-    impl_->sent += end > value->sent ? end - value->sent : 0;
+    const auto added = end > value->sent ? end - value->sent : 0;
+    const auto used = std::min(added, value->reserved);
+    value->reserved -= used; impl_->reserved -= used;
+    impl_->sent += added;
     value->sent = std::max(value->sent, end);
-    if (fin) value->sent_final = end;
+    if (fin) {
+        value->sent_final = end; abandon_critical(id);
+    }
     return {};
 }
 quic_flow_result quic_flow_control::check_reset_sent(std::uint64_t id, std::uint64_t final_size) const {
@@ -46,7 +71,7 @@ quic_flow_result quic_flow_control::record_reset_sent(std::uint64_t id, std::uin
     auto checked = check_reset_sent(id, final_size);
     if (!checked) return checked;
     auto* value = impl_->find(id);
-    value->reset_sent = true;
+    abandon_critical(id); value->reset_sent = true;
     return {};
 }
 }  // namespace httpserver::detail

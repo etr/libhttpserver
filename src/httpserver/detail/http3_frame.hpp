@@ -36,6 +36,12 @@ struct http3_feed_result {
 };
 struct http3_limits {
     qpack_section_limits headers{65536, 65536, 256};
+    std::size_t qpack_capacity = 0;
+    std::size_t qpack_blocked_streams = 0;
+    std::size_t qpack_retained_bytes = 65536;
+    std::size_t qpack_instruction_bytes = 4096;
+    std::size_t qpack_output_bytes = 4096;
+    std::size_t qpack_outstanding_sections = 128;
     std::size_t settings_bytes = 4096;
     std::size_t settings_identifiers = 64;  // Hard ceiling: 64.
     std::size_t data_chunk = 16384;
