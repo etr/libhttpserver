@@ -24,6 +24,6 @@ Provide staged HTTP/3 GOAWAY and graceful drain for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-032
 **Related Decisions:** DR-V3-008
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** `docs/task-170-http3-drain.md`. Local implementation checks pass; separate validation and finalization are pending.
