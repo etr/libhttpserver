@@ -2388,3 +2388,22 @@ http3_websocket_harness_SOURCES = unit/http3_websocket_harness_test.cpp
 http3_websocket_harness_LDADD = $(http3_headers_LDADD)
 http3_websocket_harness_LDFLAGS = $(http3_headers_LDFLAGS)
 EXTRA_DIST += support/http3_websocket_routes.hpp integ/http3_websocket_wire.py integ/http3_websocket_client_test.py integ/http3_websocket_aioquic.py integ/http3_websocket_gate_runner_test.py
+
+# TASK-176: real recovery event sequences remain provider-free in TLS-off builds.
+check_PROGRAMS += quic_recovery_fuzz_replay
+quic_recovery_fuzz_replay_SOURCES = unit/quic_recovery_fuzz_replay_test.cpp fuzz/quic_recovery_fuzz.cpp
+quic_recovery_fuzz_replay_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/test -DQUIC_RECOVERY_SEED_DIR='"$(abs_top_srcdir)/test/data/quic/recovery"'
+quic_recovery_fuzz_replay_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_recovery_fuzz_replay_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+EXTRA_DIST += fuzz/quic_event_fuzz.hpp fuzz/quic_recovery_fuzz.hpp unit/quic_event_replay.hpp
+
+if NATIVE_V3_TLS
+check_PROGRAMS += quic_tls_callbacks_fuzz_replay
+quic_tls_callbacks_fuzz_replay_SOURCES = unit/quic_tls_callbacks_fuzz_replay_test.cpp fuzz/quic_tls_callbacks_fuzz.cpp support/http3_network_owner.cpp support/http3_network_lifecycle.cpp support/quic_interop_files.cpp
+quic_tls_callbacks_fuzz_replay_CPPFLAGS = $(tls_io_loopback_CPPFLAGS) -I$(top_srcdir) -I$(top_srcdir)/test -DQUIC_CALLBACK_SEED_DIR='"$(abs_top_srcdir)/test/data/quic/callbacks"'
+quic_tls_callbacks_fuzz_replay_LDADD = $(tls_io_LDADD)
+quic_tls_callbacks_fuzz_replay_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+EXTRA_DIST += fuzz/quic_tls_callbacks_fuzz.hpp data/quic/recovery/README.md data/quic/callbacks/README.md
+EXTRA_DIST += data/quic/recovery/ack-loss-reorder.seed data/quic/recovery/path-pending-close.seed data/quic/recovery/pto-drain-reset.seed data/quic/recovery/reordered-crypto.seed data/quic/recovery/spaces-batch-flow.seed
+EXTRA_DIST += data/quic/callbacks/all-levels-suites.seed data/quic/callbacks/backpressure.seed data/quic/callbacks/budget-dispatch-secret.seed data/quic/callbacks/chacha-transitions.seed data/quic/callbacks/close-held-lease.seed data/quic/callbacks/failure-pending-close.seed data/quic/callbacks/invalid-release.seed data/quic/callbacks/lease-transition.seed data/quic/callbacks/params-repetition.seed
