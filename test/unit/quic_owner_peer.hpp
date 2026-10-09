@@ -32,14 +32,16 @@ struct peer {
     std::map<std::uint64_t, std::vector<std::byte>> output;
     std::map<std::uint64_t, bool> fins;
     std::vector<std::uint64_t> withheld_numbers;
+    unsigned coalesced_datagrams = 0;
     hd::datagram_endpoint address;
     h3net::clock_type::time_point now = h3net::clock_type::now();
     std::optional<hd::quic_admission_facts> facts;
     std::optional<hd::quic_datagram_dispatch::cid_registration> registration;
     std::map<std::uint64_t, std::vector<std::byte>> issued;
-    peer() {
+    explicit peer(std::uint64_t udp_ceiling = 65527) {
         require(registry.replace(quic_test::credentials()).ok(), "credentials");
         auto p = h3test::parameters();
+        p.max_udp_payload_size = udp_ceiling;
         p.initial_source_cid = client_cid;
         p.active_connection_id_limit = 4;
         std::array<std::byte, 1024> bytes{};
@@ -139,7 +141,7 @@ struct peer {
         }
         return frames;
     }
-    void accept(const h3net::transmission& sent, bool acknowledge = true) {
+    void accept_packet(const h3net::transmission& sent, bool acknowledge) {
         std::array<std::byte, 1600> plain{};
         unsigned level = 0;
         std::uint64_t number = 0;
@@ -175,6 +177,22 @@ struct peer {
         if (acknowledge && (level != 0 || !server->connected())) {
             const std::array<hd::quic_frame, 1> ack{hd::quic_ack_frame{number, 0, 0, 0, {}, {}}};
             send(ack, address, level);
+        }
+    }
+    void accept(const h3net::transmission& sent, bool acknowledge = true) {
+        auto bytes = std::span(sent.bytes);
+        unsigned packets = 0;
+        while (!bytes.empty()) {
+            auto envelope = hd::parse_quic_envelope(bytes, client_cid.size());
+            require(envelope.code == hd::quic_codec_code::ok, "coalesced envelope");
+            h3net::transmission one{{bytes.begin(), bytes.begin() + envelope.consumed}, sent.peer};
+            ++packets;
+            accept_packet(one, acknowledge);
+            bytes = bytes.subspan(envelope.consumed);
+        }
+        if (packets > 1) {
+            require(sent.bytes.size() <= 1472, "coalesced handshake datagram ceiling");
+            ++coalesced_datagrams;
         }
     }
     void connect() {

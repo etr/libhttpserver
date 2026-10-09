@@ -47,6 +47,12 @@ struct quic_send_plan : quic_recovery_result {
     std::optional<quic_reset_stream_frame> reset{};
     std::optional<quic_flow_frame> flow{};
 };
+struct quic_datagram_emission {
+    std::uint64_t token;
+    std::size_t wire_bytes;
+    bool ack_eliciting, in_flight;
+    std::uint64_t key_generation = 0;
+};
 struct quic_recovery_events : quic_recovery_result {
     std::size_t acknowledged_bytes = 0, lost_bytes = 0, discarded_bytes = 0, acknowledged_packets = 0;
     std::optional<std::uint64_t> application_generation{};
@@ -79,7 +85,7 @@ struct quic_information_completion {
     std::optional<quic_flow_frame> flow{};
 };
 struct quic_recovery_timer {
-    enum class kind { acknowledge, detect_loss, probe };
+    enum class kind { acknowledge, detect_loss, probe, path_mtu };
     kind action;
     quic_pn_space space;
     std::chrono::steady_clock::time_point deadline;
@@ -101,7 +107,7 @@ class quic_recovery final {
     quic_ack_plan prepare_ack(quic_pn_space space, std::span<std::byte> output, time_point now) const;
     void publish_ack(quic_pn_space space, std::uint64_t generation);
     // Reserves a record BEFORE encryption. Abandoning burns the packet number.
-    // One outstanding preparation per owner; no allocation on successful commit.
+    // One single-packet preparation outside a datagram transaction; commits allocate nothing.
     quic_send_plan reserve_packet(quic_pn_space space);
     quic_recovery_result abandon_packet(std::uint64_t token);
     bool preparation_pending() const;
@@ -137,6 +143,17 @@ class quic_recovery final {
     // Check immediately before serialized transport emission; commit records that emission.
     quic_send_plan prepare_scheduled_packet(quic_pn_space space, std::span<std::byte> output, time_point now, quic_send_request request, quic_flow_control& flow);
     quic_send_permission check_scheduled_emission(std::uint64_t token, time_point now, std::size_t wire_bytes, bool ack_eliciting, bool in_flight) const;
+    // A bounded batch pins the active path. Check actual protected lengths before UDP submission.
+    // Commit all packets on atomic emission, or abandon all after a proven-unsent result.
+    quic_recovery_result begin_datagram();
+    quic_send_plan prepare_datagram_packet(quic_pn_space space, std::span<std::byte> output, time_point now, quic_send_request request, quic_flow_control& flow);
+    quic_send_permission check_datagram_emission(std::span<const quic_datagram_emission> packets, time_point now) const;
+    quic_recovery_result commit_datagram(std::span<const quic_datagram_emission> packets, time_point now);
+    quic_recovery_result abandon_datagram();
+    // Install only validated transport parameters; PMTU probes are distinct from PTO grants.
+    quic_recovery_result set_peer_max_datagram_size(std::uint64_t bytes);
+    std::size_t path_datagram_size() const;
+    quic_send_plan prepare_pmtu_probe(std::span<std::byte> output, time_point now, std::size_t protection_overhead);
     quic_congestion_snapshot congestion() const;
     std::optional<time_point> next_send_deadline() const;
     quic_recovery_events discard_space(quic_pn_space space);

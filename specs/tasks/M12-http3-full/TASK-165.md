@@ -9,9 +9,9 @@
 Provide QUIC datagram sizing and black-hole recovery for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Enforce 1200-byte Initial and active-path send limits.
-- [ ] Coalesce packets conservatively and probe PMTU.
-- [ ] Recover from black-holed larger datagrams in deterministic traces.
+- [x] Enforce 1200-byte Initial and active-path send limits.
+- [x] Coalesce packets conservatively and probe PMTU.
+- [x] Recover from black-holed larger datagrams in deterministic traces.
 
 **Dependencies:**
 - Blocked by: TASK-158, TASK-164
@@ -24,4 +24,4 @@ Provide QUIC datagram sizing and black-hole recovery for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** Not Started
+**Status:** Complete

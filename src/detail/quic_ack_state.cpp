@@ -17,7 +17,7 @@ bool valid_ack_config(const quic_recovery_config& c) {
 }
 }  // namespace
 quic_recovery::implementation::implementation(quic_recovery_config c, server::resource_budget b, server::resource_budget critical)
-: config(c), budget(std::move(b)), critical_budget(std::move(critical)), congestion(c.max_datagram_size), pacing(c.max_datagram_size) {
+: config(c), budget(std::move(b)), critical_budget(std::move(critical)), mtu(c.max_datagram_size), congestion(1200), pacing(1200) {
     if (!valid_capacities(c) || !valid_ack_config(c)) throw std::invalid_argument("Invalid QUIC recovery limits");
     auto bytes = quic_recovery::storage_capacity(c);
     try {
@@ -143,7 +143,9 @@ std::size_t quic_recovery::storage_capacity(quic_recovery_config c) {
     if (!valid_capacities(c) || !valid_ack_config(c)) throw std::invalid_argument("Invalid QUIC recovery limits");
     quic_congestion validate(c.max_datagram_size);
     const auto history = (3 * c.max_sent_packets + 1) * sizeof(implementation::congestion_run);
-    return history + 3 * ((c.max_receive_ranges + 1) * sizeof(quic_ack_range) +
+    const auto datagram = sizeof(implementation::datagram) + sizeof(quic_path_mtu) + 2 * sizeof(implementation::datagram_count) +
+        sizeof(implementation::emitting_datagram) + 2 * sizeof(implementation::datagram_active);
+    return datagram + history + 3 * ((c.max_receive_ranges + 1) * sizeof(quic_ack_range) +
         c.max_sent_packets * (sizeof(implementation::packet) + sizeof(quic_ack_range))) +
         c.max_information * (sizeof(implementation::information) + sizeof(implementation::stream_schedule));
 }

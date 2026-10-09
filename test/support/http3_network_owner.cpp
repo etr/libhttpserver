@@ -8,8 +8,10 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <httpserver/detail/quic_datagram_sizing.hpp>
 namespace h3net {
 namespace {
+constexpr std::size_t datagram_ceiling = 1472;
 void require(bool result, const char* message) {
     if (!result) throw std::runtime_error(message);
 }
@@ -21,6 +23,7 @@ hs::resource_budget budget() {
 }
 hd::quic_recovery_config recovery_config() {
     hd::quic_recovery_config c;
+    c.max_datagram_size = datagram_ceiling;
     c.max_information = 128;
     c.max_retained_bytes = 262144;
     c.critical_information = 16;
@@ -48,7 +51,7 @@ connection::connection(hd::tls_credentials_selection credentials, hd::quic_admis
     server_cid_.assign(facts_.destination.bytes.begin(), facts_.destination.bytes.begin() + facts_.destination.size);
     require(keys_.install_initial(hd::quic_endpoint_role::server, envelope.value.destination) == hd::quic_crypto_code::ok, "Initial keys");
     local_.max_idle_timeout = files_ ? 120000 : 15000;
-    local_.max_udp_payload_size = 1200;
+    local_.max_udp_payload_size = datagram_ceiling;
     local_.initial_max_data = 1048576;
     local_.initial_max_stream_data_bidi_local = 65536;
     local_.initial_max_stream_data_bidi_remote = 65536;
@@ -76,7 +79,8 @@ connection::connection(hd::tls_credentials_selection credentials, hd::quic_admis
 }
 connection::~connection() {
     if (pending_) {
-        recovery_.abandon_packet(pending_->token);
+        if (pending_batch_) recovery_.abandon_datagram();
+        else recovery_.abandon_packet(pending_->token);
         pending_budget_->cancel_unsent(*debit_);
     }
     if (pending_control_) identity_->complete_control(pending_control_->token, hd::quic_identity_emission::unsent, {});
@@ -208,6 +212,7 @@ void connection::apply(const hd::quic_frame& frame, hd::quic_pn_space space, clo
         drive_tls();
     } else if (auto* ack = std::get_if<hd::quic_ack_frame>(&frame)) {
         require(static_cast<bool>(recovery_.receive_ack(space, *ack, now)), "QUIC ACK");
+        if (recovery_.pto_count() == 0) probes_.fill(0);
         drain_completions();
     } else if (auto* data = std::get_if<hd::quic_stream_frame>(&frame)) {
         require(connected_, "STREAM before handshake");
@@ -263,6 +268,7 @@ void connection::drive_tls() {
         hd::quic_parameter_cid_context c;
         c.initial_source = client_cid_;
         require(hd::validate_quic_transport_parameters(peer.value, hd::quic_endpoint_role::client, c) == hd::quic_codec_code::ok, "peer CID parameters");
+        require(static_cast<bool>(recovery_.set_peer_max_datagram_size(peer.value.max_udp_payload_size)), "peer UDP ceiling");
         identity_->set_peer_active_limit(peer.value.active_connection_id_limit);
         flow_ = std::make_unique<hd::quic_flow_control>(hd::quic_endpoint_role::server, local_, peer.value, 64, pool_.data());
     }
@@ -375,7 +381,7 @@ void connection::tick(clock_type::time_point now) {
         if (connected_) identity_->issue_cid();
         recovery_.set_environment(environment(), now);
         auto expired = recovery_.expire(now);
-        if (expired.probe_space) probes_[static_cast<unsigned>(*expired.probe_space)] += expired.probes;
+        if (expired.probe_space) probes_[static_cast<unsigned>(*expired.probe_space)] = expired.probes;
         drain_completions();
         for (unsigned turn = 0; turn < 256 && executor_.run_one(); ++turn) {
         }
@@ -387,7 +393,7 @@ void connection::tick(clock_type::time_point now) {
 }
 std::optional<transmission> connection::prepare(clock_type::time_point now) {
     if (pending_ || pending_control_ || !failure_.empty() || !flow_) return {};
-    std::array<std::byte, 1200> plain{}, scratch{};
+    std::array<std::byte, datagram_ceiling> plain{}, scratch{};
     if (connected_) {
         auto control = identity_->prepare_control(now, 21);
         if (control) {
@@ -408,48 +414,115 @@ std::optional<transmission> connection::prepare(clock_type::time_point now) {
             return output;
         }
     }
-    const auto destination = identity_->application_cid();
-    for (unsigned i = 0; i < 3; ++i) {
-        auto level = static_cast<hd::quic_key_level>(i);
-        if (!keys_.keys(level, hd::quic_key_direction::write)) continue;
-        auto space = static_cast<hd::quic_pn_space>(i);
-        hd::quic_send_request request;
-        request.protection_overhead = i == 2 ? destination.size + 21 : destination.size + server_cid_.size() + (i == 0 ? 30 : 29);
-        request.probe = probes_[i] != 0;
-        auto plan = recovery_.prepare_scheduled_packet(space, plain, now, request, *flow_);
-        if (!plan) continue;
-        hd::quic_packet_write write;
-        write.packet_number_width = 4;
-        if (i != 2) write.length_width = 2;
-        write.packet_number = plan.packet_number;
-        write.kind = i == 0 ? hd::quic_packet_kind::initial : i == 1 ? hd::quic_packet_kind::handshake : hd::quic_packet_kind::one_rtt;
-        write.destination = std::span(destination.bytes).first(destination.size);
-        if (i != 2) write.source = server_cid_;
-        auto size = std::max(plan.bytes, std::size_t{4});
-        if (i == 0) size = 1200 - request.protection_overhead;
-        write.payload = std::span(plain).first(size);
+    return prepare_datagram(now, identity_->application_cid());
+}
+std::optional<transmission> connection::prepare_datagram(clock_type::time_point now, const hd::quic_cid& destination) {
+    require(static_cast<bool>(recovery_.begin_datagram()), "begin UDP transaction");
+    try {
+        std::array<std::array<std::byte, datagram_ceiling>, 3> plain{};
+        std::array<std::byte, datagram_ceiling> scratch{};
+        std::array<hd::quic_datagram_packet, 3> packets{};
+        std::array<hd::quic_send_plan, 3> plans{};
+        std::array<hd::quic_pn_space, 3> spaces{};
+        std::size_t count = 0, used = 0;
+        const auto ceiling = recovery_.path_datagram_size();
+        for (unsigned i = 0; i < 3; ++i) {
+            auto level = static_cast<hd::quic_key_level>(i);
+            if (!keys_.keys(level, hd::quic_key_direction::write)) continue;
+            hd::quic_packet_write write;
+            write.kind = i == 0 ? hd::quic_packet_kind::initial : i == 1 ? hd::quic_packet_kind::handshake : hd::quic_packet_kind::one_rtt;
+            write.packet_number_width = 4;
+            if (i != 2) write.length_width = 2;
+            write.destination = std::span(destination.bytes).first(destination.size);
+            if (i != 2) write.source = server_cid_;
+            const std::array<hd::quic_datagram_packet, 1> measure{{{write, 4, false}}};
+            auto minimum = hd::size_quic_datagram(measure, hd::quic_endpoint_role::server, ceiling);
+            require(minimum.code == hd::quic_codec_code::ok, "packet size metadata");
+            const auto overhead = minimum.wire[0] - 4;
+            if (used + overhead + 4 > ceiling) continue;
+            auto space = static_cast<hd::quic_pn_space>(i);
+            hd::quic_send_request request{ceiling - used, overhead, probes_[i] != 0};
+            auto plan = recovery_.prepare_datagram_packet(space, plain[count], now, request, *flow_);
+            if (!plan) continue;
+            write.packet_number = plan.packet_number;
+            packets[count] = {write, plan.bytes, plan.ack_eliciting};
+            plans[count] = plan;
+            spaces[count] = space;
+            used += overhead + plan.bytes;
+            ++count;
+        }
+        if (!count) {
+            recovery_.abandon_datagram();
+            return prepare_probe(now, destination);
+        }
+        auto layout = hd::size_quic_datagram(std::span(packets).first(count), hd::quic_endpoint_role::server, ceiling);
+        require(layout.code == hd::quic_codec_code::ok, "protected datagram layout");
         transmission output;
-        output.bytes.resize(1200);
         output.peer = identity_->application_path().peer;
-        auto protected_packet = keys_.protect_packet(level, write, output.bytes, scratch);
-        if (protected_packet.code != hd::quic_crypto_code::ok)
-            throw std::runtime_error("protect packet code=" + std::to_string(static_cast<unsigned>(protected_packet.code)) + " level=" + std::to_string(i) + " payload=" + std::to_string(size));
-        output.bytes.resize(protected_packet.consumed);
-        auto permission = recovery_.check_scheduled_emission(plan.token, now, output.bytes.size(), plan.ack_eliciting, plan.ack_eliciting);
+        output.bytes.resize(layout.total);
+        std::size_t at = 0;
+        for (std::size_t i = 0; i < count; ++i) {
+            packets[i].header.payload = std::span(plain[i]).first(layout.payload[i]);
+            auto protected_packet = keys_.protect_packet(static_cast<hd::quic_key_level>(spaces[i]), packets[i].header,
+                                                        std::span(output.bytes).subspan(at, layout.wire[i]), scratch);
+            require(protected_packet.code == hd::quic_crypto_code::ok && protected_packet.consumed == layout.wire[i], "protect coalesced packet");
+            pending_packets_[i] = {plans[i].token, protected_packet.consumed, plans[i].ack_eliciting, plans[i].ack_eliciting || layout.padding[i],
+                                   keys_.generation(hd::quic_key_direction::write)};
+            at += protected_packet.consumed;
+        }
+        auto permission = recovery_.check_datagram_emission(std::span(pending_packets_).first(count), now);
         auto budget = identity_->application_budget();
         auto debit = permission ? budget->reserve_send(output.bytes.size()) : std::nullopt;
         if (!debit) {
-            recovery_.abandon_packet(plan.token);
-            continue;
+            recovery_.abandon_datagram();
+            return {};
         }
-        pending_ = plan;
-        pending_space_ = space;
+        pending_ = plans[0];
+        pending_plans_ = plans;
+        pending_spaces_ = spaces;
+        pending_count_ = count;
+        pending_batch_ = true;
         debit_ = debit;
         pending_budget_ = std::move(budget);
         pending_bytes_ = output.bytes.size();
         return output;
+    } catch (...) {
+        recovery_.abandon_datagram();
+        throw;
     }
-    return {};
+}
+std::optional<transmission> connection::prepare_probe(clock_type::time_point now, const hd::quic_cid& destination) {
+    std::array<std::byte, datagram_ceiling> plain{}, scratch{};
+    const auto overhead = destination.size + 21;
+    auto plan = recovery_.prepare_pmtu_probe(plain, now, overhead);
+    if (!plan) return {};
+    hd::quic_packet_write write;
+    write.kind = hd::quic_packet_kind::one_rtt;
+    write.packet_number_width = 4;
+    write.packet_number = plan.packet_number;
+    write.destination = std::span(destination.bytes).first(destination.size);
+    write.payload = std::span(plain).first(plan.bytes);
+    transmission output;
+    output.peer = identity_->application_path().peer;
+    output.bytes.resize(plan.bytes + overhead);
+    auto protected_packet = keys_.protect_packet(hd::quic_key_level::application, write, output.bytes, scratch);
+    auto permission = protected_packet.code == hd::quic_crypto_code::ok ?
+        recovery_.check_scheduled_emission(plan.token, now, protected_packet.consumed, true, true) : hd::quic_send_permission{{hd::quic_recovery_code::invalid}};
+    auto budget = identity_->application_budget();
+    auto debit = permission ? budget->reserve_send(output.bytes.size()) : std::nullopt;
+    if (!debit) {
+        recovery_.abandon_packet(plan.token);
+        return {};
+    }
+    pending_ = plan;
+    pending_count_ = 1;
+    pending_batch_ = false;
+    pending_plans_[0] = plan;
+    pending_spaces_[0] = hd::quic_pn_space::application;
+    debit_ = debit;
+    pending_budget_ = std::move(budget);
+    pending_bytes_ = output.bytes.size();
+    return output;
 }
 void connection::emitted(bool success, clock_type::time_point now) {
     if (pending_control_) {
@@ -461,21 +534,26 @@ void connection::emitted(bool success, clock_type::time_point now) {
         return;
     }
     require(pending_.has_value(), "send without preparation");
-    const auto plan = *pending_;
     if (success) {
         require(pending_budget_->complete_send(*debit_), "actual amplification debit");
-        require(static_cast<bool>(recovery_.commit_sent(plan.token, now, pending_bytes_, plan.ack_eliciting, plan.ack_eliciting, keys_.generation(hd::quic_key_direction::write))),
-                "actual send commit");
-        if (plan.stream) require(static_cast<bool>(streams_.at(plan.stream->stream)->record_stream_sent(plan.stream->offset, plan.stream->data.size(), plan.stream->fin)), "stream actual send");
-        if (plan.reset) require(static_cast<bool>(streams_.at(plan.reset->stream)->record_reset_sent(*plan.reset)), "reset actual send");
-        if (plan.flow) flow_->credit_emitted(*plan.flow);
-        auto index = static_cast<unsigned>(pending_space_);
-        if (probes_[index] && plan.ack_eliciting) --probes_[index];
+        const auto committed = pending_batch_ ? recovery_.commit_datagram(std::span(pending_packets_).first(pending_count_), now) :
+            recovery_.commit_sent(pending_->token, now, pending_bytes_, true, true, keys_.generation(hd::quic_key_direction::write));
+        require(static_cast<bool>(committed), "actual UDP send commit");
+        for (std::size_t i = 0; i < pending_count_; ++i) {
+            const auto& plan = pending_plans_[i];
+            if (plan.stream) require(static_cast<bool>(streams_.at(plan.stream->stream)->record_stream_sent(plan.stream->offset, plan.stream->data.size(), plan.stream->fin)), "stream actual send");
+            if (plan.reset) require(static_cast<bool>(streams_.at(plan.reset->stream)->record_reset_sent(*plan.reset)), "reset actual send");
+            if (plan.flow) flow_->credit_emitted(*plan.flow);
+            auto index = static_cast<unsigned>(pending_spaces_[i]);
+            if (pending_batch_ && probes_[index] && plan.ack_eliciting) --probes_[index];
+        }
         ++stats_.emitted;
     } else {
-        recovery_.abandon_packet(plan.token);
+        if (pending_batch_) recovery_.abandon_datagram();
+        else recovery_.abandon_packet(pending_->token);
         pending_budget_->cancel_unsent(*debit_);
     }
+    pending_count_ = 0;
     pending_.reset();
     debit_.reset();
     pending_budget_.reset();

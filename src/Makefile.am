@@ -177,3 +177,9 @@ noinst_HEADERS += httpserver/detail/request_handler_frames.hpp httpserver/detail
 
 libhttpserver_v3core_la_SOURCES += detail/quic_connection_identity.cpp
 noinst_HEADERS += httpserver/detail/quic_connection_identity.hpp
+
+libhttpserver_v3core_la_SOURCES += detail/quic_path_mtu.cpp
+noinst_HEADERS += httpserver/detail/quic_path_mtu.hpp
+libhttpserver_v3core_la_SOURCES += detail/quic_recovery_mtu.cpp
+libhttpserver_v3core_la_SOURCES += detail/quic_datagram_sizing.cpp detail/quic_recovery_datagram.cpp
+noinst_HEADERS += httpserver/detail/quic_datagram_sizing.hpp

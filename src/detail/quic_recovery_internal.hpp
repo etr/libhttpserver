@@ -9,6 +9,7 @@
 #include <httpserver/detail/quic_recovery.hpp>
 #include <httpserver/detail/quic_flow_control.hpp>
 #include <httpserver/detail/quic_pacing.hpp>
+#include <httpserver/detail/quic_path_mtu.hpp>
 namespace httpserver::detail {
 using recovery_duration = std::chrono::steady_clock::duration;
 inline recovery_duration recovery_scale(recovery_duration value, std::uint64_t numerator, std::uint64_t denominator = 1) {
@@ -62,12 +63,13 @@ struct quic_recovery::implementation {
         bool terminal = false;
     };
     struct packet {
-        std::uint64_t number = 0, key_generation = 0, sequence = 0, path_epoch = 0;
+        std::uint64_t number = 0, key_generation = 0, sequence = 0, path_epoch = 0, datagram_id = 0;
         slice content{};
         std::optional<std::uint64_t> receive_watermark, ack_generation;
         time_point sent_at{};
-        std::size_t wire_bytes = 0;
-        bool sampled = false, limited = false;
+        std::size_t wire_bytes = 0, datagram_bytes = 0;
+        bool datagram_failed = false, datagram_delivered = false;
+        bool sampled = false, limited = false, pmtu_probe = false;
         bool critical = false, ack_eliciting = false, in_flight = false, acknowledged = false, lost = false;
     };
     struct space_state {
@@ -95,7 +97,7 @@ struct quic_recovery::implementation {
         std::size_t payload_bytes = 0;
         bool prepared = false, ack_eliciting = false, critical = false;
         quic_send_request request{};
-        bool scheduled = false;
+        bool scheduled = false, pmtu_probe = false;
         std::optional<std::uint64_t> path_epoch;
         quic_flow_control* flow = nullptr;
         std::optional<quic_stream_frame> stream{};
@@ -103,6 +105,10 @@ struct quic_recovery::implementation {
         std::optional<std::uint64_t> ack_generation{}, receive_watermark{};
     };
     std::optional<preparation> pending;
+    std::array<std::optional<preparation>, 3> datagram{};
+    std::size_t datagram_count = 0, emitting_bytes = 0;
+    std::uint64_t emitting_datagram = 0;
+    bool datagram_active = false, datagram_staging = false;
     std::uint64_t next_token = 1, next_information = 1;
     std::vector<information> information_records;
     std::size_t retained_bytes = 0, data_retained_bytes = 0;
@@ -151,6 +157,10 @@ struct quic_recovery::implementation {
     void compact_congestion_runs();
     bool persistent_congestion() const;
     std::optional<std::uint64_t> persistent_through;
+    void sync_mtu(time_point now);
+    void failed_mtu_opportunity(quic_pn_space space, time_point now);
+    std::size_t expire_mtu(time_point now);
+    quic_path_mtu mtu;
     quic_congestion congestion;
     quic_pacing pacing;
     std::optional<time_point> send_due;
@@ -190,7 +200,7 @@ struct quic_recovery::implementation {
     quic_recovery_code send_admission(quic_pn_space space) const;
     quic_recovery_code commit_admission(std::uint64_t token, time_point now, std::size_t bytes, bool eliciting, bool flight) const;
     bool sample_ack(const space_state& s, std::span<const quic_ack_range> ranges, const quic_ack_frame& ack, time_point now, quic_pn_space space);
-    quic_recovery_events acknowledge_packets(space_state& s, std::span<const quic_ack_range> ranges, quic_pn_space space);
+    quic_recovery_events acknowledge_packets(space_state& s, std::span<const quic_ack_range> ranges, quic_pn_space space, time_point now);
     std::optional<quic_recovery_timer> space_probe_timer(quic_pn_space space) const;
     std::optional<quic_recovery_timer> idle_probe_timer() const;
     void update_rtt(std::chrono::steady_clock::duration sample, std::uint64_t delay, quic_pn_space space);

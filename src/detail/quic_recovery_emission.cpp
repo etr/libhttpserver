@@ -33,9 +33,12 @@ void quic_recovery::implementation::record_emission(time_point now, std::size_t 
     implementation::packet packet;
     packet.critical = pending.critical;
     packet.sampled = rtt.sampled;
-    packet.limited = pending.scheduled && pending.request.limited;
+    packet.pmtu_probe = pending.pmtu_probe;
+    packet.limited = pending.pmtu_probe || (pending.scheduled && pending.request.limited);
     packet.number = pending.number;
     packet.sequence = pending.token;
+    packet.datagram_id = emitting_datagram ? emitting_datagram : pending.token;
+    packet.datagram_bytes = emitting_datagram ? emitting_bytes : wire_bytes;
     packet.content = pending.content;
     packet.receive_watermark = pending.receive_watermark;
     packet.ack_generation = pending.ack_generation;
@@ -45,10 +48,11 @@ void quic_recovery::implementation::record_emission(time_point now, std::size_t 
     packet.wire_bytes = wire_bytes;
     packet.ack_eliciting = eliciting;
     packet.in_flight = flight;
+    if (pending.pmtu_probe) mtu.sent(pending.token, wire_bytes, recovery_after(now, pto_duration(pending.space)));
     s.sent.push_back(packet);
     note_congestion_packet(packet, pending.space);
     s.last_sent = now;
-    if (eliciting) s.last_eliciting = now;
+    if (eliciting && !pending.pmtu_probe) s.last_eliciting = now;
     if (flight) in_flight += wire_bytes;
     update_information(packet.content, information_status::sent);
     if (pending.scheduled && in_flight < congestion.snapshot().window && !select_stream(false, pending.flow))
@@ -63,7 +67,7 @@ void quic_recovery::implementation::finish_loss(std::optional<time_point> newest
     if (persistent) persistent_through = congestion_runs.back().last;
 }
 quic_recovery_result quic_recovery::activate_path() {
-    if (impl_->pending) return {quic_recovery_code::busy};
+    if (preparation_pending()) return {quic_recovery_code::busy};
     ++impl_->path_epoch;
     for (auto& s : impl_->spaces) {
         for (auto& p : s.sent) {
@@ -76,8 +80,9 @@ quic_recovery_result quic_recovery::activate_path() {
         s.last_eliciting.reset();
     }
     impl_->in_flight = 0;
-    impl_->congestion = quic_congestion(impl_->config.max_datagram_size);
-    impl_->pacing = quic_pacing(impl_->config.max_datagram_size);
+    impl_->mtu.reset();
+    impl_->congestion = quic_congestion(1200);
+    impl_->pacing = quic_pacing(1200);
     impl_->rtt = {};
     impl_->congestion_runs.clear();
     impl_->persistent_through.reset();

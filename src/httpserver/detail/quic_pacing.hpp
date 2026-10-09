@@ -15,6 +15,7 @@ class quic_pacing final {
     using duration = std::chrono::steady_clock::duration;
     explicit quic_pacing(std::size_t datagram = 1200) : burst_(2 * datagram) {}
     std::optional<time_point> deadline(time_point now, std::size_t bytes, std::size_t window, duration rtt) const;
+    void set_datagram_size(std::size_t bytes, time_point now, std::size_t window, duration rtt);
     void emitted(time_point now, std::size_t bytes, std::size_t window, duration rtt);
  private:
     long double allowance(time_point now, std::size_t window, duration rtt) const;

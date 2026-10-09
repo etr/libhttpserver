@@ -23,6 +23,13 @@ std::optional<quic_pacing::time_point> quic_pacing::deadline(time_point now, std
     if (delay >= remaining || delay >= static_cast<long double>(duration::max().count())) return time_point::max();
     return now + duration(static_cast<duration::rep>(delay));
 }
+void quic_pacing::set_datagram_size(std::size_t bytes, time_point now, std::size_t window, duration rtt) {
+    if (burst_ == 2 * bytes) return;
+    auto available = allowance(now, window, rtt);
+    burst_ = 2 * bytes;
+    debt_ = burst_ - std::min(available, static_cast<long double>(burst_));
+    charged_ = now;
+}
 void quic_pacing::emitted(time_point now, std::size_t bytes, std::size_t window, duration rtt) {
     debt_ = std::min(static_cast<long double>(burst_), burst_ - allowance(now, window, rtt) + bytes);
     charged_ = now;

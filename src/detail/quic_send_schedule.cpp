@@ -27,7 +27,7 @@ std::optional<quic_recovery::implementation::slice> quic_recovery::implementatio
         if (value.completed || value.cancelled) continue;
         auto content = eligible_slice(value, probe, flow);
         if (!content) continue;
-        auto credit = entry.deficit ? entry.deficit : config.max_datagram_size;
+        auto credit = entry.deficit ? entry.deficit : mtu.confirmed();
         if (content->length > credit) {
             content->length = credit;
             content->terminal = false;
@@ -82,7 +82,9 @@ quic_send_plan quic_recovery::prepare_scheduled_packet(quic_pn_space space, std:
                                                        quic_send_request request, quic_flow_control& flow) {
     if (!impl_->state(space) || !request.max_wire_bytes || request.max_wire_bytes > impl_->config.max_datagram_size ||
         request.protection_overhead >= request.max_wire_bytes) return {{quic_recovery_code::invalid}};
-    if (impl_->pending) return {{quic_recovery_code::busy}};
+    if (impl_->pending || (impl_->datagram_active && !impl_->datagram_staging)) return {{quic_recovery_code::busy}};
+    request.max_wire_bytes = std::min(request.max_wire_bytes, impl_->mtu.confirmed());
+    if (request.protection_overhead >= request.max_wire_bytes) return {{quic_recovery_code::invalid}};
     auto payload = output.first(std::min(output.size(), request.max_wire_bytes - request.protection_overhead));
     impl_->scheduled_overhead = request.protection_overhead;
     impl_->scheduled_now = now;
@@ -114,6 +116,13 @@ quic_send_permission quic_recovery::check_scheduled_emission(std::uint64_t token
     const auto& p = *impl_->pending;
     if (!p.scheduled || bytes > p.request.max_wire_bytes || bytes < p.payload_bytes + p.request.protection_overhead)
         return {{quic_recovery_code::invalid}};
+    const auto ceiling = p.path_epoch && *p.path_epoch != impl_->path_epoch ? std::size_t{1200} : impl_->mtu.confirmed();
+    if (!p.pmtu_probe && bytes > ceiling) return {{quic_recovery_code::invalid}};
+    if (!flight && bytes > p.payload_bytes + p.request.protection_overhead) return {{quic_recovery_code::invalid}};
+    if (p.pmtu_probe && bytes != p.request.max_wire_bytes) return {{quic_recovery_code::invalid}};
+    if (p.pmtu_probe && (!impl_->mtu.candidate(now) ||
+                         !impl_->environment.handshake_confirmed || !impl_->environment.peer_validated_endpoint))
+        return {{quic_recovery_code::unavailable}};
     auto checked = impl_->check_flow();
     if (checked != quic_recovery_code::ok) return {{checked}};
     auto permission = impl_->permission(now, bytes, flight, p.critical, p.request.probe, p.space);
@@ -136,7 +145,7 @@ void quic_recovery::implementation::commit_stream_turn() {
     consecutive_controls = 0;
     auto entry = std::find_if(streams.begin(), streams.end(), [&](auto e) { return e.stream == p.stream->stream; });
     if (entry == streams.end()) return;
-    auto credit = entry->deficit ? entry->deficit : config.max_datagram_size;
+    auto credit = entry->deficit ? entry->deficit : mtu.confirmed();
     entry->deficit = credit - std::min(credit, std::max(std::size_t{1}, p.stream->data.size()));
     auto next = entry->deficit ? entry : std::next(entry);
     if (next == streams.end()) next = streams.begin();
@@ -146,6 +155,8 @@ quic_congestion_snapshot quic_recovery::congestion() const { return impl_->conge
 std::optional<quic_recovery::time_point> quic_recovery::next_send_deadline() const { return impl_->send_due; }
 quic_send_plan quic_recovery::prepare_path_packet(const quic_path_frame& frame, std::span<std::byte> output, time_point now, quic_send_request request, bool on_active_path) {
     if (frame.data.size() != 8 || request.protection_overhead >= request.max_wire_bytes || request.max_wire_bytes > impl_->config.max_datagram_size) return {{quic_recovery_code::invalid}};
+    request.max_wire_bytes = std::min(request.max_wire_bytes, on_active_path ? impl_->mtu.confirmed() : std::size_t{1200});
+    if (request.protection_overhead >= request.max_wire_bytes) return {{quic_recovery_code::invalid}};
     auto plan = reserve(quic_pn_space::application, true);
     if (!plan) return plan;
     auto bytes = output.first(std::min(output.size(), request.max_wire_bytes - request.protection_overhead));

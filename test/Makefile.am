@@ -2306,3 +2306,12 @@ quic_connection_identity_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 quic_connection_identity_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 EXTRA_DIST += unit/quic_owner_peer.hpp
+
+check_PROGRAMS += quic_path_mtu
+quic_path_mtu_SOURCES = unit/quic_path_mtu_test.cpp support/quic_network_harness.cpp
+quic_path_mtu_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_path_mtu_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+check_PROGRAMS += quic_datagram_sizing
+quic_datagram_sizing_SOURCES = unit/quic_datagram_sizing_test.cpp
+quic_datagram_sizing_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_datagram_sizing_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

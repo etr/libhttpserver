@@ -104,6 +104,15 @@ An ordinary `response` is one-shot. `response_definition` is immutable and share
 | QUIC v1 | UDP connection-ID demux, version negotiation, anti-amplification, path validation and rebinding, packet protection, CRYPTO reassembly, three packet-number-space loss/PTO state, congestion control and pacing, stream reassembly, flow control, and close/drain state. Packet records reference retransmittable information; packet bytes are never replayed as retransmission. 0-RTT is disabled for v3.0; session resumption may remain enabled. |
 | HTTP/3 | ALPN `h3`, QUIC streams, one control stream and QPACK encoder/decoder streams per endpoint, connection-owned QPACK and blocked-stream accounting, limits and scheduler priority for critical streams, stream reset and GOAWAY. QUIC v1 is the required wire transport; QUIC v2 is not a v3.0 gate. |
 
+TASK-165 adds private active-path UDP sizing to recovery. A bounded three-space
+transaction applies Initial padding once and commits packet, flow, ACK and
+pacing state after one atomic UDP completion. Validated peer/local ceilings
+bound standalone PMTU discovery; active-path probe ACKs confirm emitted sizes.
+Distinct unsuccessful larger-datagram recovery opportunities trigger a 1200-byte
+fallback, preserving retained information, congestion history and pacing debt.
+Datagram delivery survives constituent collection, and path epochs isolate prior
+feedback. See `docs/task-165-quic-datagram-sizing.md` for policy and evidence.
+
 TASK-164 implements the private QUIC identity coordinator with four active IDs,
 32 cumulative IDs per direction, eight pending retirements and three canonical
 path records. It registers aliases before reliable advertisement, validates
