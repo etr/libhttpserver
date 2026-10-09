@@ -41,6 +41,10 @@ class http3_connection final {
     const http3_peer_settings& peer_settings() const { return peer_; }
     std::span<const std::byte> local_prefix(http3_role role) const;
     bool advance_local_prefix(http3_role role, std::size_t count);
+    http::outcome begin_goaway(std::uint64_t cutoff);
+    // The adapter supplies contiguous, owned control information retirement.
+    void acknowledge_control(std::uint64_t through);
+    bool goaway_retired() const { return goaway_retired_; }
     qpack_status queue_encoder_instruction(const qpack_encoder_instruction& instruction);
     http3_encoded_section encode_section(std::uint64_t id, std::span<const qpack_field_view> fields);
     http3_encoded_section encode_response_section(std::uint64_t id, std::span<const qpack_field_view> fields);
@@ -125,6 +129,11 @@ class http3_connection final {
     qpack_decoder decoder_;
     qpack_encoder encoder_;
     std::vector<std::byte> control_prefix_;
+    server::reservation goaway_charge_;
+    std::array<std::array<std::byte, 10>, 2> goaway_{};
+    std::array<std::size_t, 2> goaway_sizes_{}, goaway_positions_{};
+    std::uint64_t initial_goaway_end_ = 0, final_goaway_end_ = 0;
+    bool goaway_started_ = false, final_goaway_enabled_ = false, goaway_retired_ = false;
     std::array<std::byte, 1> encoder_prefix_{std::byte{2}}, decoder_prefix_{std::byte{3}};
     std::array<std::optional<std::uint64_t>, 3> local_ids_{};
     std::array<std::size_t, 3> prefix_positions_{};

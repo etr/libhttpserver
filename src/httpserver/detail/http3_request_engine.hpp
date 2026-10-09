@@ -4,7 +4,9 @@
 #endif
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP3_REQUEST_ENGINE_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP3_REQUEST_ENGINE_HPP_
+#include <chrono>
 #include <memory>
+#include <httpserver/server/server.hpp>
 #include <httpserver/detail/http3_connection.hpp>
 #include <httpserver/detail/quic_flow_control.hpp>
 #include <httpserver/detail/quic_recovery.hpp>
@@ -42,6 +44,11 @@ class http3_request_engine final {
     void disconnect(http::outcome reason);
     // Existing exchanges keep their by-value peer snapshot.
     void set_peer_for_future_requests(net::peer_address peer);
+    using time_point = std::chrono::steady_clock::time_point;
+    http::outcome begin_drain(time_point deadline, server::drain_ticket& out, time_point now = std::chrono::steady_clock::now());
+    void check_drain(time_point now);
+    std::optional<time_point> drain_deadline() const;
+    std::optional<quic_close_frame> take_connection_close();
     void begin_turn();
     const std::optional<http3_error>& failure() const;
 

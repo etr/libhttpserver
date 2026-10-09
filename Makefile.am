@@ -681,3 +681,5 @@ EXTRA_DIST += docs/task-165-quic-datagram-sizing.md
 EXTRA_DIST += docs/task-166-quic-lifecycle.md
 
 EXTRA_DIST += docs/task-168-qpack-accounting.md
+
+EXTRA_DIST += docs/task-170-http3-drain.md

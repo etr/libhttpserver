@@ -190,3 +190,6 @@ noinst_HEADERS += httpserver/detail/quic_connection_lifecycle.hpp
 noinst_HEADERS += httpserver/detail/qpack_dynamic_table.hpp httpserver/detail/qpack_instructions.hpp
 
 libhttpserver_v3core_la_SOURCES += detail/http3_qpack.cpp
+
+libhttpserver_v3core_la_SOURCES += detail/http3_control_drain.cpp
+libhttpserver_v3core_la_SOURCES += detail/http3_drain.cpp

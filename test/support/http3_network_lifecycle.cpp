@@ -5,6 +5,15 @@
 #include "test/support/http3_network_owner.hpp"
 #include <httpserver/detail/quic_datagram_sizing.hpp>
 namespace h3net {
+httpserver::http::outcome connection::begin_drain(clock_type::time_point deadline, hs::drain_ticket& out) {
+    if (!active() || !engine_) return {httpserver::http::outcome_code::invalid_state, "HTTP/3 owner is not active"};
+    return engine_->begin_drain(deadline, out);
+}
+void connection::check_drain(clock_type::time_point now) {
+    if (!active() || !engine_) return;
+    engine_->check_drain(now);
+    if (auto close = engine_->take_connection_close()) request_close(*close, now);
+}
 void connection::request_close(const hd::quic_close_frame& frame, clock_type::time_point now) {
     if (lifecycle_.local_close(frame, now, recovery_.current_pto())) terminal_changed(now);
 }

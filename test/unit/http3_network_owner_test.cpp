@@ -911,6 +911,61 @@ LT_BEGIN_AUTO_TEST(network_owner_suite, reset_route_capacity_failure_retires_act
     LT_CHECK(!close->application && close->error == 0x01);
     peer.server->emitted(true, peer.now);
 LT_END_AUTO_TEST(reset_route_capacity_failure_retires_actual_send_before_local_close)
+LT_BEGIN_AUTO_TEST(network_owner_suite, drain_rejects_later_work_and_closes_after_accepted_fin_ack)
+    owner_test::peer peer; httpserver::resume_signal pause; unsigned entered = 0, finished = 0;
+    LT_ASSERT(peer.routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+        [&](httpserver::exchange& x) -> httpserver::task<void> {
+            ++entered; co_await pause.wait(); ++finished; x.respond(httpserver::http::status::from_code(204), {});
+        }).ok());
+    peer.connect(); auto head = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 1> request{hd::quic_stream_frame{0, 0, head, true}};
+    peer.send(request, peer.address); LT_CHECK_EQ(entered, 1U);
+    auto deadline = h3net::clock_type::now() + std::chrono::seconds(5); httpserver::server::drain_ticket ticket;
+    LT_ASSERT(peer.server->begin_drain(deadline, ticket).ok());
+    const std::array<hd::quic_frame, 1> later{hd::quic_stream_frame{4, 0, head, true}};
+    peer.send(later, peer.address); LT_CHECK_EQ(entered, 1U);
+    for (unsigned n = 0; n < 20; ++n) {
+        peer.now = h3net::clock_type::now(); peer.server->tick(peer.now);
+        if (auto output = peer.server->prepare(peer.now)) {
+            peer.server->emitted(true, peer.now); peer.accept(*output);
+        }
+    }
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::active);
+    LT_CHECK(!peer.output[3].empty()); LT_CHECK_EQ(peer.server->close_notifications(), 0U);
+    pause.signal(); peer.executor.run_pending();
+    for (unsigned n = 0; n < 200 && peer.server->state() == hd::quic_lifecycle_state::active; ++n) {
+        peer.now = h3net::clock_type::now(); peer.server->tick(peer.now);
+        if (auto output = peer.server->prepare(peer.now)) {
+            peer.server->emitted(true, peer.now); peer.accept(*output);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    const auto closed = peer.server->state() == hd::quic_lifecycle_state::closing;
+    if (!closed) peer.server->tick(deadline);
+    httpserver::server::drain_result result; LT_ASSERT(ticket.wait(result).ok());
+    LT_CHECK(result.status == httpserver::server::drain_status::completed); LT_CHECK(closed);
+    LT_CHECK(peer.fins[0]); LT_CHECK_EQ(finished, 1U); LT_CHECK_EQ(peer.server->close_notifications(), 1U);
+    LT_CHECK(peer.server->has_keys(hd::quic_key_level::application)); LT_CHECK(peer.server->failure().empty());
+LT_END_AUTO_TEST(drain_rejects_later_work_and_closes_after_accepted_fin_ack)
+LT_BEGIN_AUTO_TEST(network_owner_suite, drain_deadline_cancels_once_and_preserves_closing_cids)
+    owner_test::peer peer; httpserver::resume_signal pause; httpserver::stop_token stop; unsigned resumed = 0;
+    LT_ASSERT(peer.routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+        [&](httpserver::exchange& x) -> httpserver::task<void> {
+            stop = x.cancellation(); co_await pause.wait(); ++resumed; x.respond(httpserver::http::status::from_code(204), {});
+        }).ok());
+    peer.connect(); auto head = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 1> request{hd::quic_stream_frame{0, 0, head, true}}; peer.send(request, peer.address);
+    auto deadline = h3net::clock_type::now() + std::chrono::seconds(5); httpserver::server::drain_ticket ticket;
+    LT_ASSERT(peer.server->begin_drain(deadline, ticket).ok());
+    LT_ASSERT(peer.server->deadline()); LT_CHECK(*peer.server->deadline() <= deadline);
+    peer.server->tick(deadline - std::chrono::nanoseconds(1)); LT_CHECK(!stop.stop_requested());
+    peer.server->tick(deadline); LT_CHECK(stop.stop_requested()); LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::closing);
+    httpserver::server::drain_result result; LT_ASSERT(ticket.wait(result).ok());
+    LT_CHECK(result.status == httpserver::server::drain_status::deadline_expired); LT_CHECK_EQ(result.remaining, 2U);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1U); LT_CHECK(peer.server->has_keys(hd::quic_key_level::application));
+    peer.server->tick(deadline); pause.signal(); peer.executor.run_pending(); LT_CHECK_EQ(resumed, 0U);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1U); LT_CHECK(peer.server->failure().empty());
+LT_END_AUTO_TEST(drain_deadline_cancels_once_and_preserves_closing_cids)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -9,9 +9,9 @@
 Provide staged HTTP/3 GOAWAY and graceful drain for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Issue staged H3 GOAWAY IDs while retaining critical streams.
-- [ ] Complete accepted requests and refuse later streams.
-- [ ] Close QUIC at deadline with observable drain result.
+- [x] Issue staged H3 GOAWAY IDs while retaining critical streams.
+- [x] Complete accepted requests and refuse later streams.
+- [x] Close QUIC at deadline with observable drain result.
 
 **Dependencies:**
 - Blocked by: TASK-143, TASK-166, TASK-169
@@ -24,4 +24,6 @@ Provide staged HTTP/3 GOAWAY and graceful drain for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-032
 **Related Decisions:** DR-V3-008
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** `docs/task-170-http3-drain.md`. Local implementation checks pass; separate validation and finalization are pending.

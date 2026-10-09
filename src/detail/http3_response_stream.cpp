@@ -260,15 +260,20 @@ http3_progress http3_request_engine::pump_output() {
 }
 void http3_request_engine::state::complete(const quic_information_completion& completion) {
     auto it = records.find(completion.stream);
-    if (it == records.end()) return;
+    if (it == records.end() || completion.kind != quic_information_kind::stream || completion.space != quic_pn_space::application) return;
     auto& ids = it->second->information;
     const auto found = std::find(ids.begin(), ids.end(), completion.id);
     if (found != ids.end()) {
         ids.erase(found);
         --(it->second->local ? retained_critical : retained);
+        if (it->second->local_role == http3_role::control) connection.acknowledge_control(completion.through_offset);
+        retire_drain_request(*it->second);
+        check_drain(std::chrono::steady_clock::now());
     }
 }
 void http3_request_engine::information_completed(const quic_information_completion& completion) {
-    state_->complete(completion);
+    auto s = state_;
+    state::pump_guard guard(*s);
+    s->complete(completion);
 }
 }  // namespace httpserver::detail

@@ -42,7 +42,13 @@ std::optional<http3_error> http3_connection::attach_local_stream(http3_role role
 }
 std::span<const std::byte> http3_connection::local_prefix(http3_role role) const {
     if (error_ || stopped_) return {};
-    if (role == http3_role::control) return std::span(control_prefix_).subspan(prefix_positions_[0]);
+    if (role == http3_role::control) {
+        if (prefix_positions_[0] < control_prefix_.size()) return std::span(control_prefix_).subspan(prefix_positions_[0]);
+        if (!goaway_started_) return {};
+        const auto slot = goaway_positions_[0] < goaway_sizes_[0] ? 0U : 1U;
+        if (slot == 1 && !final_goaway_enabled_) return {};
+        return std::span(goaway_[slot]).first(goaway_sizes_[slot]).subspan(goaway_positions_[slot]);
+    }
     if (role == http3_role::qpack_encoder) {
         if (!prefix_positions_[1]) return encoder_prefix_;
         return qpack_output_[0];
@@ -57,7 +63,10 @@ bool http3_connection::advance_local_prefix(http3_role role, std::size_t count) 
     if (role < http3_role::control || role > http3_role::qpack_decoder) return false;
     const auto slot = static_cast<std::size_t>(role) - static_cast<std::size_t>(http3_role::control);
     if (count > local_prefix(role).size()) return false;
-    if (slot == 0 || prefix_positions_[slot] == 0) {
+    if (slot == 0 && prefix_positions_[0] == control_prefix_.size() && goaway_started_) {
+        const auto stage = goaway_positions_[0] < goaway_sizes_[0] ? 0U : 1U;
+        goaway_positions_[stage] += count;
+    } else if (slot == 0 || prefix_positions_[slot] == 0) {
         prefix_positions_[slot] += count;
     } else {
         auto& output = qpack_output_[slot - 1];
