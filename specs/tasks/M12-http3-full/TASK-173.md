@@ -24,6 +24,6 @@ Provide required QUIC interop-runner matrix for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008
 **Related Decisions:** DR-V3-001
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [Required matrix and local checks](../../../docs/task-173-quic-interop-evidence.md). Validation and final completion status remain coordinator-owned.
