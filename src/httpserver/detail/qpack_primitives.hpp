@@ -32,13 +32,15 @@
 #include <utility>
 #include <httpserver/detail/hpack_primitives.hpp>
 namespace httpserver::detail {
-enum class qpack_state { ok, incomplete, invalid_argument, malformed, limit_exceeded };
+enum class qpack_state { ok, incomplete, invalid_argument, malformed, limit_exceeded, inserts_unavailable, eviction_prohibited };
 struct qpack_status {
     qpack_state state = qpack_state::ok;
     constexpr bool ok() const noexcept { return state == qpack_state::ok; }
     constexpr http::outcome_code code() const noexcept {
         switch (state) {
             case qpack_state::ok: return http::outcome_code::ok;
+            case qpack_state::inserts_unavailable:
+            case qpack_state::eviction_prohibited:
             case qpack_state::incomplete: return http::outcome_code::invalid_state;
             case qpack_state::invalid_argument: return http::outcome_code::invalid_argument;
             case qpack_state::malformed: return http::outcome_code::protocol_error;
@@ -49,6 +51,8 @@ struct qpack_status {
     constexpr std::string_view message() const noexcept {
         switch (state) {
             case qpack_state::ok: return {};
+            case qpack_state::inserts_unavailable: return "required QPACK inserts unavailable";
+            case qpack_state::eviction_prohibited: return "QPACK eviction prohibited";
             case qpack_state::incomplete: return "incomplete QPACK primitive";
             case qpack_state::invalid_argument: return "invalid QPACK parameters";
             case qpack_state::malformed: return "malformed QPACK data";

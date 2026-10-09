@@ -2320,3 +2320,11 @@ check_PROGRAMS += quic_connection_lifecycle
 quic_connection_lifecycle_SOURCES = unit/quic_connection_lifecycle_test.cpp
 quic_connection_lifecycle_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 quic_connection_lifecycle_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += qpack_dynamic_table qpack_instructions qpack_dynamic_corpus
+qpack_dynamic_table_SOURCES = unit/qpack_dynamic_table_test.cpp
+qpack_dynamic_table_LDADD =
+qpack_instructions_SOURCES = unit/qpack_instructions_test.cpp
+qpack_instructions_LDADD =
+qpack_dynamic_corpus_SOURCES = unit/qpack_dynamic_corpus_test.cpp
+qpack_dynamic_corpus_LDADD =
