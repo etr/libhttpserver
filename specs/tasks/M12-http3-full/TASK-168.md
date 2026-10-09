@@ -24,7 +24,7 @@ Provide QPACK blocked-section and critical-stream accounting for libhttpserver v
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** `docs/task-168-qpack-accounting.md`.
 Implementation is prepared for coordinator-owned validation. Status remains In
