@@ -114,3 +114,5 @@ __pycache__/
 /build-task172/
 /build-task172-on/
 /build-task172-san/
+
+!test/integ/http3_semantic_aioquic.py

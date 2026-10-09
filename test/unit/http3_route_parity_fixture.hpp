@@ -9,6 +9,7 @@
 #include <chrono>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <httpserver/detail/connection_engine.hpp>
@@ -49,12 +50,17 @@ class http1_fixture {
     }
     void send(std::string_view wire) { io_loopback::write_all(pair_.peer(), wire.data(), wire.size()); }
     void cancel() { engine_->shutdown(); }
-    parity::observed_response response() {
+    parity::observed_response response(std::string* raw_wire = nullptr) {
         parity::response_frame_parser parser;
         std::optional<parity::observed_response> result;
+        if (raw_wire) raw_wire->clear();
         if (!until([&] {
                 std::array<std::byte, 1024> bytes{};
                 auto read = hd::pollsys::read_some(pair_.peer(), bytes.data(), bytes.size());
+                if (raw_wire && read.status == hd::pollsys::sys_status::ok) {
+                    if (read.transferred > parser.max_response_bytes - raw_wire->size()) throw std::runtime_error("HTTP/1 transcript limit");
+                    raw_wire->append(reinterpret_cast<const char*>(bytes.data()), read.transferred);
+                }
                 auto responses = read.status == hd::pollsys::sys_status::ok
                                      ? parser.feed({reinterpret_cast<const char*>(bytes.data()), read.transferred})
                                      : (read.status == hd::pollsys::sys_status::closed_reset ? parser.finish() : std::vector<parity::observed_response>{});

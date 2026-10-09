@@ -5,6 +5,7 @@
 #include <vector>
 #include <array>
 #include "./http3_request_fixture.hpp"
+#include "../support/http3_semantic_routes.hpp"
 #include "./littletest.hpp"
 namespace hd = httpserver::detail;
 namespace http = httpserver::http;
@@ -562,6 +563,70 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, peer_field_section_uses_full_62_bit_se
         }
     }
 LT_END_AUTO_TEST(peer_field_section_uses_full_62_bit_setting_without_narrowing)
+
+
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, semantic_route_reads_prefix_before_fin_and_separates_response_trailers)
+    h3test::request_fixture f;
+    unsigned read = 0, finished = 0;
+    h3semantic::install(f.routes, [&](const char* kind, exchange&, std::size_t count) {
+        if (std::string_view(kind) == "read") read += count;
+        if (std::string_view(kind) == "finished") ++finished;
+    });
+    f.open(0);
+    auto fields = h3test::get("POST", "/items/../semantic?x=1");
+    fields.push_back({"x-repeat", "a"});
+    fields.push_back({"x-repeat", "b"});
+    LT_ASSERT(f.feed(0, h3test::headers(fields)));
+    f.executor.run_pending();
+    const std::string prefix("a\0b", 3);
+    LT_ASSERT(f.feed(0, h3test::data(prefix)));
+    f.executor.run_pending();
+    LT_CHECK_EQ(read, 3u);
+    LT_CHECK_EQ(finished, 0u);
+    LT_ASSERT(f.feed(0, h3test::data("tail")));
+    LT_ASSERT(f.feed(0, h3test::headers({{"x-end", "yes"}}), true));
+    f.executor.run_pending();
+    f.drain();
+    auto r = h3test::decode_response(f.output[0]);
+    LT_CHECK_EQ(r.body, prefix + "tail");
+    LT_ASSERT_EQ(r.heads.size(), 2u);
+    LT_CHECK_EQ(r.heads[1][0].name, "x-reply");
+    LT_CHECK_EQ(r.heads[1][0].value, "done");
+    LT_CHECK_EQ(finished, 1u);
+    LT_CHECK_EQ(f.fins[0], 1u);
+LT_END_AUTO_TEST(semantic_route_reads_prefix_before_fin_and_separates_response_trailers)
+
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, semantic_large_writer_parks_on_send_credit_and_resumes_exactly)
+    h3test::request_fixture f({}, 4096);
+    unsigned started = 0, completed = 0, finished = 0;
+    h3semantic::install(f.routes, [&](const char* kind, exchange&, std::size_t) {
+        if (std::string_view(kind) == "write_started") ++started;
+        if (std::string_view(kind) == "write_completed") ++completed;
+        if (std::string_view(kind) == "finished") ++finished;
+    });
+    f.open(0);
+    LT_ASSERT(f.feed(0, h3test::headers(h3test::get("GET", "/large")), true));
+    f.executor.run_pending();
+    f.drain();
+    LT_CHECK_EQ(started, completed + 1);
+    LT_CHECK_EQ(finished, 0u);
+    LT_ASSERT(f.flow.apply({hd::quic_flow_kind::max_data, 1048576}));
+    LT_ASSERT(f.flow.apply({hd::quic_flow_kind::max_stream_data, 1048576, 0}));
+    for (unsigned i = 0; i < 256 && !finished; ++i) {
+        f.engine->pump_output();
+        f.drain();
+        f.executor.run_pending();
+    }
+    f.drain();
+    const auto r = h3test::decode_response(f.output[0]);
+    LT_CHECK_EQ(r.body.size(), 524288u);
+    std::string expected(524288, '\0');
+    for (std::size_t i = 0; i < expected.size(); ++i) expected[i] = static_cast<char>(i % 256);
+    LT_CHECK_EQ(r.body, expected);
+    LT_ASSERT_EQ(r.heads.size(), 2u);
+    LT_CHECK_EQ(finished, 1u);
+LT_END_AUTO_TEST(semantic_large_writer_parks_on_send_credit_and_resumes_exactly)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

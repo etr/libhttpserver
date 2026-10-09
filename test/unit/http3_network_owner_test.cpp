@@ -6,6 +6,7 @@
 #include <string>
 #include <httpserver/detail/quic_crypto.hpp>
 #include "../support/http3_network_owner.hpp"
+#include "../support/http3_semantic_routes.hpp"
 #include "./quic_tls_peer.hpp"
 #include "./quic_owner_peer.hpp"
 #include "./quic_crypto_test_support.hpp"
@@ -966,6 +967,35 @@ LT_BEGIN_AUTO_TEST(network_owner_suite, drain_deadline_cancels_once_and_preserve
     peer.server->tick(deadline); pause.signal(); peer.executor.run_pending(); LT_CHECK_EQ(resumed, 0U);
     LT_CHECK_EQ(peer.server->close_notifications(), 1U); LT_CHECK(peer.server->failure().empty());
 LT_END_AUTO_TEST(drain_deadline_cancels_once_and_preserves_closing_cids)
+LT_BEGIN_AUTO_TEST(network_owner_suite, small_peer_window_receives_large_response_prefix_before_credit_resume)
+    owner_test::peer f(65527, nullptr, nullptr, {}, false, 4096);
+    unsigned started = 0, completed = 0;
+    h3semantic::install(f.routes, [&](const char* kind, httpserver::exchange&, std::size_t) {
+        if (std::string_view(kind) == "write_started") ++started;
+        if (std::string_view(kind) == "write_completed") ++completed;
+    });
+    f.connect();
+    f.drain(10);
+    auto head = h3test::headers(h3test::get("GET", "/large"));
+    const std::array<hd::quic_frame, 1> frames{hd::quic_stream_frame{0, 0, head, true}};
+    f.send(frames, f.address);
+    f.executor.run_pending();
+    for (unsigned turn = 0; turn < 100 && f.output[0].size() < 4096; ++turn) {
+        f.now = h3net::clock_type::now();
+        f.server->tick(f.now);
+        if (auto sent = f.server->prepare(f.now)) {
+            f.server->emitted(true, f.now);
+            f.accept(*sent);
+        } else {
+            auto due = f.server->deadline();
+            LT_ASSERT(due && *due < f.now + std::chrono::milliseconds(100));
+            std::this_thread::sleep_until(*due);
+        }
+    }
+    LT_CHECK_EQ(f.output[0].size(), 4096u);
+    LT_CHECK_EQ(started, completed + 1);
+    LT_CHECK(!f.fins[0]);
+LT_END_AUTO_TEST(small_peer_window_receives_large_response_prefix_before_credit_resume)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

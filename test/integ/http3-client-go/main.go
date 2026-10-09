@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -49,7 +50,9 @@ func control(command string, values fields) (fields, error) {
 		return nil, fmt.Errorf("runner control EOF")
 	}
 	result := fields{}
-	err := json.Unmarshal(input.Bytes(), &result)
+	decoder := json.NewDecoder(strings.NewReader(input.Text()))
+	decoder.UseNumber()
+	err := decoder.Decode(&result)
 	return result, err
 }
 func open(client *http3.ClientConn, ctx context.Context, port int, method, path string, body []byte) (*http3.RequestStream, error) {
@@ -110,6 +113,7 @@ func run() error {
 	if len(os.Args) == 2 && os.Args[1] == "--identity" {
 		return json.NewEncoder(os.Stdout).Encode(identity())
 	}
+	matrix := flag.String("matrix", "smoke", "smoke or task174")
 	port := flag.Int("port", 0, "fixture port")
 	ca := flag.String("ca", "", "fixture CA")
 	wrongCA := flag.String("wrong-ca", "", "untrusted CA")
@@ -129,13 +133,29 @@ func run() error {
 	defer keys.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
+	witness := &wireWitness{highest: map[int64]int64{}, credit: map[int64]int64{}}
 	config := &quic.Config{Versions: []quic.Version{quic.Version1}, HandshakeIdleTimeout: 10 * time.Second, MaxIdleTimeout: 15 * time.Second, Tracer: func(ctx context.Context, p logging.Perspective, id quic.ConnectionID) *logging.ConnectionTracer {
 		file, err := os.OpenFile(filepath.Join(*logs, fmt.Sprintf("qlog-%s.sqlog", id)), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 		if err != nil {
 			panic(err)
 		}
-		return qlog.NewConnectionTracer(file, p, id)
+		native := qlog.NewConnectionTracer(file, p, id)
+		if *matrix == "task174" {
+			observer := &logging.ConnectionTracer{ReceivedShortHeaderPacket: func(h *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
+				witness.received(frames)
+			}, SentShortHeaderPacket: func(h *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
+				witness.sent(frames)
+			}}
+			return logging.NewMultiplexedConnectionTracer(native, observer)
+		}
+		return native
 	}}
+	if *matrix == "task174" {
+		config.InitialStreamReceiveWindow = 4096
+		config.MaxStreamReceiveWindow = 4096
+		config.InitialConnectionReceiveWindow = 16777216
+		config.MaxConnectionReceiveWindow = 16777216
+	}
 	tlsConfig := &tls.Config{RootCAs: trust, ServerName: "localhost", NextProtos: []string{"h3"}, MinVersion: tls.VersionTLS13, KeyLogWriter: keys}
 	address := fmt.Sprintf("127.0.0.1:%d", *port)
 	conn, err := quic.DialAddr(ctx, address, tlsConfig, config)
@@ -216,7 +236,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	cases = append(cases, fields{"case": "cancellation", "stream": int64(stopped.StreamID()), "type": "*quic.StreamError", "code": uint64(streamError.ErrorCode), "sibling_status": siblingResult["status"], "server_cancelled": observed["event"] == "cancelled"})
+	cases = append(cases, fields{"case": "cancellation", "stream": int64(stopped.StreamID()), "type": "*quic.StreamError", "code": uint64(streamError.ErrorCode), "sibling_status": siblingResult["status"], "server_cancelled": observed["event"] == "cancelled", "sibling_stream": int64(sibling.StreamID()), "sibling_connection": observed["connection"]})
+	if *matrix == "task174" {
+		if err = semanticUploads(client, ctx, *port, &cases, witness); err != nil {
+			return err
+		}
+	}
 	missing, err := open(client, ctx, *port, "GET", "/missing", nil)
 	if err != nil {
 		return err
@@ -244,8 +269,23 @@ func run() error {
 		return fmt.Errorf("expected verification failure, got %T", err)
 	}
 	cases = append(cases, fields{"case": "tls_failure", "type": "*tls.CertificateVerificationError", "code": uint64(transportError.ErrorCode), "response": false})
+	if *matrix == "task174" {
+		goodTLS := tlsConfig.Clone()
+		goodTLS.RootCAs = trust
+		draining, err := quic.DialAddr(ctx, address, goodTLS, config)
+		if err != nil {
+			return err
+		}
+		defer draining.CloseWithError(0, "done")
+		if err = semanticDrain(draining, transport.NewClientConn(draining), ctx, *port, &cases); err != nil {
+			return err
+		}
+	}
 	receipt := identity()
 	receipt["cases"] = cases
+	if *matrix == "task174" {
+		receipt["matrix"] = "task174"
+	}
 	return json.NewEncoder(os.Stdout).Encode(fields{"receipt": receipt})
 }
 func main() {
