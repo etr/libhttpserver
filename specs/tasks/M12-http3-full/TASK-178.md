@@ -24,7 +24,7 @@ Provide full HTTP/3 and WebSocket-over-H3 conformance for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-011, PRD-V3N-REQ-012, PRD-V3N-REQ-013
 **Related Decisions:** DR-V3-001
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence (2026-10-09):** The repaired aggregate at
 `build/task178-repair-full-02/manifest.json` passed all nine required local
