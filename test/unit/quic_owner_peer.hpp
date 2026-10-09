@@ -6,6 +6,7 @@
 #include <vector>
 #include <map>
 #include <thread>
+#include <string>
 #include "./http3_request_fixture.hpp"
 #include "./quic_tls_peer.hpp"
 #include "../support/http3_network_owner.hpp"
@@ -38,7 +39,10 @@ struct peer {
     std::optional<hd::quic_admission_facts> facts;
     std::optional<hd::quic_datagram_dispatch::cid_registration> registration;
     std::map<std::uint64_t, std::vector<std::byte>> issued;
-    explicit peer(std::uint64_t udp_ceiling = 65527) {
+    hd::quic_key_observer observer = nullptr;
+    void* observer_argument = nullptr;
+    explicit peer(std::uint64_t udp_ceiling = 65527, hd::quic_key_observer inspect_keys = nullptr, void* argument = nullptr)
+        : observer(inspect_keys), observer_argument(argument) {
         require(registry.replace(quic_test::credentials()).ok(), "credentials");
         auto p = h3test::parameters();
         p.max_udp_payload_size = udp_ceiling;
@@ -113,7 +117,7 @@ struct peer {
                     auto pending = admission->receive(bytes, 0);
                     facts = admission->inspect(pending.pending);
                     require(static_cast<bool>(facts), "Initial admission");
-                    server = std::make_shared<h3net::connection>(registry.acquire()->select_default(), *facts, routes, executor, 77, policy);
+                    server = std::make_shared<h3net::connection>(registry.acquire()->select_default(), *facts, routes, executor, 77, policy, std::string{}, observer, observer_argument);
                     registration = admission->routes().register_cid(facts->destination, listener.datagrams(), server);
                     require(static_cast<bool>(registration), "initial route");
                     server->adopt_routes(admission->routes(), listener.datagrams(), *registration, server);

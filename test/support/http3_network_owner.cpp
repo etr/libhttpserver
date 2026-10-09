@@ -12,6 +12,11 @@
 namespace h3net {
 namespace {
 constexpr std::size_t datagram_ceiling = 1472;
+struct receive_turn {
+    bool& receiving;
+    explicit receive_turn(bool& state) : receiving(state) { receiving = true; }
+    ~receive_turn() { receiving = false; }
+};
 void require(bool result, const char* message) {
     if (!result) throw std::runtime_error(message);
 }
@@ -39,8 +44,9 @@ hd::quic_pn_space packet_space(hd::quic_packet_kind kind) {
 }
 }  // namespace
 connection::connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes, httpserver::manual_executor& executor, std::uint64_t id,
-                       const hs::peer_policy& policy, const std::string& file_root)
-    : facts_(std::move(facts)), root_(budget()), pool_(4194304, 1048576, root_), recovery_(recovery_config(), pool_.data(), pool_.critical()), routes_(routes), executor_(executor), id_(id) {
+                       const hs::peer_policy& policy, const std::string& file_root, hd::quic_key_observer observer, void* observer_argument)
+    : facts_(std::move(facts)), root_(budget()), pool_(4194304, 1048576, root_), keys_({}, observer, observer_argument), recovery_(recovery_config(), pool_.data(), pool_.critical()),
+      routes_(routes), executor_(executor), id_(id) {
     if (!file_root.empty()) {
         files_ = std::make_unique<hqnet::files>(file_root);
         expires_ = clock_type::now() + std::chrono::seconds(120);
@@ -51,6 +57,7 @@ connection::connection(hd::tls_credentials_selection credentials, hd::quic_admis
     server_cid_.assign(facts_.destination.bytes.begin(), facts_.destination.bytes.begin() + facts_.destination.size);
     require(keys_.install_initial(hd::quic_endpoint_role::server, envelope.value.destination) == hd::quic_crypto_code::ok, "Initial keys");
     local_.max_idle_timeout = files_ ? 120000 : 15000;
+    lifecycle_.negotiate(std::chrono::milliseconds(local_.max_idle_timeout), {});
     local_.max_udp_payload_size = datagram_ceiling;
     local_.initial_max_data = 1048576;
     local_.initial_max_stream_data_bidi_local = 65536;
@@ -78,15 +85,15 @@ connection::connection(hd::tls_credentials_selection credentials, hd::quic_admis
     tls_ = std::make_unique<hd::quic_tls_session>(std::move(credentials), config, pool_.critical(), keys_);
 }
 connection::~connection() {
-    if (pending_) {
-        if (pending_batch_) recovery_.abandon_datagram();
-        else recovery_.abandon_packet(pending_->token);
-        pending_budget_->cancel_unsent(*debit_);
-    }
-    if (pending_control_) identity_->complete_control(pending_control_->token, hd::quic_identity_emission::unsent, {});
-    if (engine_) engine_->disconnect({httpserver::http::outcome_code::connection_closed, "fixture closed"});
+    const auto now = clock_type::now();
+    lifecycle_.peer_close({}, now, recovery_.current_pto());
+    terminal_changed(now);
+    // A preparation without a completion is potentially submitted. Preserve
+    // its debit; destruction cannot manufacture evidence of an unsent datagram.
+    if (pending_ || pending_control_ || close_pending_) emitted(hd::quic_identity_emission::ambiguous, now);
     engine_.reset();
 }
+
 namespace {
 class weak_connection_sink final : public hd::datagram_sink {
  public:
@@ -104,10 +111,10 @@ void connection::adopt_routes(hd::quic_datagram_dispatch& routes, hd::io_connect
 }
 void connection::on_datagram(std::shared_ptr<const hd::io_datagram> packet) noexcept {
     try {
-        if (!failure_.empty()) return;
+        if (receiving_ || !failure_.empty() || lifecycle_.state() == hd::quic_lifecycle_state::closed || lifecycle_.state() == hd::quic_lifecycle_state::draining) return;
         // Submitted UDP sends remain pinned until their actual completion. Do
         // not mutate CID/path selection or ACK dropped payload while pinned.
-        if (pending_ || pending_control_) {
+        if (pending_ || pending_control_ || close_pending_) {
             ++stats_.drops;
             return;
         }
@@ -116,27 +123,45 @@ void connection::on_datagram(std::shared_ptr<const hd::io_datagram> packet) noex
             ++stats_.drops;
             return;
         }
+        const auto now = clock_type::now();
         bool accounted = false;
         if (*path == identity_->application_path()) {
+            close_blocked_ = false;
             if (!(packet == facts_.initial && !initial_delivered_)) identity_->application_budget()->receive_datagram(packet->bytes.size());
             accounted = true;
         }
         initial_delivered_ = true;
-        auto bytes = std::span(packet->bytes);
-        while (!bytes.empty()) {
-            auto envelope = hd::parse_quic_envelope(bytes, server_cid_.size());
-            if (envelope.code != hd::quic_codec_code::ok) {
-                ++stats_.drops;
-                break;
+        {
+            receive_turn turn(receiving_);
+            auto bytes = std::span(packet->bytes);
+            while (!bytes.empty()) {
+                auto envelope = hd::parse_quic_envelope(bytes, server_cid_.size());
+                if (envelope.code != hd::quic_codec_code::ok) {
+                    if (bytes.size() == packet->bytes.size() && identity_->matches_reset(packet->bytes, packet->peer)) {
+                        lifecycle_.stateless_reset(now, recovery_.current_pto());
+                        terminal_changed(now);
+                    }
+                    ++stats_.drops;
+                    break;
+                }
+                const bool authenticated = receive_packet(envelope.value.packet, *path, packet->bytes.size(), accounted, now);
+                if (!authenticated && bytes.size() == packet->bytes.size() && identity_->matches_reset(packet->bytes, packet->peer)) {
+                    lifecycle_.stateless_reset(now, recovery_.current_pto());
+                    terminal_changed(now);
+                }
+                if (!active()) {
+                    lifecycle_.closing_packet(now);
+                    break;
+                }
+                bytes = bytes.subspan(envelope.consumed);
             }
-            receive_packet(envelope.value.packet, *path, packet->bytes.size(), accounted, clock_type::now());
-            bytes = bytes.subspan(envelope.consumed);
         }
+        retire_terminal(now);
     } catch (const std::exception& e) {
         failure_ = e.what();
     }
 }
-void connection::receive_packet(std::span<const std::byte> packet, const hd::quic_path_identity& path, std::size_t credit, bool& accounted, clock_type::time_point now) {
+bool connection::receive_packet(std::span<const std::byte> packet, const hd::quic_path_identity& path, std::size_t credit, bool& accounted, clock_type::time_point now) {
     auto envelope = hd::parse_quic_envelope(packet, server_cid_.size());
     auto space = packet_space(envelope.value.kind);
     auto index = static_cast<unsigned>(space);
@@ -144,12 +169,12 @@ void connection::receive_packet(std::span<const std::byte> packet, const hd::qui
     auto opened = keys_.open_packet(static_cast<hd::quic_key_level>(index), packet, server_cid_.size(), largest_[index], connected_, plain, scratch);
     if (opened.code != hd::quic_crypto_code::ok) {
         ++stats_.drops;
-        return;
+        return false;
     }
-    if (space == hd::quic_pn_space::application && keys_.generation(hd::quic_key_direction::read) > keys_.generation(hd::quic_key_direction::write))
+    if (active() && space == hd::quic_pn_space::application && keys_.generation(hd::quic_key_direction::read) > keys_.generation(hd::quic_key_direction::write))
         require(keys_.respond_to_peer_update(connected_) == hd::quic_crypto_code::ok, "peer key update response");
     const auto number = opened.header.packet_number;
-    auto receipt = recovery_.inspect_received(space, number);
+    auto receipt = active() ? recovery_.inspect_received(space, number) : hd::quic_receipt::fresh;
     require(receipt != hd::quic_receipt::invalid, "packet receive capacity");
     auto payload = std::span(plain).first(opened.payload_size);
     hd::quic_frame_cursor cursor;
@@ -162,14 +187,23 @@ void connection::receive_packet(std::span<const std::byte> packet, const hd::qui
             !std::holds_alternative<hd::quic_padding_frame>(frame.value) && !std::holds_alternative<hd::quic_ack_frame>(frame.value) && !std::holds_alternative<hd::quic_close_frame>(frame.value);
         frames.push_back(frame.value);
     }
+    // A valid close wins before any CRYPTO, identity or application effects.
+    for (const auto& frame : frames) if (const auto* close = std::get_if<hd::quic_close_frame>(&frame)) {
+        if (path != identity_->application_path()) return true;
+        lifecycle_.peer_close(*close, now, recovery_.current_pto());
+        terminal_changed(now);
+        return true;
+    }
+    if (!active()) return true;
     if (receipt != hd::quic_receipt::fresh) {
         if (path != identity_->application_path()) {
             ++stats_.duplicates;
-            return;
+            return true;
         }
         require(static_cast<bool>(recovery_.receive_packet(space, number, eliciting, now)), "duplicate receipt");
+        lifecycle_.received(now);
         ++stats_.duplicates;
-        return;
+        return true;
     }
     if (space == hd::quic_pn_space::application) {
         hd::quic_cid destination;
@@ -180,7 +214,7 @@ void connection::receive_packet(std::span<const std::byte> packet, const hd::qui
             throw std::runtime_error("QUIC identity control error");
         if (!result) {
             ++stats_.drops;
-            return;
+            return true;
         }
         accounted = true;
         if (result.activated && engine_) engine_->set_peer_for_future_requests(identity_->application_path().peer.peer);
@@ -189,22 +223,32 @@ void connection::receive_packet(std::span<const std::byte> packet, const hd::qui
         });
         if (!result.allow_payload && !only_probing) {
             ++stats_.drops;
-            return;
+            return true;
         }
     } else if (path != identity_->application_path()) {
         ++stats_.drops;
-        return;
+        return true;
     }
-    for (const auto& frame : frames) apply(frame, space, now);
+    for (const auto& frame : frames) {
+        apply(frame, space, now);
+        if (!active()) return true;
+    }
     require(static_cast<bool>(recovery_.receive_packet(space, number, eliciting, now)), "packet receive commit");
     largest_[index] = std::max(number, largest_[index].value_or(0));
     ++stats_.authenticated;
+    lifecycle_.received(now);
     if (space == hd::quic_pn_space::handshake && !initial_discarded_) {
         keys_.discard_level(hd::quic_key_level::initial);
         recovery_.discard_space(hd::quic_pn_space::initial);
         initial_discarded_ = true;
     }
     if (space == hd::quic_pn_space::handshake) facts_.budget->mark_address_validated();
+    if (connected_ && keys_.keys(hd::quic_key_level::handshake, hd::quic_key_direction::read)) {
+        keys_.discard_level(hd::quic_key_level::handshake);
+        recovery_.discard_space(hd::quic_pn_space::handshake);
+        recovery_.set_environment(environment(), now);
+    }
+    return true;
 }
 void connection::apply(const hd::quic_frame& frame, hd::quic_pn_space space, clock_type::time_point now) {
     if (auto* crypto = std::get_if<hd::quic_crypto_frame>(&frame)) {
@@ -226,7 +270,7 @@ void connection::apply(const hd::quic_frame& frame, hd::quic_pn_space space, clo
             files_->receive(s, *flow_);
             return;
         }
-        for (unsigned pass = 0; pass < 16; ++pass) {
+        for (unsigned pass = 0; active() && pass < 16; ++pass) {
             engine_->begin_turn();
             engine_->pump_receive(data->stream);
             for (unsigned turn = 0; turn < 256 && executor_.run_one(); ++turn) {
@@ -248,10 +292,6 @@ void connection::apply(const hd::quic_frame& frame, hd::quic_pn_space space, clo
         }
     } else if (auto* flow = std::get_if<hd::quic_flow_frame>(&frame)) {
         require(flow_ && static_cast<bool>(flow_->apply(*flow)), "flow frame");
-    } else if (auto* close = std::get_if<hd::quic_close_frame>(&frame)) {
-        std::cerr << "QUIC close connection=" << id_ << " application=" << close->application << " code=" << close->error << "\n";
-        if (engine_) engine_->disconnect({httpserver::http::outcome_code::connection_closed, "fixture closed"});
-        failure_ = "peer closed";
     } else if (std::holds_alternative<hd::quic_padding_frame>(frame) || std::holds_alternative<hd::quic_ping_frame>(frame) || std::holds_alternative<hd::quic_new_connection_id_frame>(frame) ||
                std::holds_alternative<hd::quic_retire_connection_id_frame>(frame) || std::holds_alternative<hd::quic_path_frame>(frame)) {
         // Identity controls were processed before committing any application data.
@@ -260,6 +300,7 @@ void connection::apply(const hd::quic_frame& frame, hd::quic_pn_space space, clo
     }
 }
 void connection::drive_tls() {
+    if (!active()) return;
     auto result = connected_ ? tls_->process_post_handshake() : tls_->handshake();
     require(result.state != hd::tls_session::progress::failed && result.state != hd::tls_session::progress::eof, "TLS handshake failed");
     if (!flow_ && !tls_->peer_transport_parameter_bytes().empty()) {
@@ -270,6 +311,8 @@ void connection::drive_tls() {
         require(hd::validate_quic_transport_parameters(peer.value, hd::quic_endpoint_role::client, c) == hd::quic_codec_code::ok, "peer CID parameters");
         require(static_cast<bool>(recovery_.set_peer_max_datagram_size(peer.value.max_udp_payload_size)), "peer UDP ceiling");
         identity_->set_peer_active_limit(peer.value.active_connection_id_limit);
+        const auto peer_idle = std::min<std::uint64_t>(peer.value.max_idle_timeout, std::chrono::milliseconds::max().count());
+        lifecycle_.negotiate(std::chrono::milliseconds(local_.max_idle_timeout), std::chrono::milliseconds(peer_idle));
         flow_ = std::make_unique<hd::quic_flow_control>(hd::quic_endpoint_role::server, local_, peer.value, 64, pool_.data());
     }
     if (!connected_ && result.state == hd::tls_session::progress::complete) {
@@ -306,6 +349,7 @@ hd::quic_stream_state& connection::stream(std::uint64_t id) {
     return result;
 }
 void connection::drain_completions() {
+    if (!active()) return;
     while (auto done = recovery_.take_completion()) {
         identity_->information_completed(*done);
         if (done->kind == hd::quic_information_kind::crypto) {
@@ -337,6 +381,7 @@ hd::quic_recovery_environment connection::environment() const {
     return env;
 }
 void connection::retain_output() {
+    if (!active()) return;
     std::array<std::byte, 4096> bytes{};
     for (unsigned i = 0; i < 3; ++i) {
         for (unsigned turn = 0; turn < 16; ++turn) {
@@ -376,7 +421,12 @@ void connection::retain_output() {
 void connection::tick(clock_type::time_point now) {
     if (!failure_.empty()) return;
     try {
-        require(now < expires_, "connection deadline exceeded");
+        if (lifecycle_.expire(now, recovery_.current_pto())) terminal_changed(now);
+        if (!active()) {
+            retire_terminal(now);
+            return;
+        }
+        require(now < expires_, "fixture watchdog exceeded");
         identity_->expire(now);
         if (connected_) identity_->issue_cid();
         recovery_.set_environment(environment(), now);
@@ -392,7 +442,9 @@ void connection::tick(clock_type::time_point now) {
     }
 }
 std::optional<transmission> connection::prepare(clock_type::time_point now) {
-    if (pending_ || pending_control_ || !failure_.empty() || !flow_) return {};
+    if (pending_ || pending_control_ || close_pending_ || !failure_.empty()) return {};
+    if (!active()) return prepare_close(now);
+    if (!flow_) return {};
     std::array<std::byte, datagram_ceiling> plain{}, scratch{};
     if (connected_) {
         auto control = identity_->prepare_control(now, 21);
@@ -525,21 +577,42 @@ std::optional<transmission> connection::prepare_probe(clock_type::time_point now
     return output;
 }
 void connection::emitted(bool success, clock_type::time_point now) {
-    if (pending_control_) {
-        require(static_cast<bool>(identity_->complete_control(pending_control_->token, success ? hd::quic_identity_emission::sent : hd::quic_identity_emission::unsent, now,
-                                                              keys_.generation(hd::quic_key_direction::write))),
-                "path actual send");
-        if (success) ++stats_.emitted;
-        pending_control_.reset();
+    emitted(success ? hd::quic_identity_emission::sent : hd::quic_identity_emission::unsent, now);
+}
+void connection::emitted(hd::quic_identity_emission outcome, clock_type::time_point now) {
+    const bool success = outcome != hd::quic_identity_emission::unsent;
+    if (close_pending_) {
+        if (success) {
+            require(pending_budget_->complete_send(*debit_), "terminal amplification debit");
+            lifecycle_.close_emitted(true, now, recovery_.current_pto());
+            ++stats_.emitted;
+        } else {
+            pending_budget_->cancel_unsent(*debit_);
+        }
+        close_pending_ = false;
+        debit_.reset();
+        pending_budget_.reset();
+        retire_terminal(now);
         return;
     }
+    if (pending_control_) {
+        const auto completed = identity_->complete_control(pending_control_->token, outcome, now, keys_.generation(hd::quic_key_direction::write));
+        if (success) ++stats_.emitted;
+        pending_control_.reset();
+        lifecycle_.emitted(success, true, now);
+        if (!completed) request_close({false, 0x01, 0, {}}, now);
+        retire_terminal(now);
+        return;
+    }
+    if (!pending_ && !active()) return;
     require(pending_.has_value(), "send without preparation");
+    hd::quic_identity_result reset_registration;
     if (success) {
         require(pending_budget_->complete_send(*debit_), "actual amplification debit");
         const auto committed = pending_batch_ ? recovery_.commit_datagram(std::span(pending_packets_).first(pending_count_), now) :
             recovery_.commit_sent(pending_->token, now, pending_bytes_, true, true, keys_.generation(hd::quic_key_direction::write));
         require(static_cast<bool>(committed), "actual UDP send commit");
-        for (std::size_t i = 0; i < pending_count_; ++i) {
+        for (std::size_t i = 0; active() && i < pending_count_; ++i) {
             const auto& plan = pending_plans_[i];
             if (plan.stream) require(static_cast<bool>(streams_.at(plan.stream->stream)->record_stream_sent(plan.stream->offset, plan.stream->data.size(), plan.stream->fin)), "stream actual send");
             if (plan.reset) require(static_cast<bool>(streams_.at(plan.reset->stream)->record_reset_sent(*plan.reset)), "reset actual send");
@@ -547,6 +620,10 @@ void connection::emitted(bool success, clock_type::time_point now) {
             auto index = static_cast<unsigned>(pending_spaces_[i]);
             if (pending_batch_ && probes_[index] && plan.ack_eliciting) --probes_[index];
         }
+        bool eliciting = !pending_batch_;
+        for (std::size_t i = 0; i < pending_count_; ++i) eliciting |= pending_packets_[i].ack_eliciting;
+        lifecycle_.emitted(true, eliciting, now);
+        reset_registration = identity_->peer_cid_emitted(identity_->application_cid(), identity_->application_path().peer, outcome);
         ++stats_.emitted;
     } else {
         if (pending_batch_) recovery_.abandon_datagram();
@@ -557,12 +634,22 @@ void connection::emitted(bool success, clock_type::time_point now) {
     pending_.reset();
     debit_.reset();
     pending_budget_.reset();
+    if (!reset_registration) request_close({false, 0x01, 0, {}}, now);
+    retire_terminal(now);
 }
 std::optional<clock_type::time_point> connection::deadline() const {
     if (!failure_.empty()) return {};
+    if (!active()) {
+        auto endpoint = lifecycle_.deadline(recovery_.current_pto());
+        auto response = cached_close_ && !close_pending_ && !close_blocked_ ? lifecycle_.response_deadline() : std::nullopt;
+        if (response && (!endpoint || *response < *endpoint)) return response;
+        return endpoint;
+    }
     auto deadline = recovery_.next_deadline();
     auto due = recovery_.next_send_deadline();
     auto identity_due = identity_->deadline();
+    const auto idle_due = lifecycle_.deadline(recovery_.current_pto());
+    if (idle_due && (!due || *idle_due < *due)) due = idle_due;
     if (identity_due && (!due || *identity_due < *due)) due = identity_due;
     if (deadline && (!due || deadline->deadline < *due)) due = deadline->deadline;
     if (!due || expires_ < *due) due = expires_;

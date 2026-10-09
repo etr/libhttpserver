@@ -2253,14 +2253,14 @@ EXTRA_DIST += unit/http3_route_parity_fixture.hpp
 
 if NATIVE_V3_TLS
 check_PROGRAMS += http3_network_owner
-http3_network_owner_SOURCES = unit/http3_network_owner_test.cpp support/http3_network_owner.cpp support/quic_interop_files.cpp
+http3_network_owner_SOURCES = unit/http3_network_owner_test.cpp support/http3_network_owner.cpp support/http3_network_lifecycle.cpp support/quic_interop_files.cpp
 http3_network_owner_CPPFLAGS = $(tls_io_loopback_CPPFLAGS) -I$(top_srcdir)
 http3_network_owner_LDADD = $(tls_io_LDADD)
 http3_network_owner_LDFLAGS = $(tls_io_LDFLAGS)
 endif
 if NATIVE_V3_TLS
 noinst_PROGRAMS += http3_udp_fixture
-http3_udp_fixture_SOURCES = integ/http3_udp_fixture.cpp support/http3_network_owner.cpp support/quic_interop_files.cpp
+http3_udp_fixture_SOURCES = integ/http3_udp_fixture.cpp support/http3_network_owner.cpp support/http3_network_lifecycle.cpp support/quic_interop_files.cpp
 http3_udp_fixture_CPPFLAGS = $(http3_network_owner_CPPFLAGS)
 http3_udp_fixture_LDADD = $(tls_io_LDADD)
 http3_udp_fixture_LDFLAGS = $(tls_io_LDFLAGS)
@@ -2271,7 +2271,7 @@ EXTRA_DIST += integ/http3-client-go/main.go integ/http3_gate_runner_test.py
 
 if NATIVE_V3_TLS
 check_PROGRAMS += quic_interop_tls
-quic_interop_tls_SOURCES = unit/quic_interop_tls_test.cpp support/http3_network_owner.cpp support/quic_interop_files.cpp
+quic_interop_tls_SOURCES = unit/quic_interop_tls_test.cpp support/http3_network_owner.cpp support/http3_network_lifecycle.cpp support/quic_interop_files.cpp
 quic_interop_tls_CPPFLAGS = $(http3_network_owner_CPPFLAGS)
 quic_interop_tls_LDADD = libquic_interop_provider.a $(top_builddir)/src/.libs/libhttpserver_v3core.a $(V3_TLS_LIBS) -lpthread -ldl
 quic_interop_tls_LDFLAGS = $(tls_io_LDFLAGS)
@@ -2291,7 +2291,7 @@ endif
 
 if NATIVE_V3_TLS
 noinst_PROGRAMS += quic_interop_endpoint
-quic_interop_endpoint_SOURCES = integ/quic_interop_endpoint.cpp support/http3_network_owner.cpp support/quic_interop_files.cpp
+quic_interop_endpoint_SOURCES = integ/quic_interop_endpoint.cpp support/http3_network_owner.cpp support/http3_network_lifecycle.cpp support/quic_interop_files.cpp
 quic_interop_endpoint_CPPFLAGS = $(http3_network_owner_CPPFLAGS)
 quic_interop_endpoint_LDADD = $(quic_interop_tls_LDADD)
 quic_interop_endpoint_LDFLAGS = $(tls_io_LDFLAGS)
@@ -2315,3 +2315,8 @@ check_PROGRAMS += quic_datagram_sizing
 quic_datagram_sizing_SOURCES = unit/quic_datagram_sizing_test.cpp
 quic_datagram_sizing_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 quic_datagram_sizing_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += quic_connection_lifecycle
+quic_connection_lifecycle_SOURCES = unit/quic_connection_lifecycle_test.cpp
+quic_connection_lifecycle_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+quic_connection_lifecycle_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

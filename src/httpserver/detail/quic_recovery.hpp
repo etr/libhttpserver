@@ -119,6 +119,8 @@ class quic_recovery final {
     quic_recovery_events expire(time_point now);
     std::optional<quic_recovery_timer> next_deadline() const;
     unsigned pto_count() const;
+    // Lifecycle interval excludes probe backoff, which must not postpone idle expiry.
+    std::chrono::steady_clock::duration current_pto() const;
     std::chrono::steady_clock::duration path_probe_interval() const;
     quic_information_result retain_crypto(quic_pn_space space, std::uint64_t offset, std::span<const std::byte> data);
     // Owner marks local protocol-control STREAM data for reserved retention.

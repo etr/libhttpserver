@@ -10,6 +10,7 @@
 #include "test/support/quic_interop_files.hpp"
 #include <httpserver/detail/http3_request_engine.hpp>
 #include <httpserver/detail/quic_connection_identity.hpp>
+#include <httpserver/detail/quic_connection_lifecycle.hpp>
 #include <httpserver/detail/quic_server_admission.hpp>
 #include <httpserver/detail/quic_tls_session.hpp>
 namespace h3net {
@@ -27,31 +28,47 @@ struct transmission {
 class connection final : public hd::datagram_sink {
  public:
     connection(hd::tls_credentials_selection credentials, hd::quic_admission_facts facts, const hs::route_registry& routes, httpserver::manual_executor& executor, std::uint64_t id,
-               const hs::peer_policy& policy, const std::string& file_root = {});
+               const hs::peer_policy& policy, const std::string& file_root = {}, hd::quic_key_observer observer = nullptr, void* observer_argument = nullptr);
     ~connection();
     void adopt_routes(hd::quic_datagram_dispatch& routes, hd::io_connection_owner::datagram_port owner, hd::quic_datagram_dispatch::cid_registration initial, std::weak_ptr<connection> self);
     void on_datagram(std::shared_ptr<const hd::io_datagram> packet) noexcept override;
     void tick(clock_type::time_point now);
     std::optional<transmission> prepare(clock_type::time_point now);
     void emitted(bool success, clock_type::time_point now);
+    void emitted(hd::quic_identity_emission outcome, clock_type::time_point now);
     std::optional<clock_type::time_point> deadline() const;
     hs::resource_budget storage_budget() const { return root_; }
+    hs::resource_budget application_storage_budget() const { return pool_.data().budget; }
     const statistics& stats() const { return stats_; }
     const std::string& failure() const { return failure_; }
     bool connected() const { return connected_; }
+    void request_close(const hd::quic_close_frame& frame, clock_type::time_point now);
+    hd::quic_lifecycle_state state() const { return lifecycle_.state(); }
+    unsigned close_notifications() const { return close_notifications_; }
+    bool has_keys(hd::quic_key_level level) const { return keys_.keys(level, hd::quic_key_direction::read) || keys_.keys(level, hd::quic_key_direction::write); }
     std::uint64_t current_stream() const { return current_stream_; }
 
  private:
-    void receive_packet(std::span<const std::byte> packet, const hd::quic_path_identity& path, std::size_t credit, bool& accounted, clock_type::time_point now);
+    bool receive_packet(std::span<const std::byte> packet, const hd::quic_path_identity& path, std::size_t credit, bool& accounted, clock_type::time_point now);
     void apply(const hd::quic_frame& frame, hd::quic_pn_space space, clock_type::time_point now);
     std::optional<transmission> prepare_datagram(clock_type::time_point now, const hd::quic_cid& destination);
     std::optional<transmission> prepare_probe(clock_type::time_point now, const hd::quic_cid& destination);
     void drive_tls();
+    bool active() const { return lifecycle_.state() == hd::quic_lifecycle_state::active; }
+    void terminal_changed(clock_type::time_point now);
+    void retire_terminal(clock_type::time_point now);
+    void cache_close();
+    std::optional<transmission> prepare_close(clock_type::time_point now);
     void admit_h3();
     hd::quic_stream_state& stream(std::uint64_t id);
     void drain_completions();
     void retain_output();
     hd::quic_recovery_environment environment() const;
+    hd::quic_connection_lifecycle lifecycle_{std::chrono::milliseconds(15000), {}, clock_type::now()};
+    unsigned close_notifications_ = 0;
+    bool receiving_ = false, close_blocked_ = false;
+    bool terminal_stopped_ = false, terminal_retired_ = false, close_pending_ = false;
+    std::optional<transmission> cached_close_;
     hd::quic_admission_facts facts_;
     hs::resource_budget root_;
     hd::quic_storage_pool pool_;
