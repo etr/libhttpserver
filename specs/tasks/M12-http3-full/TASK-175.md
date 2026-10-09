@@ -24,7 +24,7 @@ Provide independent WebSocket-over-HTTP/3 client harness for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-011, PRD-V3N-REQ-012, PRD-V3N-REQ-013
 **Related Decisions:** DR-V3-001
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** Independent pinned aioquic RFC 9220 harness,
 shared bounded fixture routes, native/runner/wire tests, and reproduction
