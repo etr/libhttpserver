@@ -141,15 +141,28 @@ LT_BEGIN_AUTO_TEST(h3_ws_lifecycle_suite, inline_close_callbacks_can_disconnect_
 LT_END_AUTO_TEST(inline_close_callbacks_can_disconnect_or_destroy_during_feed_and_retention)
 LT_BEGIN_AUTO_TEST(h3_ws_lifecycle_suite, drain_waits_for_reliable_fin_completions)
     fixture f; f.local(); LT_ASSERT(f.settings()); LT_ASSERT(f.request()); f.drain();
+    unsigned closed = 0;
+    LT_ASSERT(f.sessions[0].on_close([&](auto info) { ++closed; LT_CHECK(info.clean); }).ok());
     h::server::drain_ticket ticket; auto deadline = std::chrono::steady_clock::now() + std::chrono::hours(1);
     LT_ASSERT(f.engine->begin_drain(deadline, ticket).ok());
-    std::vector<h::detail::quic_information_completion> held;
-    for (unsigned n = 0; n < 100 && f.transmit_held(held); ++n) {}
-    LT_CHECK_EQ(f.fins[0], 1U); LT_ASSERT(!held.empty());
+    std::vector<h::detail::quic_information_completion> held_fin;
+    for (unsigned n = 0; n < 100; ++n) {
+        std::vector<h::detail::quic_information_completion> completions;
+        if (!f.transmit_held(completions)) break;
+        for (const auto& completion : completions) {
+            if (completion.stream == 0 && completion.fin) held_fin.push_back(completion);
+            else f.engine->information_completed(completion);
+        }
+    }
+    // Retire both GOAWAY stages and all other output; only the tunnel FIN is held.
+    f.drain(); LT_CHECK_EQ(f.fins[0], 1U); LT_ASSERT_EQ(held_fin.size(), 1U);
     LT_ASSERT(f.data(masked(8, std::string("\x03\xe9", 2)), 0, true));
+    f.drain(); LT_CHECK_EQ(closed, 1U);
     LT_CHECK(!f.engine->take_connection_close());
-    for (const auto& completion : held) f.engine->information_completed(completion);
+    LT_CHECK(f.engine->drain_deadline() == deadline);
+    f.engine->information_completed(held_fin.front());
     f.drain(); LT_ASSERT(f.engine->take_connection_close());
+    LT_CHECK(!f.engine->drain_deadline());
     h::server::drain_result result; LT_ASSERT(ticket.wait(result).ok()); LT_CHECK(result.status == h::server::drain_status::completed);
 LT_END_AUTO_TEST(drain_waits_for_reliable_fin_completions)
 LT_BEGIN_AUTO_TEST(h3_ws_lifecycle_suite, drain_deadline_cancels_credit_blocked_tunnel_and_ignores_late_completion)
