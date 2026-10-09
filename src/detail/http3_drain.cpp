@@ -23,12 +23,20 @@ http::outcome http3_request_engine::begin_drain(time_point deadline, server::dra
         s->phase = state::drain_phase::draining;
         s->deadline = deadline;
         s->scope->arm(deadline, std::move(counted), std::move(cancel));
-        for (auto& [id, r] : s->records)
-            if (!r->local && !(id & 2) && !r->accepted) s->reset(*r, 0x10b);
+        s->drain_requests();
         out = std::move(ticket);
         return http::outcome::okay();
     } catch (const std::bad_alloc&) {
         return {http::outcome_code::limit_exceeded, "HTTP/3 drain allocation refused"};
+    }
+}
+void http3_request_engine::state::drain_requests() {
+    for (auto& [id, r] : records) {
+        if (!r->local && !(id & 2) && !r->accepted) reset(*r, 0x10b);
+        if (!r->cancelled && r->semantic && r->semantic->websocket) {
+            auto driver = r->semantic->websocket;
+            driver->begin_close(1001, {});
+        }
     }
 }
 void http3_request_engine::state::leave_connection() {

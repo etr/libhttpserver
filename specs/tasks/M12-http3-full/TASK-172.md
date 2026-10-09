@@ -9,9 +9,9 @@
 Provide WebSocket-over-HTTP/3 DATA and lifecycle adapter for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Feed only H3 DATA payload bytes to the shared WS codec.
-- [ ] Frame outbound WS bytes as DATA under stream credit.
-- [ ] Map FIN/reset/drain to exactly-once close without harming siblings.
+- [x] Feed only H3 DATA payload bytes to the shared WS codec.
+- [x] Frame outbound WS bytes as DATA under stream credit.
+- [x] Map FIN/reset/drain to exactly-once close without harming siblings.
 
 **Dependencies:**
 - Blocked by: TASK-166, TASK-170, TASK-171
@@ -24,4 +24,7 @@ Provide WebSocket-over-HTTP/3 DATA and lifecycle adapter for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-011, PRD-V3N-REQ-012, PRD-V3N-REQ-013, PRD-V3N-REQ-033
 **Related Decisions:** DR-V3-008
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation Notes:**
+- See [DATA and lifecycle behavior and verification](../../../docs/task-172-http3-websocket-data-lifecycle.md). Runner-owned validation and finalization remain pending.

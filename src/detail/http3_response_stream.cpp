@@ -150,9 +150,29 @@ bool http3_request_engine::state::stream_output(record& r) {
     r.output_fin = true;
     return true;
 }
+bool http3_request_engine::state::websocket_output(record& r) {
+    if (!r.semantic || !r.semantic->websocket) return false;
+    auto driver = r.semantic->websocket;
+    const auto progress = driver->snapshot();
+    websocket_terminal(r);
+    if (r.cancelled) return false;
+    if (progress.close_sent && !progress.output_pending) {
+        r.output_fin = true;
+        return true;
+    }
+    if (!progress.output_pending) return false;
+    std::vector<std::byte> payload(limits.response_buffer_bytes);
+    const auto n = driver->copy_output(payload);
+    if (!n) return false;
+    integer(r.output, 0);
+    integer(r.output, n);
+    r.output_body_begin = r.output.size();
+    r.output.insert(r.output.end(), payload.begin(), payload.begin() + n);
+    return true;
+}
 bool http3_request_engine::state::prepare_output(record& r) {
     if (!r.output.empty() || r.output_fin) return true;
-    if (r.sections.empty()) return stream_output(r);
+    if (r.sections.empty()) return r.semantic && r.semantic->websocket ? websocket_output(r) : stream_output(r);
     auto& section = r.sections.front();
     r.output = std::move(section.bytes);
     r.output_charge = std::move(section.charge);
@@ -190,7 +210,11 @@ bool http3_request_engine::state::local_output(record& r) {
 void http3_request_engine::state::retire_output(record& r, std::size_t start) {
     if (r.output_body_begin && r.semantic) {
         const auto from = std::max(start, r.output_body_begin), to = std::max(r.output_position, r.output_body_begin);
-        if (to > from) r.semantic->body.retire(to - from);
+        if (to > from) {
+            auto driver = r.semantic->websocket;
+            if (driver) driver->consume_output(to - from);
+            else r.semantic->body.retire(to - from);
+        }
     }
     if (r.cancelled) return;
     if (r.output_position == r.output.size()) {

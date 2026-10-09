@@ -683,3 +683,5 @@ EXTRA_DIST += docs/task-166-quic-lifecycle.md
 EXTRA_DIST += docs/task-168-qpack-accounting.md
 
 EXTRA_DIST += docs/task-170-http3-drain.md
+
+EXTRA_DIST += docs/task-172-http3-websocket-data-lifecycle.md

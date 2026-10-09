@@ -109,3 +109,8 @@ __pycache__/
 /build-task171/
 /build-task171-san/
 /build-task171-on/
+
+# TASK-172 local C++20 verification builds.
+/build-task172/
+/build-task172-on/
+/build-task172-san/

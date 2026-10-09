@@ -65,7 +65,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         quic_stream_state* transport = nullptr;
         http3_role local_role = http3_role::pending;
         bool local = false, cancelled = false, abandoned = false, receive_done = false, fin_retained = false, reset_settled = false;
-        bool event_recorded = false, accepted = false;
+        bool event_recorded = false, accepted = false, receiving = false, websocket_input_blocked = false;
         std::optional<drain_scope::unit> drain_unit;
         std::optional<quic_stream_terminal> terminal;
         http3_request_action action;
@@ -116,6 +116,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     void check_drain(time_point now);
     void finish_drain();
     void retire_drain_request(record& r);
+    void drain_requests();
     state(quic_storage_lease d, quic_storage_lease c, quic_flow_control& f, quic_recovery& q, const server::route_registry& r, executor& e, http3_request_limits l,
           std::uint64_t id, net::peer_address p)
         : data(std::move(d)),
@@ -155,6 +156,8 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     void record_event(record& r, const http3_event& event);
     bool deliver_body(record& r, const http3_event& event);
     void finish_receive(record& r);
+    void end_body(record& r);
+    bool can_receive(const record& r) const;
     void receive_pending();
     void receive_critical();
     void peer_reset(record& r, quic_stream_terminal terminal);
@@ -166,6 +169,11 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     bool section(record& r, std::uint16_t status, const http::fields& fields, bool fin, bool trailers = false);
     bool upgrade_available(const stream& value) const;
     websocket_upgrade_result upgrade(stream& value, const ws_upgrade_options& options);
+    void observe_websocket(websocket_driver& driver, std::uint64_t id);
+    bool deliver_websocket(record& r, const http3_event& event);
+    void websocket_terminal(record& r);
+    void pump_websocket_input(record& r);
+    bool websocket_output(record& r);
     bool reserve_websocket(websocket::options& options, server::reservation& input, server::reservation& output, server::reservation& message);
     void respond(record& r, std::uint16_t status, const http::fields& fields, bool streaming);
     bool prepare_output(record& r);
