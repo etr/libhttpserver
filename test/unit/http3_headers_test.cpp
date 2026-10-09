@@ -79,6 +79,32 @@ LT_BEGIN_AUTO_TEST(http3_headers_suite, trailers_preserve_order_and_reject_frami
         LT_CHECK(!hd::http3_convert_trailers(std::vector<hd::qpack_field>{{name, "x"}}, out));
     }
 LT_END_AUTO_TEST(trailers_preserve_order_and_reject_framing_and_routing)
+LT_BEGIN_AUTO_TEST(http3_headers_suite, extended_connect_has_canonical_route_and_effective_authority)
+    std::vector<hd::qpack_field> fields{{":method", "CONNECT"}, {":protocol", "websocket"}, {":scheme", "https"},
+        {":authority", "example.test"}, {":path", "/items/../chat?q=1"}, {"sec-websocket-version", "13"}};
+    http::request_head head; hd::http3_connect_metadata connect;
+    LT_ASSERT(hd::http3_convert_request(fields, head, connect));
+    LT_CHECK(connect.protocol == "websocket"); LT_CHECK_EQ(connect.scheme, "https");
+    LT_CHECK(head.request_method.id() == http::method_id::connect);
+    LT_CHECK_EQ(head.route_path, "/chat"); LT_CHECK_EQ(head.raw_target, "/items/../chat?q=1");
+    LT_CHECK_EQ(*head.head_fields.first("host"), "example.test"); LT_CHECK(!head.head_fields.first(":protocol"));
+LT_END_AUTO_TEST(extended_connect_has_canonical_route_and_effective_authority)
+LT_BEGIN_AUTO_TEST(http3_headers_suite, metadata_overload_rejects_incomplete_and_invalid_extended_connect)
+    const std::vector<hd::qpack_field> base{{":method", "CONNECT"}, {":protocol", "websocket"}, {":scheme", "https"},
+        {":authority", "example.test"}, {":path", "/chat"}};
+    for (unsigned index : {2u, 3u, 4u}) {
+        auto fields = base; fields.erase(fields.begin() + index);
+        http::request_head head; hd::http3_connect_metadata connect;
+        LT_CHECK(!hd::http3_convert_request(fields, head, connect));
+    }
+    for (const auto& mutation : std::vector<hd::qpack_field>{{":protocol", "bad protocol"}, {":protocol", ""}, {":scheme", "1http"},
+            {":authority", "bad host"}, {":path", "*"}, {":path", "relative"}, {":path", "/bad%gg"}}) {
+        auto fields = base;
+        for (auto& field : fields) if (field.name == mutation.name) field.value = mutation.value;
+        http::request_head head; hd::http3_connect_metadata connect;
+        LT_CHECK(!hd::http3_convert_request(fields, head, connect));
+    }
+LT_END_AUTO_TEST(metadata_overload_rejects_incomplete_and_invalid_extended_connect)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

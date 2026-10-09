@@ -7,8 +7,11 @@
 #include <optional>
 #include <httpserver/detail/qpack_field_section.hpp>
 #include <httpserver/detail/http1_target.hpp>
+#include <httpserver/detail/multiplexed_request_head.hpp>
 #include <httpserver/http/request_head.hpp>
 namespace httpserver::detail {
+using http3_connect_metadata = multiplexed_head::connect_metadata;
+bool http3_convert_request(std::span<const qpack_field> fields, http::request_head& head, http3_connect_metadata& connect);
 bool http3_regular_field(std::string_view name, std::string_view value);
 bool http3_trailer_field(std::string_view name, std::string_view value);
 bool http3_content_length(const http::fields& fields, std::optional<std::uint64_t>& length);

@@ -115,8 +115,9 @@ class fields {
         return key == npos ? 0 : value_store_[key].size();
     }
 
-    // The full sequence in insertion (wire) order.
-    std::span<const entry> entries() const noexcept {
+    // The full sequence in insertion (wire) order. Building the cached views
+    // may allocate; callers performing admission can contain allocation failure.
+    std::span<const entry> entries() const {
         if (cache_dirty_) rebuild_cache();
         return entry_cache_;
     }

@@ -388,6 +388,8 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, single_retention_slot_rotates_to_ready
     LT_CHECK_EQ(f.fins[0], 1u);
 LT_END_AUTO_TEST(single_retention_slot_rotates_to_ready_sibling)
 LT_BEGIN_AUTO_TEST(http3_streaming_suite, critical_prefix_uses_reserved_capacity_under_ordinary_saturation)
+    const auto bootstrap = h3test::bytes({0, 4, 6, 1, 0, 7, 0, 8, 1});
+    const auto prefix_bytes = bootstrap.size() + 2;
     for (unsigned saturation : {0u, 1u, 2u, 3u}) {
         hd::http3_request_limits limits;
         hd::quic_recovery_config config;
@@ -397,8 +399,8 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, critical_prefix_uses_reserved_capacity
             config.critical_information = 3;
         }
         if (saturation == 2) {
-            config.max_retained_bytes = 11;
-            config.critical_retained_bytes = 9;
+            config.max_retained_bytes = prefix_bytes + 2;
+            config.critical_retained_bytes = prefix_bytes;
         }
         h3test::request_fixture f(limits, 65536, config);
         f.open(0);
@@ -426,7 +428,7 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, critical_prefix_uses_reserved_capacity
         const auto ordinary_before = data_budget.in_use(resource), critical_before = critical_budget.in_use(resource);
         f.engine->pump_output();
         LT_CHECK_EQ(data_budget.in_use(resource), ordinary_before);
-        LT_CHECK_EQ(critical_budget.in_use(resource), critical_before + 18u);
+        LT_CHECK_EQ(critical_budget.in_use(resource), critical_before + 2 * prefix_bytes);
         std::array<std::byte, 64> packet;
         hd::quic_send_request request;
         request.protection_overhead = 0;
@@ -439,11 +441,11 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, critical_prefix_uses_reserved_capacity
         LT_ASSERT(f.recovery.abandon_packet(plan.token));
         LT_CHECK_EQ(f.flow.sent(), 0u);
         f.drain(64);
-        LT_CHECK(f.output[ids[0]] == h3test::bytes({0, 4, 4, 1, 0, 7, 0}));
+        LT_CHECK(f.output[ids[0]] == bootstrap);
         LT_CHECK(f.output[ids[1]] == h3test::bytes({2}));
         LT_CHECK(f.output[ids[2]] == h3test::bytes({3}));
         for (auto id : ids) LT_CHECK_EQ(f.fins[id], 0u);
-        LT_CHECK_EQ(f.flow.sent(), f.output[0].size() + 9u);
+        LT_CHECK_EQ(f.flow.sent(), f.output[0].size() + prefix_bytes);
         LT_CHECK_EQ(critical_budget.in_use(resource), critical_before);
         f.engine->pump_output();
         LT_CHECK_EQ(critical_budget.in_use(resource), critical_before);
@@ -528,7 +530,7 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, blocked_response_does_not_block_siblin
     f.drain();
     LT_CHECK_EQ(f.fins[0], 0u);
     LT_CHECK_EQ(f.fins[4], 1u);
-    LT_CHECK(f.output[local.id] == h3test::bytes({0, 4, 4, 1, 0, 7, 0}));
+    LT_CHECK(f.output[local.id] == h3test::bytes({0, 4, 6, 1, 0, 7, 0, 8, 1}));
     LT_CHECK_EQ(f.fins[local.id], 0u);
     LT_ASSERT(f.flow.apply({hd::quic_flow_kind::max_stream_data, 64, 0}));
     f.drain();

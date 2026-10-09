@@ -111,6 +111,7 @@ bool http3_connection::admit_request(stream& s, std::uint64_t id) {
         fail(0x105, "Unexpected request frame", id); return false;
     }
     if (type == 1) {
+        if (!s.request_stage) s.opening_connect_enabled = s.frame_connect_enabled;
         if (s.parser->length() > limits_.qpack_retained_bytes - retained_bytes_) {
             fail(0x107, "Retained HEADERS byte limit", id); return false;
         }
@@ -199,10 +200,17 @@ http3_feed_result http3_connection::feed(std::uint64_t id, std::span<const std::
     consumed += feed_frames(s, input, id);
     return {progress_for(error_.has_value(), s.ready, frame_budget(s)), consumed, error_};
 }
+void http3_connection::capture_connect_setting(stream& s, std::span<const std::byte> input) {
+    // Freeze before even a fragmented frame type is consumed; ignored frames
+    // must not freeze the fact for the subsequent opening HEADERS.
+    if (s.role == http3_role::request && !s.request_stage && !input.empty() && s.parser->at_frame_start())
+        s.frame_connect_enabled = peer_.received && peer_.enable_connect_protocol;
+}
 std::size_t http3_connection::feed_frames(stream& s, std::span<const std::byte> input, std::uint64_t id) {
     if (!s.parser || error_) return 0;
     std::size_t consumed = 0;
     while (!s.ready && !s.blocked && frame_budget(s)) {
+        capture_connect_setting(s, input);
         const auto r = s.parser->feed(input, s.offset);
         consumed += r.consumed; s.offset += r.consumed; input = input.subspan(r.consumed);
         if (!handle_frame(s, r, id)) break;
@@ -242,6 +250,10 @@ void http3_connection::release_event(std::uint64_t id) {
     if (it == streams_.end() || !it->second->ready) return;
     auto& s = *it->second;
     s.ready = false; s.event = {}; std::vector<qpack_field>().swap(s.fields); s.fields_charge.release(); s.parser->release_event(); release_retained(s);
+}
+bool http3_connection::connect_eligible(std::uint64_t id) const {
+    const auto it = streams_.find(id);
+    return it != streams_.end() && it->second->opening_connect_enabled;
 }
 std::uint64_t http3_connection::offset(std::uint64_t id) const {
     const auto it = streams_.find(id); return it == streams_.end() ? 0 : it->second->offset;

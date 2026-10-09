@@ -104,3 +104,8 @@ __pycache__/
 # TASK-170 local verification builds.
 /build-task170/
 /build-task170-on/
+
+# TASK-171 local verification builds.
+/build-task171/
+/build-task171-san/
+/build-task171-on/

@@ -16,7 +16,7 @@
 #include <httpserver/detail/quic_stream_state.hpp>
 namespace httpserver::detail {
 struct http3_peer_settings {
-    bool received = false;
+    bool received = false, enable_connect_protocol = false;
     std::uint64_t qpack_capacity = 0, qpack_blocked = 0, max_field_section = k_quic_max_integer;
 };
 struct http3_encoded_section {
@@ -49,6 +49,7 @@ class http3_connection final {
     http3_encoded_section encode_section(std::uint64_t id, std::span<const qpack_field_view> fields);
     http3_encoded_section encode_response_section(std::uint64_t id, std::span<const qpack_field_view> fields);
     bool blocked(std::uint64_t id) const;
+    bool connect_eligible(std::uint64_t id) const;
     void publish_section(std::uint64_t token);
     void cancel_section(std::uint64_t token);
     void cancel_unpublished(std::uint64_t id);
@@ -63,6 +64,7 @@ class http3_connection final {
         std::size_t scratch_size = 0;
         unsigned request_stage = 0;
         bool closed = false, blocked = false;
+        bool frame_connect_enabled = false, opening_connect_enabled = false;
         std::size_t retained_bytes = 0;
         qpack_decoder::section_prefix section;
         server::reservation blocked_charge, instruction_charge;
@@ -82,6 +84,7 @@ class http3_connection final {
     bool decode_fields(stream& s, std::uint64_t id);
     bool handle_frame(stream& s, const http3_feed_result& result, std::uint64_t id);
     bool process_safe(stream& s, std::uint64_t id);
+    void capture_connect_setting(stream& s, std::span<const std::byte> input);
     std::size_t feed_frames(stream& s, std::span<const std::byte> input, std::uint64_t id);
     std::optional<http3_error> clean_terminal(stream& s, std::uint64_t id);
     bool process(stream& s, std::uint64_t id);

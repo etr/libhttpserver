@@ -43,7 +43,7 @@ session::session(options limits, close_callback callback) {
     if (!valid.ok()) throw std::invalid_argument(valid.message());
     state_ = std::make_shared<detail::session_state>(limits, std::move(callback));
 }
-session::~session() { cancel(); }
+session::~session() { if (state_) cancel(); }
 session::session(session&& other) noexcept : state_(std::move(other.state_)) { }
 session& session::operator=(session&& other) noexcept {
     if (this != &other) {
