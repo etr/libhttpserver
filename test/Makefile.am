@@ -2377,3 +2377,8 @@ http3_semantic_parity_fixture_SOURCES = integ/http3_semantic_parity_fixture.cpp 
 http3_semantic_parity_fixture_LDADD = $(http3_headers_LDADD)
 http3_semantic_parity_fixture_LDFLAGS = $(http3_headers_LDFLAGS)
 EXTRA_DIST += support/http3_semantic_routes.hpp integ/http3_semantic_aioquic.py integ/http3-client-go/semantic.go integ/http3-client-go/semantic_test.go
+
+check_PROGRAMS += http3_semantic_h1
+http3_semantic_h1_SOURCES = unit/http3_semantic_h1_test.cpp parity/response_frame.cpp
+http3_semantic_h1_LDADD =
+EXTRA_DIST += support/http3_semantic_h1.hpp

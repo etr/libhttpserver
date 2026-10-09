@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../support/http3_semantic_routes.hpp"
+#include "../support/http3_semantic_h1.hpp"
 #include "../unit/http2_request_fixture.hpp"
 #include "../unit/http3_request_fixture.hpp"
 #include "../unit/http3_route_parity_fixture.hpp"
@@ -69,18 +70,15 @@ void run(unsigned version) {
             "POST /items/../semantic?x=1 HTTP/1.1\r\nHost: localhost\r\nx-repeat: "
             "a\r\nx-repeat: b\r\nTransfer-Encoding: chunked\r\n\r\n");
         h1.send("6\r\n" + upload.substr(0, 6) + "\r\nd\r\n" + upload.substr(6) + "\r\n0\r\n\r\n");
-        auto response = h1.response();
+        auto response = h1.response(&raw_wire);
         require(response.status == 200);
         body = response.body;
         raw_status = response.raw_status_line;
         framing = response.framing;
         for (const auto& field : response.headers) raw_fields.emplace_back(field.name, field.value);
-        for (const auto& field : response.headers) {
-            if (field.name == "x-reply")
-                trailers.emplace_back(field.name, field.value);
-            else if (field.name.starts_with("x-"))
-                headers.emplace_back(field.name, field.value);
-        }
+        auto observed = h3semantic::observe_h1_fields(response, raw_wire);
+        headers = std::move(observed.headers);
+        trailers = std::move(observed.trailers);
         h1.send("GET /missing HTTP/1.1\r\nHost: localhost\r\n\r\n");
         missing = h1.response().status;
     } else {

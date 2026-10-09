@@ -142,7 +142,11 @@ def run_parity(binary, directory):
         need(not process.errors and not any(thread.is_alive() for thread in process.threads),'parity diagnostic capture failed')
 
 
-def decode_goaway(text):
+class GoawayPending(GateFailure):
+    """A valid received-stage prefix needs more actual capture evidence."""
+
+
+def decode_goaway(text, cutoff=None):
     ids=[]
     for line in text.splitlines():
         parts=line.split('\t')
@@ -150,25 +154,46 @@ def decode_goaway(text):
         kinds,payloads=parts[0].split(','),parts[1].split(',')
         need(len(kinds)==len(payloads),'ambiguous decoder frame alignment')
         for kind,payload in zip(kinds,payloads):
-            if int(kind,0)!=7:continue
+            try:frame_type=int(kind,0)
+            except ValueError as error:raise GateFailure('malformed decoder frame type') from error
+            if frame_type!=7:continue
             try:raw=bytes.fromhex(payload.replace(':',''))
             except ValueError as error:raise GateFailure('malformed GOAWAY payload') from error
             need(raw and len(raw)==1<<(raw[0]>>6),'malformed GOAWAY integer')
             value=int.from_bytes(bytes([raw[0]&63])+raw[1:],'big')
             if not ids or ids[-1]!=value:ids.append(value)
-    need(len(ids)==2 and ids[0]==(1<<62)-4 and ids[1]<=ids[0] and ids[1]%4==0,'missing received GOAWAY stages')
+    need(len(ids)<=2 and (not ids or ids[0]==(1<<62)-4),'wrong received GOAWAY stages')
+    if len(ids)==2:
+        need(ids[1]<=ids[0] and ids[1]%4==0 and (cutoff is None or ids[1]==cutoff),'wrong received GOAWAY cutoff')
+    else:
+        raise GoawayPending('missing received GOAWAY stages')
     return ids
 
 
-def goaway_witness(tshark, directory, port):
+def goaway_witness(tshark, directory, port, deadline=None, cutoff=4):
+    deadline=min(time.monotonic()+10,deadline) if deadline is not None else time.monotonic()+10
     snapshot=directory/'goaway.pcap'
-    snapshot.write_bytes((directory/'packets.pcap').read_bytes())
     command=[str(tshark),'-r',str(snapshot),'-o','tls.keylog_file:'+str(directory/'tls.keys'),'-d',f'udp.port=={port},quic','-Y',f'udp.srcport=={port} && http3.frame_type==7','-T','fields','-e','http3.frame_type','-e','http3.frame_payload']
-    result=subprocess.run(command,capture_output=True,text=True,timeout=10)
-    (directory/'goaway-decoded.tsv').write_text(result.stdout)
-    (directory/'goaway-decoder.json').write_text(json.dumps({'command':command,'exit_status':result.returncode,'stderr':result.stderr,'capture_sha256':hashlib.sha256(snapshot.read_bytes()).hexdigest()},indent=2)+'\n')
-    need(result.returncode==0,'GOAWAY decoder failed')
-    return {'ids':decode_goaway(result.stdout)}
+    attempts=0
+    while True:
+        remaining=deadline-time.monotonic()
+        need(remaining>0,'GOAWAY witness deadline exceeded: missing received stages')
+        snapshot.write_bytes((directory/'packets.pcap').read_bytes())
+        remaining=deadline-time.monotonic()
+        need(remaining>0,'GOAWAY witness deadline exceeded: missing received stages')
+        result=subprocess.run(command,capture_output=True,text=True,timeout=remaining)
+        attempts+=1
+        (directory/'goaway-decoded.tsv').write_text(result.stdout)
+        (directory/'goaway-decoder.json').write_text(json.dumps({'command':command,'exit_status':result.returncode,'stderr':result.stderr,'capture_sha256':hashlib.sha256(snapshot.read_bytes()).hexdigest(),'attempts':attempts},indent=2)+'\n')
+        need(result.returncode==0,'GOAWAY decoder failed')
+        try:ids=decode_goaway(result.stdout,cutoff)
+        except GoawayPending:
+            remaining=deadline-time.monotonic()
+            need(remaining>0,'GOAWAY witness deadline exceeded: missing received stages')
+            time.sleep(min(0.05,remaining))
+            continue
+        need(time.monotonic()<deadline,'GOAWAY witness deadline exceeded')
+        return {'ids':ids}
 
 
 class Process:
@@ -353,7 +378,7 @@ def run_client(name, fixture_path, client_command, credentials, directory, matri
         command = client_command + ['--port',str(port),'--ca',str(credentials/'ca.pem'),'--wrong-ca',str(credentials/'wrong-ca.pem'),'--log-dir',str(directory)]
         client = Process(command,directory,'client',messages)
         deadline = time.monotonic()+15
-        waiting = None; receipt = None; active = set(); connection_id = None
+        waiting = None; receipt = None; active = set(); connection_id = None; drain_deadline = None
         while receipt is None:
             process,line = next_message(messages,deadline)
             need(line is not None, 'process exited before all receipts')
@@ -375,10 +400,12 @@ def run_client(name, fixture_path, client_command, credentials, directory, matri
                 if command=='reset':
                     fixture.write('reset');client.write('{}');deadline=time.monotonic()+15
                 elif semantic and command == 'goaway_witness':
-                    client.write(json.dumps(goaway_witness(tshark,directory,port)))
+                    need(drain_deadline is not None,'GOAWAY witness requested before drain')
+                    client.write(json.dumps(goaway_witness(tshark,directory,port,min(deadline,drain_deadline),item['stream']+4)))
                     deadline=time.monotonic()+15
                 elif semantic and command in ('snapshot','drain'):
                     waiting = {**item, 'event': 'snapshot' if command == 'snapshot' else 'drain_started'}
+                    if command=='drain':drain_deadline=time.monotonic()+5
                     fixture.write(f"{command} {item['connection']} {item['stream']}")
                 elif command in ('wait','release'):
                     waiting={**item,'event':item.get('event') if command=='wait' else 'released'}
@@ -468,12 +495,12 @@ def main():
                 'src/detail/quic_repacketize.cpp','src/detail/quic_send_schedule.cpp','src/httpserver/detail/quic_recovery.hpp',
                 'src/detail/http3_response_stream.cpp','src/detail/http3_body_stream.cpp','src/detail/http3_drain.cpp','src/detail/http3_control_drain.cpp',
                 'test/support/http3_network_owner.cpp','test/support/http3_network_owner.hpp','test/support/http3_network_lifecycle.cpp',
-                'test/support/http3_semantic_routes.hpp','test/integ/http3_udp_fixture.cpp','test/integ/http3_semantic_parity_fixture.cpp',
+                'test/support/http3_semantic_routes.hpp','test/support/http3_semantic_h1.hpp','test/integ/http3_udp_fixture.cpp','test/integ/http3_semantic_parity_fixture.cpp',
                 'test/integ/http3_client_aioquic.py','test/integ/http3_semantic_aioquic.py','test/integ/http3-client-requirements.txt',
                 'test/integ/http3-client-go/main.go','test/integ/http3-client-go/semantic.go','test/integ/http3-client-go/semantic_test.go',
                 'test/integ/http3-client-go/go.mod','test/integ/http3-client-go/go.sum','test/integ/http3_gate_runner_test.py',
                 'test/unit/http3_route_parity_fixture.hpp','test/unit/http2_request_fixture.hpp','test/unit/quic_owner_peer.hpp',
-                'test/unit/http3_streaming_test.cpp','test/unit/http3_network_owner_test.cpp','test/Makefile.am','Makefile.am','.gitignore','docs/task-174-http3-semantic-matrix.md',
+                'test/unit/http3_streaming_test.cpp','test/unit/http3_network_owner_test.cpp','test/unit/http3_semantic_h1_test.cpp','test/Makefile.am','Makefile.am','.gitignore','docs/task-174-http3-semantic-matrix.md',
                 'scripts/run-v3-http3-gates.py']
             manifest['source_files_sha256']={name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in sources if (ROOT/name).is_file()}
             manifest['fixture_sha256']=hashlib.sha256(fixture.read_bytes()).hexdigest() if fixture.is_file() else None

@@ -12,6 +12,7 @@ import time
 import tempfile
 import sys
 import subprocess
+from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('gate', ROOT / 'scripts/run-v3-http3-gates.py')
 gate = importlib.util.module_from_spec(spec)
@@ -153,5 +154,117 @@ class FlowWitness(unittest.TestCase):
         gate.flow_witness(events,36,40)
         for variant in [events[:2],events[1:], [events[0],events[2],events[1],events[3]],events[:-1]]:
             with self.assertRaises(gate.GateFailure):gate.flow_witness(variant,36,40)
+
+class GoawayWitness(unittest.TestCase):
+    first = '0x7\tfffffffffffffffc\n'
+    both = first + '0x7\t04\n'
+
+    def decoder(self, directory):
+        """External decoder stand-in: decode the snapshot, then grow live capture."""
+        executable = directory/'decoder'
+        executable.write_text('#!' + sys.executable + '\n'
+            'import pathlib, shutil, sys\n'
+            'snapshot = pathlib.Path(sys.argv[sys.argv.index("-r") + 1])\n'
+            'print(snapshot.read_text(), end="")\n'
+            'next_capture = snapshot.parent/"next-capture"\n'
+            'if next_capture.exists():\n'
+            '    shutil.copyfile(next_capture, snapshot.parent/"packets.pcap")\n'
+            '    next_capture.unlink()\n'
+            'status = snapshot.parent/"decoder-status"\n'
+            'sys.exit(int(status.read_text()) if status.exists() else 0)\n')
+        executable.chmod(0o700)
+        return executable
+
+    def test_growing_capture_waits_for_both_actual_received_stages(self):
+        for initial in ['', self.first]:
+            with self.subTest(initial=initial), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                decoder = self.decoder(directory)
+                (directory/'packets.pcap').write_text(initial)
+                (directory/'next-capture').write_text(self.both)
+
+                result = gate.goaway_witness(decoder, directory, 443)
+
+                self.assertEqual(result, {'ids': [(1<<62)-4, 4]})
+                self.assertEqual((directory/'goaway-decoded.tsv').read_text(), self.both)
+                self.assertEqual((directory/'goaway.pcap').read_text(), self.both)
+
+    def test_absent_second_stage_fails_at_fixed_deadline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            decoder = self.decoder(directory)
+            (directory/'packets.pcap').write_text(self.first)
+            now = [0.0]
+            def advance(seconds): now[0] += seconds
+
+            with patch.object(gate.time, 'monotonic', lambda: now[0]), patch.object(gate.time, 'sleep', advance):
+                with self.assertRaisesRegex(gate.GateFailure, 'GOAWAY witness deadline exceeded'):
+                    gate.goaway_witness(decoder, directory, 443, deadline=0.1)
+
+            self.assertEqual(now[0], 0.1)
+            self.assertEqual((directory/'goaway-decoded.tsv').read_text(), self.first)
+
+    def test_invalid_wire_evidence_fails_without_refreshing_snapshot(self):
+        for text in ['bad-row\n', 'bad-kind\t04\n', '0x7\tff\n',
+                     '0x7\t04\n', self.first+'0x7\t08\n',
+                     self.both+'0x7\t08\n']:
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                decoder = self.decoder(directory)
+                (directory/'packets.pcap').write_text(text)
+                (directory/'next-capture').write_text(self.both)
+
+                with self.assertRaises(gate.GateFailure):
+                    gate.goaway_witness(decoder, directory, 443)
+
+                self.assertEqual((directory/'goaway.pcap').read_text(), text)
+
+    def test_decoder_failure_is_not_incomplete_wire_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            decoder = self.decoder(directory)
+            (directory/'packets.pcap').write_text(self.first)
+            (directory/'next-capture').write_text(self.both)
+            (directory/'decoder-status').write_text('2')
+
+            with self.assertRaisesRegex(gate.GateFailure, 'GOAWAY decoder failed'):
+                gate.goaway_witness(decoder, directory, 443)
+
+            self.assertEqual((directory/'goaway.pcap').read_text(), self.first)
+
+    def test_decoder_timeout_is_clipped_to_remaining_witness_budget(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory/'packets.pcap').write_text(self.first)
+            expired = subprocess.TimeoutExpired(['decoder'], 1)
+
+            with patch.object(gate.time, 'monotonic', return_value=0), patch.object(gate.subprocess, 'run', side_effect=expired) as decoder:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    gate.goaway_witness(Path('decoder'), directory, 443, deadline=1)
+
+            self.assertEqual(decoder.call_args.kwargs['timeout'], 1)
+
+    def test_complete_evidence_after_deadline_cannot_acknowledge_client(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory/'packets.pcap').write_text(self.both)
+            now = [0.0]
+            def late_decode(command, **kwargs):
+                now[0] = 1.01
+                return subprocess.CompletedProcess(command, 0, self.both, '')
+
+            with patch.object(gate.time, 'monotonic', lambda: now[0]), patch.object(gate.subprocess, 'run', late_decode):
+                with self.assertRaisesRegex(gate.GateFailure, 'GOAWAY witness deadline exceeded'):
+                    gate.goaway_witness(Path('decoder'), directory, 443, deadline=1)
+
+    def test_missing_capture_fails_before_decoder_invocation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            decoder = self.decoder(directory)
+
+            with self.assertRaises(FileNotFoundError):
+                gate.goaway_witness(decoder, directory, 443)
+
+            self.assertFalse((directory/'goaway-decoded.tsv').exists())
 
 if __name__ == '__main__': unittest.main()
