@@ -9,9 +9,9 @@
 Provide QUIC recovery and TLS callback event sequences for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Generate reordered CRYPTO, ACK, timer, path and callback events.
-- [ ] Run stateful ASan/UBSan fuzz targets under byte/time ceilings.
-- [ ] Preserve minimized crashes as deterministic regressions.
+- [x] Generate reordered CRYPTO, ACK, timer, path and callback events.
+- [x] Run stateful ASan/UBSan fuzz targets under byte/time ceilings.
+- [x] Preserve minimized crashes as deterministic regressions.
 
 **Dependencies:**
 - Blocked by: TASK-166
@@ -24,4 +24,9 @@ Provide QUIC recovery and TLS callback event sequences for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-025
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Implementation evidence:** `docs/task-176-quic-stateful-evidence.md` records
+bounded stateful targets, authored deterministic seeds, local C++20 and sanitizer
+results, and limitations. No sanitizer crash was found; no minimized crash is
+claimed. Formal validation and completion remain runner-owned.

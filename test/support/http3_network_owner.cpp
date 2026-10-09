@@ -303,7 +303,13 @@ void connection::apply(const hd::quic_frame& frame, hd::quic_pn_space space, clo
 void connection::drive_tls() {
     if (!active()) return;
     auto result = connected_ ? tls_->process_post_handshake() : tls_->handshake();
-    require(result.state != hd::tls_session::progress::failed && result.state != hd::tls_session::progress::eof, "TLS handshake failed");
+    if (result.state == hd::tls_session::progress::failed || result.state == hd::tls_session::progress::eof) {
+        // Peer TLS errors arbitrate ordinary connection termination, so pending
+        // sends and suspended request work follow the same cancellation path.
+        const auto alert = tls_->failure().alert;
+        request_close({false, alert ? std::uint64_t{0x100} + *alert : 0x01, 0, {}}, clock_type::now());
+        return;
+    }
     if (!flow_ && !tls_->peer_transport_parameter_bytes().empty()) {
         auto peer = hd::decode_quic_transport_parameters(tls_->peer_transport_parameter_bytes(), hd::quic_endpoint_role::client);
         require(peer.code == hd::quic_codec_code::ok, "peer parameters decode");
