@@ -24,7 +24,7 @@ Provide QUIC recovery and TLS callback event sequences for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-025
 **Related Decisions:** DR-V3-001
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** `docs/task-176-quic-stateful-evidence.md` records
 bounded stateful targets, authored deterministic seeds, local C++20 and sanitizer
