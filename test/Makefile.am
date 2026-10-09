@@ -2484,3 +2484,9 @@ EXTRA_DIST += data/http3/unknown-frame.seed
 EXTRA_DIST += data/http3/varint-2.seed
 EXTRA_DIST += data/http3/varint-4.seed
 EXTRA_DIST += data/http3/varint-8.seed
+
+# The aggregate contract is dependency-free; independent network/fuzz lanes are opt-in.
+TESTS += integ/http3_full_gate_runner_test.py
+TEST_EXTENSIONS = .py
+PY_LOG_COMPILER = python3
+EXTRA_DIST += integ/http3_full_gate_runner_test.py conformance/http3/full-gates.json

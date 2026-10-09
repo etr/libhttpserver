@@ -119,3 +119,6 @@ __pycache__/
 
 !test/integ/http3_websocket*.py
 !scripts/run-v3-http3-websocket-gates.py
+
+!scripts/run-v3-http3-full-gates.py
+!test/integ/http3_full_gate_runner_test.py
