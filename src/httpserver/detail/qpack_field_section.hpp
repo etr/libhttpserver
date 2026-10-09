@@ -52,6 +52,7 @@ struct qpack_section_limits {
 struct qpack_section_result {
     qpack_status status;
     std::vector<qpack_field> fields;
+    std::uint64_t required_insert_count = 0;
     http::fields materialize() const {
         http::fields out;
         for (const auto& field : fields) out.append(field.name, field.value);

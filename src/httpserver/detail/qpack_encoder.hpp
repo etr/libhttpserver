@@ -23,15 +23,26 @@
 #endif
 #ifndef SRC_HTTPSERVER_DETAIL_QPACK_ENCODER_HPP_
 #define SRC_HTTPSERVER_DETAIL_QPACK_ENCODER_HPP_
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <new>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 #include <httpserver/detail/qpack_field_section.hpp>
+#include <httpserver/detail/qpack_dynamic_table.hpp>
 namespace httpserver::detail {
+struct qpack_dynamic_bytes_result {
+    qpack_status status;
+    std::string value;
+    std::size_t consumed = 0;
+    qpack_reference_hold references;
+};
 class qpack_encoder {
  public:
     qpack_bytes_result encode(std::span<const qpack_field_view> fields, qpack_section_limits limits, bool huffman = false) const {
@@ -48,7 +59,75 @@ class qpack_encoder {
         }, limits, huffman);
     }
 
+    qpack_dynamic_bytes_result encode_dynamic(std::span<const qpack_field_view> fields, qpack_dynamic_table& table,
+                                              std::uint64_t base, qpack_section_limits limits, bool huffman = false) const {
+        if (!table.initialized() || table.role() != qpack_table_role::encoder || base > qpack_integer_maximum) {
+            return {{qpack_state::invalid_argument}, {}, 0, {}};
+        }
+        if (fields.size() > limits.max_fields || limits.max_compressed_bytes < 2) return {{qpack_state::limit_exceeded}, {}, 0, {}};
+        auto remaining = limits.max_expanded_bytes;
+        for (const auto& field : fields) {
+            if (!qpack_admit_field(field.name.size(), field.value.size(), remaining)) return {{qpack_state::limit_exceeded}, {}, 0, {}};
+        }
+        try {
+            std::vector<std::uint64_t> indexes;
+            std::uint64_t required = 0;
+            for (const auto& field : fields) {
+                const auto dynamic = dynamic_reference(field, table);
+                if (dynamic) {
+                    indexes.push_back(*dynamic);
+                    required = std::max(required, *dynamic + 1);
+                }
+            }
+            const auto max_entries = table.maximum_capacity() / 32;
+            if (required && max_entries == 0) return {{qpack_state::invalid_argument}, {}, 0, {}};
+            const auto encoded_required = required ? (required % (2 * max_entries)) + 1 : 0;
+            auto prefix_bytes = qpack_encode_integer(encoded_required, 8, 0, {}, limits.max_compressed_bytes);
+            if (!prefix_bytes.status.ok()) return {prefix_bytes.status, {}, 0, {}};
+            auto wire = std::move(prefix_bytes.value);
+            auto status = append(qpack_encode_integer(base >= required ? base - required : required - base - 1,
+                                                       7, base >= required ? 0 : 0x80, {}, limits.max_compressed_bytes - wire.size()), wire);
+            if (!status.ok()) return {status, {}, 0, {}};
+            for (const auto& field : fields) {
+                status = write_dynamic_field(field, table, base, huffman, wire, limits.max_compressed_bytes);
+                if (!status.ok()) return {status, {}, 0, {}};
+            }
+            qpack_dynamic_bytes_result result;
+            status = table.acquire(indexes, limits.max_fields, result.references);
+            if (!status.ok()) return {status, {}, 0, {}};
+            result.value = std::move(wire);
+            result.consumed = result.value.size();
+            return result;
+        } catch (const std::bad_alloc&) {
+            return {{qpack_state::limit_exceeded}, {}, 0, {}};
+        } catch (const std::length_error&) {
+            return {{qpack_state::limit_exceeded}, {}, 0, {}};
+        }
+    }
+
  private:
+    static std::optional<std::uint64_t> dynamic_reference(qpack_field_view field, const qpack_dynamic_table& table) noexcept {
+        if (!field.never_indexed && qpack_static_find(field.name, field.value)) return std::nullopt;
+        if (!field.never_indexed) {
+            if (auto exact = table.find(field.name, field.value)) return exact;
+        }
+        return table.find_name(field.name);
+    }
+    static qpack_status write_dynamic_field(qpack_field_view field, const qpack_dynamic_table& table, std::uint64_t base,
+                                             bool huffman, std::string& wire, std::size_t limit) {
+        const auto dynamic = dynamic_reference(field, table);
+        if (!dynamic) return write_field(field, huffman, wire, limit);
+        const auto* entry = table.lookup(*dynamic);
+        const bool indexed = !field.never_indexed && entry->value == field.value;
+        const bool relative = *dynamic < base;
+        const auto index = relative ? base - *dynamic - 1 : *dynamic - base;
+        const unsigned prefix = indexed ? (relative ? 6 : 4) : (relative ? 4 : 3);
+        const std::uint8_t bits = indexed ? (relative ? 0x80 : 0x10) :
+            (relative ? (field.never_indexed ? 0x60 : 0x40) : (field.never_indexed ? 8 : 0));
+        const auto status = append(qpack_encode_integer(index, prefix, bits, {}, limit - wire.size()), wire);
+        if (!status.ok() || indexed) return status;
+        return write_string(field.value, huffman, wire, limit);
+    }
     template<typename View>
     static qpack_bytes_result encode_sequence(std::size_t count, View view, qpack_section_limits limits, bool huffman) {
         if (count > limits.max_fields || limits.max_compressed_bytes < 2) return {{qpack_state::limit_exceeded}, {}};

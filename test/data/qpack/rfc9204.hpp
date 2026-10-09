@@ -131,5 +131,13 @@ inline constexpr std::array<entry, 99> entries = {{
 inline constexpr std::string_view literal_path = "0000510b2f696e6465782e68746d6c";
 inline constexpr std::string_view static_request = "0000d1d7c1";
 inline constexpr std::string_view dynamic_section = "03811011";
+// RFC 9204 Appendix B.2-B.5, replayed as one instruction history.
+inline constexpr std::string_view dynamic_capacity = "3fbd01";
+inline constexpr std::string_view dynamic_authority = "c00f7777772e6578616d706c652e636f6d";
+inline constexpr std::string_view dynamic_path = "c10c2f73616d706c652f70617468";
+inline constexpr std::string_view dynamic_custom = "4a637573746f6d2d6b65790c637573746f6d2d76616c7565";
+inline constexpr std::string_view dynamic_duplicate = "02";
+inline constexpr std::string_view dynamic_duplicate_section = "050080c181";
+inline constexpr std::string_view dynamic_eviction = "810d637573746f6d2d76616c756532";
 }  // namespace qpack_fixture
 #endif  // TEST_DATA_QPACK_RFC9204_HPP_

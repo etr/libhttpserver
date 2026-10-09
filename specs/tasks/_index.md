@@ -312,7 +312,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-164 | [Implement QUIC CID lifecycle, path validation and rebinding](M12-http3-full/TASK-164.md) | M12 | Complete | TASK-153, TASK-156, TASK-158 |
 | TASK-165 | [Implement QUIC datagram sizing and black-hole recovery](M12-http3-full/TASK-165.md) | M12 | Complete | TASK-158, TASK-164 |
 | TASK-166 | [Implement QUIC idle, close, drain and key disposal](M12-http3-full/TASK-166.md) | M12 | Complete | TASK-110, TASK-156, TASK-157, TASK-164 |
-| TASK-167 | [Implement QPACK dynamic table and instruction codecs](M12-http3-full/TASK-167.md) | M12 | Not Started | TASK-159 |
+| TASK-167 | [Implement QPACK dynamic table and instruction codecs](M12-http3-full/TASK-167.md) | M12 | In Progress | TASK-159 |
 | TASK-168 | [Implement QPACK blocked-section and critical-stream accounting](M12-http3-full/TASK-168.md) | M12 | Not Started | TASK-160, TASK-167 |
 | TASK-169 | [Integrate dynamic QPACK with HTTP/3 request scheduling](M12-http3-full/TASK-169.md) | M12 | Not Started | TASK-161, TASK-168 |
 | TASK-170 | [Implement staged HTTP/3 GOAWAY and graceful drain](M12-http3-full/TASK-170.md) | M12 | Not Started | TASK-143, TASK-166, TASK-169 |

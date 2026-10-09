@@ -23,6 +23,7 @@
 #endif
 #ifndef SRC_HTTPSERVER_DETAIL_QPACK_DECODER_HPP_
 #define SRC_HTTPSERVER_DETAIL_QPACK_DECODER_HPP_
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <new>
@@ -32,9 +33,10 @@
 #include <utility>
 #include <vector>
 #include <httpserver/detail/qpack_field_section.hpp>
+#include <httpserver/detail/qpack_dynamic_table.hpp>
 namespace httpserver::detail {
-// Complete static-only sections; input must stay immutable for the call's two
-// passes. No compression state is retained across independent calls.
+// Input and any supplied table must stay immutable for both decode passes.
+// The connection owner serializes table mutations; the decoder retains none.
 class qpack_decoder {
  public:
     qpack_section_result decode(std::span<const std::uint8_t> input, qpack_section_limits limits) const {
@@ -60,9 +62,34 @@ class qpack_decoder {
         return result;
     }
 
+    qpack_section_result decode_dynamic(std::span<const std::uint8_t> input, const qpack_dynamic_table& table,
+                                        qpack_section_limits limits) const {
+        if (!table.initialized() || table.role() != qpack_table_role::decoder) return {{qpack_state::invalid_argument}, {}};
+        if (input.size() > limits.max_compressed_bytes) return {{qpack_state::limit_exceeded}, {}};
+        const auto section = dynamic_prefix(input, table);
+        if (!section.status.ok()) return {complete(section.status), {}, section.required};
+        if (section.required > table.insert_count()) return {{qpack_state::inserts_unavailable}, {}, section.required};
+        try {
+            std::size_t count = 0;
+            auto status = process(input, limits, nullptr, count, &table);
+            if (!status.ok()) return {complete(status), {}, section.required};
+            qpack_section_result result;
+            result.required_insert_count = section.required;
+            result.fields.reserve(count);
+            status = process(input, limits, &result.fields, count, &table);
+            if (!status.ok()) return {complete(status), {}, section.required};
+            return result;
+        } catch (const std::bad_alloc&) {
+            return {{qpack_state::limit_exceeded}, {}, section.required};
+        } catch (const std::length_error&) {
+            return {{qpack_state::limit_exceeded}, {}, section.required};
+        }
+    }
+
  private:
     struct wire_field {
         const qpack_static_entry* entry = nullptr;
+        const qpack_dynamic_entry* dynamic = nullptr;
         std::span<const std::uint8_t> name_wire;
         std::span<const std::uint8_t> value_wire;
         std::size_t name_size = 0;
@@ -73,6 +100,45 @@ class qpack_decoder {
     };
     static qpack_status complete(qpack_status status) noexcept {
         return status.state == qpack_state::incomplete ? qpack_status{qpack_state::malformed} : status;
+    }
+    struct section_prefix {
+        qpack_status status;
+        std::uint64_t required = 0;
+        std::uint64_t base = 0;
+        std::size_t consumed = 0;
+    };
+    static section_prefix dynamic_prefix(std::span<const std::uint8_t> input, const qpack_dynamic_table& table) noexcept {
+        const auto encoded = qpack_decode_integer(input, 8, {});
+        if (!encoded.status.ok()) return {encoded.status};
+        std::uint64_t required = 0;
+        if (encoded.value != 0) {
+            const auto max_entries = table.maximum_capacity() / 32;
+            const auto full_range = 2 * max_entries;
+            if (max_entries == 0 || encoded.value > full_range || table.insert_count() > qpack_integer_maximum - max_entries) {
+                return {{qpack_state::malformed}};
+            }
+            const auto max_value = table.insert_count() + max_entries;
+            const auto max_wrapped = (max_value / full_range) * full_range;
+            if (encoded.value - 1 > qpack_integer_maximum - max_wrapped) return {{qpack_state::malformed}};
+            required = max_wrapped + encoded.value - 1;
+            if (required > max_value) {
+                if (required <= full_range) return {{qpack_state::malformed}};
+                required -= full_range;
+            }
+            if (required == 0) return {{qpack_state::malformed}};
+        }
+        const auto base_wire = input.subspan(encoded.consumed);
+        const auto delta = qpack_decode_integer(base_wire, 7, {});
+        if (!delta.status.ok()) return {delta.status, required};
+        std::uint64_t base;
+        if ((base_wire[0] & 0x80) != 0) {
+            if (delta.value >= required) return {{qpack_state::malformed}, required};
+            base = required - delta.value - 1;
+        } else {
+            if (delta.value > qpack_integer_maximum - required) return {{qpack_state::malformed}, required};
+            base = required + delta.value;
+        }
+        return {{}, required, base, encoded.consumed + delta.consumed};
     }
     static qpack_integer_result prefix(std::span<const std::uint8_t> input) noexcept {
         const auto required = qpack_decode_integer(input, 8, {});
@@ -85,19 +151,27 @@ class qpack_decoder {
         if ((base_wire[0] & 0x80) != 0) return {{qpack_state::malformed}};
         return {{}, 0, required.consumed + base.consumed};
     }
-    static qpack_status read_name(std::span<const std::uint8_t> input, std::size_t remaining, std::size_t encoded_limit, wire_field& field) noexcept {
+    static qpack_status read_name(std::span<const std::uint8_t> input, std::size_t remaining, std::size_t encoded_limit, wire_field& field,
+                                  const qpack_dynamic_table* table, std::uint64_t base, std::uint64_t required) noexcept {
         const auto bits = input[0];
         if ((bits & 0x80) != 0 || (bits & 0x40) != 0) {
             field.indexed = (bits & 0x80) != 0;
             const auto static_bit = field.indexed ? 0x40 : 0x10;
-            if ((bits & static_bit) == 0) return {qpack_state::malformed};
+            if ((bits & static_bit) == 0 && !table) return {qpack_state::malformed};
             const auto index = qpack_decode_integer(input, field.indexed ? 6 : 4, {});
             if (!index.status.ok()) return index.status;
-            field.entry = qpack_static_lookup(index.value);
-            if (field.entry == nullptr) return {qpack_state::malformed};
+            if (bits & static_bit) {
+                field.entry = qpack_static_lookup(index.value);
+                if (!field.entry) return {qpack_state::malformed};
+                field.name_size = field.entry->name.size();
+                field.value_size = field.indexed ? field.entry->value.size() : 0;
+            } else {
+                field.dynamic = table->section_relative(base, index.value);
+                if (!field.dynamic || field.dynamic->absolute >= required) return {qpack_state::malformed};
+                field.name_size = field.dynamic->name.size();
+                field.value_size = field.indexed ? field.dynamic->value.size() : 0;
+            }
             field.consumed = index.consumed;
-            field.name_size = field.entry->name.size();
-            field.value_size = field.indexed ? field.entry->value.size() : 0;
             field.never_indexed = !field.indexed && (bits & 0x20) != 0;
         } else if ((bits & 0x20) != 0) {
             const auto name = qpack_inspect_string(input, {encoded_limit, remaining - 32}, 3, 8);
@@ -107,14 +181,23 @@ class qpack_decoder {
             field.consumed = name.consumed;
             field.never_indexed = (bits & 0x10) != 0;
         } else {
-            // Both post-Base families always reference the dynamic table.
-            return {qpack_state::malformed};
+            if (!table) return {qpack_state::malformed};
+            field.indexed = (bits & 0x10) != 0;
+            const auto index = qpack_decode_integer(input, field.indexed ? 4 : 3, {});
+            if (!index.status.ok()) return index.status;
+            field.dynamic = table->post_base(base, index.value);
+            if (!field.dynamic || field.dynamic->absolute >= required) return {qpack_state::malformed};
+            field.name_size = field.dynamic->name.size();
+            field.value_size = field.indexed ? field.dynamic->value.size() : 0;
+            field.consumed = index.consumed;
+            field.never_indexed = !field.indexed && (bits & 8) != 0;
         }
         return {};
     }
-    static qpack_status read_field(std::span<const std::uint8_t> input, std::size_t& remaining, std::size_t encoded_limit, wire_field& field) noexcept {
+    static qpack_status read_field(std::span<const std::uint8_t> input, std::size_t& remaining, std::size_t encoded_limit, wire_field& field,
+                                    const qpack_dynamic_table* table, std::uint64_t base, std::uint64_t required) noexcept {
         if (remaining < 32) return {qpack_state::limit_exceeded};
-        auto status = read_name(input, remaining, encoded_limit, field);
+        auto status = read_name(input, remaining, encoded_limit, field, table, base, required);
         if (!status.ok()) return status;
         if (field.name_size > remaining - 32) return {qpack_state::limit_exceeded};
         if (!field.indexed) {
@@ -130,28 +213,45 @@ class qpack_decoder {
     static qpack_field materialize(const wire_field& field) {
         qpack_field out;
         out.never_indexed = field.never_indexed;
-        out.name = field.entry != nullptr ? std::string(field.entry->name) :
-            qpack_decode_string(field.name_wire, {field.name_wire.size(), field.name_size}, 3, 8).value;
-        out.value = field.indexed ? std::string(field.entry->value) :
-            qpack_decode_string(field.value_wire, {field.value_wire.size(), field.value_size}).value;
+        if (field.dynamic) {
+            out.name = field.dynamic->name;
+        } else if (field.entry) {
+            out.name = field.entry->name;
+        } else {
+            out.name = qpack_decode_string(field.name_wire, {field.name_wire.size(), field.name_size}, 3, 8).value;
+        }
+        if (field.indexed) {
+            out.value = field.dynamic ? field.dynamic->value : std::string(field.entry->value);
+        } else {
+            out.value = qpack_decode_string(field.value_wire, {field.value_wire.size(), field.value_size}).value;
+        }
         return out;
     }
     static qpack_status process(std::span<const std::uint8_t> input, qpack_section_limits limits,
-                                std::vector<qpack_field>* output, std::size_t& count) {
-        const auto section = prefix(input);
+                                std::vector<qpack_field>* output, std::size_t& count, const qpack_dynamic_table* table = nullptr) {
+        section_prefix section;
+        if (table) {
+            section = dynamic_prefix(input, *table);
+        } else {
+            const auto legacy = prefix(input);
+            section = {legacy.status, 0, 0, legacy.consumed};
+        }
         if (!section.status.ok()) return section.status;
         input = input.subspan(section.consumed);
         auto remaining = limits.max_expanded_bytes;
         count = 0;
+        std::uint64_t largest_required = 0;
         while (!input.empty()) {
             if (count == limits.max_fields) return {qpack_state::limit_exceeded};
             wire_field field;
-            const auto status = read_field(input, remaining, limits.max_compressed_bytes, field);
+            const auto status = read_field(input, remaining, limits.max_compressed_bytes, field, table, section.base, section.required);
             if (!status.ok()) return status;
+            if (field.dynamic) largest_required = std::max(largest_required, field.dynamic->absolute + 1);
             if (output != nullptr) output->push_back(materialize(field));
             input = input.subspan(field.consumed);
             ++count;
         }
+        if (table && largest_required != section.required) return {qpack_state::malformed};
         return {};
     }
 };
