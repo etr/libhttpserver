@@ -79,7 +79,7 @@ listener_engine::listener_engine(io_socket_backend& backend, worker_pool& pool,
 
 http::outcome listener_engine::listen(
     const server::listener_options& endpoint, std::size_t index,
-    std::shared_ptr<tls_psk_runtime> runtime) {
+    std::shared_ptr<tls_psk_runtime> runtime, std::shared_ptr<const tls_credentials_binding> binding) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (bound_ || stopped_) {
@@ -104,6 +104,7 @@ http::outcome listener_engine::listen(
         pending_listener_ = transport;
         endpoint_ = endpoint;
         handshake_runtime_ = std::move(runtime);
+        tls_binding_ = std::move(binding);
         bound_port_ = port;
         bound_ = true;
     }
@@ -139,6 +140,7 @@ void listener_engine::quiesce(std::chrono::steady_clock::time_point server_deadl
         std::lock_guard<std::mutex> lock(mu_);
         release = !stopped_;
         stopped_ = true;
+        tls_binding_.reset();
         if (pending_listener_ != pollsys::k_invalid_socket) {
             pollsys::close_socket(pending_listener_);
             bound_port_.store(0, std::memory_order_release);
@@ -161,6 +163,7 @@ void listener_engine::request_stop(http::outcome_code reason) noexcept {
         std::lock_guard<std::mutex> lock(mu_);
         release = !stopped_;
         stopped_ = true;
+        tls_binding_.reset();
         if (pending_listener_ != pollsys::k_invalid_socket) {
             pollsys::close_socket(pending_listener_);
             bound_port_.store(0, std::memory_order_release);

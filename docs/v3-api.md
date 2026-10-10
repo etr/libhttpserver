@@ -10,8 +10,9 @@ There is no v2 source/ABI compatibility shim.
 \ref httpserver::server::server_options defines listener endpoints, protocol
 selection, budgets, timeouts, worker concurrency and loop ownership.
 \ref httpserver::server::native_server validates before binding and owns shutdown.
-Plaintext HTTP/1.0 and HTTP/1.1 listeners are available. Public TLS/H2/H3 listeners
-return not_supported before binding, even when semantic validation succeeds.
+Plaintext HTTP/1.0 and HTTP/1.1 listeners are available. TLS-on builds also serve
+public HTTP/1 certificate, initial mTLS and eligible external-PSK listeners.
+Public H2/H3 listeners still return not_supported before binding.
 Provider availability from \ref httpserver::query_features is a separate fact.
 
 \include v3_protocol_options.cpp
@@ -67,8 +68,18 @@ counted work returns would_deadlock. \ref httpserver::http::outcome and
 \ref httpserver::auth::basic_auth_policy, \ref httpserver::auth::digest_auth_policy,
 and the bounded forms APIs replace the corresponding v2 conveniences.
 
-Certificate rotation has no public installation API. The separately labeled
-repository-internal demonstration at test/examples/v3_tls_rotation.cpp uses an
-uninstalled private header. It is not included as a public API example here.
+\ref httpserver::server::tls_credentials copies share an immutable-generation
+store attached to each TLS listener. replace validates before atomic publication;
+selected connections retain their generation, and incompatible bound-policy
+changes reject. Public host values carry mTLS trust/request/require policy or
+external-PSK lookup configuration. The application owns the bounded shared lookup
+runtime through actual callback retirement; native stop never joins application
+lookups. Public ACME publish/remove accepts application-supplied material and
+selects only exact SNI plus sole acme-tls/1 on authentic TCP443.
+
+The installed public listener example at test/examples/v3_tls_rotation.cpp serves
+requests across valid/rejected live replacement. Read the [TLS usage and lifetime
+contract](https://github.com/etr/libhttpserver/blob/v3/docs/native-tls-build.md).
+TLS-off retains the same declarations and typed unavailable operations.
 The [TASK-179 audit](https://github.com/etr/libhttpserver/blob/v3/docs/task-179-behavior-parity.md) distinguishes semantic,
 frame, provider and private TCP/TLS/QUIC observations.

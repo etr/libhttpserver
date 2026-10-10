@@ -1,0 +1,2503 @@
+{
+  "version": 1,
+  "task_id": "TASK-194",
+  "branch": "task/TASK-194",
+  "base_branch": "v3",
+  "base_revision": "329b110ad9b801addf952f12d874601eee29ab0d",
+  "worktree_path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194",
+  "status": "implemented_pending_caller_validation",
+  "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a",
+  "changed_file_hashes": {
+    "Makefile.am": "75c6752ccf86b73d44ffb1427a3db11c321ef033b0ef30b2eb88ace737c07fa6",
+    "docs/external-psk-lookup-contract.md": "9a373e686b147f220d8cfa150debed8712d9265661a7956543b1261ba1ff1a0f",
+    "docs/native-tls-build.md": "cd57fa6e9059745f3d1f0879e4aca0ed37a3b7b7b07cc78cec646824a5f43e7b",
+    "docs/v2-to-v3-migration.md": "3ee96d57c87f1d288a722f2fae63e8cb9f12f174c713fcc7fa7424e86a4690f8",
+    "docs/v3-api.md": "fc73d487b13c2cd71067adb88f859813e66422edc8fd5b3a3422b12d3f211dd5",
+    "scripts/check-v3-public-tls.py": "5daefa28fc2ffa03e58857b9fa4f57af7681c2f3fa22926db5b460f8553fbc25",
+    "scripts/lib/v3_package_matrix.py": "01da24f18020c62156e6c144d36592fc7b1c237a060637a8067a30309578cce1",
+    "scripts/test-v3-installed-consumer.py": "424e22277743a462698c4694c122a5adba5d50c33271834ea2e4b31df0a8c12d",
+    "specs/architecture/v3/v2-parity-inventory.md": "504b193fa5e8f3a1f406834b74fecf089036d38c6c2dc1b0a18c8ef79561c4d5",
+    "specs/tasks/M14-v3-release-repairs/TASK-194.md": "48722670a9a4296653c5d762620d1acf49626b787ba84e1029368bc30ea7c58e",
+    "src/Makefile.am": "636d87583f8519d8ac56998700955b8be4deede84a35ed1ecad65f008980d961",
+    "src/detail/listener_engine.cpp": "473c35cd43e4845abc1e3dea770ac96d35d9ce8b4e8934404fc7b2cd1f56894e",
+    "src/detail/server.cpp": "ab5859f95c23929dd0fe408740d8d9ea2d95c2cba84c00da48530b79c3342443",
+    "src/detail/server_tls_credentials.cpp": "7f387ce5fbcb19f18c7ff49c5a38dec095512db05db83a2ef76e97ede8021e31",
+    "src/detail/tls_credentials.cpp": "b23477e8adb2188ae9c0f4e194cf426c488587a6c5937752046bfd7f0f8065c3",
+    "src/httpserver/detail/listener_engine.hpp": "98de305b37aff3b065d7efc3ca1c628238a6013999285a140953c6e84c5ab2ad",
+    "src/httpserver/detail/tls_credentials.hpp": "c80d0517755597137216d60383ec5715718c8c816e2f67176ce8e67bc60b700e",
+    "src/httpserver/detail/tls_credentials_access.hpp": "fa3b00b091026d88fac6487424ab7f709ea6d0eaf43fd7e22d91934c1e046fd6",
+    "src/httpserver/server/tls_credentials.hpp": "a960a40c862d507ac7c42ab40a7ffd411cef2284d60f3d33188e76bc2cfe0f63",
+    "test/Makefile.am": "b2dfc8ac1ab251bc08f5991555041665f6fc67c3edf88d89cc61a59b78c869a8",
+    "test/examples/v3_tls_rotation.cpp": "6e09ffbcff65142f61bdcde111e4bda44af9193c6e2c2807fadc1eca363cf00b",
+    "test/installed/v3-package-matrix.json": "06a4ab257718317e1f6c3a33e318d1c155d0009761f4b302898399f7213a00c3",
+    "test/installed/v3_tls_consumer.cpp": "72dd43f7e5522d50161d05383c2ee9c569f3146fb6fdb1edad0f242e4308a1d5",
+    "scripts/lib/v3_public_tls_profiles.py": "222bda9788fa89c7f536919a7b9c60d0839d48b726773d50a9a6b5639f331f2b",
+    "specs/architecture/v3/TASK-194-design.md": "1b6f08a84a38f3ebb88ef3f6e4b2e95e348574dcb7c77a7eeda592d72cd17c17",
+    "specs/architecture/v3/TASK-194-implementation-evidence.md": "74ed6c4d0827cc0ea05240685abde09eb6cfbeb69f25fb81d82c2009fea3a7db",
+    "src/detail/server_tls_psk.cpp": "10d712aad3f1979f02745d53b2787b07acecf9ebbc3f7218895896ae42787ab3",
+    "test/installed/v3_tls_client.cpp": "d089f69904713a7e2d53d579e774aece9cac7b74f39fbb9cf715b4c036911faf",
+    "test/installed/v3_tls_profiles.cpp": "7766029804901653f8c97eaeb22a854b63d513a5720206657364dab4aa8b6dbe",
+    "test/unit/public_tls_profiles_test.cpp": "be2d2fbe794b3d328a161cf76be0e70a401da5e5f4043a891b9f5acd59a9c63b"
+  },
+  "owners": {
+    "normal-off": {
+      "summary": "build/task194/owners-normal-off-final/summary.json",
+      "programs": 18,
+      "suites": {
+        "native_server": {
+          "log": "build/task194/normal-off/test/native_server.log",
+          "sha256": "9e468db2bbea82bbb7cec1215c893c1d6507dcad4c6e8dfb6870ff5415422637",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/.libs/native_server",
+            "sha256": "116f6503a971666357718794e4ac36b7417a4e386cafc578739e91d4749d1db1"
+          }
+        },
+        "server_options_validate": {
+          "log": "build/task194/normal-off/test/server_options_validate.log",
+          "sha256": "244dd6b9ab92e71dc5dc2449429018c54dd01ea024cb80047f8bbb7c7e46ea29",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/server_options_validate",
+            "sha256": "a8c2dec6d0afa6c3a6577e57d4657cf5712e34a4a94545a3cce63647fecfbe78"
+          }
+        },
+        "native_http1_e2e": {
+          "log": "build/task194/normal-off/test/native_http1_e2e.log",
+          "sha256": "8b2afa7d5ffbf2dc5940c0bbe5ad447c8dc19e9a86d2dc139342aa5a01ba991e",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/native_http1_e2e",
+            "sha256": "d2c1faf19d69964fcb44947f26848a237aeee8467aedea41fa53f956537f30f3"
+          }
+        },
+        "native_http1_parity": {
+          "log": "build/task194/normal-off/test/native_http1_parity.log",
+          "sha256": "0788dfc84fc9e378caabb3b5ec1f1541e919c554bba3c125521c6ac484ee78ff",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/native_http1_parity",
+            "sha256": "39958962c6d145e7410c0a97dfd4c2b926b4da7cc450a31c72e9e2ac11172143"
+          }
+        },
+        "external_http1_e2e": {
+          "log": "build/task194/normal-off/test/external_http1_e2e.log",
+          "sha256": "af263aec90326c49a7b058838b695513ca010ea9a12b8af1ea6959d6f31cd5d5",
+          "tests": 4,
+          "checks": 52,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/external_http1_e2e",
+            "sha256": "daca8ee32a4beb5643d7724653347002a1617c5eedcc1c62f77944a8c2910cd9"
+          }
+        },
+        "external_readiness_adapter": {
+          "log": "build/task194/normal-off/test/external_readiness_adapter.log",
+          "sha256": "9b3abc1f9fcf98981de01771a44f9b64914092615073289681381f6d00907917",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/external_readiness_adapter",
+            "sha256": "9636a1170e0199bf47b134ba1944ab975cd8de26ec24d6ec709926e219afafe2"
+          }
+        },
+        "readiness_contract": {
+          "log": "build/task194/normal-off/test/readiness_contract.log",
+          "sha256": "56176d4e85d2dd6b32845e93f3eeb4ff9125c7c827f079c747f59fdedf93bf7d",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/readiness_contract",
+            "sha256": "3e36b3b0d1da62df2e78a797b92c2d05b1f63dc9fc50ecf071749d0122ec1ba1"
+          }
+        },
+        "io_backend_contract": {
+          "log": "build/task194/normal-off/test/io_backend_contract.log",
+          "sha256": "f76435d5e1ae0a88de1d9d6d47479228d6b131f42b8dfaafeed17e8f0ce1dff0",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/io_backend_contract",
+            "sha256": "dcc779714fb04d9a315b3364c2f8d40adbeae093dbacbf5481ece7eb56aca9c7"
+          }
+        },
+        "connection_engine": {
+          "log": "build/task194/normal-off/test/connection_engine.log",
+          "sha256": "b4b43970df00225c98d028a3045c228168529548af25f1893d212022df18cc9b",
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/.libs/connection_engine",
+            "sha256": "3c3573c8fc1d6a3c13df7a5eef5a3ee13a173db2fe8e26befd7314a7c570e92e"
+          }
+        },
+        "drain_scope": {
+          "log": "build/task194/normal-off/test/drain_scope.log",
+          "sha256": "17b5b759e185113670b6d1d18e2a67a007646b8162ae3f98c4f00b1d6fdc62de",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/.libs/drain_scope",
+            "sha256": "eeb8d6c7645faf8b297490c8f1677399a803cbc42e4ab52ae8bbc9350a7c49a5"
+          }
+        },
+        "worker_pool": {
+          "log": "build/task194/normal-off/test/worker_pool.log",
+          "sha256": "e8e801c69979ca86ebfbaf9c0cf7751820b5d21ba31ddb2b3fcbda90fb62303c",
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/.libs/worker_pool",
+            "sha256": "ae8d2e42503c2c86088a49e4dd647423374e667b802b1eb7a6d126aaaaa176f6"
+          }
+        },
+        "server_hooks": {
+          "log": "build/task194/normal-off/test/server_hooks.log",
+          "sha256": "e17ee1ebfd51fb4c6095b1dc5350e41ce752b5e3501f9e185a2bdf1e5ab39f57",
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/.libs/server_hooks",
+            "sha256": "83a06a06c8554760149dd7ddeb804d74f038b481e698e6ff66c61de4fd7f587f"
+          }
+        },
+        "request_lifecycle": {
+          "log": "build/task194/normal-off/test/request_lifecycle.log",
+          "sha256": "d3e1270e626360bac52ac55fcb93f8d4a895af507cd922bd2551d00c25bd68bf",
+          "tests": 31,
+          "checks": 173,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/.libs/request_lifecycle",
+            "sha256": "09f716a31ff4fe9720a3ef509f0c2c2e82075875b361a50956ca32df275d6301"
+          }
+        },
+        "task_stop_inside_handler": {
+          "log": "build/task194/normal-off/test/task_stop_inside_handler.log",
+          "sha256": "472e8c16c456a30256839a3d0f522e430c10791f5b5eb442905aa62fd51f3b82",
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/task_stop_inside_handler",
+            "sha256": "40f2cb7aa004ede99c069a0e9c7155870d244624261972c46ca9835118693280"
+          }
+        },
+        "v3_header_hygiene": {
+          "log": "build/task194/normal-off/test/v3_header_hygiene.log",
+          "sha256": "b1369807d9eb7319367519984656036707039f7be2005011cfcc7a510b76005a",
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-off/test/v3_header_hygiene",
+            "sha256": "3714cb6cf46d6a1272c0aa57e6078cbb6bc7d397aeae6eab6908f5e4c1127abc"
+          }
+        }
+      },
+      "standalone": [
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "build/task194/normal-off/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+        },
+        {
+          "name": "consumer_v3_native_server",
+          "log": "build/task194/normal-off/test/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+        },
+        {
+          "name": "consumer_v3_server",
+          "log": "build/task194/normal-off/test/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+        }
+      ],
+      "tests": 289,
+      "checks": 3165,
+      "environment": {}
+    },
+    "normal-on": {
+      "summary": "build/task194/owners-normal-on-final/summary.json",
+      "programs": 37,
+      "suites": {
+        "native_server": {
+          "log": "build/task194/normal-on/test/native_server.log",
+          "sha256": "8667882dccf2d5431bf94e3f871851752327134df46c6d21be10d5b488b0a726",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/native_server",
+            "sha256": "5be7efc40612533d1414ad4481d431ccefd783f9fc489784db54288dadf071aa"
+          }
+        },
+        "server_options_validate": {
+          "log": "build/task194/normal-on/test/server_options_validate.log",
+          "sha256": "166fbc32d3ae92c58f0f0dee43ec36d740ddcf6c3b91cffb2c5d354a40120ae8",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/server_options_validate",
+            "sha256": "847004243943ae017cd63c2865e6687e47cde4871a817539dc71ce4aca697718"
+          }
+        },
+        "native_http1_e2e": {
+          "log": "build/task194/normal-on/test/native_http1_e2e.log",
+          "sha256": "d356c52ee3c2c12d8d0f2425ee4caa3825d89607d267e8edb122823b7aada822",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_e2e",
+            "sha256": "593d876a73587690f1022e15bda062fcbad6304844d5530185714c522b141f08"
+          }
+        },
+        "native_http1_parity": {
+          "log": "build/task194/normal-on/test/native_http1_parity.log",
+          "sha256": "682265d9959c5a862634f8955f100d0dff9a768f93ef15f2483ccf0a164353f8",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_parity",
+            "sha256": "7746e0363f383ec87a0d725344457a6635bc1469ee6e983ac541e06c976b74dc"
+          }
+        },
+        "external_http1_e2e": {
+          "log": "build/task194/normal-on/test/external_http1_e2e.log",
+          "sha256": "89bf7c42fb4b3337816651477c1780068fe4fc788e5c810caee8697e3df873f4",
+          "tests": 4,
+          "checks": 52,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/external_http1_e2e",
+            "sha256": "47fb62b4f0b9b26258bc13c11ce2aaea240be28ad578ecf624b1aed93f642ac9"
+          }
+        },
+        "external_readiness_adapter": {
+          "log": "build/task194/normal-on/test/external_readiness_adapter.log",
+          "sha256": "f792e85b0252bd3d9bdcf1f4863bee2fdc6d992bf8b90b9fa0ed40bcfc9b108a",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/external_readiness_adapter",
+            "sha256": "70d1450d3e00a4f8e0822979247452fe89284c2a0a36fe43ce124e2009ea93a3"
+          }
+        },
+        "readiness_contract": {
+          "log": "build/task194/normal-on/test/readiness_contract.log",
+          "sha256": "b5f4aac9efdc9d84ab021dc7df9dcb9b7cbe59557a7ded4bc382acc055636af2",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/readiness_contract",
+            "sha256": "434e210675410f90cd0586596a1024c6178d390a2847a2d3c1f6acbd509b9d85"
+          }
+        },
+        "io_backend_contract": {
+          "log": "build/task194/normal-on/test/io_backend_contract.log",
+          "sha256": "55209b79a9823ee703dbf365ea23d554ec9bc5fa5af01985260c531f6201ab75",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/io_backend_contract",
+            "sha256": "b79135eecef6ee130d0485b076d0ab0eba3c8d3f7dfd428091157f05af88da01"
+          }
+        },
+        "connection_engine": {
+          "log": "build/task194/normal-on/test/connection_engine.log",
+          "sha256": "35f2201d094626b8b1393517e2299196a0debe5b37328e8af53f324c8533fe03",
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/connection_engine",
+            "sha256": "7c61ec0f7cf023b6de62cb453f78e3f47d7e4ca559b9c84abf31e8ba75d09f4b"
+          }
+        },
+        "drain_scope": {
+          "log": "build/task194/normal-on/test/drain_scope.log",
+          "sha256": "83e65d821f896344fbf1b178a279a5ca890059366ec5eb58f7c3a6cc15cbe60a",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/drain_scope",
+            "sha256": "d1efe97b221015c94710e204185dc782faad61ac4adec3fea183968a12d8d4bd"
+          }
+        },
+        "worker_pool": {
+          "log": "build/task194/normal-on/test/worker_pool.log",
+          "sha256": "91f08053946ab545fe3cb4bbf9721aad7964d21a29ff23f09cda7e3a4121f463",
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/worker_pool",
+            "sha256": "9dafb8b38513de66bda19fc3bfe8fefa327657cd35ccd364ecac3b7a97d3b8d9"
+          }
+        },
+        "server_hooks": {
+          "log": "build/task194/normal-on/test/server_hooks.log",
+          "sha256": "b327b3fdabf60088558868adc561aa498da4c45586f40bdd16272462c077f0a5",
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/server_hooks",
+            "sha256": "b1e41742b20bd97cf5a088b96532802bde0db022f5d3593dc596ade736cf4d30"
+          }
+        },
+        "request_lifecycle": {
+          "log": "build/task194/normal-on/test/request_lifecycle.log",
+          "sha256": "f29527c6f3471cacf321997a4368650d6b834e449066d8bccfd232c4ff66e560",
+          "tests": 31,
+          "checks": 173,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/request_lifecycle",
+            "sha256": "6eacdf019333754b9bead02110c19e0e26271035c082b052e417428dda7ad01b"
+          }
+        },
+        "task_stop_inside_handler": {
+          "log": "build/task194/normal-on/test/task_stop_inside_handler.log",
+          "sha256": "52fc7ff8e63604f25bdc8fb46c3d13c6f67a276f5576da81cddc66c87a48f97c",
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/task_stop_inside_handler",
+            "sha256": "2f86818cd8c5f668d09c11f92ae8ebecafb4f881b3c612524666a6b4a251899d"
+          }
+        },
+        "v3_header_hygiene": {
+          "log": "build/task194/normal-on/test/v3_header_hygiene.log",
+          "sha256": "21075547191dbb15212a48f192e8e7a2010fc57f80391ac375307c9a81160996",
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/v3_header_hygiene",
+            "sha256": "0c01e93bebab6d368a40ea6dea0ceda74b2c46e40d4b0ed273f5324cab6d9d14"
+          }
+        },
+        "public_tls_profiles": {
+          "log": "build/task194/normal-on/test/public_tls_profiles.log",
+          "sha256": "3ef9dfafcad81be44c5ad1e6145ee71aaf9b4f588865caf48a932998d31d8a55",
+          "tests": 5,
+          "checks": 68,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/public_tls_profiles",
+            "sha256": "e0f01ba453038a4d1d6bd5edf9c9a6380a6e6f4f5f9947a9c96e290afbfe327a"
+          }
+        },
+        "tls_credentials": {
+          "log": "build/task194/normal-on/test/tls_credentials.log",
+          "sha256": "818a14db1af0234a54371eadcc9401b3379b374dcca54d4366e06f0c4d2d8df4",
+          "tests": 6,
+          "checks": 216,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_credentials",
+            "sha256": "f4e89fb7b1dc3d71ca6a6e734dd5fde2d303498683530c405cc61c3d41e9d75b"
+          }
+        },
+        "tls_credentials_rotation": {
+          "log": "build/task194/normal-on/test/tls_credentials_rotation.log",
+          "sha256": "558bce83f458e96a518de3d5c4fec15286b147f4633493ca176dde57f563f2ca",
+          "tests": 2,
+          "checks": 31,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_credentials_rotation",
+            "sha256": "5c8d8a8ffaf3f87f7faa5b7adcf1c5449064160850557f0a0c546fa56e07e056"
+          }
+        },
+        "tls_selection": {
+          "log": "build/task194/normal-on/test/tls_selection.log",
+          "sha256": "337b02a96de1198205177dff50f4198812eea1ec549234db08e5447c5af1afb3",
+          "tests": 6,
+          "checks": 260,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_selection",
+            "sha256": "e7194601f3859569dd65ec87cdf6fd0dc737f6287563a2c9f79225381af98fd8"
+          }
+        },
+        "tls_mtls": {
+          "log": "build/task194/normal-on/test/tls_mtls.log",
+          "sha256": "6767739f3571dac03a74e32280251dd41c937e123099a5131451582333c17164",
+          "tests": 6,
+          "checks": 390,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_mtls",
+            "sha256": "6d05c89178807a73e6241ea8f2c01d4fa4f81f96746e110a15f85b803e4284ea"
+          }
+        },
+        "tls_psk_contract": {
+          "log": "build/task194/normal-on/test/tls_psk_contract.log",
+          "sha256": "b5ec248e4f83c085e709793ad1f30131ed54f03dc86848a0aefc9d146e192d87",
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_psk_contract",
+            "sha256": "101d7610046f2f1f56933affbbd5ff0dd73de9ce9a6085369cfcbfb133ecca38"
+          }
+        },
+        "tls_psk": {
+          "log": "build/task194/normal-on/test/tls_psk.log",
+          "sha256": "32bdbac325705654d5c471db38e69e28d5338f1945c3fa66984b526b9b0d5868",
+          "tests": 14,
+          "checks": 313,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_psk",
+            "sha256": "33cf73f1046d310d24394834dffd2662dcf9b3b083b6459c1331b4bc4d6e8aee"
+          }
+        },
+        "tls_psk_runtime": {
+          "log": "build/task194/normal-on/test/tls_psk_runtime.log",
+          "sha256": "89db6230dd03dd3940344684731120d1a556917cbaeb123b116445d15e55e1fc",
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_psk_runtime",
+            "sha256": "94c82d57d9a47ee1d9921dac9ad2d5dc5fdc45414c81b13a8883d0b88ce3ec12"
+          }
+        },
+        "tls_acme_credentials": {
+          "log": "build/task194/normal-on/test/tls_acme_credentials.log",
+          "sha256": "db53eac13bc87da307a28df73b0801a22f870d625018012acd5f248dbf489e43",
+          "tests": 2,
+          "checks": 174,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_credentials",
+            "sha256": "554e5fe2bbd380a572bca7a058eb8e080a9c922e4b5e51bdc1ef4ffc2c7a85e0"
+          }
+        },
+        "tls_acme_selection": {
+          "log": "build/task194/normal-on/test/tls_acme_selection.log",
+          "sha256": "2008ee4512185168296fea0c7c7b1b8c81475cf09dcaec17b624e0e4a2092699",
+          "tests": 6,
+          "checks": 277,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_selection",
+            "sha256": "15dad171a724f1d14db81766146c81fac558b0c75be677e54701b38d1e3905bf"
+          }
+        },
+        "tls_acme_lifetime": {
+          "log": "build/task194/normal-on/test/tls_acme_lifetime.log",
+          "sha256": "55f0a281ac84fcbea660e2a4143c6e4f258276d88d7783cd76f47bad50618ae3",
+          "tests": 6,
+          "checks": 93,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_lifetime",
+            "sha256": "014104a59b7d53d709c73da3a96c6bc3d836d0e2ab8926cc0f1fb2adc7370aaa"
+          }
+        },
+        "tls_io": {
+          "log": "build/task194/normal-on/test/tls_io.log",
+          "sha256": "84fbc6afdbd4ef9cd05f99db42452e1c9de9389bd42049860999dc8951e77e9f",
+          "tests": 11,
+          "checks": 161,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io",
+            "sha256": "9d8e9dd133af0dbe5a2607caa796d0c60f99aa2f1e699190bdc85c463a05215b"
+          }
+        },
+        "tls_io_race": {
+          "log": "build/task194/normal-on/test/tls_io_race.log",
+          "sha256": "ccbd04e2881cd458356306d767a4130e566e8dd40104ca5e0322f53370dc751c",
+          "tests": 10,
+          "checks": 253,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io_race",
+            "sha256": "d70af3909d013a9883f32118c7ca1b0ef261896ca3afe9d270759ff095688d72"
+          }
+        },
+        "tls_io_loopback": {
+          "log": "build/task194/normal-on/test/tls_io_loopback.log",
+          "sha256": "65b052d21d20186d4cafc1a20903da4df7278b5419164d790582bb8a848c1a89",
+          "tests": 3,
+          "checks": 48,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io_loopback",
+            "sha256": "2a6b594c85184e4191f9518b2714359ca64fe61a84040fc8ef533fb9b679d998"
+          }
+        },
+        "io_tls_control": {
+          "log": "build/task194/normal-on/test/io_tls_control.log",
+          "sha256": "ce788e1530b7ac7d565ee1d6c16d07fd9cc10ef3c694fec8bb4ae26171234e09",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/io_tls_control",
+            "sha256": "2b01076d07b409209b5d595454f86478846a4e60cef87a2d02febc67f545d81a"
+          }
+        },
+        "tls_policy_concurrency": {
+          "log": "build/task194/normal-on/test/tls_policy_concurrency.log",
+          "sha256": "733444b530a26a89ff4138c47ec2779bea4f2601fc32d08a6d6daa99f65e764e",
+          "tests": 6,
+          "checks": 97,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_policy_concurrency",
+            "sha256": "543238de2a7649230fef1b1a4ebccada85fb007dce8edaccfc7673b574663e43"
+          }
+        },
+        "tls_policy_hostile_profiles": {
+          "log": "build/task194/normal-on/test/tls_policy_hostile_profiles.log",
+          "sha256": "c345a2f11238a5dfa6810bb7db314f120469a5f4ec2a0fcc948e791d4201e604",
+          "tests": 6,
+          "checks": 474,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_policy_hostile_profiles",
+            "sha256": "d209e33d98e58c7d818abea344f9cfeb41c93c99e725dd8fa508535ad802afa0"
+          }
+        },
+        "http2_tls_boundary": {
+          "log": "build/task194/normal-on/test/http2_tls_boundary.log",
+          "sha256": "25971a667fd07cbe44882196ea27dfccc360be719ba5ff7a158a7cdfa59e5dc4",
+          "tests": 5,
+          "checks": 218,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/http2_tls_boundary",
+            "sha256": "ac16e8a9684f2842c9336ab0db1e99064e96ca71cf5071837c57b5b31d223b08"
+          }
+        },
+        "native_http1_tls_parity": {
+          "log": "build/task194/normal-on/test/native_http1_tls_parity.log",
+          "sha256": "be5079f0d48e5eeb0ec2d9d8b1a3d004446d04c61f054e4187bf25f8c311917c",
+          "tests": 21,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_tls_parity",
+            "sha256": "fa7cbfadb1b4679f4ab4ee848ed9e73029b4e33529a2426143406f176f3c5360"
+          }
+        }
+      },
+      "standalone": [
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "build/task194/normal-on/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+        },
+        {
+          "name": "consumer_v3_native_server",
+          "log": "build/task194/normal-on/test/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+        },
+        {
+          "name": "consumer_v3_server",
+          "log": "build/task194/normal-on/test/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+        }
+      ],
+      "tests": 417,
+      "checks": 6404,
+      "environment": {}
+    },
+    "asan-off": {
+      "summary": "build/task194/owners-asan-off-final/summary.json",
+      "programs": 18,
+      "suites": {
+        "native_server": {
+          "log": "build/task194/asan-off/test/native_server.log",
+          "sha256": "3fcd38b00aabf0e450ffb6d8319fef8c3a8c2e65985ecb85e9c71e93a6123323",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/.libs/native_server",
+            "sha256": "5ee9623ec6b591d1eb1f8e940beac44d897442e0504b0629a687d794b400b50f"
+          }
+        },
+        "server_options_validate": {
+          "log": "build/task194/asan-off/test/server_options_validate.log",
+          "sha256": "0b8c1b581156833a915f6965f9145900b902c5c6e217add2f086fa39524d0c07",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/server_options_validate",
+            "sha256": "ec953c4aa3191b1a475ccf6edb3808f49161572356b78b83b7dcfc8b1ddd0b11"
+          }
+        },
+        "native_http1_e2e": {
+          "log": "build/task194/asan-off/test/native_http1_e2e.log",
+          "sha256": "96a5be4cf3d50fef8aeb934d5faabad50cec2621efa0cc0ab761112db5a3ec1f",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/native_http1_e2e",
+            "sha256": "85e335bc319f376ccb50cd0da13eee269d7b646d4b76a56c0fbaf54a943c4d5f"
+          }
+        },
+        "native_http1_parity": {
+          "log": "build/task194/asan-off/test/native_http1_parity.log",
+          "sha256": "bf60fc49a9d6af72636495b1e24f9ad601fef10f9bd7738c20bee665bd5e9e43",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/native_http1_parity",
+            "sha256": "aef6e4da4133f974e2f57403360d324c3e35373cd01526fa5624cfad0b3f9531"
+          }
+        },
+        "external_http1_e2e": {
+          "log": "build/task194/asan-off/test/external_http1_e2e.log",
+          "sha256": "82a1963210fa4fcf0477886ec8b76fd40f0982f33c7b7c233c263beb23970d76",
+          "tests": 4,
+          "checks": 52,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/external_http1_e2e",
+            "sha256": "bdcb3533871e7d6967e6cea9ab3d7992bec8455cd7b874748aeeb40a409234f0"
+          }
+        },
+        "external_readiness_adapter": {
+          "log": "build/task194/asan-off/test/external_readiness_adapter.log",
+          "sha256": "23737ab2e0a2dd9cbc670872ea237d9a4ecd7644f963caf40e7f6d4a95c6a471",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/external_readiness_adapter",
+            "sha256": "70038f690970dab26f485dac09d9a530093ea2536305416d3921cddfa3c13402"
+          }
+        },
+        "readiness_contract": {
+          "log": "build/task194/asan-off/test/readiness_contract.log",
+          "sha256": "06c847019207293d0b886953e26e6fc6ab8616337ee34f7c3abd5bd44be67584",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/readiness_contract",
+            "sha256": "f8d23d72138ac43192408ee72482e637904a73561c33aef2a5db956a82b3d465"
+          }
+        },
+        "io_backend_contract": {
+          "log": "build/task194/asan-off/test/io_backend_contract.log",
+          "sha256": "a8dc41ce2c2fb00620286f4704eeea70aea944c52934480afc11745c8ca14c41",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/io_backend_contract",
+            "sha256": "cb9ea33f446328abe9636d9ed8300588b3cd786d8bf05ac0c34c04daa6c6422a"
+          }
+        },
+        "connection_engine": {
+          "log": "build/task194/asan-off/test/connection_engine.log",
+          "sha256": "938055a25ce1c8f2fbc27d31129e80d35d73d19c4aad5cd4285af16f6c100e1d",
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/.libs/connection_engine",
+            "sha256": "0299f9029abcc548a61178dc3b3b33da4419f8be7bcf083a5cc5f53f93288b25"
+          }
+        },
+        "drain_scope": {
+          "log": "build/task194/asan-off/test/drain_scope.log",
+          "sha256": "0a15daeb0edcfa7666a3307494f90229e55bcf6ac874d10c4762c0aa3e46d02c",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/.libs/drain_scope",
+            "sha256": "94ba78e005b267da99000265110b6ddbf83919024124e9e7061e31efd05ff68d"
+          }
+        },
+        "worker_pool": {
+          "log": "build/task194/asan-off/test/worker_pool.log",
+          "sha256": "3db0595d37bf9b5596fa50a10ac9893db48d5f05fa5f9844b7ba5f61d4afe6da",
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/.libs/worker_pool",
+            "sha256": "a679fa013f04d6a459b5438919bf42da761331846ce1894addf4e821bc9e3d9d"
+          }
+        },
+        "server_hooks": {
+          "log": "build/task194/asan-off/test/server_hooks.log",
+          "sha256": "25058ae023077f1dc14dc87cfed6491c6f3d955f998eddd67af81657c0c0f646",
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/.libs/server_hooks",
+            "sha256": "0481394cd4a24e56ac66f7065a7d073919f7c772754d26b430210ad2df4feddc"
+          }
+        },
+        "request_lifecycle": {
+          "log": "build/task194/asan-off/test/request_lifecycle.log",
+          "sha256": "8f1ecc6bf6e2e6995bbd41a7c0da769ed4a838b8e2714efd06e224b8571e6898",
+          "tests": 31,
+          "checks": 173,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/.libs/request_lifecycle",
+            "sha256": "e8e95f9ffb61cea30591aaac5f6e8506bf568b7890bd7d3d1918e9ba420bcc17"
+          }
+        },
+        "task_stop_inside_handler": {
+          "log": "build/task194/asan-off/test/task_stop_inside_handler.log",
+          "sha256": "bc94771866d3d5ee408c45a6dd9a9cf0cbaa8980ac405e0c70995dda7eee385d",
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/task_stop_inside_handler",
+            "sha256": "c25247f24b29af3fa3c21546369ee4b3cd35a155f8b2c9595a73877cca599d89"
+          }
+        },
+        "v3_header_hygiene": {
+          "log": "build/task194/asan-off/test/v3_header_hygiene.log",
+          "sha256": "1f201d2dda8bb27e625ee8f106e44b0dc2d4244af911fbde087aa3418f2a3b95",
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-off/test/v3_header_hygiene",
+            "sha256": "2a3fd669c465950dc5c1cadf826324ad1cf995c7915c4bb3291300d0186ffbec"
+          }
+        }
+      },
+      "standalone": [
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "build/task194/asan-off/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+        },
+        {
+          "name": "consumer_v3_native_server",
+          "log": "build/task194/asan-off/test/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+        },
+        {
+          "name": "consumer_v3_server",
+          "log": "build/task194/asan-off/test/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+        }
+      ],
+      "tests": 289,
+      "checks": 3165,
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      }
+    },
+    "asan-on": {
+      "summary": "build/task194/owners-asan-on-final/summary.json",
+      "programs": 37,
+      "suites": {
+        "native_server": {
+          "log": "build/task194/asan-on/test/native_server.log",
+          "sha256": "e7a05f1c20ee2a78f70b9a7b428258f9e690c5eb203fddefb3742b2b43ecca09",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/native_server",
+            "sha256": "396f35cb67aa785604a79e4500541cee6a10ac41f369c954e43461a1b5ea7a09"
+          }
+        },
+        "server_options_validate": {
+          "log": "build/task194/asan-on/test/server_options_validate.log",
+          "sha256": "8e679a16d02afcdf300039f2a5937877b106359b3fb0f4561ec7e0f57634de1e",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/server_options_validate",
+            "sha256": "61ec3c0cbb75563fa6e6e1ab228b6cddd869859be09700fa70221101a79fccfe"
+          }
+        },
+        "native_http1_e2e": {
+          "log": "build/task194/asan-on/test/native_http1_e2e.log",
+          "sha256": "d86a2c1d4c7579e4c8ba3339eb400b5cec6e7e3a56b4525c7c6e80c2bf60a89d",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_e2e",
+            "sha256": "278e8d37e4db4c9a8fd92f10fd069d4a6221dde7cff80006338beffb546d25fc"
+          }
+        },
+        "native_http1_parity": {
+          "log": "build/task194/asan-on/test/native_http1_parity.log",
+          "sha256": "43338bb23aaa29c593768be4e97159796d599cb4caa9ebf1259ae2fc75bfc348",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_parity",
+            "sha256": "2629903704ff0dd8ed3f87ed2e20f9ede6ea25aee90dfc3e283980d15b9ba4ba"
+          }
+        },
+        "external_http1_e2e": {
+          "log": "build/task194/asan-on/test/external_http1_e2e.log",
+          "sha256": "95a8b3a17fcbda07a87d7b15887da7280d50e1c49f74a676e7931ca343bd21d7",
+          "tests": 4,
+          "checks": 52,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/external_http1_e2e",
+            "sha256": "4ba7d75e047c6ce16faea347f371df46a056d6e7d65b6ddb0cae2d832c5c6799"
+          }
+        },
+        "external_readiness_adapter": {
+          "log": "build/task194/asan-on/test/external_readiness_adapter.log",
+          "sha256": "633c9063350b901d11839aa066d387ca41a1294fb5b820e7d9dc4ecd3014705a",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/external_readiness_adapter",
+            "sha256": "543b60bb1e8f2e31607c574b537c1a267276abb37f71e4fdb4bf0aa54085c4ce"
+          }
+        },
+        "readiness_contract": {
+          "log": "build/task194/asan-on/test/readiness_contract.log",
+          "sha256": "de42949e1bf73c48243af8cbbe77d22c73cac28057d3327421bf8b9c5616dbd7",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/readiness_contract",
+            "sha256": "6c719058dd5c0265bced94068219f8f1845bb47f93d5d392b40debd548108344"
+          }
+        },
+        "io_backend_contract": {
+          "log": "build/task194/asan-on/test/io_backend_contract.log",
+          "sha256": "0b610f199f126cbeb12cbef545698b93ba3d6dd1d9dac86f12cbc9324b20327c",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/io_backend_contract",
+            "sha256": "5b0ce17fc7d774ac7dfe249dd8b74be019b2ec44a8679dc9bf2b6da44ccb1dd8"
+          }
+        },
+        "connection_engine": {
+          "log": "build/task194/asan-on/test/connection_engine.log",
+          "sha256": "9d4a63df04e26889ecd3e6bbb82bb4df6246775f9daa27d4a6437c6dae3b0760",
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/connection_engine",
+            "sha256": "ba943d1768d3d177bd45d2c30a2aec08295f84f4e83ffc8079e038d108cce5de"
+          }
+        },
+        "drain_scope": {
+          "log": "build/task194/asan-on/test/drain_scope.log",
+          "sha256": "28e974f76ee5a24803cf1cbd1ea482ca655383eff8fd222adca02bd2f0dbc431",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/drain_scope",
+            "sha256": "36584c643a00112cd0c6307aeb5980cf9794f42cb2aee3a3df9da719a2e14a4f"
+          }
+        },
+        "worker_pool": {
+          "log": "build/task194/asan-on/test/worker_pool.log",
+          "sha256": "baf26e6e1468de5c2cb6fa408fb1c06aeca878f0c2a32b363eee632c76a71924",
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/worker_pool",
+            "sha256": "aa168e74b9cda7d064fb3e527ca86c6a0bf2f83ee8a44fdcbf28fde2fc079fe7"
+          }
+        },
+        "server_hooks": {
+          "log": "build/task194/asan-on/test/server_hooks.log",
+          "sha256": "c85521e672543ce190deba1c6c9a0a1d52b1309239ca7309d154c87a2b50b993",
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/server_hooks",
+            "sha256": "27f4dcd7c72f1cb587c4173f4e44bf119c48b03285c2b27729442f03279f786d"
+          }
+        },
+        "request_lifecycle": {
+          "log": "build/task194/asan-on/test/request_lifecycle.log",
+          "sha256": "b6c3cec265fd44bf598044f284acd0375b2596c5e3b41519861a2bd1f6c98a4b",
+          "tests": 31,
+          "checks": 173,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/request_lifecycle",
+            "sha256": "ea591f06eb562dc75fdd7bc1abf2f1aaf45fa77b06ed4903565fd4fa0d480027"
+          }
+        },
+        "task_stop_inside_handler": {
+          "log": "build/task194/asan-on/test/task_stop_inside_handler.log",
+          "sha256": "67c8a433e63999ce0147a5d0aff22e1b2c9299468af116badafd43edae8a1129",
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/task_stop_inside_handler",
+            "sha256": "bee8b6ce8bf28afd8af63a9940f51504ccd51857cb756da3d5bc991f8eb6ace1"
+          }
+        },
+        "v3_header_hygiene": {
+          "log": "build/task194/asan-on/test/v3_header_hygiene.log",
+          "sha256": "bf3af6c68a3b6e55a6abed922c87fbb874b3a20e93f0fcbeb437ae9efc3c6917",
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/v3_header_hygiene",
+            "sha256": "0773d329cd38888b5438482613ef4cce9319f9ea55977a71fcd8faaa77cdb1fe"
+          }
+        },
+        "public_tls_profiles": {
+          "log": "build/task194/asan-on/test/public_tls_profiles.log",
+          "sha256": "4a29e6db095d5d6b7bd7619363f4d5b9204f1ae3a509eb0e6871b7522515c123",
+          "tests": 5,
+          "checks": 68,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/public_tls_profiles",
+            "sha256": "2b102e60d612400f2833e1c2c3f03e2c7a235c90848c46bc6eabf1e1aed2225e"
+          }
+        },
+        "tls_credentials": {
+          "log": "build/task194/asan-on/test/tls_credentials.log",
+          "sha256": "637dc09e31374139ec3bc377a3a55b1cc3d9d5afd67921c49a73a07f1c0903f8",
+          "tests": 6,
+          "checks": 216,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_credentials",
+            "sha256": "068d8ae6820fd9159a59864a10f412356756ac540ad8144ba66d19069acda4c0"
+          }
+        },
+        "tls_credentials_rotation": {
+          "log": "build/task194/asan-on/test/tls_credentials_rotation.log",
+          "sha256": "ac07820c8587971cf72237774028dbf0f33180d1fc249ec8a140631fee82460e",
+          "tests": 2,
+          "checks": 31,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_credentials_rotation",
+            "sha256": "e8b0bb6ac7226219de731588168f0e40a1487fe3dfbe6e23156031a1a8475d5f"
+          }
+        },
+        "tls_selection": {
+          "log": "build/task194/asan-on/test/tls_selection.log",
+          "sha256": "d9a64cc2a07daaf6fd4a5504f7be6dd624566042a32d38947b90e25317f7c28a",
+          "tests": 6,
+          "checks": 260,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_selection",
+            "sha256": "28ea0ac3f2659e6844a3d38f94e556f2ad2bbc50014364441e4076718e81112f"
+          }
+        },
+        "tls_mtls": {
+          "log": "build/task194/asan-on/test/tls_mtls.log",
+          "sha256": "068e8fa8ced9ac0e73a626a77e160a7a00f0bf4a773eb54c383320d873e078e8",
+          "tests": 6,
+          "checks": 390,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_mtls",
+            "sha256": "4c0eb74dab730f0b04bf231473a5dea8dcb6bb61d9d1f72bc2c0995f5b8bf588"
+          }
+        },
+        "tls_psk_contract": {
+          "log": "build/task194/asan-on/test/tls_psk_contract.log",
+          "sha256": "6d10a1498d6d663276c5735ee1ec3f8597e6cd3fb96b8253ea53175c6bed1100",
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_psk_contract",
+            "sha256": "ae88249432ed04351e47a5e532d9703f0eb686b3123c6ac845070ecf67d9f9c6"
+          }
+        },
+        "tls_psk": {
+          "log": "build/task194/asan-on/test/tls_psk.log",
+          "sha256": "91561868ad0a1702c5ccd0935bb94b457e715bf00e4b20a043909997b9ed4aa5",
+          "tests": 14,
+          "checks": 313,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_psk",
+            "sha256": "510809924ab0bc9911016f6c8cbf5ef07d55b046239f53edb69dcc890edb28e7"
+          }
+        },
+        "tls_psk_runtime": {
+          "log": "build/task194/asan-on/test/tls_psk_runtime.log",
+          "sha256": "b3e040beb362270ec421ee9caaf7324b5ada8255025a7864adae593ef9974402",
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_psk_runtime",
+            "sha256": "711575c957be8070f4cfd51a20c4323497910c6dfd2b06a29deaa02119fa2474"
+          }
+        },
+        "tls_acme_credentials": {
+          "log": "build/task194/asan-on/test/tls_acme_credentials.log",
+          "sha256": "59518caec061785b3d4efd69b2ace45ed1c22d98545299d24604c417d4dd4a73",
+          "tests": 2,
+          "checks": 174,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_credentials",
+            "sha256": "a676d66814f8478490c40b60cc3f3f75f161eabdb6bfa77fef34ba6acad17204"
+          }
+        },
+        "tls_acme_selection": {
+          "log": "build/task194/asan-on/test/tls_acme_selection.log",
+          "sha256": "20e96865db207e6661607d77da785eb5ab5d70a873425bf32b30cb926e2792a2",
+          "tests": 6,
+          "checks": 277,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_selection",
+            "sha256": "fd07040d7321df7fb19f5ce7f4b30a338108f95109b36b813e132b31de3e8c83"
+          }
+        },
+        "tls_acme_lifetime": {
+          "log": "build/task194/asan-on/test/tls_acme_lifetime.log",
+          "sha256": "9e6e60cf51091a53140b50a2f86de2946718d845813e0b18ff815963a2650e8b",
+          "tests": 6,
+          "checks": 93,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_lifetime",
+            "sha256": "c4641bd1e53e4e8c6847f0942c15806e41f25d25daabfc4a3bb694068c460315"
+          }
+        },
+        "tls_io": {
+          "log": "build/task194/asan-on/test/tls_io.log",
+          "sha256": "52dd8807731ebf7731c1699e66c0ffbd8b9aed27e0128a6e90b1aa510297c066",
+          "tests": 11,
+          "checks": 161,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io",
+            "sha256": "fdca1678f3158c4505eccd5359e912e509865c4634e4845d6759889cd1ff5aa7"
+          }
+        },
+        "tls_io_race": {
+          "log": "build/task194/asan-on/test/tls_io_race.log",
+          "sha256": "8575b7ace022689c33d3f8acc0478847e6389e1ff61ed421123a77c91b276246",
+          "tests": 10,
+          "checks": 253,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io_race",
+            "sha256": "769d25a4447a24576b6e0e84caceb98ed38954a083be4afe541528c6edb03af2"
+          }
+        },
+        "tls_io_loopback": {
+          "log": "build/task194/asan-on/test/tls_io_loopback.log",
+          "sha256": "2896968e11ee7e4e68211c311dc4c2bfd04b3fbdc1c0a1aa27b6f39d235f17cd",
+          "tests": 3,
+          "checks": 48,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io_loopback",
+            "sha256": "f5d7d93dea1e93436cfdc5abad4566ddc51101835c08b8e642fd901ef5325313"
+          }
+        },
+        "io_tls_control": {
+          "log": "build/task194/asan-on/test/io_tls_control.log",
+          "sha256": "65aa34e986532872bf25a5d87e1416e6f075092a817e70ab56194bb222222a06",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/io_tls_control",
+            "sha256": "073afc07da672944f00e1ef8a83615cde505f86fa2f7aba0c7f7acf44a44afbf"
+          }
+        },
+        "tls_policy_concurrency": {
+          "log": "build/task194/asan-on/test/tls_policy_concurrency.log",
+          "sha256": "d9e90208c11049427039dc1d41a2230fcb8fa264d0019864d452adcf954e4b15",
+          "tests": 6,
+          "checks": 97,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_policy_concurrency",
+            "sha256": "0bdd8e0581a18d259cc40a084287e6ed77e415a989dd1e9ec76d7b958a902f9a"
+          }
+        },
+        "tls_policy_hostile_profiles": {
+          "log": "build/task194/asan-on/test/tls_policy_hostile_profiles.log",
+          "sha256": "b8c6c75433ec610978b17cd0b70751efb3c10e8ef4b0842b057adb9a9228be06",
+          "tests": 6,
+          "checks": 474,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_policy_hostile_profiles",
+            "sha256": "d851c72b4c4a98389bc5343f8da822e9c2e8395a38ed6e86bf3fe1e3bea1aa2e"
+          }
+        },
+        "http2_tls_boundary": {
+          "log": "build/task194/asan-on/test/http2_tls_boundary.log",
+          "sha256": "f7b289cc53ed4467df34fe90b19acb58249ffbb6f6961af484e4c39ee9f19ac4",
+          "tests": 5,
+          "checks": 218,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/http2_tls_boundary",
+            "sha256": "7977a3262cca2e35a9af9373fe0994512c53696b4eebe593fe0d83b584e0ccbc"
+          }
+        },
+        "native_http1_tls_parity": {
+          "log": "build/task194/asan-on/test/native_http1_tls_parity.log",
+          "sha256": "018a906840ab6c8e7ba6f1bfa6902c0d9f1d638a61b7fe5f4f7ea886ca1b0380",
+          "tests": 21,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_tls_parity",
+            "sha256": "245f9044e636bce865f1ee5cbabef7d01e23650972c7787f635c8549b5e2ed8d"
+          }
+        }
+      },
+      "standalone": [
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "build/task194/asan-on/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+        },
+        {
+          "name": "consumer_v3_native_server",
+          "log": "build/task194/asan-on/test/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+        },
+        {
+          "name": "consumer_v3_server",
+          "log": "build/task194/asan-on/test/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+        }
+      ],
+      "tests": 417,
+      "checks": 6404,
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      }
+    },
+    "tsan-off": {
+      "summary": "build/task194/owners-tsan-off-final/summary.json",
+      "programs": 18,
+      "suites": {
+        "native_server": {
+          "log": "build/task194/tsan-off/test/native_server.log",
+          "sha256": "6fa165e8a11817de58ec20a7b58f674b8f66ccdce3ad41994ce1f3a732f2cc6a",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/.libs/native_server",
+            "sha256": "5758d96bee71e61b155d2b5ccb6ef4deec91672bef86b09cebda6d6cdb80b49f"
+          }
+        },
+        "server_options_validate": {
+          "log": "build/task194/tsan-off/test/server_options_validate.log",
+          "sha256": "d7e9b8cae76ede0404b7cf8c8395dd61f06f7cb820729dc6810abea6a2229314",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/server_options_validate",
+            "sha256": "75a2fad920ca2553cfa07781555090bbfa33eb4c8bf2f5b3180e26e5b04b2bfa"
+          }
+        },
+        "native_http1_e2e": {
+          "log": "build/task194/tsan-off/test/native_http1_e2e.log",
+          "sha256": "e33f553a9922723c7b43f2dec11dae9ef89b38bf2604e6e09da11ae91a08adc2",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/native_http1_e2e",
+            "sha256": "6811a1826993c83379a0ff72939020c7ac5b03317cfe5374e410ec4d41074abd"
+          }
+        },
+        "native_http1_parity": {
+          "log": "build/task194/tsan-off/test/native_http1_parity.log",
+          "sha256": "2d23b5a862cc20c869aa290c6e2c32c9adde1a49481fc4d25b980f3e7f4d2db2",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/native_http1_parity",
+            "sha256": "ac8ee2255e53c0d8018e9c29a004088528cc464df7dd7b54ae963847aa78a77d"
+          }
+        },
+        "external_http1_e2e": {
+          "log": "build/task194/tsan-off/test/external_http1_e2e.log",
+          "sha256": "451752f2fab0910d5592b3c04568c8f4ef519c9a0f29601271fdf37faf9e52c3",
+          "tests": 4,
+          "checks": 52,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/external_http1_e2e",
+            "sha256": "124548654b3f920311539477f26054e530279da10f61273cb3262dca65ae8e54"
+          }
+        },
+        "external_readiness_adapter": {
+          "log": "build/task194/tsan-off/test/external_readiness_adapter.log",
+          "sha256": "5dc8bdcce23be2403403fd86518425bb5a4d458fa98500d831c7d7789f21c865",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/external_readiness_adapter",
+            "sha256": "1722e247e0fe6dfab036fcdd0205b093cc3c256205ef3afea2bedc59cba04dd4"
+          }
+        },
+        "readiness_contract": {
+          "log": "build/task194/tsan-off/test/readiness_contract.log",
+          "sha256": "06371214fd44d792ec7d0df6e85cd9318cbb91e89a956d64a7e1120520f506bf",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/readiness_contract",
+            "sha256": "4b4413fefc6b3f723b1366b44188b6190d5732a705152faba5a40a7632b3b279"
+          }
+        },
+        "io_backend_contract": {
+          "log": "build/task194/tsan-off/test/io_backend_contract.log",
+          "sha256": "2b58f1d8267460e6875ac7182bcde245db9bd41cab5cbe3394e62fbf44dc0239",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/io_backend_contract",
+            "sha256": "6f1571899df77ddda7ee2aa93e48cad4c1e5a6bfa1420fff3752bbb7c4ff3a67"
+          }
+        },
+        "connection_engine": {
+          "log": "build/task194/tsan-off/test/connection_engine.log",
+          "sha256": "9ad1b65af679013e319471547e2d0dca74091e1b225e5741d3ced8217989ae01",
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/.libs/connection_engine",
+            "sha256": "eb661cde38db76008dd90d97202427e3096df506797cb6a39879c472bd53c09d"
+          }
+        },
+        "drain_scope": {
+          "log": "build/task194/tsan-off/test/drain_scope.log",
+          "sha256": "fbaeff8c0cc3ae19b96729c35920d611f244a6d3878085d3a263dfbce53fec46",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/.libs/drain_scope",
+            "sha256": "6e2384130359167b94092051f45a0b042e709acd412c3b7edf08f35e4a065dc4"
+          }
+        },
+        "worker_pool": {
+          "log": "build/task194/tsan-off/test/worker_pool.log",
+          "sha256": "78df7b8650497886d4a4ca975d04bd752942ac461969c6db4548ad2ea28d8697",
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/.libs/worker_pool",
+            "sha256": "dda70bfd40c2c0862ccac921ea4d8ae734edb3ba9858d990c5186f94cefa20f6"
+          }
+        },
+        "server_hooks": {
+          "log": "build/task194/tsan-off/test/server_hooks.log",
+          "sha256": "3f25055cff4b7dd7baa1871e3caf8d26bea6be4e960a47ff0baef8bf2ba6e397",
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/.libs/server_hooks",
+            "sha256": "6f475a86e64bc933ccfa2fa25f2481c791ff54288992b91982edb012069431ed"
+          }
+        },
+        "request_lifecycle": {
+          "log": "build/task194/tsan-off/test/request_lifecycle.log",
+          "sha256": "ebadb51cb3feb04e00504ad64fadd783bc03733c6d512c27ef71066475ab9337",
+          "tests": 31,
+          "checks": 171,
+          "failures": 0,
+          "skipped": 1,
+          "exclusion": "Existing zero_hook_commit_allocates_nothing allocation-count-only sanitizer ownership guard; functional commit assertions retained; root accepted TASK-186/188 boundary, normal/ASan allocation checks pass.",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/.libs/request_lifecycle",
+            "sha256": "a24d18f0d4e2670a4f5a9bf8941d5afbb27240a51db293ce20a574360065383f"
+          }
+        },
+        "task_stop_inside_handler": {
+          "log": "build/task194/tsan-off/test/task_stop_inside_handler.log",
+          "sha256": "bfa355d85ffde99d8363e466c2246f8ce6610f4382d08413e442ae9e88cd643d",
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/task_stop_inside_handler",
+            "sha256": "3e4c3277d44e207a39bf6e8781ab94e5477babe7a88bb5a6ccfbb778da845197"
+          }
+        },
+        "v3_header_hygiene": {
+          "log": "build/task194/tsan-off/test/v3_header_hygiene.log",
+          "sha256": "ad9df01cdaed687248f801f55ea580c54f001ba3cb309a0cd1b421a7760cfa8d",
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-off/test/v3_header_hygiene",
+            "sha256": "9c675253371e1d2e5d77206a2ebf83b0b2fb1b44d9c260ccc8af7ab55f51c827"
+          }
+        }
+      },
+      "standalone": [
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "build/task194/tsan-off/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+        },
+        {
+          "name": "consumer_v3_native_server",
+          "log": "build/task194/tsan-off/test/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+        },
+        {
+          "name": "consumer_v3_server",
+          "log": "build/task194/tsan-off/test/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+        }
+      ],
+      "tests": 289,
+      "checks": 3163,
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1"
+      }
+    },
+    "tsan-on": {
+      "summary": "build/task194/owners-tsan-on-final/summary.json",
+      "programs": 37,
+      "suites": {
+        "native_server": {
+          "log": "build/task194/tsan-on/test/native_server.log",
+          "sha256": "5573923cbca8aa9043deeda88c0bca0c58d80fde6f12715853cc1d5079785e70",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/native_server",
+            "sha256": "59d73ce774b92a8d95e572e4cd7a6e47a50d73e79e989c7f377f61be8c27a4c0"
+          }
+        },
+        "server_options_validate": {
+          "log": "build/task194/tsan-on/test/server_options_validate.log",
+          "sha256": "56f8b12fa79c986642abbbfbf0a8daec21ca38091e2f146c021d7c4b64b647cc",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/server_options_validate",
+            "sha256": "28ad38d490b5c5a3591deb3e5bd0c23ac11344a29e2093ca9441600731c41051"
+          }
+        },
+        "native_http1_e2e": {
+          "log": "build/task194/tsan-on/test/native_http1_e2e.log",
+          "sha256": "436de7cc526767aa754eceadf3f48d9c4eefbed64ea8b68db56918c7431489b1",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_e2e",
+            "sha256": "a77f21fde47026130917d0bbcca51dfde4d889cd7754a38373d899c563230d1c"
+          }
+        },
+        "native_http1_parity": {
+          "log": "build/task194/tsan-on/test/native_http1_parity.log",
+          "sha256": "72e2115670a8250cf76dc3a0ecfca19cdffc5bd39c2c69e2043d8989f2c4661f",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_parity",
+            "sha256": "b4be773ff952b46512ad20f8d7abe8687ca46a0889b4f6d8bb48cd7be21df814"
+          }
+        },
+        "external_http1_e2e": {
+          "log": "build/task194/tsan-on/test/external_http1_e2e.log",
+          "sha256": "774cfb3593cf9e599fb1783b91ec95ea0dd7e89dabc541d9afc63c340a49c008",
+          "tests": 4,
+          "checks": 52,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/external_http1_e2e",
+            "sha256": "c84e8245d75d3a7c2c8818d2a43922a03644459cc9bfd14b3c641d1f875d6154"
+          }
+        },
+        "external_readiness_adapter": {
+          "log": "build/task194/tsan-on/test/external_readiness_adapter.log",
+          "sha256": "64770840bacfc4e9e3f69fd6129c787d04111062dca5e82a2512db53cf155efa",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/external_readiness_adapter",
+            "sha256": "1f5b88e60edf0f715e58da72eb4d86aeac2efc15db4eac7f89e8bc2d5b60891a"
+          }
+        },
+        "readiness_contract": {
+          "log": "build/task194/tsan-on/test/readiness_contract.log",
+          "sha256": "86afe62c08b262b7bbc37e819f05e94e9d60d895790c526329bae89bc1d5a881",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/readiness_contract",
+            "sha256": "7d3aad6531393dd1f270448702ca97fa9908cfffd85f09eda40956141d89b66c"
+          }
+        },
+        "io_backend_contract": {
+          "log": "build/task194/tsan-on/test/io_backend_contract.log",
+          "sha256": "763e8a7959992f18c05b3edaf0b69f30cd32ca5e47dfddbebaa6a6b57eb188ff",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/io_backend_contract",
+            "sha256": "9b74c33fce319b7f08533192b3d3f1df2fb6f0df3541db8f4942246351ada254"
+          }
+        },
+        "connection_engine": {
+          "log": "build/task194/tsan-on/test/connection_engine.log",
+          "sha256": "becaeb5d8458f40f7a44c65dcab5626a29603304721f8980e7fe3e79d339d49f",
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/connection_engine",
+            "sha256": "a6b9d3b6622591dc3f59eb6cd52c18b6896284a6325eeab9e9aa3d7505dfe188"
+          }
+        },
+        "drain_scope": {
+          "log": "build/task194/tsan-on/test/drain_scope.log",
+          "sha256": "c90425ff89b9bc7676d59d77850a2e261c31294c73bacb5813c8450a1c27ff43",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/drain_scope",
+            "sha256": "832a80e005b9a510ec5afdaad0bf738296d6228beafe7a15a8d492ee273dba07"
+          }
+        },
+        "worker_pool": {
+          "log": "build/task194/tsan-on/test/worker_pool.log",
+          "sha256": "8d77dd7f09972490188fed682c8ab2189087f704ff4899c7decebc45f727a54c",
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/worker_pool",
+            "sha256": "a7ef83e3eadad20b4613fbb1ae6eedf039fff639cf6747fd4e668a6191fc50a1"
+          }
+        },
+        "server_hooks": {
+          "log": "build/task194/tsan-on/test/server_hooks.log",
+          "sha256": "2e6f2d3cbb9a3209730ea7580dab19e89b7582b0818af1d0a927594e1505ab03",
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/server_hooks",
+            "sha256": "dd0fdfdf818a414d5745b1a8e088d70f7987e589160a12c8ea72052b576324dc"
+          }
+        },
+        "request_lifecycle": {
+          "log": "build/task194/tsan-on/test/request_lifecycle.log",
+          "sha256": "5676b9b210722d772645f1315a187125385615d3627409f7d31d7a96b768d3d3",
+          "tests": 31,
+          "checks": 171,
+          "failures": 0,
+          "skipped": 1,
+          "exclusion": "Existing zero_hook_commit_allocates_nothing allocation-count-only sanitizer ownership guard; functional commit assertions retained; root accepted TASK-186/188 boundary, normal/ASan allocation checks pass.",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/request_lifecycle",
+            "sha256": "aacb609ae598fe17329973978f371aff96cf4f50b6cc0f5c633801d64f1c8c7e"
+          }
+        },
+        "task_stop_inside_handler": {
+          "log": "build/task194/tsan-on/test/task_stop_inside_handler.log",
+          "sha256": "33a36799120465e81e0d1848c12517bdf2a4205324e8a6021bde99f436700106",
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/task_stop_inside_handler",
+            "sha256": "46092076bd59affd5c8724a43e4f16ea37721f027851ee62bd1fa00582ca0860"
+          }
+        },
+        "v3_header_hygiene": {
+          "log": "build/task194/tsan-on/test/v3_header_hygiene.log",
+          "sha256": "1ef9d9178b6f7bb423caad05e46a5c75d0949bfd16b46c855db4a7f8523a16b3",
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/v3_header_hygiene",
+            "sha256": "9d1a228e46ce4e2dff2219ffc39d8a5a7faf3249f6c3ba8f2c9711466fec2c7e"
+          }
+        },
+        "public_tls_profiles": {
+          "log": "build/task194/tsan-on/test/public_tls_profiles.log",
+          "sha256": "83b2dbc9f390cbca02e6eb7eb1c304740a929ede35ada8864016d31a9f966088",
+          "tests": 5,
+          "checks": 68,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/public_tls_profiles",
+            "sha256": "063e441e2f632bce0b1e533be3f3c58b440571a16adf77cb4f7c16e6f22ffcbd"
+          }
+        },
+        "tls_credentials": {
+          "log": "build/task194/tsan-on/test/tls_credentials.log",
+          "sha256": "6336616657d0a360c44ead719a448b2db2bfb66c9b7fa628a89f6cefcb46f5ce",
+          "tests": 6,
+          "checks": 216,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_credentials",
+            "sha256": "f300fa57f4773784a70919d3f0254cb1e201d56d23d6e912e751bea0f1fffbd0"
+          }
+        },
+        "tls_credentials_rotation": {
+          "log": "build/task194/tsan-on/test/tls_credentials_rotation.log",
+          "sha256": "c284324812cfa00d8003b34a646e409262a7700ce54e6a330f445632de105bbe",
+          "tests": 2,
+          "checks": 31,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_credentials_rotation",
+            "sha256": "f28cd2e1b881775762e27c1ef9ed993d226b10482e0a6f7f19b704af795f3539"
+          }
+        },
+        "tls_selection": {
+          "log": "build/task194/tsan-on/test/tls_selection.log",
+          "sha256": "eddd45b0b16e3bbd9917f4f11404a2795019c23d83a74b86de1400d80dfdf7af",
+          "tests": 6,
+          "checks": 260,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_selection",
+            "sha256": "d3c0543e09ac79603a637cd7dd743adbedde97bf63b3d8b5c377c75eef871ff4"
+          }
+        },
+        "tls_mtls": {
+          "log": "build/task194/tsan-on/test/tls_mtls.log",
+          "sha256": "6deaf5152b1cfa42aad22fa60f285ae1088a46b8b91dd6fce9a95309d9c76488",
+          "tests": 6,
+          "checks": 390,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_mtls",
+            "sha256": "007de0aac1e6999eeb432d4ed4bbba043416b5e3a2adb6c334bda6f1f88175fb"
+          }
+        },
+        "tls_psk_contract": {
+          "log": "build/task194/tsan-on/test/tls_psk_contract.log",
+          "sha256": "152b8c8e8ca3a4412b83f01bd83a6929ea09affce5f2d5ca22b3b5c4e1f5059b",
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_psk_contract",
+            "sha256": "3b73b2334421d318bd7c35b83803c03b9b0d58b9c1ee4b1e9c03cdcf84a5f6e1"
+          }
+        },
+        "tls_psk": {
+          "log": "build/task194/tsan-on/test/tls_psk.log",
+          "sha256": "1ab46630969e376289cb40142d5e9d74745222dd2ea1905b7e34b251de06ea81",
+          "tests": 14,
+          "checks": 313,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_psk",
+            "sha256": "9665ad04854c1434ba6974d7f62bb0763652bb8ceec9c6a6aa5b541f7a59c74e"
+          }
+        },
+        "tls_psk_runtime": {
+          "log": "build/task194/tsan-on/test/tls_psk_runtime.log",
+          "sha256": "e606b70bddee246696b5416f4f6f01c8bf8903fd2a53298d6d12ea7dd7b8ca82",
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_psk_runtime",
+            "sha256": "8e89cddad5c87d4b0cffa67082941e9ef872a564f5ae5dd17ba486c105cdaad3"
+          }
+        },
+        "tls_acme_credentials": {
+          "log": "build/task194/tsan-on/test/tls_acme_credentials.log",
+          "sha256": "3a9339672aa7469a6e1c8b57e85a010aecf27cff51378ef43ccb638eac915a61",
+          "tests": 2,
+          "checks": 174,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_credentials",
+            "sha256": "8898ed8322f4788a30e446a8541324b0f0d6c5e32520f9757249095d99207864"
+          }
+        },
+        "tls_acme_selection": {
+          "log": "build/task194/tsan-on/test/tls_acme_selection.log",
+          "sha256": "e0d1303e85ed0272c76dc89afacdf1f39dcf676297b6b606fa427f92ff4b8559",
+          "tests": 6,
+          "checks": 277,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_selection",
+            "sha256": "c39a1a603a975c0e97e29997e2a1fcdab09d356748a92f3150c11297176135eb"
+          }
+        },
+        "tls_acme_lifetime": {
+          "log": "build/task194/tsan-on/test/tls_acme_lifetime.log",
+          "sha256": "9a79ca16daca2eaa42941824a48e22c5a1c0e3ed6478fecc23f38729a4873551",
+          "tests": 6,
+          "checks": 93,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_lifetime",
+            "sha256": "b52c525d415476550f46139d752f50b5bd76728291d1e78795ea6ecef4d0739e"
+          }
+        },
+        "tls_io": {
+          "log": "build/task194/tsan-on/test/tls_io.log",
+          "sha256": "0975accda6840a4319bb28b92d9b2ae41a32564605ad663878a8cc54f241e8c3",
+          "tests": 11,
+          "checks": 161,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io",
+            "sha256": "e2f9c9657cc258391f5a5404a034d6336fee2ed019dac7f9e40fcde8ff0afc45"
+          }
+        },
+        "tls_io_race": {
+          "log": "build/task194/tsan-on/test/tls_io_race.log",
+          "sha256": "f6a8cce92460162ad50da326fd341e7dedbadf360201f9e54e44c6221cf2cb5b",
+          "tests": 10,
+          "checks": 253,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io_race",
+            "sha256": "aba150773f8d71ed6b0bd932beded5a4f6e0b4431a51cef3e91cc7a5b8106c10"
+          }
+        },
+        "tls_io_loopback": {
+          "log": "build/task194/tsan-on/test/tls_io_loopback.log",
+          "sha256": "2cfa5a8f1ff42931503d2d54c04bd5ab9c246fdaa4254071afb40c99cc803fcf",
+          "tests": 3,
+          "checks": 48,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io_loopback",
+            "sha256": "00e080413ee34214b342deee3a60f15d5ebbd01ea702c8981493912cfd86213e"
+          }
+        },
+        "io_tls_control": {
+          "log": "build/task194/tsan-on/test/io_tls_control.log",
+          "sha256": "c66dce963a210ccfc022154463563a98bcdaac4f74aee6de445dd5802ca7eafd",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/io_tls_control",
+            "sha256": "20480532e38c756123bad6be8259948c48540128bcd58b09a26a0743ab8cb238"
+          }
+        },
+        "tls_policy_concurrency": {
+          "log": "build/task194/tsan-on/test/tls_policy_concurrency.log",
+          "sha256": "7a0c0b3c25544c1e72f6c6c8610b947b61fd095cf2707fa7f13e533410b15b72",
+          "tests": 6,
+          "checks": 97,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_policy_concurrency",
+            "sha256": "1ad207613b5e2c7cb5470795259fcc283b06fa407e44d771acd10382c44942ad"
+          }
+        },
+        "tls_policy_hostile_profiles": {
+          "log": "build/task194/tsan-on/test/tls_policy_hostile_profiles.log",
+          "sha256": "f6a018c0a61c557c68afdf7fb7451082d329023119b619ea3bc40f1cbb685d82",
+          "tests": 6,
+          "checks": 474,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_policy_hostile_profiles",
+            "sha256": "153aa24f41fbcbbe30df6c7f73eb7379a589261b1493ff099f9bbc510d01c057"
+          }
+        },
+        "http2_tls_boundary": {
+          "log": "build/task194/tsan-on/test/http2_tls_boundary.log",
+          "sha256": "daffadef435e3e1dc67a52042c61d8fade87d044d64b5d772ea79cb3593d8a7e",
+          "tests": 5,
+          "checks": 218,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/http2_tls_boundary",
+            "sha256": "1ea6df4c796dc9315b582ce6db381f02dd84d1730ec821b764821f623ad14e47"
+          }
+        },
+        "native_http1_tls_parity": {
+          "log": "build/task194/tsan-on/test/native_http1_tls_parity.log",
+          "sha256": "abefaacdb7fd69daa787b895a8216b8b02d32c357d8aa773976211bc996e8f83",
+          "tests": 21,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0,
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_tls_parity",
+            "sha256": "5193759b03e67ea086921cc24e33d0678de1db5ae2443f7c3e0eb9e757f74e11"
+          }
+        }
+      },
+      "standalone": [
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "build/task194/tsan-on/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+        },
+        {
+          "name": "consumer_v3_native_server",
+          "log": "build/task194/tsan-on/test/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+        },
+        {
+          "name": "consumer_v3_server",
+          "log": "build/task194/tsan-on/test/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+        }
+      ],
+      "tests": 417,
+      "checks": 6402,
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1"
+      }
+    }
+  },
+  "public": {
+    "normal-on": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-normal-on-final5/receipt.json",
+      "sha256": "f961a3e7d7303bc1a83869910c536e9be4742007629193b2f55c64e5a62b2d2c",
+      "cells": 4,
+      "scenarios_per_cell": 82,
+      "consumer_directory": "/tmp/task193-public-tls-client-k_wxvc5_",
+      "prefix": "/tmp/task194-normal-on-zCpNpuxh",
+      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a",
+      "verified_mtls_hook_counter_samples": 104
+    },
+    "asan-on": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-asan-on-final2/receipt.json",
+      "sha256": "b580652babf8f244c0c27799d9bcc153695923b77f452215771544a6f5ab977f",
+      "cells": 4,
+      "scenarios_per_cell": 82,
+      "consumer_directory": "/tmp/task193-public-tls-client-rwlsiq91",
+      "prefix": "/tmp/task194-asan-on-h4llbhmo",
+      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a",
+      "verified_mtls_hook_counter_samples": 104
+    },
+    "tsan-on": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-tsan-on-final5/receipt.json",
+      "sha256": "8de87486560aed193106480df00042ea1c3294be261eb67ba30ad00b793ed18c",
+      "cells": 4,
+      "scenarios_per_cell": 82,
+      "consumer_directory": "/tmp/task193-public-tls-client-w3xrr9pf",
+      "prefix": "/tmp/task194-tsan-on-zr1lfeze",
+      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a",
+      "verified_mtls_hook_counter_samples": 104
+    },
+    "normal-off": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-normal-off-final3/receipt.json",
+      "sha256": "d65016e11877d434708f1ee772fcbac905ab6acaae89a7a1a7ac867327fe9a62",
+      "cells": 4,
+      "scenarios_per_cell": 1,
+      "consumer_directory": "/tmp/task193-public-tls-client-fd9bhixt",
+      "prefix": "/tmp/task194-normal-off-IJ2IgEv4",
+      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a"
+    },
+    "asan-off": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-asan-off-final3/receipt.json",
+      "sha256": "32e93ae52c225cf5a495c369f6d595a361b7a6c45b278c7e0a9c1a0c9fca2cbf",
+      "cells": 4,
+      "scenarios_per_cell": 1,
+      "consumer_directory": "/tmp/task193-public-tls-client-54qxm21p",
+      "prefix": "/tmp/task194-asan-off-ledcowap",
+      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a"
+    },
+    "tsan-off": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-tsan-off-final3/receipt.json",
+      "sha256": "d17b31b49f79bbedc8a1d3ac63323b98af7aafd2d55e3e0e4765dc851442cdb2",
+      "cells": 4,
+      "scenarios_per_cell": 1,
+      "consumer_directory": "/tmp/task193-public-tls-client-1mzrghxr",
+      "prefix": "/tmp/task194-tsan-off-ffpjxrdw",
+      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a"
+    }
+  },
+  "red": [
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/initial-mtls-red.log",
+      "sha256": "f0862fc0b2e260eeea6adbf7ff365578ec48e0383f07059ebcf20befb4c62d17"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-profiles-red.log",
+      "sha256": "3de8c2d6a6616fcfce2a44711229de20832b0cc39feac17d28dfabcf4fe4e233"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/runtime-red.log",
+      "sha256": "de58fbc6adac103d90d7a3952b0e80e3e1a7035b9a3f2ffe0193f3a8ce07a09f"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/key-red.log",
+      "sha256": "59f13abf06c0386ed7345135d2c33f8cfb9a0dc5629218d247ed7d4aaa85c8dd"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/acme-public-red.log",
+      "sha256": "167940f0c80716916b9851a11cc4c933aadd869b82baaaa265684d17e604e946"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/psk-profile-red.log",
+      "sha256": "8d7c3e88beaa77960e02bd7abd334a289108b3a732d7e2da73b6d875710fa748"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/retirement-lock-red.log",
+      "sha256": "934580f9a5c39392841a5e47e465929fd0485f52dbdee93ad429ab54944b4df0"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/false-cell-red2.log",
+      "sha256": "c3aaaa2145680d923b07d1f6cd97ce963671f96e5301b1fcb468bea6e59b8e9d"
+    }
+  ],
+  "green": [
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-profiles-green.log",
+      "sha256": "5b78b9a1c05cfc424065128efbff1afbec8cb90e22e17c9e201112d85065ac22"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/psk-wire-green.json",
+      "sha256": "5de3b53a3ac9e5a43e4bebb368a1301207cecaf09f1e1caeec5042622333fa37"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/retirement-lock-green.log",
+      "sha256": "e6aba17b6a49bbc2e610777dd764bbd1af8eaeb91a314ee14159eb13173f060d"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/false-cell-green.log",
+      "sha256": "c3dc4ce80790d0a5a68dcff2d3009be59564c24dfe01144e0f6b50051e539cc3"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-adapter-shared.log",
+      "sha256": "1c503f81cf71953cbb5aeb5a08cfc44b1bd4cd835effb1b8ab99cf5e963c244a"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on-adapter-shared.log",
+      "sha256": "52dc823d1f016532668093d0719a39ebd1ea23a383e9061906c4334e537c4a16"
+    }
+  ],
+  "provider_runtime_identities": {
+    "/home/etr/progs/libhttpserver/build/tooling/provider/include/openssl/opensslv.h": "9647fc99758cf83e3bcf11ae310894fd4911ad62bff22d8213a614df89cfedda",
+    "/home/etr/progs/libhttpserver/build/tooling/provider/lib/libssl.a": "27b98208ab4edcb48c04af7a1ca764b28e3b71ca9627f8f3ce7e58b257dbccfa",
+    "/home/etr/progs/libhttpserver/build/tooling/provider/lib/libcrypto.a": "ec9a9ab436a8b7d3c6282c17cc368ad819f43f11e9a1ef0a4f0d50b71d53ed10",
+    "/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.tsan-x86_64.so": "dfb5ab5d511f84a08fbb380b04b2d3d30db69ee8817c427e73c131ff7e7c596b"
+  },
+  "package": {
+    "summary": {
+      "path": "/tmp/task194-package-final-lvij4ht5/matrix/resume-clock-rollback/summary.json",
+      "sha256": "86ad42ea3b9b37a30ad54dc2d42d202dbddba3c5e0a4000258caedd396440bee"
+    },
+    "audits": {
+      "no": {
+        "path": "/tmp/task194-package-final-lvij4ht5/matrix/tls-no/audit.json",
+        "sha256": "b1bef88204239976f23ede74a131ccd03ae05251d031bd7ae6cd1a8a207ba5b7",
+        "headers": {
+          "files": [
+            "httpserver.hpp",
+            "httpserver/auth/basic_auth.hpp",
+            "httpserver/auth/digest_auth.hpp",
+            "httpserver/body_reader.hpp",
+            "httpserver/concurrency/cancellation.hpp",
+            "httpserver/concurrency/concurrency.hpp",
+            "httpserver/concurrency/executor.hpp",
+            "httpserver/concurrency/resume_signal.hpp",
+            "httpserver/concurrency/task.hpp",
+            "httpserver/exchange.hpp",
+            "httpserver/features.hpp",
+            "httpserver/forms/multipart.hpp",
+            "httpserver/forms/urlencoded.hpp",
+            "httpserver/http.hpp",
+            "httpserver/http/cookie.hpp",
+            "httpserver/http/fields.hpp",
+            "httpserver/http/method.hpp",
+            "httpserver/http/outcome.hpp",
+            "httpserver/http/protocol.hpp",
+            "httpserver/http/request_head.hpp",
+            "httpserver/http/status.hpp",
+            "httpserver/net/address.hpp",
+            "httpserver/response_definition.hpp",
+            "httpserver/response_sources.hpp",
+            "httpserver/response_writer.hpp",
+            "httpserver/server/budgets.hpp",
+            "httpserver/server/configuration.hpp",
+            "httpserver/server/diagnostics.hpp",
+            "httpserver/server/hooks.hpp",
+            "httpserver/server/options.hpp",
+            "httpserver/server/peer_policy.hpp",
+            "httpserver/server/readiness.hpp",
+            "httpserver/server/route_sync.hpp",
+            "httpserver/server/routes.hpp",
+            "httpserver/server/server.hpp",
+            "httpserver/server/tls_credentials.hpp",
+            "httpserver/server/tls_peer_metadata.hpp",
+            "httpserver/websocket/message.hpp",
+            "httpserver/websocket/options.hpp",
+            "httpserver/websocket/session.hpp",
+            "httpserverpp"
+          ],
+          "declaration_sha256": {
+            "httpserver.hpp": "453637d81c677ca4dbc61838f60e90231fae6403eb63b7c06f46d89c156d1472",
+            "httpserver/auth/basic_auth.hpp": "bad236180d62c21727cd067a6405302106a87e47bcc16fd06334f4b16ea6cdc4",
+            "httpserver/auth/digest_auth.hpp": "e1c004faf501a4443d524287d7dcbb9f9566c30ec44646e26b583cc65d33ab76",
+            "httpserver/body_reader.hpp": "669dcf14b45f2b0b72220776e076e8dc10483bf6d6cdf4f21805b3e573ee82c9",
+            "httpserver/concurrency/cancellation.hpp": "3d277c578f8f7474ea86313a6e23f554634cc80fa5c7f7f574805a20644ad045",
+            "httpserver/concurrency/concurrency.hpp": "e684e2ad2042827bd75db678973ede2318ab9df5d2ef24fc40ed961461032e94",
+            "httpserver/concurrency/executor.hpp": "871c42274f6989b3591ef11a7a1db8d7aadc6259eb096d915046a9573a14f824",
+            "httpserver/concurrency/resume_signal.hpp": "bb47745726646df4519a495d5238dceee5acdabddab055c787c6dc429e7891ec",
+            "httpserver/concurrency/task.hpp": "040904cf7021314c9a332a38f64181d2e9f2c9034e606d03ad8cb45c6e33f0cc",
+            "httpserver/exchange.hpp": "65c5e780cd256d355c43d32dc29bc28a221b4d3e603394c9e3a8f857e4c0e12f",
+            "httpserver/features.hpp": "22bbb6cacb5b086edf73c314ccf486ea48f109e2407cd2857614257d238bf198",
+            "httpserver/forms/multipart.hpp": "888c7095ca1b7150a9dc820ed15fa0bf0fd6c1b8026ae0e42f86ae69d6249782",
+            "httpserver/forms/urlencoded.hpp": "fb11cf7f5487faa26a569c58e27f97277a953762569fa900e397429389b372b4",
+            "httpserver/http.hpp": "8fe66b145e6c69b1ad3f4bd552003796234c13c3a11812f74f35fbd4087b486e",
+            "httpserver/http/cookie.hpp": "55b311e1bf0d100bebe813047cb12eab5bd4597db4a86df44999264d79205a7d",
+            "httpserver/http/fields.hpp": "657b843383182b433de9f2b962cbbf438f15e10860cfc2dd5b940ec6ca8e13f6",
+            "httpserver/http/method.hpp": "15ae7b68f90c79b4348d6b052a9d5a45a8ac289d17788b9055880fe1a87308e7",
+            "httpserver/http/outcome.hpp": "3a93de77ca17ce362d4e07eb1661c8d4fb60e256742335b1f58363e7adfb0d46",
+            "httpserver/http/protocol.hpp": "73969ec7a8cba1056bb217850be77d57c687188731e9b1b3330971888f19aa9a",
+            "httpserver/http/request_head.hpp": "e315d72fdf688443a3b74b99c14eafeed44afc1527c49e30c9ba4682c3a7de84",
+            "httpserver/http/status.hpp": "ae7e56266c43b11086fb328a5a9c95a70f2e18f2ceded9a128e61cfb212da757",
+            "httpserver/net/address.hpp": "ad26f979c3e4ea605a37a319de4c0d13db0c5d4ae71d2ce5ae1bddaeecd494f0",
+            "httpserver/response_definition.hpp": "94bd64a60b5b095bfb4eeef176893f5bcbb17ac6ce0035ba52f3288e6cd57446",
+            "httpserver/response_sources.hpp": "437978fe3b87e48f5c27bf4a34255d467bd42e011199201aad59941b2f7691c3",
+            "httpserver/response_writer.hpp": "2625570191e3017c0d929647873a2607d7a9835ba0dc7c48b962360e13ce0771",
+            "httpserver/server/budgets.hpp": "27872e7559bbf62309b37cf14348ed8886610043054e2c02bf0ad0e201c27199",
+            "httpserver/server/configuration.hpp": "9e992f8b525735a6d519d76564d5c0dec1fd7c4200eef33e2c515f357b4009d5",
+            "httpserver/server/diagnostics.hpp": "a06e0ac96a6c6e6cd82aea6d364782240bc35efe21749544876518a9d55ade64",
+            "httpserver/server/hooks.hpp": "2d7b76b6a2017622fd951ec8b4f7b498773817ccfcbd88a96cdf8b65e7388d52",
+            "httpserver/server/options.hpp": "dab6715abcd2d55e0fc30090d6368c57adb4a244fa1f80e3fb61f8801d6e03d3",
+            "httpserver/server/peer_policy.hpp": "eefc48cbc41ab0ffd711c220d8bd662c1063c6dc05ed6bbc878a08be7d66b130",
+            "httpserver/server/readiness.hpp": "2bb4f2782ab2b838287359234815bc44c2c28d2ca5eb2c2377f0cc6e73aaead2",
+            "httpserver/server/route_sync.hpp": "319e0171bd14c4748dc27c2021c1c042e10c0a665d5ca8286855c49f34011ffb",
+            "httpserver/server/routes.hpp": "d4a05305d2d20c8a532bfddeced719974d5a31323b81efe73a3e5c3465d29359",
+            "httpserver/server/server.hpp": "b3bae50a33bed10038be21fd8efadf40c5de10414f8c436c10da5cf74fefed81",
+            "httpserver/server/tls_credentials.hpp": "697fb9fa2116271ffc2fa8a9bc9aa40aebb4afb6dea4b5da8fa098af588bada1",
+            "httpserver/server/tls_peer_metadata.hpp": "90f5ffa84d0b6bdecad9555bd4b3ba93915094da72f671e45ef608fb4c5fe8cd",
+            "httpserver/websocket/message.hpp": "f5d0fc06dc8dfbca918ff3b1d5ec6a0bd47ce3c0e29dade2e160f3edf2b52a6c",
+            "httpserver/websocket/options.hpp": "ce3c0c47d6fa72e10c24a781afc42bc26c495ff34d65f4fb08e2727b69212780",
+            "httpserver/websocket/session.hpp": "003dff20c49f176e24bd894adda7bfe14fbf2e9e4ea7c24379930322ef20a3cf",
+            "httpserverpp": "453637d81c677ca4dbc61838f60e90231fae6403eb63b7c06f46d89c156d1472"
+          }
+        }
+      },
+      "yes": {
+        "path": "/tmp/task194-package-final-lvij4ht5/matrix/resume-clock-rollback/audit-yes.json",
+        "sha256": "f93097d5780d3721546560e863b97017290e4e1bc1a2b566b7fe4e4a513f9f9e",
+        "headers": {
+          "files": [
+            "httpserver.hpp",
+            "httpserver/auth/basic_auth.hpp",
+            "httpserver/auth/digest_auth.hpp",
+            "httpserver/body_reader.hpp",
+            "httpserver/concurrency/cancellation.hpp",
+            "httpserver/concurrency/concurrency.hpp",
+            "httpserver/concurrency/executor.hpp",
+            "httpserver/concurrency/resume_signal.hpp",
+            "httpserver/concurrency/task.hpp",
+            "httpserver/exchange.hpp",
+            "httpserver/features.hpp",
+            "httpserver/forms/multipart.hpp",
+            "httpserver/forms/urlencoded.hpp",
+            "httpserver/http.hpp",
+            "httpserver/http/cookie.hpp",
+            "httpserver/http/fields.hpp",
+            "httpserver/http/method.hpp",
+            "httpserver/http/outcome.hpp",
+            "httpserver/http/protocol.hpp",
+            "httpserver/http/request_head.hpp",
+            "httpserver/http/status.hpp",
+            "httpserver/net/address.hpp",
+            "httpserver/response_definition.hpp",
+            "httpserver/response_sources.hpp",
+            "httpserver/response_writer.hpp",
+            "httpserver/server/budgets.hpp",
+            "httpserver/server/configuration.hpp",
+            "httpserver/server/diagnostics.hpp",
+            "httpserver/server/hooks.hpp",
+            "httpserver/server/options.hpp",
+            "httpserver/server/peer_policy.hpp",
+            "httpserver/server/readiness.hpp",
+            "httpserver/server/route_sync.hpp",
+            "httpserver/server/routes.hpp",
+            "httpserver/server/server.hpp",
+            "httpserver/server/tls_credentials.hpp",
+            "httpserver/server/tls_peer_metadata.hpp",
+            "httpserver/websocket/message.hpp",
+            "httpserver/websocket/options.hpp",
+            "httpserver/websocket/session.hpp",
+            "httpserverpp"
+          ],
+          "declaration_sha256": {
+            "httpserver.hpp": "453637d81c677ca4dbc61838f60e90231fae6403eb63b7c06f46d89c156d1472",
+            "httpserver/auth/basic_auth.hpp": "bad236180d62c21727cd067a6405302106a87e47bcc16fd06334f4b16ea6cdc4",
+            "httpserver/auth/digest_auth.hpp": "e1c004faf501a4443d524287d7dcbb9f9566c30ec44646e26b583cc65d33ab76",
+            "httpserver/body_reader.hpp": "669dcf14b45f2b0b72220776e076e8dc10483bf6d6cdf4f21805b3e573ee82c9",
+            "httpserver/concurrency/cancellation.hpp": "3d277c578f8f7474ea86313a6e23f554634cc80fa5c7f7f574805a20644ad045",
+            "httpserver/concurrency/concurrency.hpp": "e684e2ad2042827bd75db678973ede2318ab9df5d2ef24fc40ed961461032e94",
+            "httpserver/concurrency/executor.hpp": "871c42274f6989b3591ef11a7a1db8d7aadc6259eb096d915046a9573a14f824",
+            "httpserver/concurrency/resume_signal.hpp": "bb47745726646df4519a495d5238dceee5acdabddab055c787c6dc429e7891ec",
+            "httpserver/concurrency/task.hpp": "040904cf7021314c9a332a38f64181d2e9f2c9034e606d03ad8cb45c6e33f0cc",
+            "httpserver/exchange.hpp": "65c5e780cd256d355c43d32dc29bc28a221b4d3e603394c9e3a8f857e4c0e12f",
+            "httpserver/features.hpp": "22bbb6cacb5b086edf73c314ccf486ea48f109e2407cd2857614257d238bf198",
+            "httpserver/forms/multipart.hpp": "888c7095ca1b7150a9dc820ed15fa0bf0fd6c1b8026ae0e42f86ae69d6249782",
+            "httpserver/forms/urlencoded.hpp": "fb11cf7f5487faa26a569c58e27f97277a953762569fa900e397429389b372b4",
+            "httpserver/http.hpp": "8fe66b145e6c69b1ad3f4bd552003796234c13c3a11812f74f35fbd4087b486e",
+            "httpserver/http/cookie.hpp": "55b311e1bf0d100bebe813047cb12eab5bd4597db4a86df44999264d79205a7d",
+            "httpserver/http/fields.hpp": "657b843383182b433de9f2b962cbbf438f15e10860cfc2dd5b940ec6ca8e13f6",
+            "httpserver/http/method.hpp": "15ae7b68f90c79b4348d6b052a9d5a45a8ac289d17788b9055880fe1a87308e7",
+            "httpserver/http/outcome.hpp": "3a93de77ca17ce362d4e07eb1661c8d4fb60e256742335b1f58363e7adfb0d46",
+            "httpserver/http/protocol.hpp": "73969ec7a8cba1056bb217850be77d57c687188731e9b1b3330971888f19aa9a",
+            "httpserver/http/request_head.hpp": "e315d72fdf688443a3b74b99c14eafeed44afc1527c49e30c9ba4682c3a7de84",
+            "httpserver/http/status.hpp": "ae7e56266c43b11086fb328a5a9c95a70f2e18f2ceded9a128e61cfb212da757",
+            "httpserver/net/address.hpp": "ad26f979c3e4ea605a37a319de4c0d13db0c5d4ae71d2ce5ae1bddaeecd494f0",
+            "httpserver/response_definition.hpp": "94bd64a60b5b095bfb4eeef176893f5bcbb17ac6ce0035ba52f3288e6cd57446",
+            "httpserver/response_sources.hpp": "437978fe3b87e48f5c27bf4a34255d467bd42e011199201aad59941b2f7691c3",
+            "httpserver/response_writer.hpp": "2625570191e3017c0d929647873a2607d7a9835ba0dc7c48b962360e13ce0771",
+            "httpserver/server/budgets.hpp": "27872e7559bbf62309b37cf14348ed8886610043054e2c02bf0ad0e201c27199",
+            "httpserver/server/configuration.hpp": "9e992f8b525735a6d519d76564d5c0dec1fd7c4200eef33e2c515f357b4009d5",
+            "httpserver/server/diagnostics.hpp": "a06e0ac96a6c6e6cd82aea6d364782240bc35efe21749544876518a9d55ade64",
+            "httpserver/server/hooks.hpp": "2d7b76b6a2017622fd951ec8b4f7b498773817ccfcbd88a96cdf8b65e7388d52",
+            "httpserver/server/options.hpp": "dab6715abcd2d55e0fc30090d6368c57adb4a244fa1f80e3fb61f8801d6e03d3",
+            "httpserver/server/peer_policy.hpp": "eefc48cbc41ab0ffd711c220d8bd662c1063c6dc05ed6bbc878a08be7d66b130",
+            "httpserver/server/readiness.hpp": "2bb4f2782ab2b838287359234815bc44c2c28d2ca5eb2c2377f0cc6e73aaead2",
+            "httpserver/server/route_sync.hpp": "319e0171bd14c4748dc27c2021c1c042e10c0a665d5ca8286855c49f34011ffb",
+            "httpserver/server/routes.hpp": "d4a05305d2d20c8a532bfddeced719974d5a31323b81efe73a3e5c3465d29359",
+            "httpserver/server/server.hpp": "b3bae50a33bed10038be21fd8efadf40c5de10414f8c436c10da5cf74fefed81",
+            "httpserver/server/tls_credentials.hpp": "697fb9fa2116271ffc2fa8a9bc9aa40aebb4afb6dea4b5da8fa098af588bada1",
+            "httpserver/server/tls_peer_metadata.hpp": "90f5ffa84d0b6bdecad9555bd4b3ba93915094da72f671e45ef608fb4c5fe8cd",
+            "httpserver/websocket/message.hpp": "f5d0fc06dc8dfbca918ff3b1d5ec6a0bd47ce3c0e29dade2e160f3edf2b52a6c",
+            "httpserver/websocket/options.hpp": "ce3c0c47d6fa72e10c24a781afc42bc26c495ff34d65f4fb08e2727b69212780",
+            "httpserver/websocket/session.hpp": "003dff20c49f176e24bd894adda7bfe14fbf2e9e4ea7c24379930322ef20a3cf",
+            "httpserverpp": "453637d81c677ca4dbc61838f60e90231fae6403eb63b7c06f46d89c156d1472"
+          }
+        }
+      }
+    },
+    "local_headers": 41
+  },
+  "checks": {
+    "check-local-on.log": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/check-local-on.log",
+      "sha256": "288c9527e689cda96f6ce477bf66a8e0a57a02f7bc222169c5e23f62dbc958ca"
+    },
+    "check-local-off.log": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/check-local-off.log",
+      "sha256": "f508f58a77a568629d9edd7c45c057eff89f8117bf025f74ce73f3184616a5ca"
+    },
+    "python-contracts-final4.log": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/python-contracts-final4.log",
+      "sha256": "3b669b121084175a9b92eea5250b828b4331c262568e6ef5b7a4ca04c72e8529"
+    },
+    "package-contracts.log": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/package-contracts.log",
+      "sha256": "da9bf8725bdd0cc6248a4c9378458f800f603a4ed7f0291106f6da860c5a14d0"
+    },
+    "cpplint-final.log": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/cpplint-final.log",
+      "sha256": "3ae63d7b238897491291a99837febd39ab0edfe649a3dd121555fdb7b82eb2cb"
+    },
+    "whitespace-final.log": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/whitespace-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "fences-final.log": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/fences-final.log",
+      "sha256": "27f6da5199466fed81bf2d74dfa2d541d5758518d18248de34c86852b3110cea"
+    },
+    "distribution-final.json": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/distribution-final.json",
+      "sha256": "70769ea2041de32357e428a9fd33aa71a0469227815dd60a7a3880cdd03eee0f"
+    },
+    "tsan-adapter-runtime-graph.log": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-adapter-runtime-graph.log",
+      "sha256": "3a99fa6d047105c5bba700f1dfe912f65eb44f077b4851fbde323ba29ea70aab"
+    }
+  },
+  "actions": {
+    "1_public_seam": [
+      "mtls_request_bound_policy",
+      "mtls_require_bound_policy",
+      "psk_identity_key_bounds",
+      "acme_actual443_exact"
+    ],
+    "2_independent_authentication": [
+      "psk_blocked_timeout",
+      "psk_blocked_peer_close",
+      "psk_blocked_request_stop",
+      "psk_blocked_drain",
+      "psk_saturation_rotation_recovery",
+      "psk_handler_stop_while_lookup_held",
+      "psk_handler_drain_while_lookup_held",
+      "psk_shared_runtime_server_isolation",
+      "psk_self_retirement_refused"
+    ],
+    "3_rotation_resumption": [
+      "atomic_replacement_and_caller_lifetime",
+      "certificate_selected_handshake_rotation",
+      "installed_rotation_example",
+      "certificate_resumption_12",
+      "certificate_resumption_13",
+      "certificate_cross_host_12",
+      "certificate_cross_host_13",
+      "certificate_cross_store",
+      "certificate_rotation_rejects_old_session_12",
+      "certificate_rotation_rejects_old_session_13",
+      "psk_no_ticket_resumption",
+      "acme_no_resumption",
+      "acme_normal_session_isolation",
+      "psk_wire_early_data_rejected",
+      "acme_wire_early_data_rejected"
+    ],
+    "4_acme_selection": [
+      "acme_actual443_exact",
+      "acme_sni_rejections",
+      "acme_alpn_normal_isolation",
+      "acme_invalid_material_preserves",
+      "acme_real_expiry",
+      "acme_remove_normal_preserved",
+      "acme_selected_handshake_pinned",
+      "acme_concurrent_writers",
+      "acme_wrong_port_rejected",
+      "acme_mtls-require_auth_isolation",
+      "acme_psk_auth_isolation"
+    ],
+    "5_installed_example_docs_audits": [
+      "installed_rotation_example",
+      "package.summary",
+      "checks.check-local-on.log",
+      "checks.check-local-off.log"
+    ]
+  },
+  "acceptance": {
+    "independent_installed_matrix": {
+      "tls_on_cells": 12,
+      "tls_on_scenarios_per_cell": 82,
+      "tls_off_cells": 12
+    },
+    "generation_cancellation_retirement": "All six impacted owner lanes and installed matrix pass; see named cases/doubts and allocator-only TSan clarification.",
+    "tls_off_and_caller_followup": "Identical 41 public headers/effective declarations; typed unavailable operations; caller owns validation/completion/merge/cleanup."
+  },
+  "design_doubts": {
+    "1": {
+      "name": "profile_policy",
+      "status": "cleared",
+      "scenarios": [
+        "mtls_request_bound_policy",
+        "mtls_require_bound_policy"
+      ]
+    },
+    "2": {
+      "name": "callback_lifetime",
+      "status": "cleared",
+      "scenarios": [
+        "psk_blocked_timeout",
+        "psk_blocked_peer_close",
+        "psk_blocked_request_stop",
+        "psk_blocked_drain"
+      ]
+    },
+    "3": {
+      "name": "fixed_capacity",
+      "status": "cleared",
+      "scenarios": [
+        "psk_saturation_rotation_recovery"
+      ]
+    },
+    "4": {
+      "name": "handler_runtime_ownership",
+      "status": "cleared",
+      "scenarios": [
+        "psk_handler_stop_while_lookup_held",
+        "psk_handler_drain_while_lookup_held",
+        "psk_shared_runtime_server_isolation",
+        "psk_self_retirement_refused"
+      ]
+    },
+    "5": {
+      "name": "coherent_rotation",
+      "status": "cleared",
+      "scenarios": [
+        "atomic_replacement_and_caller_lifetime",
+        "certificate_selected_handshake_rotation",
+        "installed_rotation_example"
+      ]
+    },
+    "6": {
+      "name": "acme_isolation",
+      "status": "cleared",
+      "scenarios": [
+        "acme_actual443_exact",
+        "acme_sni_rejections",
+        "acme_alpn_normal_isolation",
+        "acme_invalid_material_preserves",
+        "acme_real_expiry",
+        "acme_remove_normal_preserved",
+        "acme_selected_handshake_pinned",
+        "acme_concurrent_writers",
+        "acme_wrong_port_rejected",
+        "acme_mtls-require_auth_isolation",
+        "acme_psk_auth_isolation"
+      ]
+    },
+    "7": {
+      "name": "resumption_early_data",
+      "status": "cleared",
+      "scenarios": [
+        "certificate_resumption_12",
+        "certificate_resumption_13",
+        "certificate_cross_host_12",
+        "certificate_cross_host_13",
+        "certificate_cross_store",
+        "certificate_rotation_rejects_old_session_12",
+        "certificate_rotation_rejects_old_session_13",
+        "psk_no_ticket_resumption",
+        "acme_no_resumption",
+        "acme_normal_session_isolation",
+        "psk_wire_early_data_rejected",
+        "acme_wire_early_data_rejected"
+      ]
+    },
+    "8": {
+      "name": "installed_provenance",
+      "status": "cleared",
+      "scenarios": [
+        "tls_off_same_source",
+        "installed_rotation_example"
+      ]
+    }
+  },
+  "actual443": {
+    "endpoint": "127.0.0.1:443",
+    "proof_case": "acme_actual443_exact",
+    "execution": "disposable unshare --user --map-root-user --net namespace; loopback enabled only inside namespace",
+    "host_changes": false,
+    "predicate_override": false
+  },
+  "exclusions": {
+    "tsan_allocator_only": "Existing request_lifecycle::zero_hook_commit_allocates_nothing allocation-count-only exclusion once per TSan owner lane; functional commit checks execute. Root confirmed settled TASK-186/188 policy; normal/ASan allocation assertions pass. External adapter all27/491 probes execute via standard shared runtime.",
+    "nonlocal": "BSD/macOS/Windows and nonlocal backends are CI/v3-PR owned under AGENTS.md; unexecuted locally.",
+    "doxygen": "Repository check-local explicitly assigns missing local Doxygen execution to CI."
+  },
+  "untouched_owners": [
+    "TASK-185",
+    "FEATURE-bauth-conditional-compile",
+    "TASK-195..199",
+    "TASK-200"
+  ]
+}

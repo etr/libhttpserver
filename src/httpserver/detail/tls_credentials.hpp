@@ -23,6 +23,7 @@
 #include <vector>
 #include <httpserver/detail/tls_io_backend.hpp>
 #include <httpserver/detail/tls_psk.hpp>
+#include <httpserver/detail/tls_credentials_access.hpp>
 #include <httpserver/server/options.hpp>
 namespace httpserver::detail {
 // Shared canonical DNS validation for configuration and current ClientHello.
@@ -97,6 +98,7 @@ class tls_credentials_registry final {
     explicit tls_credentials_registry(std::function<std::chrono::system_clock::time_point()> selection_clock = std::chrono::system_clock::now)
         : selection_clock_(std::move(selection_clock)) {}
     http::outcome replace(const tls_credentials_config& config);
+    http::outcome bind(tls_credentials_binding policy, std::shared_ptr<const tls_credentials_binding>& lease);
     http::outcome publish_acme(const tls_acme_challenge& input);
     http::outcome remove_acme(std::string_view host);
     std::shared_ptr<const tls_credentials_snapshot> acquire() const { return std::atomic_load_explicit(&active_, std::memory_order_acquire); }
@@ -107,6 +109,7 @@ class tls_credentials_registry final {
     std::shared_ptr<const tls_credentials_snapshot> active_;
     std::function<std::chrono::system_clock::time_point()> selection_clock_;
     std::mutex publication_;
+    std::vector<std::weak_ptr<const tls_credentials_binding>> bindings_;
     std::uint64_t generation_ = 0;
 };
 }  // namespace httpserver::detail

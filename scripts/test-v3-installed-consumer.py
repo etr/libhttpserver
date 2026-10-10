@@ -60,6 +60,11 @@ class MatrixTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 matrix.check_scenarios(rows, expected)
 
+    def test_public_tls_failed_cell_cannot_claim_inventory_success(self):
+        for row in ({'case': 'a', 'status': 'failed'}, {'case': 'a', 'passed': False}):
+            with self.assertRaises(ValueError):
+                matrix.check_scenarios([row], ['a'])
+
     def test_duplicate_inventory_keys_cannot_hide_platform_cells(self):
         with self.assertRaises(ValueError):
             matrix.parse_inventory('{"platforms":{"Linux":"epoll","Linux":"poll"}}')

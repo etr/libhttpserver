@@ -11,6 +11,7 @@
 #include <openssl/x509v3.h>
 #include <ctime>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -259,8 +260,34 @@ std::optional<tls_credentials_selection> tls_credentials_snapshot::select_acme(s
     if (found == challenges_.end() || now >= found->second.expires_at) return std::nullopt;
     return tls_credentials_selection{shared_from_this(), found->second.context};
 }
+namespace {
+bool compatible(const tls_credentials_binding& policy, const tls_credentials_snapshot& snapshot) {
+    for (const auto& host : snapshot.hosts()) {
+        if (policy.profile != host.profile || policy.mode != host.client_certificate_mode || (!policy.http11 && !host.alpn.empty())) return false;
+    }
+    return true;
+}
+}  // namespace
+http::outcome tls_credentials_registry::bind(tls_credentials_binding policy, std::shared_ptr<const tls_credentials_binding>& lease) {
+    std::lock_guard lock(publication_);
+    const auto snapshot = acquire();
+    if (!snapshot || !compatible(policy, *snapshot)) {
+        return {http::outcome_code::invalid_argument, "TLS credentials conflict with listener policy"};
+    }
+    auto binding = std::make_shared<const tls_credentials_binding>(policy);
+    std::erase_if(bindings_, [](const auto& weak) { return weak.expired(); });
+    bindings_.push_back(binding);
+    lease = std::move(binding);
+    return {};
+}
 http::outcome tls_credentials_registry::publish_locked(std::shared_ptr<tls_credentials_snapshot> candidate,
     std::shared_ptr<const tls_credentials_snapshot>& retired) {
+    std::erase_if(bindings_, [](const auto& weak) { return weak.expired(); });
+    for (const auto& weak : bindings_) {
+        if (const auto binding = weak.lock(); binding && !compatible(*binding, *candidate)) {
+            return {http::outcome_code::invalid_argument, "TLS credentials conflict with bound listener policy"};
+        }
+    }
     if (generation_ == std::numeric_limits<std::uint64_t>::max()) {
         return {http::outcome_code::limit_exceeded, "TLS generation limit exceeded"};
     }

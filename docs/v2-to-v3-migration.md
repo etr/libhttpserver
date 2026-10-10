@@ -160,11 +160,14 @@ Native TLS selects optional OpenSSL at build time with `--enable-v3-tls`; the
 current build gate requires stable OpenSSL **3.5.x patch 9 or later** and its QUIC
 TLS callbacks. Public certificate values go through `server::tls_credentials`;
 `listener_options::credentials` associates the store. `server_options::tls()`
-selects provider/profile policy. Public mTLS/PSK/ACME scenarios remain TASK-194
-work; their native listener requests reject honestly. Private initial-handshake
-client-auth/PSK suites retain existing coverage; post-handshake auth is unavailable.
+selects provider/profile policy. Public host values accept initial mTLS trust and
+request/require mode, or bounded external PSK for HTTP/1. The application owns the
+shared lookup runtime through actual callback retirement; server stop requests
+cancellation without joining application code. Public ACME publication/removal
+uses application-supplied material and exact SNI/sole `acme-tls/1` on TCP443.
+Post-handshake auth remains unavailable; see the [public TLS lifetime contract](native-tls-build.md).
 
-The [public publication demonstration](../test/examples/v3_tls_rotation.cpp)
+The [public listener rotation example](../test/examples/v3_tls_rotation.cpp)
 uses `server::tls_credentials::replace()`: successful publication replaces the
 active generation, accepted sessions retain their contexts, and failed
 replacement leaves the active publication unchanged. It uses only installed
@@ -180,6 +183,8 @@ TASK-193 adds public certificate TCP TLS through
 [`server::tls_credentials`](native-tls-build.md#public-certificate-credentials-and-native-tcp-tls).
 Associate a shared store with each TLS listener and publish PEM values with
 `replace`; accepted sessions retain immutable selections during replacement.
-Managed and external loops support the same HTTP/1 routes. Public mTLS/PSK/ACME
-profiles and H2/H3 listeners remain subsequent repair tasks; unsupported requests
-still return typed pre-bind outcomes.
+Managed and external loops support the same HTTP/1 routes. TASK-194 extends
+installed witnesses to mTLS/PSK/ACME and live listener rotation. H2/H3 public
+listeners remain subsequent repair tasks; unsupported combinations retain typed
+pre-bind outcomes. TLS-off exposes the same declarations and typed unavailable
+credential/runtime operations.

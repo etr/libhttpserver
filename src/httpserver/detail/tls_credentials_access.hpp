@@ -12,8 +12,17 @@
 #include <httpserver/server/tls_credentials.hpp>
 namespace httpserver::detail {
 class tls_credentials_snapshot;
+struct tls_psk_config;
+struct tls_credentials_binding {
+    server::tls_profile profile;
+    server::tls_client_certificate_mode mode;
+    bool http11;
+};
 class tls_credentials_access final {
  public:
+    static tls_psk_config psk(const server::tls_psk_config& input);
+    static http::outcome bind(const server::tls_credentials& credentials, tls_credentials_binding policy,
+                              std::shared_ptr<const tls_credentials_binding>& lease);
     static std::shared_ptr<const tls_credentials_snapshot> acquire(const server::tls_credentials& credentials);
 };
 }  // namespace httpserver::detail

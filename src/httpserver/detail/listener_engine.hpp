@@ -88,7 +88,8 @@ class listener_engine final
     // out of the backend's fabricated-connection id range). Fails typed
     // when the bind does; the transport is closed either way.
     http::outcome listen(const server::listener_options& endpoint,
-                         std::size_t index, std::shared_ptr<class tls_psk_runtime> runtime = {});
+                         std::size_t index, std::shared_ptr<class tls_psk_runtime> runtime = {},
+                         std::shared_ptr<const struct tls_credentials_binding> binding = {});
 
     // Activate only after every endpoint has bound successfully.
     void activate();
@@ -147,6 +148,7 @@ class listener_engine final
     bool activated_ = false;
     server::listener_options endpoint_;
     std::shared_ptr<class tls_psk_runtime> handshake_runtime_;
+    std::shared_ptr<const struct tls_credentials_binding> tls_binding_;
 
     mutable std::mutex mu_;
     std::unordered_map<std::uint64_t,
