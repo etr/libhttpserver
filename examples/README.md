@@ -1,17 +1,83 @@
 libhttpserver Examples
 ======================
 
-Every example is a standalone program built from a single `.cpp`. To
-build the suite locally:
+Native v3 examples
+------------------
 
-    ./bootstrap && mkdir build && cd build && ../configure && make
+Read the [migration guide](../docs/v2-to-v3-migration.md) and
+[native API page](../docs/v3-api.md). Public examples include only installed
+native headers; the shared route/host helpers live beside their source files.
 
-Each binary lands in `build/examples/`. To verify that an example also
-compiles against an *installed* libhttpserver (the consumer view), run
-`scripts/verify-installed-examples.sh` after `make install`. To enforce
-the structural invariants on `hello_world.cpp` and `shared_state.cpp`
-(LOC budget, lambda-only form, mutex usage), run
-`scripts/check-examples.sh`.
+| Example | What it demonstrates |
+| --- | --- |
+| [v3_routes.cpp](v3_routes.cpp) | Bounded `route_sync` GET/HEAD, coroutine POST echo, handler-safe stop |
+| [v3_protocol_options.cpp](v3_protocol_options.cpp) | HTTP/1.1, H2, H3 and TLS options; semantic validation versus typed public listener rejection |
+| [v3_websocket_echo.cpp](v3_websocket_echo.cpp) | HTTP/1.1 upgrade/rejection, text/binary echo, `try_send` backpressure, `writable`, retained session through close |
+| [v3_external_event_loop.cpp](v3_external_event_loop.cpp) | External host readiness, generation tokens, worker wakeups and deadlines |
+
+From the repository root (legacy aggregate prerequisites remain until TASK-184):
+
+```sh
+./bootstrap
+mkdir -p build/native
+cd build/native
+CXX=clang++ CXXFLAGS='-std=c++20 -O0 -g' ../../configure --disable-v3-tls --enable-examples
+make -j2
+./examples/v3_routes 30
+# Another terminal: substitute the printed PORT value.
+curl http://127.0.0.1:PORT/hello
+curl --data-binary 'hello' http://127.0.0.1:PORT/echo
+curl -X POST http://127.0.0.1:PORT/stop
+```
+
+`v3_routes` and `v3_websocket_echo` listen on ephemeral loopback ports, print
+`PORT=...`, and default to a ten-second lifetime; an optional integer selects
+1–3600 seconds. `/stop` cancels active exchanges and need not return a reply.
+Run `./examples/v3_protocol_options` for the configuration report and
+`./examples/v3_external_event_loop 10` for a bounded external host.
+The WebSocket example accepts `/echo` without an Origin policy for local smoke
+use; applications should configure allowed origins, subprotocols and limits.
+
+The protocol example compiles in TLS-off and TLS-on builds. It validates each
+configuration and reports `not_supported` with port zero for public TLS/H2/H3
+listeners. It does not serve H2/H3. Shared-handler tests exercise their semantic
+contract; the [TASK-179 audit](../docs/task-179-behavior-parity.md) separately
+records private encrypted transport and Extended CONNECT evidence.
+
+The native examples also compile as installed consumers. With libhttpserver.pc and prerequisite .pc metadata
+available via PKG_CONFIG_PATH, run from the repository root:
+
+```sh
+clang++ -std=c++20 -I. examples/v3_routes.cpp -o /tmp/v3_routes $(pkg-config --cflags --libs libhttpserver)
+clang++ -std=c++20 examples/v3_websocket_echo.cpp -o /tmp/v3_websocket_echo $(pkg-config --cflags --libs libhttpserver)
+clang++ -std=c++20 examples/v3_protocol_options.cpp -o /tmp/v3_protocol_options $(pkg-config --cflags --libs libhttpserver)
+clang++ -std=c++20 examples/v3_external_event_loop.cpp -o /tmp/v3_external_event_loop $(pkg-config --cflags --libs libhttpserver)
+```
+
+Private TLS rotation demonstration
+----------------------------------
+
+[test/examples/v3_tls_rotation.cpp](../test/examples/v3_tls_rotation.cpp) is
+repository-internal, requires `HTTPSERVER_COMPILATION`, and cannot use installed
+public headers. Build with the genuine provider described in
+[native-tls-build.md](../docs/native-tls-build.md): configure a fresh build with
+`--enable-v3-tls --enable-examples` and explicit `V3_TLS_CFLAGS`/`V3_TLS_LIBS`, run
+`make -j2`, then `make -C test v3_tls_rotation`. Run `./test/v3_tls_rotation` from
+the build root. It loads committed fixtures and demonstrates retained old
+selection, new active selection, and failed replacement preserving that selection.
+`make -C test check TESTS='tls_credentials tls_credentials_rotation v3_tls_rotation'
+check_PROGRAMS='tls_credentials tls_credentials_rotation v3_tls_rotation'` runs
+the private demonstration and independent established-session handshake tests.
+There is no public native credential installation/rotation API.
+
+Legacy v2 examples
+------------------
+
+The remaining examples use the legacy umbrella and MHD-backed APIs. Each is a
+standalone program. They build with the same `--enable-examples` configuration;
+native sources link v3core separately and do not require legacy `HAVE_WEBSOCKET`.
+`scripts/verify-installed-examples.sh` compiles examples after installation.
+`scripts/check-examples.sh` enforces the pinned v2 introductory examples.
 
 Start here
 ----------

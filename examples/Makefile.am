@@ -95,3 +95,15 @@ endif
 noinst_PROGRAMS += v3_external_event_loop
 v3_external_event_loop_SOURCES = v3_external_event_loop.cpp v3_host_poll.hpp
 v3_external_event_loop_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+
+noinst_PROGRAMS += v3_routes v3_protocol_options v3_websocket_echo
+v3_routes_SOURCES = v3_routes.cpp v3_route_handlers.hpp v3_example_host.hpp
+v3_protocol_options_SOURCES = v3_protocol_options.cpp
+v3_websocket_echo_SOURCES = v3_websocket_echo.cpp v3_example_host.hpp
+v3_routes_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+v3_protocol_options_LDADD = $(v3_routes_LDADD)
+v3_websocket_echo_LDADD = $(v3_routes_LDADD)
+v3_routes_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+v3_protocol_options_LDFLAGS = $(v3_routes_LDFLAGS)
+v3_websocket_echo_LDFLAGS = $(v3_routes_LDFLAGS)
+v3_external_event_loop_LDFLAGS = $(v3_routes_LDFLAGS)

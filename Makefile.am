@@ -714,3 +714,6 @@ EXTRA_DIST += scripts/test-v3-installed-consumer.py scripts/test-v3-package-work
  scripts/lib/v3_package_matrix.py scripts/lib/v3_package_process.py scripts/lib/v3_package_commands.py \
  scripts/lib/v3_package_traffic.py scripts/lib/v3_package_integration.py docs/task-182-package-validation-evidence.md \
  .github/workflows/v3-package-validation.yml
+
+EXTRA_DIST += docs/v2-to-v3-migration.md docs/v3-api.md docs/task-183-migration-evidence.md examples/README.md
+EXTRA_DIST += scripts/doxygen-class-fragments.py scripts/test-doxygen-class-fragments.py

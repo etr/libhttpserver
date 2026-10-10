@@ -8,13 +8,42 @@ Copyright (C)  2011-2026  Sebastiano Merlino.
     root, and online at <https://www.gnu.org/licenses/fdl-1.3.html>.
 -->
 
-# The libhttpserver reference manual
+# libhttpserver
 
 ![GA: Build Status](https://github.com/etr/libhttpserver/actions/workflows/verify-build.yml/badge.svg)
 [![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/1bd1e8c21f66400fb70e5a5ce357b525)](https://www.codacy.com/gh/etr/libhttpserver/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=etr/libhttpserver&amp;utm_campaign=Badge_Grade)
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/etr)
+
+## Native v3 entry point
+
+The `v3` branch provides the native C++20 API. Start with the
+[v2-to-v3 migration guide](docs/v2-to-v3-migration.md),
+[native API documentation](docs/v3-api.md), and
+[native examples and commands](examples/README.md#native-v3-examples).
+There is no v2 source or ABI compatibility shim. Include native headers such as
+`<httpserver/server/server.hpp>` directly.
+
+| Native capability | Current public availability |
+| --- | --- |
+| HTTP/1.0 and HTTP/1.1 plaintext | Managed and external listeners |
+| HTTP/1.1 WebSocket | Coroutine upgrade/echo; independent of legacy WS flags |
+| TLS / HTTP/2 / HTTP/3 listeners | Typed `not_supported` before binding |
+| Certificate rotation | Repository-internal demonstration only; no public installation API |
+
+Build native examples with `./bootstrap`, an out-of-tree configure using
+`CXX=clang++ CXXFLAGS='-std=c++20 -O0 -g'`, `--enable-examples` and
+`--disable-v3-tls`, then `make -j2`. For the optional native provider use
+`--enable-v3-tls` and genuine OpenSSL 3.5.x patch 9 or later as described in
+[the native TLS build guide](docs/native-tls-build.md). Provider availability
+and configuration validation do not imply public encrypted listener availability.
+The transitional aggregate still needs legacy MHD/GnuTLS dependencies;
+TASK-184 owns their removal and the ABI cutover.
+
+## Legacy v2 reference manual
+
+The rest of this README documents the legacy v2 API and examples.
 
 ## Tl;dr
 

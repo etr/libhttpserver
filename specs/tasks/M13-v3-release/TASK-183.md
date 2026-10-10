@@ -9,9 +9,9 @@
 Provide v2-to-v3 migration guide and API examples for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Write v2-to-v3 API/behavior migration mapping.
-- [ ] Update README, examples and generated API docs.
-- [ ] Compile examples for sync/coroutine routes, three protocols, WS and TLS rotation.
+- [x] Write v2-to-v3 API/behavior migration mapping.
+- [x] Update README, examples and generated API docs.
+- [x] Compile examples for sync/coroutine routes, three protocols, WS and TLS rotation.
 
 **Dependencies:**
 - Blocked by: TASK-179
@@ -24,4 +24,10 @@ Provide v2-to-v3 migration guide and API examples for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-009, PRD-V3N-REQ-031, PRD-V3N-REQ-037, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** [TASK-183 local checks and boundaries](../../../docs/task-183-migration-evidence.md).
+Local TLS-off/on C++20 builds, focused suites, public example smoke,
+private rotation and Doxygen generation pass. Public TLS/H2/H3 listeners and
+credential installation remain documented gaps; nonlocal platform runs are
+CI/v3-PR owned. Status stays In Progress until runner validation/finalization.
