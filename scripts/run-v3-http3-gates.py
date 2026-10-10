@@ -296,6 +296,37 @@ def flow_witness(events, stream, sibling):
     return {'exhausted_event':min(exhausted),'sibling_fin_event':min(healthy),'grant_event':min(grants),'response_fin_event':min(finished)}
 
 
+def drain_ack_witness(events, case):
+    need(case.get('fin_acknowledged') is True and case.get('local_hold_stream') == 8,
+         'missing native drain synchronization')
+    need(case.get('accepted_body_hex') == '', 'accepted drain response payload mismatch')
+    fins = set()
+    acknowledged = None
+    closed = False
+    for event in events:
+        name = event.get('name')
+        data = event.get('data', {})
+        for frame in data.get('frames', []):
+            kind = frame.get('frame_type')
+            need(frame.get('stream_id') != case['local_hold_stream'], 'local hold appeared on wire')
+            if name == 'transport:packet_received':
+                if kind == 'stream' and frame.get('stream_id') == case['accepted_stream'] and frame.get('fin'):
+                    fins.add(data['header']['packet_number'])
+                if kind == 'connection_close':
+                    need(frame.get('error_space') == 'application' and frame.get('raw_error_code') == 256,
+                         'wrong native drain close')
+                    need(acknowledged is not None, 'server close preceded accepted FIN ACK')
+                    closed = True
+            elif name == 'transport:packet_sent':
+                need(kind != 'connection_close' or closed, 'client closed before server drain')
+                if kind == 'ack' and not closed:
+                    for bounds in frame.get('acked_ranges', []):
+                        for number in fins:
+                            if bounds[0] <= number <= bounds[-1]: acknowledged = number
+    need(closed and acknowledged is not None, 'missing accepted FIN ACK/server close')
+    return {'fin_packet': acknowledged, 'local_hold_stream': case['local_hold_stream'], 'server_close_code': 256}
+
+
 def semantic_artifacts(events, receipt, qlogs, directory):
     cases={c['case']:c for c in receipt['cases']}
     connection=cases['concurrency']['connection']
@@ -319,13 +350,21 @@ def semantic_artifacts(events, receipt, qlogs, directory):
     need(not any(e.get('connection')==d['connection'] and e.get('stream')==d['late_stream'] and e.get('event') in ('get','entered') for e in events),'late drain request entered a handler')
     need(sum(e.get('event')=='drained' and e.get('connection')==d['connection'] for e in events)==1,'missing completed drain ticket')
     witnesses=[]
+    drain_witnesses=[]
+    if receipt['client']=='quic-go':
+        need(not any(e.get('connection')==d['connection'] and e.get('stream')==d.get('local_hold_stream') for e in events), 'local hold admitted by server')
     for path in qlogs:
         need(path.stat().st_size<=16*1024*1024,'qlog diagnostic bound')
         if path.suffix=='.qlog':native=json.loads(path.read_text())['traces'][0]['events']
         else:native=[json.loads(line.lstrip('\x1e')) for line in path.read_text().splitlines() if line.lstrip('\x1e')]
         need(len(native)<=100000,'qlog event bound')
+        if receipt['client']=='quic-go' and any(e.get('name')=='transport:connection_closed' and e.get('data',{}).get('owner')=='remote' and e.get('data',{}).get('application_code')==256 for e in native):
+            drain_witnesses.append({'qlog':path.name, **drain_ack_witness(native,d)})
         if any(f.get('stream_id')==c['stream'] and e.get('name')=='transport:packet_received' for e in native for f in e.get('data',{}).get('frames',[])):
             witnesses.append({'qlog':path.name,**flow_witness(native,c['stream'],c['sibling_stream'])})
+    if receipt['client']=='quic-go':
+        need(len(drain_witnesses)==1,'missing or ambiguous native drain ACK witness')
+        (directory/'drain-ack-witness.json').write_text(json.dumps(drain_witnesses[0],indent=2)+'\n')
     need(len(witnesses)==1,'missing or ambiguous native flow-control witness')
     (directory/'flow-witness.json').write_text(json.dumps(witnesses[0],indent=2)+'\n')
 
@@ -378,13 +417,29 @@ def run_client(name, fixture_path, client_command, credentials, directory, matri
         command = client_command + ['--port',str(port),'--ca',str(credentials/'ca.pem'),'--wrong-ca',str(credentials/'wrong-ca.pem'),'--log-dir',str(directory)]
         client = Process(command,directory,'client',messages)
         deadline = time.monotonic()+15
-        waiting = None; receipt = None; active = set(); connection_id = None; drain_deadline = None
+        waiting = None; receipt = None; active = set(); connection_id = None; drain_deadline = None; accounting = None
         while receipt is None:
             process,line = next_message(messages,deadline)
+            if line is None and process is fixture:
+                fixture.process.wait(timeout=3)
+                for thread in fixture.threads: thread.join(timeout=2)
+                diagnostic = (directory/'fixture.stderr').read_text().strip()
+                prefix = 'fixture exited nonzero' if fixture.process.returncode else 'fixture exited'
+                raise GateFailure(prefix + ' before all receipts' + (': ' + diagnostic if diagnostic else ''))
             need(line is not None, 'process exited before all receipts')
             try: item=json.loads(line)
             except json.JSONDecodeError as error: raise GateFailure('malformed JSON process receipt') from error
             if process is fixture:
+                if item.get('event') == 'traffic':
+                    need(accounting is None, 'duplicate fixture traffic accounting')
+                    keys = ('received_count', 'sent_count', 'received_bytes', 'sent_bytes')
+                    need(set(item) == {'event', 'port', *keys} and type(item.get('port')) is int
+                         and item['port'] == port
+                         and all(type(item.get(key)) is int and item[key] >= 0 for key in keys),
+                         'malformed fixture traffic accounting')
+                    accounting = item
+                    continue  # Teardown accounting never acknowledges semantic work.
+                need(accounting is None, 'fixture lifecycle event after final accounting')
                 allowed = ('held','released','cancelled','get','post','health')
                 if semantic:
                     allowed += ('entered','read','write_started','write_completed','finished','snapshot','drain_started','drained')
@@ -394,6 +449,7 @@ def run_client(name, fixture_path, client_command, credentials, directory, matri
             else:
                 need(process is client,'unknown process')
                 if 'receipt' in item:
+                    need(accounting is None, 'fixture accounting before semantic receipt')
                     receipt=item['receipt'];break
                 command=item.get('command')
                 need(waiting is None,'overlapping runner commands')

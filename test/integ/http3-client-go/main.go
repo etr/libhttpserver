@@ -272,12 +272,25 @@ func run() error {
 	if *matrix == "task174" {
 		goodTLS := tlsConfig.Clone()
 		goodTLS.RootCAs = trust
-		draining, err := quic.DialAddr(ctx, address, goodTLS, config)
+		drainWitness := &drainACKWitness{finACK: make(chan struct{})}
+		drainConfig := config.Clone()
+		drainConfig.Tracer = func(ctx context.Context, p logging.Perspective, id quic.ConnectionID) *logging.ConnectionTracer {
+			observer := &logging.ConnectionTracer{
+				ReceivedShortHeaderPacket: func(h *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
+					drainWitness.receivedPacket(h.PacketNumber, frames)
+				},
+				SentShortHeaderPacket: func(h *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
+					drainWitness.sentACK(ack)
+				},
+			}
+			return logging.NewMultiplexedConnectionTracer(config.Tracer(ctx, p, id), observer)
+		}
+		draining, err := quic.DialAddr(ctx, address, goodTLS, drainConfig)
 		if err != nil {
 			return err
 		}
 		defer draining.CloseWithError(0, "done")
-		if err = semanticDrain(draining, transport.NewClientConn(draining), ctx, *port, &cases); err != nil {
+		if err = semanticDrain(draining, transport.NewClientConn(draining), ctx, *port, &cases, drainWitness); err != nil {
 			return err
 		}
 	}
