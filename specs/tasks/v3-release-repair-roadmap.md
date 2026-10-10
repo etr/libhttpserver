@@ -12,7 +12,7 @@ The user's new authorization supersedes the old TASK-185 plan's product/benchmar
 | 4 | TASK-189 | Raw/independent H1 WebSocket handshake/flood repair |
 | 5 | TASK-190 | Five H2 corpus transcripts/six route-effect checks repaired |
 | 6 | TASK-191 | Independent quic-go H3 semantic/drain completion |
-| 7 | TASK-192 | Current-v3 cookie parity execution witnesses |
+| 7 | TASK-192 | Owned v3 cookie helpers and executable parity witnesses |
 | 8 | TASK-193 | Public credentials and native TCP TLS listener |
 | 9 | TASK-194 | Public SNI/mTLS/PSK/rotation/ACME support |
 | 10 | TASK-195 | Public TLS ALPN H2 owner, routes/streams/RFC8441/lifecycle |

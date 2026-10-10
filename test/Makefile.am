@@ -1753,3 +1753,20 @@ consumer_v3_peer_policy_runtime_SOURCES = integ/consumer_v3_peer_policy_runtime.
 consumer_v3_peer_policy_runtime_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/examples
 consumer_v3_peer_policy_runtime_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 consumer_v3_peer_policy_runtime_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += http_cookie consumer_v3_cookie
+TESTS += http_cookie consumer_v3_cookie
+http_cookie_SOURCES = unit/http_cookie_test.cpp
+http_cookie_LDADD = $(top_builddir)/src/libhttpserver.la $(V3_TLS_LIBS)
+http_cookie_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+consumer_v3_cookie_SOURCES = headers/consumer_v3_cookie.cpp
+consumer_v3_cookie_CPPFLAGS = -I$(top_srcdir)/src
+consumer_v3_cookie_LDADD = $(top_builddir)/src/libhttpserver.la $(V3_TLS_LIBS)
+consumer_v3_cookie_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += consumer_v3_cookie_wire
+TESTS += consumer_v3_cookie_wire
+consumer_v3_cookie_wire_SOURCES = integ/consumer_v3_cookie_wire.cpp
+consumer_v3_cookie_wire_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -I$(top_srcdir)/examples
+consumer_v3_cookie_wire_LDADD = $(top_builddir)/src/libhttpserver.la $(V3_TLS_LIBS)
+consumer_v3_cookie_wire_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

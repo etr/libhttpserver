@@ -191,3 +191,6 @@ noinst_HEADERS += httpserver/detail/base64.hpp httpserver/detail/entropy_sys.hpp
     httpserver/detail/http1_head_parser.hpp httpserver/detail/http1_response_framer.hpp httpserver/detail/http1_response_mode.hpp \
     httpserver/detail/http1_response_outbox.hpp httpserver/detail/http1_target.hpp httpserver/detail/md5.hpp \
     httpserver/detail/secure_compare.hpp httpserver/detail/sha1.hpp httpserver/detail/sha256.hpp
+
+libhttpserver_v3core_la_SOURCES += cookie.cpp
+nobase_include_HEADERS += httpserver/http/cookie.hpp

@@ -338,6 +338,18 @@ Give C++ applications one embedded server API across HTTP/1.1, HTTP/2, HTTP/3, a
 - The request, response, lifecycle, configuration, TLS, and release capabilities below.
 - Preservation of documented v2.0 behavior where applicable, without source compatibility.
 
+For structured cookies, PRD-V3N-REQ-017/018/037/038 preserve PRD-CKY's
+observable parser, canonical attribute ordering and injection rejection through
+owned `http::cookie`, explicit `parse_cookie_header` / `render_set_cookie` and
+ordered fields. Rendering returns a typed outcome and leaves output unchanged
+on invalid input; raw construction replaces v2 fluent setters. Parsing retains
+interior controls for render-time rejection and trims only SP/HT at token/name
+edges. No v2 request/response convenience, parse-once cache or compatibility shim
+is restored. Expires outside civil years 0000..9999 explicitly fails; the
+[migration guide](../docs/v2-to-v3-migration.md#request-data-forms-and-cookies)
+records the actual API and bounded-date change. The historical PRD-CKY section
+continues to describe v2, including its deprecated integration shapes.
+
 **Out of scope**
 - A pluggable HTTP backend or v2.0 source compatibility.
 - Automatic ACME account management or certificate issuance.

@@ -1,8 +1,11 @@
 """TASK-179 receipts must prove each applicable capability and corpus cell."""
 import copy
+import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -196,7 +199,7 @@ class Receipts(unittest.TestCase):
         fixture.write_text('changed file bytes')
         self.assertTrue(self.errors())
 
-    def test_inventory_only_requires_named_executed_checks(self):
+    def add_named_fixture(self):
         with (self.root / 'inventory.md').open('a') as output:
             output.write('| Prefix family | routes.hpp | — | inventory-only | preserve |\n')
         self.inventory['capabilities'].append({'id': 'prefix', 'behavior': 'Prefix family', 'cases': [],
@@ -205,17 +208,102 @@ class Receipts(unittest.TestCase):
         (self.root / 'families.log').write_text('Running test (1): prefix_matching\n'
             '- Time spent during "prefix_matching": 1 ms\n1 tests executed\n3 checks\n-> 3 successes\n-> 0 failures\n-> 0 skipped\n')
         self.receipt['commands'].append({'id': 'families', 'argv': ['./families'], 'exit': 0,
-            'tool': 'families built source hash', 'log': 'families.log'})
+            'tool': 'families built source hash', 'log': 'families.log', 'cwd': str(self.root)})
+        binary = self.root / 'families'
+        binary.write_bytes(b'synthetic mutation fixture')
+        self.bind_execution(self.receipt['commands'][-1], binary, 'families')
         self.receipt['supporting'] = [{'id': 'prefix-check', 'command': 'families', 'suite': 'families',
             'name': 'prefix_matching', 'kind': 'semantic'}]
         self.receipt['outcomes'] += [{'capability': 'prefix', 'mode': mode,
             'classification': 'preserved', 'evidence': ['prefix-check']} for mode in AUDIT.MODES]
         self.refresh_inputs()
+
+    def bind_execution(self, command, binary, suite):
+        log = (self.root / command['log']).read_text()
+        command['named_execution'] = {'suite': suite, 'executable': str(binary.resolve()),
+            'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
+            'log_sha256': hashlib.sha256(log.encode()).hexdigest(),
+            'tests': len(AUDIT.executed_tests(log)),
+            'checks': int(AUDIT.re.search(r'^(\d+) checks$', log, AUDIT.re.MULTILINE)[1])}
+
+    def test_inventory_only_requires_named_executed_checks(self):
+        self.add_named_fixture()
         self.assertEqual([], self.errors())
+        valid = (self.root / 'families.log').read_text()
         for log in ('fixture started\n', 'Running test (1): other\n-> 0 failures\n-> 0 skipped\n',
-                    'Running test (1): prefix_matching\n-> 1 failures\n-> 0 skipped\n'):
-            (self.root / 'families.log').write_text(log)
-            self.assertTrue(self.errors())
+                    valid.replace('prefix_matching', 'another_case'),
+                    valid.replace('1 tests executed', '2 tests executed'),
+                    valid.replace('-> 0 failures', '-> 1 failures'),
+                    valid.replace('-> 0 skipped', '-> 1 skipped'),
+                    valid.replace('- Time spent during "prefix_matching": 1 ms\n', ''),
+                    valid.replace('3 checks', '0 checks'),
+                    valid + valid):
+            with self.subTest(log=log):
+                (self.root / 'families.log').write_text(log)
+                self.receipt['commands'][-1]['named_execution']['log_sha256'] = hashlib.sha256(log.encode()).hexdigest()
+                self.assertTrue(self.errors())
+
+    def test_named_counts_and_completion_cannot_be_forged(self):
+        valid = ('Running test (1): first\n- Time spent during "first": 1 ms\n'
+                 '1 tests executed\n3 checks\n-> 3 successes\n-> 0 failures\n-> 0 skipped\n')
+        self.assertEqual({'first'}, AUDIT.executed_tests(valid))
+        for log in (valid.replace('-> 3 successes', '-> 2 successes'),
+                    valid.replace('test (1)', 'test (2)'),
+                    valid + '1 tests executed\n', valid + '3 checks\n',
+                    valid + '-> 1 failures\n', valid + '-> 1 skipped\n'):
+            with self.subTest(log=log):
+                self.assertEqual(set(), AUDIT.executed_tests(log))
+
+    def test_named_suite_requires_matching_executable_and_command_provenance(self):
+        self.add_named_fixture()
+        valid = copy.deepcopy(self.receipt['commands'][-1])
+        mutations = [dict(valid, argv=['./unrelated']), dict(valid, argv=[]),
+            dict(valid, named_execution={}), dict(valid, named_execution=None),
+            dict(valid, named_execution=[]), dict(valid, named_execution='unrelated'),
+            dict(valid, cwd=str(self.root / 'elsewhere'))]
+        for key, value in (('suite', 'cookie_render'), ('sha256', 'wrong'),
+                           ('log_sha256', 'wrong'), ('tests', 2), ('checks', 4),
+                           ('executable', str(self.root / 'absent'))):
+            mutated = copy.deepcopy(valid)
+            mutated['named_execution'][key] = value
+            mutations.append(mutated)
+        for command in mutations:
+            with self.subTest(command=command):
+                self.receipt['commands'][-1] = command
+                self.assertTrue(self.errors())
+        self.receipt['commands'][-1] = valid
+        self.receipt['supporting'][0]['suite'] = 'absent_suite'
+        self.assertTrue(self.errors())
+        self.receipt['supporting'][0]['suite'] = 'families'
+        (self.root / 'families').unlink()
+        self.assertTrue(self.errors())
+
+    def test_real_current_cookie_execution_proves_three_inventory_witnesses(self):
+        self.add_named_fixture()
+        binary = Path(os.environ.get('TASK192_COOKIE_BINARY', Path.cwd() / 'http_cookie')).resolve()
+        if not binary.is_file():
+            binary = self.root / 'http_cookie'
+            subprocess.run([os.environ.get('CXX', 'c++'), '-std=c++20', '-I' + str(ROOT / 'src'),
+                '-I' + str(ROOT / 'test'), str(ROOT / 'test/unit/http_cookie_test.cpp'),
+                str(ROOT / 'src/cookie.cpp'), '-o', str(binary)], check=True, capture_output=True, timeout=120)
+        result = subprocess.run([str(binary)], capture_output=True, text=True, check=True, cwd=binary.parent, timeout=30)
+        names = ('parse_multi_semicolon_separated', 'render_full_attribute_ordering',
+                 'render_guard_rejects_cr_in_parsed_value')
+        self.assertTrue(set(names).issubset(AUDIT.executed_tests(result.stdout)))
+        command = self.receipt['commands'][-1]
+        command.update(argv=[str(binary)], cwd=str(binary.parent))
+        (self.root / command['log']).write_text(result.stdout)
+        actual = binary.parent / '.libs' / binary.name
+        self.bind_execution(command, actual if actual.is_file() else binary, 'http_cookie')
+        self.inventory['capabilities'][-1]['tests'] = [
+            {'suite': 'http_cookie', 'name': name, 'kind': 'semantic'} for name in names]
+        self.receipt['supporting'] = [{'id': name, 'command': 'families', 'suite': 'http_cookie',
+                                      'name': name, 'kind': 'semantic'} for name in names]
+        for outcome in self.receipt['outcomes']:
+            if outcome['capability'] == 'prefix':
+                outcome['evidence'] = list(names)
+        self.refresh_inputs()
+        self.assertEqual([], self.errors())
 
     def test_allow_auth_captures_and_hook_fields_survive_framing_translation(self):
         observation = copy.deepcopy(self.receipt['observations'][-1])

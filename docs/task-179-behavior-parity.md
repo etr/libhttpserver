@@ -81,8 +81,12 @@ also verify snapshot stability across validated rebinding.
 
 v3 retains raw escaped target/query, ordered fields and separate trailers; it
 has no merged v2 query/form/path map. Applications opt into bounded decoders;
-path captures use exchange::path_args(). Cookies use the standalone parser/render
-API and ordered Cookie/Set-Cookie fields. Request bodies are pulled and footers
+path captures use exchange::path_args(). Cookies use the owned `http::cookie` value,
+`http::parse_cookie_header` and typed `http::render_set_cookie` operations with
+ordered Cookie/Set-Cookie fields. TASK-192 supplies the installed helper and the
+`http_cookie` suite with all three capability-054 identities. Receipts bind named
+checks to the actual executable/hash, command, complete log and executed counts;
+semantic supporting evidence does not claim per-protocol wire observations. Request bodies are pulled and footers
 are accessed after end-of-body. Malformed encodings and limits return typed errors.
 Multipart disk sinks have explicit abort cleanup, keep-once callbacks and sanitized
 names, verified by named decoder and disk lifecycle tests.
