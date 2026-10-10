@@ -9,10 +9,10 @@
 **Workflow:** Follow `../v3-release-repair-workflow.md`; helper-resolve TASK-190, require `base_branch=v3`, systematic cause analysis and RED/GREEN, then Groundwork validation/finalization.
 
 **Action Items:**
-- [ ] Reproduce `http2_engine_conformance/rfc9113_engine_transcripts` failures for `content-length-data`, `malformed-trailer`, `closed-data`, `stream-window-overflow`, `half-closed-head` (47/52 transcripts currently complete). Trace protocol events versus scheduled header-time handler execution, resets and cancellation across executor batching and all fragmentation splits.
-- [ ] Establish whether corpus route expectations or engine behavior violate the documented header-time decision contract. Add focused failing regression for each distinct cause, asserting route observations, terminal scope/code/count, compression state and resource release. A handler may validly observe headers before a later malformed body; an expectation change requires specification-backed evidence and a regression, never blanket acceptance of fewer route checks.
-- [ ] Repair minimal engine scheduling/lifetime/error handling or demonstrably invalid oracle; preserve strict RFC 9113 error scope and suffix/HPACK handling after stream resets.
-- [ ] Run all corpus fragmentation variants, stream/body/response/WebSocket/drain suites and existing pinned h2spec/independent-client lane. Keep the exact h2spec exclusion inventory and named corpus requirements unchanged.
+- [x] Reproduce `http2_engine_conformance/rfc9113_engine_transcripts` failures for `content-length-data`, `malformed-trailer`, `closed-data`, `stream-window-overflow`, `half-closed-head` (47/52 transcripts currently complete). Trace protocol events versus scheduled header-time handler execution, resets and cancellation across executor batching and all fragmentation splits.
+- [x] Establish whether corpus route expectations or engine behavior violate the documented header-time decision contract. Add focused failing regression for each distinct cause, asserting route observations, terminal scope/code/count, compression state and resource release. A handler may validly observe headers before a later malformed body; an expectation change requires specification-backed evidence and a regression, never blanket acceptance of fewer route checks.
+- [x] Repair minimal engine scheduling/lifetime/error handling or demonstrably invalid oracle; preserve strict RFC 9113 error scope and suffix/HPACK handling after stream resets.
+- [x] Run all corpus fragmentation variants, stream/body/response/WebSocket/drain suites and existing pinned h2spec/independent-client lane. Keep the exact h2spec exclusion inventory and named corpus requirements unchanged.
 
 **Acceptance Criteria:**
 - All 52 engine transcripts and existing engine tests pass with every route-effect check executed, under normal and ASan/nonrecovering UBSan TLS-off/on.
@@ -24,4 +24,4 @@
 - Blocks: TASK-191, TASK-185
 **Related Requirements:** PRD-V3N-REQ-005, PRD-V3N-REQ-006, PRD-V3N-REQ-009, PRD-V3N-REQ-023, PRD-V3N-REQ-025, PRD-V3N-REQ-037.
 **Related Decisions:** DR-V3-001, DR-V3-003, DR-V3-006.
-**Status:** Not Started
+**Status:** In Progress
