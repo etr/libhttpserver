@@ -24,6 +24,6 @@
 - Blocks: TASK-188, TASK-185
 **Related Requirements:** PRD-V3N-REQ-021, PRD-V3N-REQ-024, PRD-V3N-REQ-025, PRD-V3N-REQ-026, PRD-V3N-REQ-028, PRD-V3N-REQ-029, PRD-V3N-REQ-038.
 **Related Decisions:** DR-V3-003, DR-V3-005, DR-V3-006.
-**Status:** In Progress
+**Status:** Complete
 
-**Implementation evidence:** [TASK-187 implementation evidence](../../architecture/v3/TASK-187-implementation-evidence.md). Required affected normal/ASan TLS-off/on suites and TSan owner targets pass, as do 30 staged public consumer executions. Groundwork validation/finalization remain caller-owned. An extra intermittent unchanged task_race TSan finding remains open for separate caller-owned repair before TASK-185 final gate.
+**Implementation evidence:** [TASK-187 implementation evidence](../../architecture/v3/TASK-187-implementation-evidence.md). Required affected normal/ASan TLS-off/on suites and TSan owner targets pass, as do 30 staged public consumer executions. Groundwork validation passed in one iteration with eight approvals, zero fixes and zero unworked findings (run `042c2872ddd35da2da0b750e793b21e4`). Implementation artifacts are retained at `build/task187-evidence/implementation-ad76a561/` in the primary worktree with a SHA256 archive manifest; relative implementation build/debug paths resolve beneath that archive. An extra intermittent unchanged task_race TSan finding remains open for separate caller-owned repair before TASK-185 final gate.
