@@ -77,6 +77,48 @@ class Receipts(unittest.TestCase):
                 gate.run_client('aioquic',fixture,[],path,path/'evidence')
             self.assertTrue((path/'evidence/exits.json').is_file())
 
+    def early_accounting(self, events, status=1, diagnostic='fixture failure: drain deadline expired'):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        path = Path(temporary.name)
+        fixture = path/'fixture'
+        fixture.write_text('#!' + sys.executable + '\nimport sys\n'
+                           'print("READY 40000", flush=True)\n' +
+                           ''.join('print(' + repr(event) + ', flush=True)\n' for event in events) +
+                           'print(' + repr(diagnostic) + ', file=sys.stderr, flush=True)\n' +
+                           'sys.exit(' + str(status) + ')\n')
+        fixture.chmod(0o700)
+        return path, fixture
+
+    def accounting(self, **changes):
+        return {**{'event': 'traffic', 'port': 40000, 'received_count': 0,
+                   'sent_count': 0, 'received_bytes': 0, 'sent_bytes': 0}, **changes}
+
+    def test_final_accounting_preserves_causal_fixture_failure(self):
+        path, fixture = self.early_accounting([gate.json.dumps(self.accounting())])
+        with self.assertRaisesRegex(gate.GateFailure, 'fixture exited nonzero.*drain deadline expired'):
+            gate.run_client('quic-go', fixture, [sys.executable, '-c', 'import time; time.sleep(30)'],
+                            path, path/'evidence', 'task174')
+        exits = gate.json.loads((path/'evidence/exits.json').read_text())
+        self.assertEqual(exits['fixture'], 1)
+        self.assertIn('fixture exited nonzero', exits['cleanup_errors'])
+        self.assertFalse((path/'evidence/receipt.json').exists())
+
+    def test_accounting_cannot_substitute_for_semantic_receipt(self):
+        variants = [([self.accounting()], 'fixture exited before all receipts'),
+                    ([self.accounting(), self.accounting()], 'duplicate fixture traffic accounting'),
+                    ([self.accounting(sent_count=-1)], 'malformed fixture traffic accounting'),
+                    ([self.accounting(port=40001)], 'malformed fixture traffic accounting'),
+                    ([{'event': 'invented'}], 'unknown fixture event')]
+        for events, expected in variants:
+            with self.subTest(events=events):
+                path, fixture = self.early_accounting([gate.json.dumps(e) for e in events], 0, '')
+                with self.assertRaisesRegex(gate.GateFailure, expected):
+                    gate.run_client('quic-go', fixture,
+                                    [sys.executable, '-c', 'import time; time.sleep(30)'],
+                                    path, path/'evidence', 'task174')
+                self.assertFalse((path/'evidence/receipt.json').exists())
+
     def test_failed_preflight_preserves_existing_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory);manifest=path/'manifest.json';manifest.write_text('retained evidence')
@@ -154,6 +196,26 @@ class FlowWitness(unittest.TestCase):
         gate.flow_witness(events,36,40)
         for variant in [events[:2],events[1:], [events[0],events[2],events[1],events[3]],events[:-1]]:
             with self.assertRaises(gate.GateFailure):gate.flow_witness(variant,36,40)
+
+class DrainACKWitness(unittest.TestCase):
+    def test_native_ack_gap_peer_close_and_unsent_local_hold(self):
+        self.assertTrue(hasattr(gate, 'drain_ack_witness'), 'native drain ACK evidence missing')
+        case = {'accepted_stream': 0, 'local_hold_stream': 8, 'fin_acknowledged': True, 'accepted_body_hex': ''}
+        def packet(name, number, frames):
+            return {'name': 'transport:packet_' + name,
+                    'data': {'header': {'packet_number': number}, 'frames': frames}}
+        fin = packet('received', 33, [{'frame_type': 'stream', 'stream_id': 0, 'fin': True}])
+        ack = packet('sent', 12, [{'frame_type': 'ack', 'acked_ranges': [[32, 33]]}])
+        close = packet('received', 34, [{'frame_type': 'connection_close', 'error_space': 'application', 'raw_error_code': 256}])
+        good = [fin, ack, close]
+        self.assertEqual(gate.drain_ack_witness(good, case)['fin_packet'], 33)
+        variants = [[fin, close], [fin, close, ack],
+                    [fin, packet('sent', 12, [{'frame_type': 'ack', 'acked_ranges': [[32], [34, 40]]}]), close],
+                    good + [packet('sent', 13, [{'frame_type': 'stream', 'stream_id': 8}])]]
+        for events in variants:
+            with self.assertRaises(gate.GateFailure): gate.drain_ack_witness(events, case)
+        with self.assertRaises(gate.GateFailure):
+            gate.drain_ack_witness(good, {**case, 'accepted_body_hex': '00'})
 
 class GoawayWitness(unittest.TestCase):
     first = '0x7\tfffffffffffffffc\n'

@@ -948,6 +948,93 @@ LT_BEGIN_AUTO_TEST(network_owner_suite, drain_rejects_later_work_and_closes_afte
     LT_CHECK(peer.fins[0]); LT_CHECK_EQ(finished, 1U); LT_CHECK_EQ(peer.server->close_notifications(), 1U);
     LT_CHECK(peer.server->has_keys(hd::quic_key_level::application)); LT_CHECK(peer.server->failure().empty());
 LT_END_AUTO_TEST(drain_rejects_later_work_and_closes_after_accepted_fin_ack)
+LT_BEGIN_AUTO_TEST(network_owner_suite, final_fin_ack_and_immediate_peer_close_have_distinct_drain_results)
+    for (bool acknowledge_fin : {false, true}) {
+        owner_test::peer peer;
+        httpserver::resume_signal pause;
+        unsigned entered = 0;
+        LT_ASSERT(peer.routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",
+            [&](httpserver::exchange& x) -> httpserver::task<void> {
+                ++entered; co_await pause.wait(); x.respond(httpserver::http::status::from_code(200), {});
+            }).ok());
+        peer.connect(); peer.drain(10);
+        LT_ASSERT(!peer.issued.empty());
+        auto head = h3test::headers(h3test::get());
+        const std::array<hd::quic_frame, 1> request{hd::quic_stream_frame{0, 0, head, true}};
+        peer.send(request, peer.address); LT_CHECK_EQ(entered, 1U);
+        auto deadline = h3net::clock_type::now() + std::chrono::seconds(5);
+        httpserver::server::drain_ticket ticket;
+        LT_ASSERT(peer.server->begin_drain(deadline, ticket).ok());
+        // Receive and acknowledge both GOAWAY stages while accepted work is held.
+        peer.drain(20);
+        hd::quic_cursor cursor(peer.output[3]);
+        LT_CHECK_EQ(cursor.varint(), 0U);
+        std::vector<std::uint64_t> ids;
+        while (cursor.remaining()) {
+            auto type = cursor.varint(), size = cursor.varint();
+            auto bytes = cursor.take(size);
+            if (type == 7) ids.push_back(hd::decode_quic_varint(bytes).value);
+        }
+        LT_ASSERT_EQ(ids.size(), 2U);
+        LT_CHECK_EQ(ids[0], hd::k_quic_max_integer - 3); LT_CHECK_EQ(ids[1], 4U);
+        const std::array<hd::quic_frame, 1> late{hd::quic_stream_frame{4, 0, head, true}};
+        peer.send(late, peer.address); LT_CHECK_EQ(entered, 1U);
+        bool rejected = false;
+        for (unsigned turn = 0; turn < 20; ++turn) {
+            if (auto output = peer.prepare()) {
+                peer.server->emitted(true, peer.now);
+                std::array<std::byte, 1600> plain{}; unsigned level; std::uint64_t number;
+                for (auto frame : peer.decode(*output, plain, level, number))
+                    if (auto reset = std::get_if<hd::quic_reset_stream_frame>(&frame))
+                        rejected |= reset->stream == 4 && reset->error == 267;
+                peer.accept(*output);
+            }
+        }
+        LT_CHECK(rejected); pause.signal(); peer.executor.run_pending();
+        std::optional<std::uint64_t> final_packet;
+        for (unsigned turn = 0; turn < 100 && !final_packet; ++turn) {
+            if (auto output = peer.prepare()) {
+                peer.server->emitted(true, peer.now);
+                std::array<std::byte, 1600> plain{}; unsigned level; std::uint64_t number;
+                for (auto frame : peer.decode(*output, plain, level, number))
+                    if (auto stream = std::get_if<hd::quic_stream_frame>(&frame); stream && stream->stream == 0 && stream->fin)
+                        final_packet = number;
+                peer.accept(*output, !final_packet);
+            }
+        }
+        LT_ASSERT(final_packet); LT_CHECK(peer.fins[0]);
+        LT_CHECK_EQ(h3test::decode_response(peer.output[0]).heads[0][0].value, "200");
+        LT_CHECK(h3test::decode_response(peer.output[0]).body.empty());
+        LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::active);
+        if (acknowledge_fin) {
+            const std::array<hd::quic_frame, 1> ack{hd::quic_ack_frame{*final_packet, 0, 0, 0, {}, {}}};
+            peer.send(ack, peer.address); peer.server->tick(h3net::clock_type::now());
+            LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::closing);
+            LT_CHECK(peer.server->has_keys(hd::quic_key_level::application));
+        }
+        const std::array<hd::quic_frame, 1> close{hd::quic_close_frame{true, 256, 0, {}}};
+        peer.send(close, peer.address);
+        LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::draining);
+        LT_CHECK(!peer.server->has_keys(hd::quic_key_level::application));
+        LT_CHECK(!peer.server->prepare(h3net::clock_type::now()));
+        httpserver::server::drain_result result, again;
+        LT_ASSERT(ticket.wait(result).ok());
+        LT_CHECK(result.status == (acknowledge_fin ? httpserver::server::drain_status::completed : httpserver::server::drain_status::deadline_expired));
+        LT_CHECK_EQ(result.remaining, acknowledge_fin ? 0U : 2U);
+        auto endpoint = peer.server->deadline(); LT_ASSERT(endpoint);
+        auto alias = std::make_shared<hd::io_datagram>();
+        alias->bytes.push_back(std::byte{0x40});
+        alias->bytes.insert(alias->bytes.end(), peer.issued.begin()->second.begin(), peer.issued.begin()->second.end());
+        alias->bytes.resize(40); alias->peer = peer.address; alias->socket_id = 1;
+        peer.server->tick(*endpoint - std::chrono::nanoseconds(1));
+        LT_CHECK(peer.admission->routes().dispatch(alias).code == hd::datagram_dispatch_code::routed);
+        peer.server->tick(*endpoint); peer.executor.run_pending();
+        LT_CHECK(peer.admission->routes().dispatch(alias).code == hd::datagram_dispatch_code::retired);
+        peer.server->tick(deadline); LT_ASSERT(ticket.wait(again).ok());
+        LT_CHECK(again.status == result.status); LT_CHECK_EQ(again.remaining, result.remaining);
+        LT_CHECK_EQ(peer.server->close_notifications(), 1U); LT_CHECK(peer.server->failure().empty());
+    }
+LT_END_AUTO_TEST(final_fin_ack_and_immediate_peer_close_have_distinct_drain_results)
 LT_BEGIN_AUTO_TEST(network_owner_suite, drain_deadline_cancels_once_and_preserves_closing_cids)
     owner_test::peer peer; httpserver::resume_signal pause; httpserver::stop_token stop; unsigned resumed = 0;
     LT_ASSERT(peer.routes.route(httpserver::http::method::known(httpserver::http::method_id::get), "/hello",

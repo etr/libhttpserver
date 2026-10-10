@@ -79,6 +79,41 @@ output. Evidence directories are private; TLS secrets have mode 0600.
 `packets.pcap` contains real application-boundary datagrams with synthesized
 IPv4/UDP envelopes, rather than an interface capture.
 
+## TASK-191 drain scheduling clarification
+
+A successful drain requires the accepted response FIN and required control/QPACK
+information to retire through actual QUIC ACK completions. A clean peer close is
+not proof of receipt of that FIN. If the peer closes first, the ticket reports an
+immutable incomplete outcome, even when its application close code is H3_NO_ERROR.
+The fixture's historical `drain deadline expired` diagnostic also covers this
+interrupted outcome; it does not establish that five wall-clock seconds elapsed.
+
+The pinned quic-go H3 client automatically closes after GOAWAY when its last
+tracked request reaches EOF. Its application can consume that EOF before the
+native delayed ACK for the server FIN is sent. The original immediate-EOF schedule
+is therefore a legal negative case, retained in the protected owner regression.
+A naive ACK-before-read observer is also invalid: remote CONNECTION_CLOSE makes
+this stack discard unread response data.
+
+The positive client schedule preopens one additional client-only stream (ID 8)
+before drain, sends no bytes or FIN on it, and retains it through the actual native
+FIN ACK and remote server closure. It is not server work or a drain dependency.
+The original accepted stream 0 and preopened rejected stream 4 remain unchanged.
+The native tracer observes exact packet ACK coverage; qlog validation independently
+requires FIN → covering ACK → authenticated server application close 256. It also
+rejects any wire frame or server event naming the local hold. After remote closure,
+the client cancels each half of that local stream once. The observation and closure
+share the original five-second drain budget; no sleeps or synthetic ACKs are used.
+This scheduling amendment was explicitly authorized for TASK-191.
+
+Final fixture `traffic` records are teardown capture accounting. The live runner
+validates their bounded integer shape and uniqueness, then waits for the actual
+process exit. Nonzero fixture exit and its captured causal stderr remain the
+primary error. Accounting cannot acknowledge semantic work or replace a receipt;
+unknown lifecycle events, duplicate/malformed accounting and lifecycle output after
+accounting fail closed. Successful runs still require exactly one accounting record
+and exact packet/byte reconciliation against the unchanged capture.
+
 ## Provisioning and reproduction
 
 Local tools: Clang 18 (C++20 in actual compiler output), Python 3.12, Go 1.26.9,

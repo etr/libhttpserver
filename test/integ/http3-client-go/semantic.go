@@ -24,6 +24,59 @@ type wireWitness struct {
 	credit  map[int64]int64
 }
 
+type drainACKWitness struct {
+	mu           sync.Mutex
+	finPackets   map[logging.PacketNumber]bool
+	finACK       chan struct{}
+	acknowledged bool
+}
+
+// The native H3 stack closes after the last response EOF during GOAWAY.
+// A local-only stream holds it open while this observer verifies a real FIN ACK.
+func (w *drainACKWitness) receivedPacket(number logging.PacketNumber, frames []logging.Frame) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, frame := range frames {
+		if stream, ok := frame.(*logging.StreamFrame); ok && stream.StreamID == 0 && stream.Fin {
+			if w.finPackets == nil {
+				w.finPackets = map[logging.PacketNumber]bool{}
+			}
+			if len(w.finPackets) < 128 {
+				w.finPackets[number] = true
+			}
+		}
+	}
+}
+func (w *drainACKWitness) sentACK(ack *logging.AckFrame) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if ack == nil || w.acknowledged {
+		return
+	}
+	for number := range w.finPackets {
+		if ack.AcksPacket(number) {
+			w.acknowledged = true
+			if w.finACK != nil {
+				close(w.finACK)
+			}
+			return
+		}
+	}
+}
+func (w *drainACKWitness) finAcknowledged() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.acknowledged
+}
+func (w *drainACKWitness) waitFINACK(ctx context.Context) error {
+	select {
+	case <-w.finACK:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("accepted response FIN ACK: %w", ctx.Err())
+	}
+}
+
 func (w *wireWitness) received(frames []logging.Frame) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -205,7 +258,7 @@ func semanticUploads(client *http3.ClientConn, ctx context.Context, port int, ca
 	*cases = append(*cases, result)
 	return nil
 }
-func semanticDrain(conn *quic.Conn, client *http3.ClientConn, ctx context.Context, port int, cases *[]fields) error {
+func semanticDrain(conn *quic.Conn, client *http3.ClientConn, ctx context.Context, port int, cases *[]fields, witness *drainACKWitness) error {
 	held, err := open(client, ctx, port, "GET", "/hold", nil)
 	if err != nil {
 		return err
@@ -218,6 +271,16 @@ func semanticDrain(conn *quic.Conn, client *http3.ClientConn, ctx context.Contex
 	if err != nil {
 		return err
 	}
+	// Keep one entirely local native H3 stream tracked until the server closes.
+	// Otherwise reading the last EOF makes quic-go close before its FIN ACK.
+	localHold, err := client.OpenRequestStream(ctx)
+	if err != nil {
+		return err
+	}
+	defer localHold.CancelRead(268)
+	defer localHold.CancelWrite(268)
+	drainCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	if _, err = control("drain", fields{"connection": observed["connection"], "stream": int64(held.StreamID())}); err != nil {
 		return err
 	}
@@ -245,18 +308,21 @@ func semanticDrain(conn *quic.Conn, client *http3.ClientConn, ctx context.Contex
 	if err != nil {
 		return err
 	}
+	if err = witness.waitFINACK(drainCtx); err != nil {
+		return err
+	}
 	if _, err = control("wait", fields{"event": "drained", "connection": observed["connection"], "stream": 0}); err != nil {
 		return err
 	}
 	select {
 	case <-conn.Context().Done():
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-drainCtx.Done():
+		return drainCtx.Err()
 	}
 	var closeErr *quic.ApplicationError
-	if !errors.As(context.Cause(conn.Context()), &closeErr) {
+	if !errors.As(context.Cause(conn.Context()), &closeErr) || !closeErr.Remote {
 		return fmt.Errorf("missing graceful native close: %v", context.Cause(conn.Context()))
 	}
-	*cases = append(*cases, fields{"case": "goaway", "connection": observed["connection"], "accepted_stream": int64(held.StreamID()), "late_stream": int64(late.StreamID()), "ids": received["ids"], "rejection": uint64(refused.ErrorCode), "accepted_status": accepted["status"], "close_code": uint64(closeErr.ErrorCode), "drain_complete": true})
+	*cases = append(*cases, fields{"case": "goaway", "connection": observed["connection"], "accepted_stream": int64(held.StreamID()), "late_stream": int64(late.StreamID()), "ids": received["ids"], "rejection": uint64(refused.ErrorCode), "accepted_status": accepted["status"], "accepted_body_hex": accepted["body_hex"], "close_code": uint64(closeErr.ErrorCode), "drain_complete": true, "fin_acknowledged": witness.finAcknowledged(), "local_hold_stream": int64(localHold.StreamID())})
 	return nil
 }
