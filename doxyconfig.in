@@ -624,8 +624,7 @@ EXCLUDE_SYMLINKS       = NO
 # against the file with absolute path, so to exclude all test directories
 # for example use the pattern */test/*
 
-# The five class-body fragments are expanded in their owning public classes by the filter.
-EXCLUDE_PATTERNS       = */httpserver/detail/* */create_webserver_setters.hpp */webserver_routes.hpp */webserver_runtime.hpp */webserver_websocket.hpp */webserver_hooks.hpp
+EXCLUDE_PATTERNS       = */httpserver/detail/*
 
 # The EXCLUDE_SYMBOLS tag can be used to specify one or more symbol names
 # (namespaces, classes, functions, etc.) that should be excluded from the
@@ -681,7 +680,7 @@ INPUT_FILTER           =
 # info on how filters are used. If FILTER_PATTERNS is empty, INPUT_FILTER
 # is applied to all files.
 
-FILTER_PATTERNS        = *.hpp="python3 $(SRCDIR)/scripts/doxygen-class-fragments.py"
+FILTER_PATTERNS        =
 
 # If the FILTER_SOURCE_FILES tag is set to YES, the input filter (if set using
 # INPUT_FILTER) will be used to filter the input files when producing source

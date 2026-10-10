@@ -20,7 +20,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-m4_define([libhttpserver_MAJOR_VERSION],[2])dnl
+m4_define([libhttpserver_MAJOR_VERSION],[3])dnl
 m4_define([libhttpserver_MINOR_VERSION],[0])dnl
 m4_define([libhttpserver_REVISION],[0])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
@@ -51,7 +51,7 @@ AC_SYS_LARGEFILE
 # Minimal feature-set required
 AX_CXX_COMPILE_STDCXX([20], [noext], [mandatory])
 
-# The native provider is independent of the transitional legacy TLS lane.
+# The native TLS provider stays private to its convenience library.
 AC_ARG_ENABLE([v3-tls],
     [AS_HELP_STRING([--enable-v3-tls], [enable native OpenSSL 3.5 LTS provider (default=no)])],
     [], [enable_v3_tls=no])
@@ -163,7 +163,7 @@ case "$host" in
     *-mingw*)
         NETWORK_HEADER="winsock2.h"
         ADDITIONAL_LIBS="-lpthread -no-undefined"
-        NETWORK_LIBS="-lws2_32"
+        NETWORK_LIBS="-lws2_32 -lmswsock -lbcrypt"
         native_srcdir=$(cd $srcdir; pwd -W)
         ;;
     *-msys*)
@@ -173,21 +173,12 @@ For native Windows binaries, use the MinGW64 shell instead.
 ])
         NETWORK_HEADER="winsock2.h"
         ADDITIONAL_LIBS="-lpthread -no-undefined"
-        NETWORK_LIBS="-lws2_32"
+        NETWORK_LIBS="-lws2_32 -lmswsock -lbcrypt"
         native_srcdir=$(cd $srcdir; pwd -W)
-        # libmicrohttpd's <microhttpd.h> asserts _SYS_TYPES_FD_SET on Cygwin/MSYS.
-        # newlib defines that macro via <sys/select.h>, included from <sys/types.h>
-        # only when __BSD_VISIBLE -- i.e. when _DEFAULT_SOURCE is set. Strict ANSI
-        # C++ (-std=c++NN, AX_CXX_COMPILE_STDCXX noext) suppresses newlib's
-        # auto-define, so expose it explicitly here.
-        CPPFLAGS="-D_DEFAULT_SOURCE $CPPFLAGS"
         ;;
     *-cygwin*)
         NETWORK_HEADER="arpa/inet.h"
         ADDITIONAL_LIBS="-lpthread -no-undefined"
-        # See *-msys* note: libmicrohttpd's fd_set check needs _DEFAULT_SOURCE
-        # under -std=c++NN strict mode.
-        CPPFLAGS="-D_DEFAULT_SOURCE $CPPFLAGS"
         ;;
     *)
         NETWORK_HEADER="arpa/inet.h"
@@ -207,7 +198,6 @@ AC_CHECK_HEADER([sys/types.h],[],[AC_MSG_ERROR("sys/types.h not found")])
 AC_CHECK_HEADER([$NETWORK_HEADER],[],[AC_MSG_ERROR("$NETWORK_HEADER not found")])
 AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 
-AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutls.h not found. TLS will be disabled"); have_gnutls="no"])
 
 # TASK-068: portable secure-zero primitive selection. Probe for
 # explicit_bzero (glibc / musl / FreeBSD / OpenBSD / *BSD). The header
@@ -219,80 +209,19 @@ AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutl
 # that memset_s would impose on a transitively-included header).
 #
 # The HAVE_EXPLICIT_BZERO macro is pushed into AM_CXXFLAGS / AM_CFLAGS
-# (matching the established libhttpserver pattern for HAVE_GNUTLS /
-# HAVE_BAUTH / etc.) so it reaches the header without requiring an
+# so it reaches the header without requiring an
 # explicit `#include "config.h"` from secure_zero.hpp.
 AC_CHECK_DECLS([explicit_bzero], [], [], [[#include <string.h>]])
 AS_IF([test "x$ac_cv_have_decl_explicit_bzero" = "xyes"],
     [AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_EXPLICIT_BZERO"
      AM_CFLAGS="$AM_CFLAGS -DHAVE_EXPLICIT_BZERO"])
 
-# Checks for libmicrohttpd
-if test x"$host" = x"$build"; then
-    AC_CHECK_HEADER([microhttpd.h],
-        AC_CHECK_LIB([microhttpd], [MHD_start_daemon],
-            [AC_MSG_CHECKING([for libmicrohttpd >= 1.0.0])
-                AC_COMPILE_IFELSE(
-                    [AC_LANG_SOURCE([
-                        #include <microhttpd.h>
-                        #if (MHD_VERSION < 0x01000000)
-                        #error needs at least version 1.0.0
-                        #endif
-                        int main () { return 0; }
-                    ])],
-                [],
-                [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 1.0.0")]
-                )
-            ],
-            [AC_MSG_ERROR(["libmicrohttpd not found"])]
-        ),
-        [AC_MSG_ERROR(["microhttpd.h not found"])]
-    )
-
-    # -DHTTPSERVER_COMPILATION is intentionally NOT injected globally into
-    # CXXFLAGS. It is added per-target via AM_CPPFLAGS in src/Makefile.am and
-    # test/Makefile.am so that examples (and any other consumer-style TUs)
-    # build through the umbrella header without seeing the internal macro.
-    CXXFLAGS="-D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
-    LDFLAGS="$LIBMICROHTTPD_LIBS $NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
-
-    cond_cross_compile="no"
-else
-    AC_CHECK_HEADER([microhttpd.h],
-        AC_CHECK_LIB([microhttpd], [MHD_start_daemon],
-            [],
-            [AC_MSG_ERROR(["libmicrohttpd not found"])]
-        ),
-        [AC_MSG_ERROR(["microhttpd.h not found"])]
-    )
-
-    # See note above: HTTPSERVER_COMPILATION is scoped to lib + tests via
-    # per-directory AM_CPPFLAGS, not injected globally into CXXFLAGS.
-    CXXFLAGS="-D_REENTRANT $CXXFLAGS"
-    LDFLAGS="$NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
-
-    cond_cross_compile="yes"
-fi
-
-AM_CONDITIONAL([COND_CROSS_COMPILE],[test x"$cond_cross_compile" = x"yes"])
-AC_SUBST(COND_CROSS_COMPILE)
-
-# Check for basic auth v3 support in libmicrohttpd
-AC_CHECK_LIB([microhttpd], [MHD_basic_auth_get_username_password3],
-    [have_bauth="yes"],
-    [have_bauth="no"; AC_MSG_WARN("libmicrohttpd basic auth v3 support not found. Basic auth will be disabled")])
-
-# Check for digest auth v3 support in libmicrohttpd
-AC_CHECK_LIB([microhttpd], [MHD_digest_auth_check3],
-    [have_dauth="yes"],
-    [have_dauth="no"; AC_MSG_WARN("libmicrohttpd digest auth v3 support not found. Digest auth will be disabled")])
-
-# Check for WebSocket support in libmicrohttpd_ws
-AC_CHECK_HEADER([microhttpd_ws.h],
-    [AC_CHECK_LIB([microhttpd_ws], [MHD_websocket_stream_init],
-        [have_websocket="yes"],
-        [have_websocket="no"; AC_MSG_WARN("libmicrohttpd_ws not found. WebSocket support will be disabled")])],
-    [have_websocket="no"; AC_MSG_WARN("microhttpd_ws.h not found. WebSocket support will be disabled")])
+CXXFLAGS="-D_REENTRANT $CXXFLAGS"
+LDFLAGS="$NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
+AM_CONDITIONAL([COND_CROSS_COMPILE], [test "x$cross_compiling" = xyes])
+# Static consumers need the same socket and thread libraries as the aggregate.
+LHT_LIBDEPS="-lpthread $NETWORK_LIBS"
+AC_SUBST([LHT_LIBDEPS])
 
 AC_MSG_CHECKING([whether to build with TCP_FASTOPEN support])
 AC_ARG_ENABLE([fastopen],
@@ -335,7 +264,6 @@ AC_TYPE_UINT16_T
 AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 
-LHT_LIBDEPS="-lmicrohttpd"
 
 AC_MSG_CHECKING([whether to build with debug information])
 AC_ARG_ENABLE([debug],
@@ -399,35 +327,6 @@ AM_CONDITIONAL([BUILD_EXAMPLES], [test "x$enable_examples" = "xyes"])
 AM_CONDITIONAL([COND_GCOV],[test x"$cond_gcov" = x"yes"])
 AC_SUBST(COND_GCOV)
 
-if test x"$have_gnutls" = x"yes"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
-    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
-fi
-
-AM_CONDITIONAL([HAVE_GNUTLS],[test x"$have_gnutls" = x"yes"])
-
-if test x"$have_bauth" = x"yes"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_BAUTH"
-    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_BAUTH"
-fi
-
-AM_CONDITIONAL([HAVE_BAUTH],[test x"$have_bauth" = x"yes"])
-
-if test x"$have_dauth" = x"yes"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_DAUTH"
-    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_DAUTH"
-fi
-
-AM_CONDITIONAL([HAVE_DAUTH],[test x"$have_dauth" = x"yes"])
-
-if test x"$have_websocket" = x"yes"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_WEBSOCKET"
-    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_WEBSOCKET"
-    LHT_LIBDEPS="$LHT_LIBDEPS -lmicrohttpd_ws"
-fi
-
-AM_CONDITIONAL([HAVE_WEBSOCKET],[test x"$have_websocket" = x"yes"])
-
 DX_HTML_FEATURE(ON)
 DX_CHM_FEATURE(OFF)
 DX_CHI_FEATURE(OFF)
@@ -473,9 +372,6 @@ AC_CONFIG_FILES([test/libhttpserver.supp:test/libhttpserver.supp])
 # find them in an out-of-tree build — mirroring libhttpserver.supp above.
 AC_CONFIG_FILES([test/valgrind-helgrind.supp:test/valgrind-helgrind.supp])
 AC_CONFIG_FILES([test/valgrind-drd.supp:test/valgrind-drd.supp])
-AC_CONFIG_FILES([examples/cert.pem:examples/cert.pem])
-AC_CONFIG_FILES([examples/key.pem:examples/key.pem])
-AC_CONFIG_FILES([examples/test_content:examples/test_content])
 
 AC_OUTPUT(
       libhttpserver.pc
@@ -492,11 +388,7 @@ AC_MSG_NOTICE([Configuration Summary:
   Target directory:  ${prefix}
   License         :  LGPL only
   Debug	          :  ${debugit}
-  Legacy TLS      :  ${have_gnutls}
   Native provider :  ${enable_v3_tls}
-  Basic Auth      :  ${have_bauth}
-  Digest Auth     :  ${have_dauth}
-  WebSocket       :  ${have_websocket}
   TCP_FASTOPEN    :  ${is_fastopen_supported}
   Static          :  ${static}
   Windows build   :  ${is_windows}

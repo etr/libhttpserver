@@ -27,7 +27,7 @@
 // caller's buffer and returns a typed outcome. The framer consumes the
 // http1_response_mode decision (computed exactly once by its caller at
 // start_head time) and never recomputes it. Strictness deltas vs the
-// v2 (libmicrohttpd-backed) emission are pre-approved for v3 and
+// v2 emission are pre-approved for v3 and
 // recorded as migration notes at their sites.
 
 #if !defined(HTTPSERVER_COMPILATION)

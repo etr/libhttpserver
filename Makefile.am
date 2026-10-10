@@ -25,22 +25,20 @@ AUTOMAKE_OPTIONS = foreign 1.4
 ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = src doc
-DIST_SUBDIRS = src doc
+DIST_SUBDIRS = src doc test examples
 
 if !COND_CROSS_COMPILE
 SUBDIRS += test
-DIST_SUBDIRS += test
 
 if BUILD_EXAMPLES
 SUBDIRS += examples
-DIST_SUBDIRS += examples
 endif
 
 endif
 
 EXTRA_DIST = docs/external-loop-contract.md libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
-	scripts/check-doxygen.sh scripts/check-hooks-doc-spotcheck.sh \
+	scripts/check-doxygen.sh \
 	scripts/check-soversion.sh \
 	scripts/check-msan-lane.sh scripts/check-valgrind-lane.sh \
 	scripts/check-codeql-workflow.sh scripts/check-workflow-pinning.sh \
@@ -53,10 +51,6 @@ EXTRA_DIST = docs/external-loop-contract.md libhttpserver.pc.in $(DX_CONFIG) scr
 	scripts/check-file-size.sh \
 	scripts/check-warning-suppressions.sh \
 	scripts/test_check_warning_suppressions.sh \
-	scripts/check-server-ready-helper.sh \
-	scripts/test_check_server_ready_helper.sh \
-	scripts/check-no-tautological-asserts.sh \
-	scripts/check-deprecated-cookie-overload.sh \
 	scripts/test_check_littletest_skip_exit_code.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_connection_context.cpp \
@@ -65,119 +59,21 @@ EXTRA_DIST = docs/external-loop-contract.md libhttpserver.pc.in $(DX_CONFIG) scr
 	test/headers/consumer_umbrella_no_backend.cpp \
 	LICENSE RELEASE_NOTES.md CONTRIBUTING.md CODE_OF_CONDUCT.md
 
-# ---------------------------------------------------------------------------
-# Header-hygiene checks (TASK-002)
-#
-# check-headers verifies that the public/private header gates are wired up
-# correctly:
-#   A.1 a consumer including a public header WITHOUT the umbrella must hit the
-#       inclusion-gate #error.
-#   A.2 a consumer including a detail header WITHOUT HTTPSERVER_COMPILATION
-#       must hit the gate.
-#   A.3 a consumer including only the umbrella, WITHOUT HTTPSERVER_COMPILATION,
-#       must compile cleanly.
-#
-# The CXX invocations below omit CXXFLAGS, AM_CPPFLAGS, and per-target CPPFLAGS
-# so that -DHTTPSERVER_COMPILATION (set per-directory in src/Makefile.am and
-# test/Makefile.am AM_CPPFLAGS, not in configure.ac global CXXFLAGS) does NOT
-# leak into the consumer-style compile. We still pass -std=c++20 explicitly
-# because libhttpserver requires C++20.
-# ---------------------------------------------------------------------------
-
-# Compose CXX with: explicit -std, the source/build include search paths used by
-# the library, and $(CPPFLAGS) (e.g., -I/opt/homebrew/include from configure).
-# Deliberately omit $(CXXFLAGS), $(AM_CPPFLAGS), and any per-target CPPFLAGS so
-# that -DHTTPSERVER_COMPILATION (set in src/ and test/ AM_CPPFLAGS) cannot
-# leak into the consumer-style compile. A true consumer never has that macro.
-CHECK_HEADERS_CXX = $(CXX) -std=c++20 -I$(top_builddir) -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver $(CPPFLAGS)
-# Public-header gate (consumer_direct, consumer_post_umbrella): triggered when
-# a public httpserver/* header is included without the umbrella having defined
-# _HTTPSERVER_HPP_INSIDE_.
-CHECK_HEADERS_PUBLIC_GATE_MSG = Only <httpserver.hpp> or <httpserverpp> can be included directly.
-# Detail-header gate (consumer_detail, consumer_detail_connection_context): post-TASK-014
-# the detail-header gate is HTTPSERVER_COMPILATION-only and emits a message of
-# the form "httpserver/detail/<file>.hpp is internal; only include it when
-# compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
-CHECK_HEADERS_DETAIL_GATE_MSG = is internal; only include it when compiling libhttpserver
-
+# Native public headers support direct inclusion; private headers stay gated.
+CHECK_HEADERS_CXX = $(CXX) -std=c++20 -I$(top_srcdir)/src
 check-headers:
-	@echo "=== check-headers A.1: direct public-header include must fail ==="
-	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_direct.cpp -o /dev/null 2>check-headers-A1.log; then \
-	    echo "FAIL: consumer_direct.cpp compiled but should have errored"; \
-	    cat check-headers-A1.log; \
-	    rm -f check-headers-A1.log; \
-	    exit 1; \
-	fi
-	@if ! grep -q "$(CHECK_HEADERS_PUBLIC_GATE_MSG)" check-headers-A1.log; then \
-	    echo "FAIL: consumer_direct.cpp failed but not for the gate reason"; \
-	    cat check-headers-A1.log; \
-	    rm -f check-headers-A1.log; \
-	    exit 1; \
-	fi
-	@rm -f check-headers-A1.log
-	@echo "  PASS: A.1 gate fired as expected"
-	@echo "=== check-headers A.2: direct detail-header include must fail ==="
-	@# Post-TASK-014: the detail-header gate is HTTPSERVER_COMPILATION-only.
-	@# consumer_detail.cpp defines _HTTPSERVER_HPP_INSIDE_ explicitly so this
-	@# check validates the stricter scenario (the macro alone must not satisfy
-	@# the gate). A.2 is distinct from A.1 because of the include-path
-	@# (detail/ vs public) and the different gate message.
-	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_detail.cpp -o /dev/null 2>check-headers-A2.log; then \
-	    echo "FAIL: consumer_detail.cpp compiled but should have errored"; \
-	    cat check-headers-A2.log; \
-	    rm -f check-headers-A2.log; \
-	    exit 1; \
-	fi
-	@if ! grep -q "$(CHECK_HEADERS_DETAIL_GATE_MSG)" check-headers-A2.log; then \
-	    echo "FAIL: consumer_detail.cpp failed but not for the gate reason"; \
-	    cat check-headers-A2.log; \
-	    rm -f check-headers-A2.log; \
-	    exit 1; \
-	fi
+	@$(CHECK_HEADERS_CXX) -fsyntax-only $(top_srcdir)/test/headers/consumer_direct.cpp
+	@$(CHECK_HEADERS_CXX) -fsyntax-only $(top_srcdir)/test/headers/consumer_umbrella.cpp
+	@$(CHECK_HEADERS_CXX) -fsyntax-only $(top_srcdir)/test/headers/consumer_post_umbrella.cpp
+	@$(CHECK_HEADERS_CXX) -fsyntax-only $(top_srcdir)/test/headers/consumer_v3_readiness.cpp
+	@for unit in consumer_detail consumer_detail_connection_context; do \
+	    if $(CHECK_HEADERS_CXX) -fsyntax-only $(top_srcdir)/test/headers/$$unit.cpp 2>check-headers-A2.log; then \
+	        echo "FAIL: private header compiled for consumer: $$unit"; exit 1; \
+	    fi; \
+	    grep -q 'is internal; only reachable when compiling libhttpserver.' check-headers-A2.log || { cat check-headers-A2.log; exit 1; }; \
+	done
 	@rm -f check-headers-A2.log
-	@echo "  PASS: A.2 gate fired as expected"
-	@echo "=== check-headers A.2b: direct detail-header (connection_context) include must fail ==="
-	@# Complements A.2 (http_endpoint.hpp); both detail headers must carry the gate.
-	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_detail_connection_context.cpp -o /dev/null 2>check-headers-A2b.log; then \
-	    echo "FAIL: consumer_detail_connection_context.cpp compiled but should have errored"; \
-	    cat check-headers-A2b.log; \
-	    rm -f check-headers-A2b.log; \
-	    exit 1; \
-	fi
-	@if ! grep -q "$(CHECK_HEADERS_DETAIL_GATE_MSG)" check-headers-A2b.log; then \
-	    echo "FAIL: consumer_detail_connection_context.cpp failed but not for the gate reason"; \
-	    cat check-headers-A2b.log; \
-	    rm -f check-headers-A2b.log; \
-	    exit 1; \
-	fi
-	@rm -f check-headers-A2b.log
-	@echo "  PASS: A.2b gate fired as expected (connection_context.hpp)"
-	@echo "=== check-headers A.3: umbrella include must succeed ==="
-	@if ! $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_umbrella.cpp -o consumer_umbrella.check.o 2>check-headers-A3.log; then \
-	    echo "FAIL: consumer_umbrella.cpp did not compile"; \
-	    cat check-headers-A3.log; \
-	    rm -f check-headers-A3.log consumer_umbrella.check.o; \
-	    exit 1; \
-	fi
-	@rm -f check-headers-A3.log consumer_umbrella.check.o
-	@echo "  PASS: A.3 umbrella compiled cleanly"
-	@echo "=== check-headers A.4: post-umbrella direct include must fail ==="
-	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_post_umbrella.cpp -o /dev/null 2>check-headers-A4.log; then \
-	    echo "FAIL: consumer_post_umbrella.cpp compiled but should have errored"; \
-	    cat check-headers-A4.log; \
-	    rm -f check-headers-A4.log; \
-	    exit 1; \
-	fi
-	@if ! grep -q "$(CHECK_HEADERS_PUBLIC_GATE_MSG)" check-headers-A4.log; then \
-	    echo "FAIL: consumer_post_umbrella.cpp failed but not for the gate reason"; \
-	    cat check-headers-A4.log; \
-	    rm -f check-headers-A4.log; \
-	    exit 1; \
-	fi
-	@rm -f check-headers-A4.log
-	@echo "  PASS: A.4 umbrella does not leak _HTTPSERVER_HPP_INSIDE_"
-	@$(CXX) -std=c++20 -I$(top_srcdir)/src -c $(top_srcdir)/test/headers/consumer_v3_readiness.cpp -o /dev/null
-	@echo "  PASS: standalone readiness consumer uses only public source includes"
+	@echo "PASS: native direct and umbrella includes; private headers rejected"
 
 # check-install-layout asserts that `make install DESTDIR=$(STAGE)` produces
 # a public include tree with NO `detail/` directory and NO `*_impl.hpp` files,
@@ -365,7 +261,7 @@ check-hygiene:
 
 # check-local runs the following static (no-install) checks first:
 #   check-headers, check-examples, check-readme, check-release-notes,
-#   check-doxygen, check-hooks-doc-spotcheck, lint-warning-suppressions
+#   check-doxygen, lint-warning-suppressions
 # Then runs check-install-layout and check-hygiene against a single shared
 # staged install to avoid paying two full `make install` costs on every
 # `make check`. Both install-backed sub-checks can still be invoked standalone
@@ -375,17 +271,17 @@ check-hygiene:
 # staged the install; sub-check skips the install step to avoid double cost.
 # This knob is set only by check-local; do not set it when invoking sub-checks
 # standalone.
-# The README / release-notes / hooks-doc / doxygen gates validate source-tree
+# The README / release-notes / doxygen gates validate source-tree
 # documentation: README.md links into specs/ and docs/architecture/, which are
 # dev-facing and intentionally NOT shipped in the distributed tarball. Gate them
 # on the presence of specs/ so that `make check` from an unpacked release tarball
 # still runs the full test suite plus the header / example / lint gates, but
 # skips the source-only doc gates whose inputs it cannot satisfy.
-check-local: check-headers check-examples lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage
+check-local: check-headers check-examples lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage
 	@if test -d "$(top_srcdir)/specs"; then \
-		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck; \
+		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen ; \
 	else \
-		echo "check-local: skipping README/release-notes/hooks-doc/doxygen gates (source-only; specs/ absent in distributed tarball)"; \
+		echo "check-local: skipping README/release-notes/doxygen gates (source-only; specs/ absent in distributed tarball)"; \
 	fi
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
@@ -406,6 +302,8 @@ check-local: check-headers check-examples lint-warning-suppressions lint-server-
 # scripts/audit-v3-native-linkage.sh over it: a banned include in the
 # v3 surface or a third-party runtime library in the binary fails check.
 check-v3-native-linkage:
+	@$(MAKE) -n -C src -W libhttpserver_v3core.la libhttpserver.la AM_LDFLAGS= >check-v3-cxx-link.log
+	@grep -E -- '--tag=CXX.*--mode=link.*-o libhttpserver.la ' check-v3-cxx-link.log >/dev/null || { cat check-v3-cxx-link.log; echo "FAIL: aggregate must use the C++ linker"; exit 1; }
 	@echo "=== check-v3-native-linkage: native provider surface audit ==="
 	@$(MAKE) $(AM_MAKEFLAGS) -C "$(top_builddir)/test" v3_native_linkage >/dev/null
 	@BUILD_DIR="$(abs_top_builddir)" SRC_DIR="$(top_srcdir)" V3_TLS_MODE="$(enable_v3_tls)" $(top_srcdir)/scripts/audit-v3-native-linkage.sh
@@ -437,19 +335,9 @@ check-doxygen:
 	@echo "=== check-doxygen: enforce TASK-043 zero-warning invariant ==="
 	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-doxygen.sh
 
-# TASK-052: hook-bus documentation spotcheck (per-header @file/@brief blocks,
-# eleven-phase enumeration on webserver::add_hook, five-permitted /
-# six-rejected enumeration on http_resource::add_hook, alias callouts on the
-# five v1 setters, hook-concurrency sentence in the class-level threading
-# block). Static grep-based gate; complements check-doxygen's full Doxygen
-# warning sweep.
-check-hooks-doc-spotcheck:
-	@echo "=== check-hooks-doc-spotcheck: enforce TASK-052 invariants on hook public surface ==="
-	@$(top_srcdir)/scripts/check-hooks-doc-spotcheck.sh
-
 # TASK-044: SOVERSION acceptance gate. Stages a clean DESTDIR install and
-# asserts that the v2.0 on-disk SONAME layout is correct (libhttpserver.so.2
-# on Linux / libhttpserver.2.dylib on Darwin, pkg-config --modversion 2.0.0,
+# asserts that the v3.0 on-disk SONAME layout is correct (libhttpserver.so.3
+# on Linux / libhttpserver.3.dylib on Darwin, pkg-config --modversion 3.0.0,
 # correct symlink chain). NOT wired into `make check` — it does its own
 # `make install` and is intentionally invoked standalone to keep per-PR CI
 # fast. Run manually before tagging a release.
@@ -491,49 +379,6 @@ lint-file-size:
 lint-warning-suppressions:
 	@echo "=== lint-warning-suppressions: forbid file-scoped GCC warning suppressions ==="
 	@$(top_srcdir)/scripts/check-warning-suppressions.sh
-
-# TASK-075: server-ready helper gate. Fails if any
-# test/integ/hooks_*.cpp file regresses to a bare
-# `std::this_thread::sleep_for(...ms)` used as a server-ready wait
-# instead of the shared `httpserver_test::wait_for_server_ready`
-# helper from test/integ/server_ready.hpp. Wired into `make check`
-# via check-local; pure bash/awk/grep, runs in every CI lane.
-lint-server-ready-helper:
-	@echo "=== lint-server-ready-helper: forbid bare server-ready sleeps in hooks_* integ tests ==="
-	@$(top_srcdir)/scripts/check-server-ready-helper.sh
-
-# TASK-075: unit test for the server-ready helper gate itself. Runs the
-# gate against synthetic pass/fail fixtures so a regression in the
-# gate's detection logic is caught by `make check`, not just trusted.
-# Pure bash/awk/grep, runs in every CI lane.
-lint-server-ready-helper-selftest:
-	@echo "=== lint-server-ready-helper-selftest: self-test the server-ready gate ==="
-	@$(top_srcdir)/scripts/test_check_server_ready_helper.sh
-
-# TASK-076: forbid `LT_CHECK_EQ(1, 1)` in test/integ/ws_start_stop.cpp.
-# Pre-TASK-076 ~33 catches in the TLS test suite used the tautological
-# assertion as a fake "skip" — a build that silently lost TLS support
-# would still report PASS. The replacement uses LT_SKIP_IF (added to
-# test/littletest.hpp by TASK-076) which reports SKIP. This gate
-# prevents regressing back to the broken pattern in ws_start_stop.cpp.
-# Wired into `make check` via check-local; pure bash/grep, runs in
-# every CI lane.
-lint-no-tautological-asserts:
-	@echo "=== lint-no-tautological-asserts: forbid tautological pseudo-skip in ws_start_stop.cpp ==="
-	@$(top_srcdir)/scripts/check-no-tautological-asserts.sh
-
-# TASK-064 code review: negative-compile gate pinning the [[deprecated]]
-# attribute on the legacy string-blob overload
-# http_response::with_cookie(std::string, std::string). Compiles a TU
-# calling the deprecated overload with -Werror=deprecated-declarations
-# and asserts the compile FAILS (plus a positive control proving the
-# structured overload builds cleanly). Complements the positive-side pin
-# in test/unit/cookie_deprecation_sentinel_test.cpp. Wired into `make
-# check` via check-local; needs only a C++ compiler on $PATH (no build
-# tree or libmicrohttpd), so it runs in every lane.
-lint-deprecated-cookie-overload:
-	@echo "=== lint-deprecated-cookie-overload: pin [[deprecated]] on legacy with_cookie(string, string) ==="
-	@CXX="$(CXX)" $(top_srcdir)/scripts/check-deprecated-cookie-overload.sh
 
 # TASK-076: pin the LT_SKIP exit-code semantics in test/littletest.hpp.
 # Asserts (a) an all-skip binary exits 77 (Automake SKIP), (b) a mixed
@@ -595,23 +440,14 @@ lint-workflow-pinning:
 	@$(top_srcdir)/scripts/test_check_workflow_pinning.sh
 	@$(top_srcdir)/scripts/check-workflow-pinning.sh
 
-.PHONY: check-v3-tls-build check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-fence-balance lint-msan-lane lint-valgrind-lane lint-codeql-workflow lint-workflow-pinning
-
-# TASK-039: top-level convenience rule that descends into test/ to
-# build and run the bench binaries (see test/Makefile.am and
-# test/PERFORMANCE.md). NOT wired into `make check`; release-mode
-# only.
-bench:
-	$(MAKE) -C test bench
-
-.PHONY: bench
+.PHONY: check-v3-tls-build check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-soversion lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance lint-msan-lane lint-valgrind-lane lint-codeql-workflow lint-workflow-pinning
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES) *.gcda *.gcno *.gcov \
 	check-headers-A1.log check-headers-A2.log check-headers-A2b.log \
 	check-headers-A3.log check-headers-A4.log \
 	consumer_umbrella.check.o \
 	check-hygiene.i check-hygiene.err check-hygiene-install.log \
-	check-shared-install.log
+	check-shared-install.log check-v3-cxx-link.log
 DISTCLEANFILES = DIST_REVISION
 
 clean-local:
@@ -631,7 +467,9 @@ libtool: $(LIBTOOL_DEPS)
 
 dist-hook:
 	date >DIST_REVISION
-	git branch -vv >>DIST_REVISION
+	@if git -C "$(top_srcdir)" rev-parse --git-dir >/dev/null 2>&1; then \
+	    git -C "$(top_srcdir)" branch -vv >>DIST_REVISION; \
+	else echo "source archive (Git metadata unavailable)" >>DIST_REVISION; fi
 	cp DIST_REVISION $(distdir)/
 
 EXTRA_DIST += scripts/run-v3-http1-websocket-gates.sh scripts/run-v3-protocol-fuzz.sh
@@ -656,6 +494,7 @@ check-v3-installed-package-fixtures:
 	@python3 $(top_srcdir)/scripts/test-v3-installed-package.py
 	@python3 $(top_srcdir)/scripts/test-v3-installed-consumer.py
 	@python3 $(top_srcdir)/scripts/test-v3-package-workflow.py
+	@python3 $(top_srcdir)/scripts/test-v3-cutover.py
 
 # Supply INSTALL_AUDIT_ARGS="--output /fresh/path --provider-prefix /provider --prerequisite-prefix /prerequisites".
 check-v3-installed-consumer:
@@ -716,4 +555,5 @@ EXTRA_DIST += scripts/test-v3-installed-consumer.py scripts/test-v3-package-work
  .github/workflows/v3-package-validation.yml
 
 EXTRA_DIST += docs/v2-to-v3-migration.md docs/v3-api.md docs/task-183-migration-evidence.md examples/README.md
-EXTRA_DIST += scripts/doxygen-class-fragments.py scripts/test-doxygen-class-fragments.py
+
+EXTRA_DIST += scripts/audit-v3-native-linkage.sh scripts/test-v3-cutover.py scripts/check-v3-runtime-coexistence.py docs/task-184-cutover-evidence.md

@@ -32,7 +32,7 @@ class AuditTest(unittest.TestCase):
             return [(dep, str(self.root / dep)) for dep in links[Path(path).name]]
         return audit.dependency_graph([str(self.root / next(iter(links)))], inspect)
 
-    def violations(self, graph, mode='pre-cutover', tls='no', surface='aggregate', declarations=None):
+    def violations(self, graph, mode='strict', tls='no', surface='aggregate', declarations=None):
         return audit.graph_violations(graph, mode, tls, surface, self.policy if declarations is None else declarations, self.root)
 
     def installed_audit(self, mode='strict', source_legacy=False, installed_legacy=False,
@@ -44,6 +44,7 @@ class AuditTest(unittest.TestCase):
             directory.mkdir(parents=True, exist_ok=True)
         (source / 'scripts/v3-installed-dependency-policy.json').write_text(json.dumps(self.policy))
         (source / 'configure.ac').write_text('AC_INIT([fixture], [3])\n')
+        (source / 'configure').write_text('generated fixture configure\n')
         (source / 'src/Makefile.am').write_text('LIBADD = -lmicrohttpd\n' if source_legacy else 'LIBADD =\n')
         metadata = 'Requires.private: libmicrohttpd\n' if installed_legacy else 'Requires.private:\n'
         (source / 'libhttpserver.pc.in').write_text(metadata)
@@ -51,6 +52,10 @@ class AuditTest(unittest.TestCase):
         (build / 'libhttpserver.pc').write_text(metadata)
         (build / 'config.log').write_text('fixture configuration\n')
         (build / 'src/Makefile').write_text('fixture build\n')
+        for name in ('config.h', 'Makefile', 'test/Makefile', 'examples/Makefile'):
+            (build / name).parent.mkdir(parents=True, exist_ok=True)
+            (build / name).write_text('fixture generated build\n')
+        (prefix / 'lib/libhttpserver.la').write_text('dependency_libs=\"\"\n')
         (prefix / 'include/httpserver.hpp').write_text('struct fixture_server {};\n')
         (prefix / 'include/httpserverpp').write_text('#include <httpserver.hpp>\n')
         shared = prefix / 'lib/libhttpserver.dylib'
@@ -71,7 +76,7 @@ class AuditTest(unittest.TestCase):
                 output = command[-1] + ':\n\t' + dependency + ' (compatibility version 1.0.0, current version 1.0.0)\n'
             elif command[:2] == ['otool', '-l']:
                 output = ''
-            elif command[:2] == ['nm', '-u']:
+            elif command[0] == 'nm':
                 output = 'unused.o:\n U _MHD_start_daemon\n' if legacy_symbol and command[-1] == str(archive) else 'used.o:\n U _fixture_runtime\n'
             else:
                 return real_run(command, **kwargs)
@@ -81,6 +86,20 @@ class AuditTest(unittest.TestCase):
                 patch.object(audit.platform, 'system', return_value='Darwin'), \
                 patch.object(subprocess, 'run', side_effect=inspect):
             return audit.audit(prefix, build, consumer, 'no', mode, self.root / 'provider')
+
+    def test_strict_rejects_configure_flags_probes_and_generated_definitions(self):
+        for text in ('AC_CHECK_HEADER([microhttpd.h])', 'AC_CHECK_LIB([microhttpd], [MHD_start_daemon])',
+                     'CPPFLAGS=-I/legacy/microhttpd', 'LIBS=-lmicrohttpd_ws',
+                     '#define HAVE_BAUTH 1', '#define HAVE_GNUTLS 1', 'LIBMICROHTTPD_CFLAGS=-I/old'):
+            with self.subTest(text=text):
+                self.assertTrue(audit.provenance_violations({'fixture': text}))
+        self.assertEqual([], audit.provenance_violations({'fixture': 'LIBS=-lpthread -lws2_32'}))
+
+    def test_strict_installed_audit_rejects_dormant_source_and_metadata_paths(self):
+        for options in ({'source_legacy': True}, {'installed_legacy': True}):
+            with self.subTest(options=options):
+                receipt = self.installed_audit(**options)
+                self.assertTrue(any('legacy provenance' in v for v in receipt['violations']))
 
     def test_strict_installed_audit_accepts_legacy_free_provenance(self):
         try:
@@ -106,24 +125,12 @@ class AuditTest(unittest.TestCase):
             self.fail('strict audit must assess archive members: ' + str(error))
         self.assertIn('legacy archive symbol: MHD_start_daemon', receipt['violations'])
 
-    def test_pre_cutover_installed_audit_requires_source_and_package_legacy_provenance(self):
-        for source_legacy, installed_legacy in ((False, True), (True, False)):
-            with self.subTest(source_legacy=source_legacy, installed_legacy=installed_legacy):
-                with self.assertRaisesRegex(audit.AuditError, 'transitional declaration provenance missing'):
-                    self.installed_audit('pre-cutover', source_legacy=source_legacy, installed_legacy=installed_legacy)
-
-    def test_pre_cutover_installed_audit_accepts_declared_legacy_dependency(self):
-        receipt = self.installed_audit('pre-cutover', source_legacy=True, installed_legacy=True, legacy_dependency=True)
-        self.assertEqual([], receipt['violations'])
-
-    def test_declared_legacy_closure_and_strict_rejection(self):
+    def test_no_policy_mode_accepts_legacy_closure(self):
         graph = self.graph({'consumer': ['libhttpserver.dylib'], 'libhttpserver.dylib': ['libmicrohttpd.dylib'],
-                            'libmicrohttpd.dylib': ['libgnutls.dylib'], 'libgnutls.dylib': ['libnettle.dylib'],
-                            'libnettle.dylib': []})
-        self.assertEqual([], self.violations(graph))
-        self.assertTrue(self.violations(graph, mode='strict'))
-        self.assertTrue(self.violations(graph, surface='native'))
-        self.assertTrue(self.violations(graph, declarations={'legacy_edges': {}}))
+                            'libmicrohttpd.dylib': ['libgnutls.dylib'], 'libgnutls.dylib': []})
+        for mode in ('pre-cutover', 'strict'):
+            self.assertTrue(self.violations(graph, mode=mode))
+            self.assertTrue(self.violations(graph, mode=mode, surface='native'))
 
     def test_undeclared_direct_and_transitive_dependencies(self):
         for dependency in ('libcurl.dylib', 'libsurprise.dylib', 'libnettle.dylib'):
@@ -180,11 +187,11 @@ class AuditTest(unittest.TestCase):
         output = str(target) + ':\n\t' + str(alias) + ' (compatibility version 1.0.0, current version 1.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1.0.0)\n'
         self.assertEqual(['/usr/lib/libSystem.B.dylib'], audit.parse_otool(output, target))
 
-    def test_declared_legacy_platform_support_edges(self):
+    def test_legacy_platform_support_closure_is_rejected(self):
         graph = self.graph({'consumer': ['libgnutls.dylib'], 'libgnutls.dylib': ['libintl.dylib', 'libunistring.dylib', 'libidn2.dylib'],
                             'libintl.dylib': ['CoreServices'], 'libunistring.dylib': ['libiconv.dylib', 'CoreFoundation', 'CoreServices'],
                             'libidn2.dylib': ['CoreFoundation'], 'libiconv.dylib': [], 'CoreFoundation': [], 'CoreServices': []})
-        self.assertEqual([], self.violations(graph))
+        self.assertTrue(self.violations(graph))
         self.assertTrue(self.violations(graph, mode='strict'))
 
     def test_archive_symbols_even_unused_members(self):
@@ -232,20 +239,20 @@ class AuditTest(unittest.TestCase):
         self.assertIn('stdout_sha256', preprocess[-1])
         self.assertNotIn('stdout', preprocess[-1])
 
-    def test_installed_test_request_builder_is_available_through_umbrella(self):
+    def test_native_public_api_is_available_through_umbrella(self):
         source = Path(__file__).resolve().parent.parent
         audit.run(['c++', '-std=c++20', '-fsyntax-only', '-x', 'c++', '-I' + str(source / 'src'), '-'],
-                  input='#include <httpserver.hpp>\nhttpserver::create_test_request builder;\n')
+                  input='#include <httpserver.hpp>\nhttpserver::server::server_options options;\n')
 
-    def test_named_static_suite_uses_declared_metadata_closure(self):
+    def test_named_static_suite_rejects_legacy_metadata_closure(self):
         graph = self.graph({'native_http1_e2e': ['libgnutls.dylib'], 'libgnutls.dylib': []})
         graph['consumer_roles'] = {graph['roots'][0]: 'static_consumer'}
-        self.assertEqual([], self.violations(graph))
+        self.assertTrue(self.violations(graph))
         self.assertTrue(self.violations(graph, mode='strict'))
 
-    def test_static_consumer_uses_same_declared_legacy_policy(self):
+    def test_static_consumer_rejects_legacy_libraries(self):
         graph = self.graph({'static_consumer': ['libmicrohttpd.dylib'], 'libmicrohttpd.dylib': []})
-        self.assertEqual([], self.violations(graph))
+        self.assertTrue(self.violations(graph))
         self.assertTrue(self.violations(graph, mode='strict'))
 
     def test_installed_header_symlink_cannot_import_source(self):
@@ -272,20 +279,20 @@ class AuditTest(unittest.TestCase):
             with self.assertRaises(audit.AuditError):
                 audit.platform_inspector('/usr/lib/example.so')
 
-    def test_static_linker_materializes_declared_provider_closure(self):
+    def test_static_linker_rejects_legacy_provider_closure(self):
         graph = self.graph({'static_consumer': ['libgnutls.dylib', 'libgmp.dylib', 'libintl.dylib', 'libz.dylib', 'CoreServices'],
                             'libgnutls.dylib': [], 'libgmp.dylib': [], 'libintl.dylib': [], 'libz.dylib': [], 'CoreServices': []})
-        self.assertEqual([], self.violations(graph))
+        self.assertTrue(self.violations(graph))
         self.assertTrue(self.violations(graph, mode='strict'))
         graph = self.graph({'static_consumer': ['libcurl.dylib'], 'libcurl.dylib': []})
         self.assertTrue(self.violations(graph))
 
-    def test_declared_legacy_names_require_selected_prerequisite_location(self):
+    def test_selected_prerequisite_location_cannot_allow_legacy_names(self):
         graph = self.graph({'consumer': ['libmicrohttpd.so'], 'libmicrohttpd.so': []})
         with patch.dict('os.environ', {'V3_PACKAGE_PREREQUISITES': str(self.root / 'selected')}):
             self.assertTrue(self.violations(graph))
         with patch.dict('os.environ', {'V3_PACKAGE_PREREQUISITES': str(self.root)}):
-            self.assertEqual([], self.violations(graph))
+            self.assertTrue(self.violations(graph))
 
     def test_windows_header_trace_separators_cannot_hide_private_backend(self):
         for include in (r'C:\prefix\include\openssl\ssl.h',

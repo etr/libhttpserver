@@ -25,33 +25,42 @@
 #  error("libhttpserver requires C++20 or later.")
 #endif
 
-#define _HTTPSERVER_HPP_INSIDE_
-
-#include "httpserver/body_kind.hpp"
-#include "httpserver/constants.hpp"
-#include "httpserver/cookie.hpp"
-#include "httpserver/feature_unavailable.hpp"
-#include "httpserver/hook_action.hpp"
-#include "httpserver/hook_context.hpp"
-#include "httpserver/hook_handle.hpp"
-#include "httpserver/hook_phase.hpp"
-#include "httpserver/http_arg_value.hpp"
-#include "httpserver/http_method.hpp"
-#include "httpserver/http_request.hpp"
-#include "httpserver/http_resource.hpp"
-#include "httpserver/http_response.hpp"
-#include "httpserver/http_utils.hpp"
-#include "httpserver/create_test_request.hpp"
-#include "httpserver/ip_representation.hpp"
-#include "httpserver/iovec_entry.hpp"
-#include "httpserver/file_info.hpp"
-#include "httpserver/webserver.hpp"
-// Included unconditionally. websocket_handler.hpp is safe to
-// include in both HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds; the
-// member-function bodies in src/websocket_handler.cpp handle the
-// disabled-build sentinel behaviour.
-#include "httpserver/websocket_handler.hpp"
-
-#undef _HTTPSERVER_HPP_INSIDE_
+#include "httpserver/http.hpp"
+#include "httpserver/http/outcome.hpp"
+#include "httpserver/http/protocol.hpp"
+#include "httpserver/http/method.hpp"
+#include "httpserver/http/fields.hpp"
+#include "httpserver/http/request_head.hpp"
+#include "httpserver/concurrency/executor.hpp"
+#include "httpserver/concurrency/task.hpp"
+#include "httpserver/concurrency/cancellation.hpp"
+#include "httpserver/concurrency/resume_signal.hpp"
+#include "httpserver/concurrency/concurrency.hpp"
+#include "httpserver/server/budgets.hpp"
+#include "httpserver/server/options.hpp"
+#include "httpserver/server/tls_peer_metadata.hpp"
+#include "httpserver/server/routes.hpp"
+#include "httpserver/server/configuration.hpp"
+#include "httpserver/server/server.hpp"
+#include "httpserver/server/readiness.hpp"
+#include "httpserver/http/status.hpp"
+#include "httpserver/exchange.hpp"
+#include "httpserver/body_reader.hpp"
+#include "httpserver/response_writer.hpp"
+#include "httpserver/response_sources.hpp"
+#include "httpserver/response_definition.hpp"
+#include "httpserver/server/route_sync.hpp"
+#include "httpserver/auth/basic_auth.hpp"
+#include "httpserver/auth/digest_auth.hpp"
+#include "httpserver/forms/urlencoded.hpp"
+#include "httpserver/forms/multipart.hpp"
+#include "httpserver/server/hooks.hpp"
+#include "httpserver/net/address.hpp"
+#include "httpserver/server/peer_policy.hpp"
+#include "httpserver/websocket/message.hpp"
+#include "httpserver/websocket/options.hpp"
+#include "httpserver/websocket/session.hpp"
+#include "httpserver/features.hpp"
+#include "httpserver/server/diagnostics.hpp"
 
 #endif  // SRC_HTTPSERVER_HPP_

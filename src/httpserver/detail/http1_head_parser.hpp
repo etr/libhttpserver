@@ -33,7 +33,7 @@
 // octets past the head terminator as residue so the engine can frame
 // them.
 //
-// Strictness deltas vs the v2 (libmicrohttpd-backed) parser, all
+// Strictness deltas vs the v2 parser, all
 // pre-approved for v3 and pinned by test/unit/http1_parser_test.cpp,
 // are recorded as migration notes at each rejection site:
 //   1. lone-LF and bare-CR termination: tolerated by v2, rejected here.

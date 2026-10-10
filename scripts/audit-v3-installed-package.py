@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed audit of a real installed transitional v3 package.
+"""Fail-closed audit of a real installed native v3 package.
 
 Fixture tests exercise policy only. Real receipts retain inspector commands,
 resolved graph edges, metadata, public declarations and all archive members.
@@ -228,7 +228,6 @@ def graph_violations(graph, mode, tls, surface, policy, provider_prefix):
             violations.append('missing dependency node: ' + str(edge))
             continue
         dep = family(child)
-        owner = graph.get('consumer_roles', {}).get(parent, family(parent))
         if runtime(child):
             continue
         if dep == 'httpserver' and surface == 'aggregate' and child in identities:
@@ -236,11 +235,6 @@ def graph_violations(graph, mode, tls, surface, policy, provider_prefix):
         if dep in ('ssl', 'crypto'):
             if tls != 'yes' or not Path(child).is_relative_to(Path(provider_prefix).resolve()):
                 violations.append('unselected native provider: ' + child)
-            continue
-        if surface == 'aggregate' and mode == 'pre-cutover' and dep in policy.get('legacy_edges', {}).get(owner, []):
-            roots = list(filter(None, os.environ.get('V3_PACKAGE_PREREQUISITES', '').split(os.pathsep)))
-            if roots and not any(Path(child).is_relative_to(Path(root).resolve()) for root in roots) and child not in DYLD_LEAVES:
-                violations.append('unselected transitional dependency: ' + child)
             continue
         violations.append(f'undeclared dependency ({surface}/{mode}): {parent} -> {child}')
     return violations
@@ -252,7 +246,7 @@ def symbol_violations(output, surface, tls, mode):
         symbol = line.split()[-1] if line.split() else ''
         symbol = re.sub(r'^_*imp_+', '', symbol).lstrip('_')
         symbol = re.sub(r'@[0-9]+$', '', symbol)
-        if LEGACY_SYMBOL.match(symbol) and (surface == 'native' or mode == 'strict' or symbol.startswith(('curl_', 'wolfSSL_', 'mbedtls_', 'wslay_'))):
+        if LEGACY_SYMBOL.match(symbol):
             violations.append('legacy archive symbol: ' + symbol)
         if TLS_SYMBOL.match(symbol) and tls != 'yes':
             violations.append('TLS-off archive symbol: ' + symbol)
@@ -326,6 +320,19 @@ def audit_headers(prefix, source, build, compiler):
     return {'files': files, 'declaration_sha256': declarations, 'include_traces': traces}, violations
 
 
+LEGACY_PROVENANCE = re.compile(
+    r'microhttpd|\bMHD_\w*|LIBMICROHTTPD\w*|gnutls|HAVE_(?:BAUTH|DAUTH|WEBSOCKET)', re.I)
+
+
+def provenance_violations(records):
+    return ['legacy provenance: ' + name + ': ' + match.group()
+            for name, content in records.items()
+            for line in content.splitlines()
+            if (not line.lstrip().startswith('#') or re.match(r'\s*#\s*(?:define|include|undef)\b', line))
+            and not line.startswith('HEADER_HYGIENE_FORBIDDEN =')
+            for match in LEGACY_PROVENANCE.finditer(line)]
+
+
 def audit(prefix, build, consumer, tls, mode, provider_prefix, compiler='c++'):
     source = Path(__file__).resolve().parent.parent
     COMMANDS.clear()
@@ -333,14 +340,13 @@ def audit(prefix, build, consumer, tls, mode, provider_prefix, compiler='c++'):
     policy = load_policy()
     # Declarations are fixed in source policy; retain current build/package evidence.
     provenance = {}
-    for name in ('configure.ac', 'src/Makefile.am', 'libhttpserver.pc.in'):
+    for name in ('configure.ac', 'configure', 'src/Makefile.am', 'libhttpserver.pc.in'):
         provenance[name] = (source / name).read_text()
-    for name in ('libhttpserver.pc', 'config.log', 'src/Makefile'):
+    for name in ('libhttpserver.pc', 'config.log', 'config.h', 'Makefile', 'src/Makefile', 'test/Makefile', 'examples/Makefile'):
         provenance['build/' + name] = (build / name).read_text()
     provenance['installed/libhttpserver.pc'] = (prefix / 'lib/pkgconfig/libhttpserver.pc').read_text()
-    if mode == 'pre-cutover' and ('-lmicrohttpd' not in provenance['src/Makefile.am'] or
-                                  'libmicrohttpd' not in provenance['installed/libhttpserver.pc']):
-        raise AuditError('transitional declaration provenance missing')
+    provenance['installed/libhttpserver.la'] = (prefix / 'lib/libhttpserver.la').read_text()
+    violations += provenance_violations(provenance)
     shared, archives = package_artifacts(prefix)
     consumers = [consumer]
     static_consumer = consumer.parent / ('static_consumer.exe' if platform.system() == 'Windows' else 'static_consumer')
@@ -357,7 +363,7 @@ def audit(prefix, build, consumer, tls, mode, provider_prefix, compiler='c++'):
     violations += graph_violations(native, mode, tls, 'native', policy, provider_prefix)
     symbols = {}
     for artifact, surface in [(p, 'aggregate') for p in archives] + [(native_archive, 'native')]:
-        output = run(['nm', '-u', str(artifact)])
+        output = run(['nm', str(artifact)])
         if not output.strip():
             raise AuditError('empty archive inspection: ' + str(artifact))
         symbols[str(artifact)] = output
@@ -372,7 +378,7 @@ def main():
     for name in ('prefix', 'build', 'consumer', 'provider-prefix', 'receipt'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--tls', choices=('yes', 'no'), required=True)
-    parser.add_argument('--mode', choices=('pre-cutover', 'strict'), default='pre-cutover')
+    parser.add_argument('--mode', choices=('pre-cutover', 'strict'), default='strict')
     parser.add_argument('--compiler', default='c++')
     args = parser.parse_args()
     try:

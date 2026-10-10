@@ -2,7 +2,7 @@
 """Exercise native provider discovery with real headers and bounded bad fixtures.
 
 V3_TLS_TEST_PREFIX must identify a genuine, installed stable 3.5 provider.
-CPPFLAGS/LDFLAGS are for the transitional legacy prerequisites only.
+TLS-off requires no provider or legacy prerequisite discovery.
 """
 import os
 from pathlib import Path

@@ -2,10 +2,11 @@
 
 v3 replaces the MHD request/response model with a C++20 native engine and
 protocol-neutral exchanges. There is **no v2 source or ABI compatibility shim**.
-Include the native headers directly. Shared cookie helpers are a transitional
-exception: they still require the legacy v2 umbrella `<httpserver.hpp>` (or
-`<httpserverpp>`), as described below. The transitional aggregate still links
-legacy dependencies; TASK-184 owns the package and SOVERSION cutover.
+Include native headers directly or use `<httpserver.hpp>` / `<httpserverpp>`.
+Version 3.0.0 ships only the native engine and uses SOVERSION 3. MHD and GnuTLS
+are absent from the build and installed package. ABI-2 and ABI-3 versioned
+runtimes coexist for separate executables; shared development-package filenames
+prevent a promise of parallel development installations.
 
 Start with [native examples](../examples/README.md), the
 [native API page](v3-api.md), and [provider build instructions](native-tls-build.md).
@@ -61,24 +62,14 @@ application work still consumes a worker.
 | `get_content` | `admit_body(body_policy{cap})`, then `co_await body().collect(cap)` or incremental `read_some()` | Admission before reads; typed limits, cancellation and protocol errors |
 | `get_footers` | `body().trailers()` after end-of-body | Trailers remain separate from initial fields |
 | Multipart uploaded-file map and cleanup callbacks | `forms::read_multipart`, `part_sink`, `temp_file_part_sink`, `temp_file_options::should_keep` | Partial parts abort exactly once; disk files clean up on abort/destruction; keep callback runs once per completed file, throws mean remove; client names sanitized |
-| `get_cookie` / response `with_cookie` | Shared `cookie::parse_cookie_header` / `cookie::to_set_cookie_header` helpers via `<httpserver.hpp>` (or `<httpserverpp>`) plus ordered Cookie/Set-Cookie fields | Preserve repeated fields; no native request/response convenience aliases |
+| `get_cookie` / response `with_cookie` | Ordered Cookie/Set-Cookie fields; parse and render cookie values in application code | Preserve repeated fields; no native request/response convenience aliases |
 
 Form/query decoding is optional, bounded, and reports malformed encodings.
 A query is the substring after `?` in `raw_target`; decoding it does not modify
 the raw target. Body trailers are meaningful only after a completed body read.
 
-The shared cookie helpers live in `<httpserver/cookie.hpp>`, which currently
-rejects direct inclusion. Include `<httpserver.hpp>` (or `<httpserverpp>`) to use
-them alongside directly included native headers:
-
-```cpp
-#include <httpserver.hpp>
-
-auto cookies = httpserver::cookie::parse_cookie_header("session=abc; theme=dark");
-```
-
-This transitional helper inclusion retains the legacy umbrella's dependency
-requirements; it does not provide a native request/response compatibility shim.
+The legacy cookie class is removed. Native headers retain repeated Cookie and
+Set-Cookie field values; applications own value parsing and rendering.
 
 ## Response ownership and producers
 

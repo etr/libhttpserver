@@ -42,30 +42,29 @@ V3_TLS_TEST_PREFIX=/path/to/openssl-3.5 make check-v3-tls-build
 
 The matrix changes genuine headers for bounded rejection fixtures; those fixtures
 are never positive provider proof. The positive case uses the unmodified provider.
-`CPPFLAGS` and `LDFLAGS`, if needed for legacy prerequisites, must be exported when
-running the matrix.
+The installed aggregate contains native objects only. TLS-off has no MHD,
+GnuTLS or OpenSSL dependency, probe or pkg-config requirement. TLS-on exposes
+selected OpenSSL flags through `Libs.private` for static consumers while keeping
+backend headers out of the installed API. Platform/thread libraries also appear
+in `Libs.private`. Curl is a test tool and has no installed-package allowance.
 
-The transitional installed aggregate library and pkg-config file still include
-declared legacy MHD/GnuTLS dependencies and their provider support libraries.
-Curl belongs to the test link path and has no installed-package allowance. TASK-184 owns their removal and package/ABI
-cutover; this task establishes the native convenience archive boundary. Provider
-build proof is not TCP TLS or QUIC interoperability proof. Nonlocal BSD and
-Windows checks belong to CI and the v3 PR.
+Version 3.0.0 advances the SOVERSION to 3. Separate ABI-2 and ABI-3 executables
+can use the versioned runtime files in one library directory. Development
+headers, metadata, archives and the unversioned link keep shared names.
 
-[TASK-148](../specs/tasks/M10-tls-http2/TASK-148.md) audits this transitional
-installed package, requiring declared and explained legacy dependencies while
-keeping native-only artifacts and installed public headers backend-free. It also
-provides a strict post-cutover policy that rejects legacy linkage. Transitional
-audit success is not final v3 dependency compliance; TASK-184 and TASK-185 retain
-the package cutover and final release gates.
+Strict installed auditing is the default and required in both TLS modes. It
+checks configure/build provenance, installed metadata, effective public headers,
+recursive dependency graphs and all static-archive members, including unused
+members. Provider build proof remains distinct from encrypted listener or QUIC
+interoperability proof. Nonlocal BSD, macOS and Windows execution belongs to CI
+and the v3 PR; public TLS/H2/H3 listeners and credential installation remain gaps.
 
 Run the clean installed-consumer matrix from a bootstrapped source checkout:
 
 ```sh
 python3 scripts/check-v3-installed-consumer.py \
   --output /fresh/disposable/receipt-directory \
-  --provider-prefix /path/to/openssl-3.5 \
-  --prerequisite-prefix /path/to/legacy-prerequisites
+  --provider-prefix /path/to/openssl-3.5
 ```
 
 Repeat `--prerequisite-prefix` for separate prerequisite library prefixes and

@@ -9,9 +9,9 @@
 Remove MHD build/link paths and bump v3 SOVERSION for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Remove all MHD configure, build, source and package paths.
-- [ ] Bump SOVERSION and validate parallel installation.
-- [ ] Audit clean artifacts for MHD headers, symbols, flags and probes.
+- [x] Remove all MHD configure, build, source and package paths.
+- [x] Bump SOVERSION and validate parallel installation.
+- [x] Audit clean artifacts for MHD headers, symbols, flags and probes.
 
 **Dependencies:**
 - Blocked by: TASK-179, TASK-182, TASK-183
@@ -24,4 +24,4 @@ Remove MHD build/link paths and bump v3 SOVERSION for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-001, PRD-V3N-REQ-003, PRD-V3N-REQ-037
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** Complete

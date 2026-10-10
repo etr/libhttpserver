@@ -76,8 +76,7 @@ jobs:
           # Ubuntu / Clang toolchain) was dropped when GitHub removed that
           # runner image and never replaced, so MemorySanitizer went
           # silently absent. This lane runs clang-18 against an
-          # instrumented libc++ + instrumented
-          # libmicrohttpd (both built and cached in-CI), with gnutls and
+          # instrumented libc++ with
           # curl kept out of the picture. See the "instrumented libc++"
           # and "Run tests" steps below for how the false-positive-free
           # dependency set is assembled and why coverage is scoped to the
@@ -243,51 +242,10 @@ jobs:
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
-            build-type: no-dauth
-            compiler-family: gcc
-            c-compiler: gcc
-            cc-compiler: g++
-            debug: nodebug
-            coverage: nocoverage
-            linking: dynamic
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
             build-type: iwyu
             compiler-family: clang
             c-compiler: clang-18
             cc-compiler: clang++-18
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: performance
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: select
-            compiler-family: gcc
-            c-compiler: gcc-14
-            cc-compiler: g++-14
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: performance
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: nodelay
-            compiler-family: gcc
-            c-compiler: gcc-14
-            cc-compiler: g++-14
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: performance
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: threads
-            compiler-family: gcc
-            c-compiler: gcc-14
-            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -320,50 +278,6 @@ jobs:
             linking: dynamic
             shell: bash
           # TASK-037 / PRD-FLG-REQ-001: flag-invariance-on gate.
-          # Compiles consumer_fixture with all features enabled (gnutls + full MHD).
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: flag-invariance-on
-            compiler-family: gcc
-            c-compiler: gcc
-            cc-compiler: g++
-            debug: nodebug
-            coverage: nocoverage
-            linking: dynamic
-            shell: bash
-          # TASK-037 / PRD-FLG-REQ-001: flag-invariance-off gate.
-          # Compiles consumer_fixture with MHD rebuilt without bauth/dauth/websockets
-          # and gnutls absent, so all four HAVE_* flags auto-detect to off.
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: flag-invariance-off
-            compiler-family: gcc
-            c-compiler: gcc
-            cc-compiler: g++
-            debug: nodebug
-            coverage: nocoverage
-            linking: dynamic
-            shell: bash
-          # TASK-076: TLS-no-CLI lane. Installs libgnutls28-dev (so the
-          # library compiles WITH HAVE_GNUTLS) but deliberately omits
-          # `gnutls-bin`, so the gnutls-cli binary is NOT on $PATH. The
-          # five `psk_connection_*` tests in test/integ/ws_start_stop.cpp
-          # must report `[SKIP]` (via LT_SKIP_IF(!has_gnutls_cli(), ...))
-          # rather than tautological PASS. Post-test verification step
-          # below greps the test log for the [SKIP] markers.
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: tls-no-cli
-            compiler-family: gcc
-            c-compiler: gcc-14
-            cc-compiler: g++-14
-            debug: nodebug
-            coverage: nocoverage
-            linking: dynamic
-            shell: bash
           - test-group: basic
             os: windows-latest
             os-type: windows
@@ -455,12 +369,12 @@ jobs:
         #     where doxygen + graphviz ARE installed, so this is a deliberate
         #     per-platform exclusion, not a coverage gap. The Windows lane just
         #     builds and tests the library.
-        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,gnutls,curl}
+        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,curl}
 
     - name: Install MSYS packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MSYS' }}
       run: |
-        pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel libgnutls-devel
+        pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel
 
     - name: Install Ubuntu test sources
       # ppa:ubuntu-toolchain-r/test was historically used to backport newer
@@ -629,38 +543,6 @@ jobs:
         sudo pip install gcovr ;
       if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' }}
 
-    - name: Setup gnutls dependency (only on linux)
-      run: |
-        sudo apt-get install libgnutls28-dev gnutls-bin ;
-      # TASK-037: skip gnutls install on the flag-invariance-off lane so
-      # HAVE_GNUTLS auto-detects to off (the configure script just
-      # AC_CHECK_HEADER's gnutls/gnutls.h, no header == HAVE_GNUTLS=0).
-      # TASK-076: also skip on the tls-no-cli lane — it does its own
-      # install of libgnutls28-dev WITHOUT gnutls-bin in the next step
-      # so the per-test LT_SKIP_IF(!has_gnutls_cli(), ...) gate fires.
-      # TASK-087: also skip on the msan lane — installing gnutls would pull
-      # an uninstrumented gnutls/nettle/gmp tree into LDADD; with no header
-      # present configure auto-detects HAVE_GNUTLS=no and -lgnutls drops out.
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'tls-no-cli' && matrix.build-type != 'msan' }}
-
-    - name: Setup gnutls dependency WITHOUT gnutls-cli (TASK-076 tls-no-cli lane)
-      run: |
-        sudo apt-get install libgnutls28-dev ;
-        # Deliberate: NO gnutls-bin here. The lane asserts that
-        # has_gnutls_cli() returns false at runtime, which makes the
-        # five `psk_connection_*` tests in ws_start_stop.cpp emit
-        # `[SKIP]` rather than tautological PASS.
-        if which gnutls-cli >/dev/null 2>&1; then
-          echo "ERROR: gnutls-cli is on PATH but the tls-no-cli lane requires it absent" >&2
-          exit 1
-        fi
-      if: ${{ matrix.build-type == 'tls-no-cli' }}
-
-    # TASK-087: MemorySanitizer reports use-of-uninitialized-value for any
-    # bytes written by uninstrumented code and later read by instrumented
-    # code. libc++ is on nearly every code path, so it must be instrumented
-    # too. Build LLVM libc++/libc++abi with MemoryWithOrigins once and cache
-    # the install prefix (keyed by os + compiler); rebuild only on a miss.
     - name: Fetch instrumented libc++ from cache (msan lane)
       id: cache-libcxx-msan
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
@@ -698,180 +580,6 @@ jobs:
         ninja -C build-libcxx-msan cxx cxxabi ;
         ninja -C build-libcxx-msan install-cxx install-cxxabi ;
       if: ${{ matrix.build-type == 'msan' && steps.cache-libcxx-msan.outputs.cache-hit != 'true' }}
-
-    - name: Fetch libmicrohttpd from cache
-      id: cache-libmicrohttpd
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
-      with:
-        path: libmicrohttpd-1.0.3
-        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-pre-built-v2
-      # TASK-037: the flag-invariance-off lane rebuilds libmicrohttpd with
-      # every sub-feature disabled, so it must skip the stock cache fetch.
-      # The flag-invariance-on lane uses the stock build because
-      # libmicrohttpd 1.0.3 ships TLS/Basic/Digest auth on by default and
-      # does NOT ship the websocket extension at all.
-      # TASK-087: the msan lane rebuilds libmicrohttpd instrumented (so MHD
-      # output is not read back as uninitialized), so it skips this stock
-      # cache/build too.
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'msan' && matrix.compiler-family != 'arm-cross' }}
-
-    - name: Build libmicrohttpd dependency (if not cached)
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
-        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | shasum -a 256 -c ;
-        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
-        cd libmicrohttpd-1.0.3 ;
-        ./configure --disable-examples ;
-        make ;
-      # TASK-037: as above -- flag-invariance-off has its own dedicated
-      # libmicrohttpd build step below; flag-invariance-on uses the stock
-      # build because libmicrohttpd 1.0.3 ships no websocket extension.
-      # TASK-087: msan has its own dedicated instrumented build step below.
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'msan' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
-
-
-    - name: Build libmicrohttpd without digest auth (no-dauth test)
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
-        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | shasum -a 256 -c ;
-        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
-        cd libmicrohttpd-1.0.3 ;
-        ./configure --disable-examples --disable-dauth ;
-        make ;
-      if: ${{ matrix.build-type == 'no-dauth' }}
-
-    - name: Fetch libmicrohttpd from cache (flag-invariance-off lane)
-      id: cache-libmicrohttpd-off
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
-      with:
-        path: libmicrohttpd-1.0.3
-        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-flags-off-v1
-      if: ${{ matrix.build-type == 'flag-invariance-off' }}
-
-    - name: Build libmicrohttpd with all features off (TASK-037 flag-invariance-off lane)
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
-        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | shasum -a 256 -c ;
-        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
-        cd libmicrohttpd-1.0.3 ;
-        ./configure --disable-examples --disable-bauth --disable-dauth --disable-websockets ;
-        make ;
-      if: ${{ matrix.build-type == 'flag-invariance-off' && steps.cache-libmicrohttpd-off.outputs.cache-hit != 'true' }}
-
-    - name: Fetch libmicrohttpd from cache (msan lane)
-      id: cache-libmicrohttpd-msan
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
-      # NOTE: the '-v1' suffix below must be bumped manually whenever the
-      # CFLAGS/LDFLAGS in the "Build instrumented libmicrohttpd" step change
-      # -- this key does not otherwise encode them, so a flag change alone
-      # would silently keep reusing a stale (differently-instrumented)
-      # cached artifact.
-      with:
-        path: libmicrohttpd-1.0.3
-        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-msan-v1
-      if: ${{ matrix.build-type == 'msan' }}
-
-    - name: Build instrumented libmicrohttpd (TASK-087 msan lane)
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
-        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | shasum -a 256 -c ;
-        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
-        cd libmicrohttpd-1.0.3 ;
-        # Instrument MHD with MemorySanitizer so its output buffers, which
-        # libhttpserver reads on nearly every code path, are not flagged as
-        # uninitialized. --disable-https keeps gnutls (uninstrumented) out.
-        export CC=clang-18 ;
-        export CFLAGS='-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1' ;
-        export LDFLAGS='-fsanitize=memory' ;
-        ./configure --disable-examples --disable-https ;
-        make -j$(nproc) ;
-      if: ${{ matrix.build-type == 'msan' && steps.cache-libmicrohttpd-msan.outputs.cache-hit != 'true' }}
-
-    - name: Install libmicrohttpd
-      run: cd libmicrohttpd-1.0.3 ; sudo make install ;
-      if: ${{ matrix.os-type != 'windows' && matrix.compiler-family != 'arm-cross' }}
-
-    - name: Verify digest auth is disabled (no-dauth test)
-      run: |
-        # Verify that MHD_queue_auth_fail_response is NOT present in libmicrohttpd
-        if nm /usr/local/lib/libmicrohttpd.so 2>/dev/null | grep -q MHD_queue_auth_fail_response; then
-          echo "ERROR: libmicrohttpd was built WITH digest auth support" ;
-          exit 1 ;
-        fi
-        echo "Verified: libmicrohttpd built without digest auth support" ;
-      if: ${{ matrix.build-type == 'no-dauth' }}
-
-    - name: Verify libmicrohttpd built without bauth/dauth/websockets (TASK-037 flag-invariance-off lane)
-      # TASK-037 / PRD-FLG-REQ-001: belt-and-braces check that the bespoke
-      # libmicrohttpd build above actually stripped the symbols that drive
-      # libhttpserver's HAVE_BAUTH / HAVE_DAUTH / HAVE_WEBSOCKET
-      # auto-detection. If any of these slipped back in, the configure
-      # step would (correctly) flip the corresponding HAVE_* back on and
-      # the lane would no longer be exercising the flag-off invariant.
-      run: |
-        fail=0 ;
-        for sym in \
-          MHD_basic_auth_get_username_password3 `# HAVE_BAUTH` \
-          MHD_digest_auth_check3                `# HAVE_DAUTH` \
-          MHD_queue_auth_fail_response          `# HAVE_DAUTH (secondary)`; do
-          if nm /usr/local/lib/libmicrohttpd.so 2>/dev/null | grep -q "$sym"; then
-            echo "ERROR: $sym present in libmicrohttpd (expected absent)" ;
-            fail=1 ;
-          else
-            echo "Verified: $sym absent from libmicrohttpd" ;
-          fi ;
-        done ;
-        if ls /usr/local/lib/libmicrohttpd_ws* >/dev/null 2>&1; then  # HAVE_WEBSOCKET
-          echo "ERROR: libmicrohttpd_ws present (expected absent)" ;
-          fail=1 ;
-        else
-          echo "Verified: libmicrohttpd_ws not built/installed" ;
-        fi ;
-        if [ "$fail" -ne 0 ]; then exit 1; fi
-      if: ${{ matrix.build-type == 'flag-invariance-off' }}
-
-    - name: Build and install libmicrohttpd (Windows)
-      if: ${{ matrix.os-type == 'windows' }}
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
-        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | shasum -a 256 -c
-        tar -xzf libmicrohttpd-1.0.3.tar.gz
-        cd libmicrohttpd-1.0.3
-        ./configure --disable-examples --enable-poll=no
-        make
-        make install
-
-    - name: Fetch libmicrohttpd from cache (ARM cross-compile)
-      id: cache-libmicrohttpd-arm
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
-      with:
-        path: libmicrohttpd-1.0.3-${{ matrix.build-type }}
-        key: ${{ matrix.os }}-${{ matrix.build-type }}-libmicrohttpd-1.0.3-cross-compiled
-      if: ${{ matrix.compiler-family == 'arm-cross' }}
-
-    - name: Cross-compile libmicrohttpd for ARM
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
-        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | shasum -a 256 -c
-        tar -xzf libmicrohttpd-1.0.3.tar.gz
-        mv libmicrohttpd-1.0.3 libmicrohttpd-1.0.3-${{ matrix.build-type }}
-        cd libmicrohttpd-1.0.3-${{ matrix.build-type }}
-        mkdir -p ${{ github.workspace }}/arm-sysroot
-        if [ "${{ matrix.build-type }}" = "arm32" ]; then
-          ./configure --host=arm-linux-gnueabihf --prefix=${{ github.workspace }}/arm-sysroot --disable-examples --disable-doc
-        else
-          ./configure --host=aarch64-linux-gnu --prefix=${{ github.workspace }}/arm-sysroot --disable-examples --disable-doc
-        fi
-        make
-        make install
-      if: ${{ matrix.compiler-family == 'arm-cross' && steps.cache-libmicrohttpd-arm.outputs.cache-hit != 'true' }}
-
-    - name: Install cross-compiled libmicrohttpd from cache
-      run: |
-        cd libmicrohttpd-1.0.3-${{ matrix.build-type }}
-        mkdir -p ${{ github.workspace }}/arm-sysroot
-        make install
-      if: ${{ matrix.compiler-family == 'arm-cross' && steps.cache-libmicrohttpd-arm.outputs.cache-hit == 'true' }}
 
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
@@ -930,15 +638,6 @@ jobs:
       # the PR's Linux lane; this gate only guards the wiring. Mirrors the
       # check-msan-lane.sh gate idiom.
       run: ./scripts/check-valgrind-lane.sh
-      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
-
-    - name: Run DR-008 stress-lane structural gate
-      # TASK-092: asserts the two DR-008 concurrency/deadlock stress-gate
-      # steps (route_table_concurrency under TSan, stop()-from-handler
-      # deadlock contract) stay wired correctly -- present, correctly `if:`
-      # gated, and timeout-boxed. See test/PERFORMANCE.md ("CI wiring —
-      # DR-008 stress gates"). Mirrors the check-msan-lane.sh gate idiom.
-      run: ./scripts/check-dr008-lanes.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
     - name: Run CodeQL-workflow structural gate
@@ -1018,84 +717,9 @@ jobs:
           # upstream in Valgrind 3.20; ubuntu-latest ships 3.22; disabled in
           # configure.ac via AX_VALGRIND_DFLT([sgcheck],[off]).
           ../configure --enable-debug --disable-fastopen;
-        elif [ "$BUILD_TYPE" = "flag-invariance-on" ]; then
-          # TASK-037 / PRD-FLG-REQ-001: explicitly request all four feature
-          # flags so configure fails fast if any dependency is absent, rather
-          # than silently falling back to the feature-off path.
-          ../configure --disable-fastopen --enable-tls --enable-bauth --enable-dauth --enable-websocket;
-        elif [ "$BUILD_TYPE" = "iwyu" ]; then
-          ../configure --disable-examples;
         else
           ../configure --disable-fastopen;
         fi
-
-    - name: Verify libhttpserver detected no digest auth (no-dauth test)
-      run: |
-        cd build ;
-        if grep -q "Digest Auth.*:.*no" config.log; then
-          echo "Verified: libhttpserver correctly detected digest auth is disabled" ;
-        else
-          echo "ERROR: libhttpserver did not detect that digest auth is disabled" ;
-          grep "Digest Auth" config.log || echo "Digest Auth line not found" ;
-          exit 1 ;
-        fi
-      if: ${{ matrix.build-type == 'no-dauth' }}
-
-    - name: Verify libhttpserver detected all features off (TASK-037 flag-invariance-off lane)
-      # TASK-037 / PRD-FLG-REQ-001 / arch §9 testing item 2. Asserts that
-      # configure auto-detected every HAVE_* feature as off in this lane;
-      # if any of them are 'yes', the lane wouldn't actually be exercising
-      # the flag-off invariant and we want the matrix to go red loudly.
-      run: |
-        cd build ;
-        # AC_MSG_NOTICE summary lines in config.log have two leading spaces
-        # rather than a 'configure:' prefix — the anchored pattern below
-        # matches that format exactly (prevents false-positive matches on
-        # unrelated config.log lines that contain the feature name).
-        fail=0 ;
-        for feat in "TLS Enabled" "Basic Auth" "Digest Auth" "WebSocket"; do
-          if grep -qE "^  ${feat}[[:space:]]*:[[:space:]]*no$" config.log; then
-            echo "Verified: ${feat} is off" ;
-          else
-            echo "ERROR: ${feat} is NOT off in this configuration" ;
-            grep "${feat}" config.log || echo "${feat} line not found" ;
-            fail=1 ;
-          fi ;
-        done ;
-        if [ "$fail" -ne 0 ]; then exit 1; fi
-      if: ${{ matrix.build-type == 'flag-invariance-off' }}
-
-    - name: Verify libhttpserver detected all features on (TASK-037 flag-invariance-on lane)
-      # TASK-037 / PRD-FLG-REQ-001 / arch §9 testing item 2. Symmetric check
-      # to the off-lane step above: asserts configure auto-detected every
-      # HAVE_* feature as 'yes'. Without this, a misconfigured dependency
-      # (e.g. missing gnutls) would silently leave a feature off and the
-      # all-features-on invariant would not actually be exercised.
-      # Note: AC_MSG_NOTICE summary lines in config.log have two leading
-      # spaces rather than a 'configure:' prefix — the anchored pattern below
-      # matches that format exactly.
-      #
-      # WebSocket intentionally omitted: libmicrohttpd 1.0.3 (the pinned
-      # dependency version) does NOT ship microhttpd_ws.h in the standard
-      # tarball, so libhttpserver's HAVE_WEBSOCKET auto-detection cannot
-      # flip on with the upstream-supported build path. The off-lane
-      # explicitly asserts microhttpd_ws is absent; the on-lane covers
-      # the other three features whose detection IS exercisable on
-      # commodity CI runners.
-      run: |
-        cd build ;
-        fail=0 ;
-        for feat in "TLS Enabled" "Basic Auth" "Digest Auth"; do
-          if grep -qE "^  ${feat}[[:space:]]*:[[:space:]]*yes$" config.log; then
-            echo "Verified: ${feat} is on" ;
-          else
-            echo "ERROR: ${feat} is NOT on in this configuration" ;
-            grep "${feat}" config.log || echo "${feat} line not found" ;
-            fail=1 ;
-          fi ;
-        done ;
-        if [ "$fail" -ne 0 ]; then exit 1; fi
-      if: ${{ matrix.build-type == 'flag-invariance-on' }}
 
     - name: Print config.log
       shell: bash
@@ -1129,21 +753,6 @@ jobs:
           make ;
         fi
 
-    - name: Build consumer fixture (TASK-037 build-flag invariance gate)
-      # TASK-037 / PRD-FLG-REQ-001 / arch §9 testing item 2. The headline
-      # gate: the same test/consumer_fixture.cpp (which touches every
-      # previously HAVE_*-gated public symbol) must compile + link in
-      # both the all-features-on and all-features-off configurations.
-      # The matrix entries skip the broad `make check` / `cppcheck` steps
-      # below -- this single fixture compile + link is the build-flag-
-      # invariance assertion.
-      # make -C test consumer_fixture (builds in build/test/) invokes the
-      # subdirectory Makefile from within the build directory.
-      run: |
-        cd build ;
-        make -C test consumer_fixture ;
-      if: ${{ matrix.build-type == 'flag-invariance-on' || matrix.build-type == 'flag-invariance-off' }}
-
     - name: Run tests
       run: |
         cd build ;
@@ -1158,8 +767,6 @@ jobs:
           # round-trip via test/integ/curl_helpers.hpp) cannot be
           # practically instrumented, so its uninstrumented output would
           # surface as false use-of-uninitialized-value reports. libc++ and
-          # libmicrohttpd ARE instrumented (see the steps above), so the
-          # unit subset — pure libhttpserver logic plus instrumented-MHD
           # type inspection — runs clean without wildcard suppressions.
           export LD_LIBRARY_PATH="${{ github.workspace }}/libcxx-msan/lib:${LD_LIBRARY_PATH:-}" ;
           export MSAN_OPTIONS="abort_on_error=1" ;
@@ -1200,7 +807,7 @@ jobs:
       # TASK-037: flag-invariance-{on,off} are compile/link-only gates, so
       # skip the full `make check` (which spins up real servers and would
       # crash on the OFF lane for the BAUTH/DAUTH/WS unit tests anyway).
-      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' && matrix.build-type != 'flag-invariance-on' && matrix.build-type != 'flag-invariance-off' }}
+      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
 
     - name: Run focused native HTTP/1 and WebSocket gates
       timeout-minutes: 10
@@ -1217,64 +824,6 @@ jobs:
         scripts/run-v3-protocol-fuzz.sh --build-dir build/protocol-fuzz --compiler clang++ --runs 2000 --seconds 30
       if: ${{ matrix.build-type == 'asan' && runner.os == 'Linux' }}
 
-    - name: Run route_table_concurrency under TSan (TASK-092)
-      # TASK-092: deliberate, time-boxed multi-iteration run of the
-      # DR-008 lock-order stress binary on the tsan lane. `make check`
-      # (above) already runs it once; this loops it RTC_ITERATIONS times
-      # so the tsan lane reliably hits the typical regression window.
-      # Reuses the same TSAN_OPTIONS suppression file as "Run tests" to
-      # mask the benign libstdc++ std::ctype narrow-cache race; any
-      # libhttpserver-internal race stays fatal.
-      timeout-minutes: 5
-      run: |
-        cd build ;
-        export TSAN_OPTIONS="suppressions=$(pwd)/../test/tsan.supp" ;
-        make -C test check-route-table-concurrency ;
-      if: ${{ matrix.build-type == 'tsan' }}
-
-    - name: Run stop()-from-handler deadlock contract (TASK-092)
-      # TASK-092: the DR-008 negative case — stop() from a handler thread
-      # makes libmicrohttpd self-join and abort. Gated behind
-      # HTTPSERVER_RUN_STOP_FROM_HANDLER=1 (set by check-stop-from-handler)
-      # so it is skipped by default in local runs. Runs on exactly one
-      # lane: the baseline Ubuntu gcc / nodebug / dynamic / classic job
-      # (os-type ubuntu excludes the identically-keyed Windows classic
-      # lanes). The documented failure mode is a hang -> timeout-minutes
-      # is the safety net; a clean zero-exit child would be a regression.
-      timeout-minutes: 3
-      run: |
-        set -o pipefail ;
-        cd build ;
-        make -C test check-stop-from-handler 2>&1 | tee test/stop_from_handler.log ;
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.c-compiler == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
-
-    - name: Verify stop()-from-handler contract fired (TASK-092)
-      # TASK-092: guards against Sub-test B
-      # (stop_from_handler_deadlocks_as_documented) silently reporting
-      # [SKIP] instead of exercising the DR-008 deadlock contract -- mirrors
-      # the "Verify [SKIP] markers fire on tls-no-cli lane (TASK-076)"
-      # grep-the-log pattern.
-      run: |
-        set -euo pipefail
-        cd build
-        LOG=test/stop_from_handler.log
-        if [ ! -f "$LOG" ]; then
-            echo "ERROR: $LOG missing — check-stop-from-handler did not run" >&2
-            exit 1
-        fi
-        if grep -q '^\[SKIP\] stop_from_handler_deadlocks_as_documented' "$LOG"; then
-            echo "ERROR: stop_from_handler_deadlocks_as_documented reported [SKIP] instead of exercising the deadlock contract" >&2
-            cat "$LOG"
-            exit 1
-        fi
-        if ! grep -q '^\[OK\] stop_from_handler' "$LOG"; then
-            echo "ERROR: expected an '[OK] stop_from_handler' marker in $LOG; none found" >&2
-            cat "$LOG"
-            exit 1
-        fi
-        echo "PASS — stop_from_handler_deadlocks_as_documented exercised the DR-008 deadlock contract"
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.c-compiler == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
-
     - name: Run header-hygiene check
       # TASK-007: dedicated public-header hygiene gate. Runs the
       # preprocessor-grep target (Layer 2) against a staged install and
@@ -1286,85 +835,12 @@ jobs:
         make check-hygiene
       if: ${{ matrix.build-type == 'header-hygiene' }}
 
-    - name: Verify [SKIP] markers fire on tls-no-cli lane (TASK-076)
-      # The five `psk_connection_*` tests in ws_start_stop.cpp gate on
-      # has_gnutls_cli(); since this lane installs libgnutls28-dev WITHOUT
-      # gnutls-bin, the gate must fire. The runner's stdout must contain
-      # at least 5 [SKIP] markers AND zero [CHECK FAILURE] / [ASSERT
-      # FAILURE] markers attributable to a psk_connection_* test. The
-      # ws_start_stop binary log is at build/test/ws_start_stop.log
-      # (Automake's per-test capture).
-      run: |
-        set -euo pipefail
-        cd build
-        LOG=test/ws_start_stop.log
-        if [ ! -f "$LOG" ]; then
-            echo "ERROR: $LOG missing — ws_start_stop did not run" >&2
-            exit 1
-        fi
-        SKIP_COUNT=$(grep -c '^\[SKIP\].*psk_connection' "$LOG" || true)
-        echo "Found $SKIP_COUNT [SKIP] markers attributable to gnutls-cli"
-        if [ "$SKIP_COUNT" -lt 5 ]; then
-            echo "ERROR: expected >=5 [SKIP] markers in $LOG; got $SKIP_COUNT" >&2
-            cat "$LOG"
-            exit 1
-        fi
-        if grep -E '\[(CHECK|ASSERT) FAILURE\].*psk_connection' "$LOG"; then
-            echo "ERROR: a psk_connection_* test reported FAILURE in tls-no-cli lane" >&2
-            exit 1
-        fi
-      if: ${{ matrix.build-type == 'tls-no-cli' }}
-
-    - name: Verify TLS blocks exercised when gnutls-cli is present (TASK-076)
-      # Canary invariant on a representative healthy gnutls-bin-installed
-      # lane: the psk_connection_* tests must NOT report [SKIP]. If they
-      # do, gnutls-cli detection regressed. Runs on the classic
-      # ubuntu/gcc/nodebug/dynamic baseline only.
-      run: |
-        set -euo pipefail
-        cd build
-        LOG=test/ws_start_stop.log
-        if [ ! -f "$LOG" ]; then
-            echo "ERROR: $LOG missing — ws_start_stop did not run" >&2
-            exit 1
-        fi
-        if grep -E '^\[SKIP\].*psk_connection' "$LOG"; then
-            echo "ERROR: psk_connection_* skipped on a lane that has gnutls-bin" >&2
-            cat "$LOG"
-            exit 1
-        fi
-        echo "PASS — no psk_connection_* SKIPs on the with-gnutls baseline lane"
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.compiler-family == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
-
     - name: Print tests results
       shell: bash
       run: |
         cd build ;
         cat test/test-suite.log ;
       if: ${{ failure() && matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
-
-    - name: Verify Windows smoke test ran (TASK-077)
-      # TASK-077: assert the `ws_start_stop_suite::windows_smoke` test is
-      # actually compiled and executed on the native MinGW64 lane so the basic
-      # daemon-start-accept-one-GET path is observed end to end on Windows.
-      # Without this, a future build-flag tweak that inadvertently turns off the
-      # `#ifdef _WINDOWS` branch would silently erase the Windows round-trip
-      # coverage. Restricted to MINGW64: windows_smoke is gated on _WINDOWS
-      # (defined(_WIN32) && !defined(__CYGWIN__)) and does native-Windows setup
-      # (winsock2 / _WIN32_WINNT), so it is deliberately NOT built on the MSYS
-      # (Cygwin/POSIX) lane where _WIN32 is undefined.
-      shell: bash
-      run: |
-        cd build
-        if [ ! -f test/ws_start_stop.log ]; then
-          echo "ERROR: test/ws_start_stop.log is missing — windows_smoke could not be verified" >&2
-          exit 1
-        fi
-        if ! grep -E "windows_smoke" test/ws_start_stop.log; then
-          echo "ERROR: windows_smoke test did not appear in test/ws_start_stop.log" >&2
-          exit 1
-        fi
-      if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
 
     - name: Verify native Windows IOCP oracle and lifetime traces (TASK-146)
       shell: bash
@@ -1433,32 +909,7 @@ jobs:
       run: |
         cd src/ ;
         cppcheck --error-exitcode=1 . ;
-      # TASK-037: flag-invariance lanes are minimal gates -- skip cppcheck.
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'flag-invariance-on' && matrix.build-type != 'flag-invariance-off' }}
-
-    - name: Run performance tests (select)
-      run: |
-        cd build
-        cd examples
-        ./benchmark_select 8080 $(nproc) &
-        sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
-      if: ${{ matrix.build-type == 'select' }}
-
-    - name: Run performance tests (nodelay)
-      run: |
-        cd build
-        cd examples
-        ./benchmark_nodelay 8080 $(nproc) &
-        sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
-      if: ${{ matrix.build-type == 'nodelay' }}
-
-    - name: Run performance tests (threads)
-      run: |
-         cd build
-         cd examples
-         ./benchmark_threads 8080 &
-         sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
-      if: ${{ matrix.build-type == 'threads' }}
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Generate coverage report
       run: |

@@ -100,15 +100,11 @@ def package_lane(args, source, output, mode, inventory):
         integrations[linkage] = run_suites(inventory, platform.system(), mode, linkage, private_dir, prefix,
                                           source, build, args.compiler, cflags, private_libraries, command, runtime_env, audit)
     receipt = audit.audit(prefix, build, consumer_dir / ('v3_package_consumer' + suffix), mode,
-                          'pre-cutover', args.provider_prefix, args.compiler)
+                          'strict', args.provider_prefix, args.compiler)
     receipt.update(consumer_metadata=metadata, public=public, integrations=integrations)
     (lane / 'audit.json').write_text(json.dumps(receipt, indent=2))
     if receipt['violations']:
         raise ValueError('\n'.join(receipt['violations']))
-    strict = audit.graph_violations(receipt['aggregate'], 'strict', mode, 'aggregate', audit.load_policy(), args.provider_prefix)
-    if not strict:
-        raise ValueError('strict mode did not reject transitional package')
-    (lane / 'strict-rejection.json').write_text(json.dumps(strict, indent=2))
     print('PASS installed consumer native TLS=' + mode, flush=True)
     return receipt
 

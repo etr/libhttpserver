@@ -1,5 +1,4 @@
 [
-  { include: ["\"microhttpd.h\"", "private", "<microhttpd.h>", "public"] },
   { include: ["<ext/alloc_traits.h>", "private", "<memory>", "public"] },
   
   { symbol: ["std::exception",     "private", "<exception>", "public"]},
@@ -13,5 +12,4 @@
   { symbol: ["uint16_t", "private", "<stdint.h>", "public"]},
   { symbol: ["uint64_t", "private", "<stdint.h>", "public"]},
 
-  { symbol: ["MHD_Connection", "private", "<microhttpd.h>", "public"]},
 ]

@@ -203,7 +203,7 @@ class native_server {
     // thread including inside handlers (every member synchronized,
     // DR-V3-008). The returned reference is valid for the server's
     // lifetime.
-    peer_policy& peer_policy() const noexcept;
+    httpserver::server::peer_policy& peer_policy() const noexcept;
 
     // The resolved port of listener @p listener_index (0 for an
     // ephemeral-port request reports the bound port; 0 before listen()

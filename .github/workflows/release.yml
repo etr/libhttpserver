@@ -72,29 +72,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y autoconf automake libtool libgnutls28-dev libcurl4-openssl-dev
-
-    - name: Fetch libmicrohttpd from cache
-      id: cache-libmicrohttpd
-      uses: actions/cache@v4
-      with:
-        path: libmicrohttpd-1.0.3
-        key: ubuntu-latest-gcc-libmicrohttpd-1.0.3-pre-built-v2
-
-    - name: Build libmicrohttpd (if not cached)
-      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
-        tar -xzf libmicrohttpd-1.0.3.tar.gz
-        cd libmicrohttpd-1.0.3
-        ./configure --disable-examples
-        make
-
-    - name: Install libmicrohttpd
-      run: |
-        cd libmicrohttpd-1.0.3
-        sudo make install
-        sudo ldconfig
+        sudo apt-get install -y autoconf automake libtool libcurl4-openssl-dev
 
     - name: Build libhttpserver
       run: |
@@ -124,29 +102,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libgnutls28-dev libcurl4-openssl-dev
-
-    - name: Fetch libmicrohttpd from cache
-      id: cache-libmicrohttpd
-      uses: actions/cache@v4
-      with:
-        path: libmicrohttpd-1.0.3
-        key: ubuntu-latest-gcc-libmicrohttpd-1.0.3-pre-built-v2
-
-    - name: Build libmicrohttpd (if not cached)
-      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
-        tar -xzf libmicrohttpd-1.0.3.tar.gz
-        cd libmicrohttpd-1.0.3
-        ./configure --disable-examples
-        make
-
-    - name: Install libmicrohttpd
-      run: |
-        cd libmicrohttpd-1.0.3
-        sudo make install
-        sudo ldconfig
+        sudo apt-get install -y libcurl4-openssl-dev
 
     - name: Download tarball
       uses: actions/download-artifact@v4
@@ -176,27 +132,6 @@ jobs:
     steps:
     - name: Install build tools
       run: brew install autoconf automake libtool
-
-    - name: Fetch libmicrohttpd from cache
-      id: cache-libmicrohttpd
-      uses: actions/cache@v4
-      with:
-        path: libmicrohttpd-1.0.3
-        key: macos-latest-gcc-libmicrohttpd-1.0.3-pre-built-v2
-
-    - name: Build libmicrohttpd (if not cached)
-      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
-        tar -xzf libmicrohttpd-1.0.3.tar.gz
-        cd libmicrohttpd-1.0.3
-        ./configure --disable-examples
-        make
-
-    - name: Install libmicrohttpd
-      run: |
-        cd libmicrohttpd-1.0.3
-        sudo make install
 
     - name: Fetch curl from cache
       id: cache-curl
@@ -259,16 +194,7 @@ jobs:
 
     - name: Install MinGW64 packages
       run: |
-        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}
-
-    - name: Build and install libmicrohttpd
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
-        tar -xzf libmicrohttpd-1.0.3.tar.gz
-        cd libmicrohttpd-1.0.3
-        ./configure --disable-examples --enable-poll=no
-        make
-        make install
+        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,doxygen,graphviz,curl,python}
 
     - name: Download tarball
       uses: actions/download-artifact@v4

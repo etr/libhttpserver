@@ -15,7 +15,7 @@ native headers; the shared route/host helpers live beside their source files.
 | [v3_websocket_echo.cpp](v3_websocket_echo.cpp) | HTTP/1.1 upgrade/rejection, text/binary echo, `try_send` backpressure, `writable`, retained session through close |
 | [v3_external_event_loop.cpp](v3_external_event_loop.cpp) | External host readiness, generation tokens, worker wakeups and deadlines |
 
-From the repository root (legacy aggregate prerequisites remain until TASK-184):
+From the repository root (native C++20 build; no MHD or GnuTLS prerequisites):
 
 ```sh
 ./bootstrap
