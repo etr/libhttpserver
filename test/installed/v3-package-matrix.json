@@ -1,0 +1,230 @@
+{
+  "version": 1,
+  "platforms": {
+    "Linux": "epoll",
+    "FreeBSD": "kqueue",
+    "Darwin": "kqueue",
+    "Windows": "iocp"
+  },
+  "tls": [
+    "no",
+    "yes"
+  ],
+  "linkages": [
+    "shared",
+    "static"
+  ],
+  "loops": [
+    "managed",
+    "external"
+  ],
+  "cases": [
+    "plaintext",
+    "invalid_listener",
+    "invalid_workers",
+    "invalid_timeout",
+    "invalid_budget",
+    "provider_profile_mismatch",
+    "tls_listener",
+    "http2",
+    "http3",
+    "mixed_rejection"
+  ],
+  "traffic": [
+    "http10",
+    "http11",
+    "post",
+    "persistent",
+    "pipeline",
+    "shutdown"
+  ],
+  "common_suites": [
+    "native_http1_e2e",
+    "external_http1_e2e",
+    "external_readiness_adapter",
+    "readiness_contract",
+    "io_backend_contract",
+    "http2_conformance",
+    "http3_exchange"
+  ],
+  "tls_suites": [
+    "tls_io_loopback",
+    "native_http1_tls_parity",
+    "tls_selection",
+    "tls_mtls",
+    "tls_credentials_rotation",
+    "tls_psk_runtime",
+    "http2_tls_boundary"
+  ],
+  "suites": {
+    "native_http1_e2e": {
+      "sources": [
+        "integ/native_http1_e2e_test.cpp",
+        "parity/response_frame.cpp"
+      ]
+    },
+    "external_http1_e2e": {
+      "sources": [
+        "integ/external_http1_e2e_test.cpp",
+        "parity/response_frame.cpp",
+        "parity/normalize.cpp"
+      ]
+    },
+    "external_readiness_adapter": {
+      "sources": [
+        "unit/external_readiness_adapter_test.cpp"
+      ]
+    },
+    "readiness_contract": {
+      "sources": [
+        "unit/readiness_contract_test.cpp"
+      ],
+      "execution": "header-only"
+    },
+    "io_backend_contract": {
+      "sources": [
+        "unit/io_backend_contract_test.cpp"
+      ]
+    },
+    "http2_conformance": {
+      "sources": [
+        "unit/http2_conformance_test.cpp"
+      ],
+      "execution": "header-only"
+    },
+    "http3_exchange": {
+      "sources": [
+        "unit/http3_exchange_test.cpp",
+        "parity/response_frame.cpp"
+      ]
+    },
+    "tls_io_loopback": {
+      "sources": [
+        "unit/tls_io_loopback_test.cpp"
+      ],
+      "required_cases": [
+        "poll_peer_roundtrip",
+        "native_managed_factory_roundtrip",
+        "external_readiness_peer_roundtrip"
+      ]
+    },
+    "native_http1_tls_parity": {
+      "sources": [
+        "integ/native_http1_tls_parity_test.cpp",
+        "parity/transcript.cpp",
+        "parity/response_frame.cpp",
+        "parity/normalize.cpp",
+        "parity/case_wire.cpp"
+      ],
+      "required_cases": [
+        "all_profiles_http11_managed",
+        "all_profiles_http10_tls",
+        "all_profiles_http11_external",
+        "all_profiles_http10_external",
+        "all_profiles_http11_poll_oracle",
+        "all_profiles_http10_poll_oracle"
+      ]
+    },
+    "tls_selection": {
+      "sources": [
+        "unit/tls_selection_test.cpp"
+      ]
+    },
+    "tls_mtls": {
+      "sources": [
+        "unit/tls_mtls_test.cpp"
+      ]
+    },
+    "tls_credentials_rotation": {
+      "sources": [
+        "unit/tls_credentials_rotation_test.cpp"
+      ]
+    },
+    "tls_psk_runtime": {
+      "sources": [
+        "unit/tls_psk_runtime_test.cpp"
+      ]
+    },
+    "http2_tls_boundary": {
+      "sources": [
+        "unit/http2_tls_boundary_test.cpp"
+      ]
+    },
+    "io_epoll_backend": {
+      "sources": [
+        "unit/io_epoll_backend_test.cpp"
+      ]
+    },
+    "io_kqueue_backend": {
+      "sources": [
+        "unit/io_kqueue_backend_test.cpp"
+      ]
+    },
+    "io_iocp_backend": {
+      "sources": [
+        "unit/io_iocp_backend_test.cpp"
+      ],
+      "required_cases": [
+        "managed_windows_selects_iocp",
+        "read_delivers_bytes_exactly_once",
+        "write_completes_with_transferred",
+        "timer_fires_at_deadline_not_before",
+        "two_timers_earliest_first_sequence_tie",
+        "wake_completes_all_wakes_once",
+        "cancel_pending_target",
+        "cancel_terminal_target_reports_invalid_state",
+        "close_sweeps_every_pending_once",
+        "submit_after_close_connection_closed",
+        "late_request_cancel_reports_invalid_state",
+        "n_awaiter_resume_exactly_once",
+        "cancel_vs_stimulus_race",
+        "accept_round_trip",
+        "interleaved_native_listeners_keep_distinct_ids",
+        "http1_round_trip",
+        "partial_read",
+        "read_hangup",
+        "write_hangup",
+        "idle_iterations_stay_bounded",
+        "slow_reader_no_busy_loop",
+        "synchronous_candidate_abort_retries_same_logical_accept",
+        "failed_candidate_packet_retries_same_logical_accept",
+        "fatal_accept_initiation_error_retires_listener",
+        "fatal_accept_packet_error_retires_listener",
+        "success_claim_before_cancel_delivers_exactly_once",
+        "cancel_claim_before_packet_delivers_exactly_once",
+        "queued_success_cancel_not_found_retains_storage_until_packet",
+        "failed_packet_cancellation_preserves_socket_and_next_read",
+        "stale_packet_after_release_and_readoption_cannot_touch_new_buffer",
+        "late_successful_accept_cancellation_closes_candidate_once",
+        "pending_accept_cancel_and_concurrent_close_drain_every_native_request",
+        "out_of_order_native_packets_across_owners_preserve_each_result",
+        "empty_spans_complete_ok_without_eof",
+        "write_failure_preserves_unread_inbound_bytes",
+        "managed_http_loopback_uses_completion_backend",
+        "cancel_unposted_operation_never_borrows_destroyed_storage",
+        "driver_delivery_can_close_reentrantly_without_self_join",
+        "opposite_direction_completes_before_earlier_pending_receive",
+        "receive_eof_retires_registration_and_sweeps_connection_controls",
+        "udp_cancelled_packet_keeps_native_storage_and_reuse_generation",
+        "udp_count_budget_includes_cancelled_native_packet_until_retirement",
+        "udp_byte_budget_includes_cancelled_native_packet_until_retirement",
+        "udp_wildcard_receive_captures_destination_and_interface"
+      ]
+    },
+    "io_completion_storage": {
+      "sources": [
+        "unit/io_completion_storage_test.cpp"
+      ]
+    }
+  },
+  "exclusions": [
+    {
+      "suite": "http2_tls_fixture",
+      "reason": "POSIX network harness; public HTTP2 listener remains unavailable; portable http2_tls_boundary/conformance retained."
+    },
+    {
+      "suite": "http3 release pipeline",
+      "reason": "TASK-178 release gate owns external interoperability tools; portable http3_exchange retained."
+    }
+  ]
+}

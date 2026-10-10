@@ -654,6 +654,8 @@ EXTRA_DIST += scripts/run-v3-http2-gates.py docs/task-145-http2-evidence.md
 EXTRA_DIST += scripts/audit-v3-installed-package.py scripts/check-v3-installed-consumer.py scripts/test-v3-installed-package.py scripts/v3-installed-dependency-policy.json docs/task-148-installed-consumer-evidence.md
 check-v3-installed-package-fixtures:
 	@python3 $(top_srcdir)/scripts/test-v3-installed-package.py
+	@python3 $(top_srcdir)/scripts/test-v3-installed-consumer.py
+	@python3 $(top_srcdir)/scripts/test-v3-package-workflow.py
 
 # Supply INSTALL_AUDIT_ARGS="--output /fresh/path --provider-prefix /provider --prerequisite-prefix /prerequisites".
 check-v3-installed-consumer:
@@ -707,3 +709,8 @@ EXTRA_DIST += scripts/lib/resource_limits_probe.py scripts/lib/resource_limits_p
 EXTRA_DIST += docs/task-180-resource-limits.md
 
 EXTRA_DIST += docs/task-181-diagnostics.md
+
+EXTRA_DIST += scripts/test-v3-installed-consumer.py scripts/test-v3-package-workflow.py scripts/prepare-v3-package-ci.py \
+ scripts/lib/v3_package_matrix.py scripts/lib/v3_package_process.py scripts/lib/v3_package_commands.py \
+ scripts/lib/v3_package_traffic.py scripts/lib/v3_package_integration.py docs/task-182-package-validation-evidence.md \
+ .github/workflows/v3-package-validation.yml

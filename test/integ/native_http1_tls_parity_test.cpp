@@ -30,6 +30,7 @@
 #include "./digest_client.hpp"
 
 #include "../unit/tls_policy_tcp_fixture.hpp"
+#include "../unit/package_backend_witness.hpp"
 #include "./littletest.hpp"
 
 namespace {
@@ -49,7 +50,8 @@ struct fixture {
     httpserver::manual_executor ex;
     hd::io_connection_owner owner{ex};
     hd::worker_pool pool{2};
-    hd::io_poll_backend raw;
+    std::unique_ptr<hd::io_socket_backend> raw_storage;
+    hd::io_socket_backend& raw;
     io_loopback::listener listener = io_loopback::listener::open();
     tcp_policy::socket_owner peer_socket;
     std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)> context{SSL_CTX_new(TLS_client_method()), SSL_CTX_free};
@@ -66,9 +68,15 @@ struct fixture {
     bool external;
     bool encrypted;
     bool peer_closed = false;
+    bool poll_oracle;
 
-    explicit fixture(bool external_mode, const std::string& profile_name = "routing_basic", bool tls = true)
-        : raw(external_mode ? srv::loop_mode::external : srv::loop_mode::managed), external(external_mode), encrypted(tls) {
+    explicit fixture(bool external_mode, const std::string& profile_name = "routing_basic", bool tls = true, bool poll = false)
+        : raw_storage(poll ? std::make_unique<hd::io_poll_backend>() :
+              hd::make_socket_backend(external_mode ? srv::loop_mode::external : srv::loop_mode::managed)),
+          raw(*raw_storage), external(external_mode), encrypted(tls), poll_oracle(poll) {
+        if (!external && !poll_oracle) {
+            std::cout << "PACKAGE_BACKEND " << package_test::native_backend(raw) << '\n';
+        }
         require(listener.ok(), "TCP listener");
         profile.install(profile_name, PARITY_DATA_ROOT);
         if (external) raw.activate_external();
@@ -212,6 +220,7 @@ struct fixture {
         require(wait([] {}, [&] { return stopped.load(); }), "native engine retirement");
         require(scope.active() == 0, "drain units retired");
         require(raw.native_handle(1) == hd::pollsys::k_invalid_socket, "socket released");
+        if (encrypted) std::cout << "PACKAGE_TLS " << (external ? "external" : poll_oracle ? "poll-oracle" : "managed") << '\n';
     }
 };
 
@@ -220,7 +229,8 @@ void emit_observation(const fixture& f, const parity::tcase& test, const std::st
     const std::string mode = std::string(http10 ? "h1.0" : "h1.1") + (f.encrypted ? "-tls" : "-tcp");
     const std::string identity = corpus + ".tseq:" + test.name;
     const auto connection = std::to_string(f.listener.port());
-    std::cout << "TASK179_OBSERVATION {\"id\":";
+    std::cout << (f.external || f.poll_oracle ? "PACKAGE_OBSERVATION" : "TASK179_OBSERVATION") << " {\"driver\":\""
+              << (f.external ? "external" : f.poll_oracle ? "poll-oracle" : "managed") << "\",\"id\":";
     parity::behavior_json_text(std::cout, mode + ":" + identity);
     std::cout << ",\"case\":";
     parity::behavior_json_text(std::cout, identity);
@@ -339,6 +349,25 @@ void corpus(bool external, bool http10) {
     }
     f.stop();
 }
+void profiles(bool external, bool http10, bool encrypted = true, bool poll = false) {
+    for (const char* name : {"routing", "hooks", "auth_basic", "auth_digest", "forms", "file_resp", "ip_controls", "tls", "shoutcast"}) {
+        if (!encrypted && std::string_view(name) == "tls") continue;
+        const auto transcript = parity::parse_transcript_file(std::string(PARITY_TRANSCRIPT_DIR) + "/" + name + ".tseq");
+        if (http10) {
+            for (const auto& test : transcript.cases) {
+                fixture f(external, transcript.profile, encrypted, poll);
+                f.start();
+                check_case(f, test, true, name);
+                f.stop();
+            }
+        } else {
+            fixture f(external, transcript.profile, encrypted, poll);
+            f.start();
+            for (const auto& test : transcript.cases) check_case(f, test, false, name);
+            f.stop();
+        }
+    }
+}
 }  // namespace
 
 LT_BEGIN_SUITE(native_http1_tls_parity_suite)
@@ -364,52 +393,54 @@ LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, http10_external_corpus)
 LT_END_AUTO_TEST(http10_external_corpus)
 
 LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http11_managed)
-    for (const char* name : {"routing", "hooks", "auth_basic", "auth_digest", "forms", "file_resp", "ip_controls", "tls", "shoutcast"}) {
-        const auto transcript = parity::parse_transcript_file(std::string(PARITY_TRANSCRIPT_DIR) + "/" + name + ".tseq");
-        fixture f(false, transcript.profile);
-        f.start();
-        for (const auto& test : transcript.cases) check_case(f, test, false, name);
-        f.stop();
-    }
+    profiles(false, false);
     LT_CHECK(true);
 LT_END_AUTO_TEST(all_profiles_http11_managed)
 
 LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http10_cleartext)
-    for (const char* name : {"routing", "hooks", "auth_basic", "auth_digest", "forms", "file_resp", "ip_controls", "shoutcast"}) {
-        const auto transcript = parity::parse_transcript_file(std::string(PARITY_TRANSCRIPT_DIR) + "/" + name + ".tseq");
-        for (const auto& test : transcript.cases) {
-            fixture f(false, transcript.profile, false);
-            f.start();
-            check_case(f, test, true, name);
-            f.stop();
-        }
-    }
+    profiles(false, true, false);
     LT_CHECK(true);
 LT_END_AUTO_TEST(all_profiles_http10_cleartext)
 
 LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http10_tls)
-    for (const char* name : {"routing", "hooks", "auth_basic", "auth_digest", "forms", "file_resp", "ip_controls", "tls", "shoutcast"}) {
-        const auto transcript = parity::parse_transcript_file(std::string(PARITY_TRANSCRIPT_DIR) + "/" + name + ".tseq");
-        for (const auto& test : transcript.cases) {
-            fixture f(false, transcript.profile);
-            f.start();
-            check_case(f, test, true, name);
-            f.stop();
-        }
-    }
+    profiles(false, true);
     LT_CHECK(true);
 LT_END_AUTO_TEST(all_profiles_http10_tls)
 
 LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http11_cleartext)
-    for (const char* name : {"routing", "hooks", "auth_basic", "auth_digest", "forms", "file_resp", "ip_controls", "shoutcast"}) {
-        const auto transcript = parity::parse_transcript_file(std::string(PARITY_TRANSCRIPT_DIR) + "/" + name + ".tseq");
-        fixture f(false, transcript.profile, false);
-        f.start();
-        for (const auto& test : transcript.cases) check_case(f, test, false, name);
-        f.stop();
-    }
+    profiles(false, false, false);
     LT_CHECK(true);
 LT_END_AUTO_TEST(all_profiles_http11_cleartext)
+
+LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http11_external)
+    profiles(true, false);
+    LT_CHECK(true);
+LT_END_AUTO_TEST(all_profiles_http11_external)
+
+LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http10_external)
+    profiles(true, true);
+    LT_CHECK(true);
+LT_END_AUTO_TEST(all_profiles_http10_external)
+
+LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http11_poll_oracle)
+    profiles(false, false, true, true);
+    LT_CHECK(true);
+LT_END_AUTO_TEST(all_profiles_http11_poll_oracle)
+
+LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http10_poll_oracle)
+    profiles(false, true, true, true);
+    LT_CHECK(true);
+LT_END_AUTO_TEST(all_profiles_http10_poll_oracle)
+
+LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http11_external_cleartext)
+    profiles(true, false, false);
+    LT_CHECK(true);
+LT_END_AUTO_TEST(all_profiles_http11_external_cleartext)
+
+LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, all_profiles_http10_external_cleartext)
+    profiles(true, true, false);
+    LT_CHECK(true);
+LT_END_AUTO_TEST(all_profiles_http10_external_cleartext)
 
 LT_BEGIN_AUTO_TEST(native_http1_tls_parity_suite, websocket_fixed_key_and_echo_over_cleartext_and_tls)
     for (const bool encrypted : {false, true}) {

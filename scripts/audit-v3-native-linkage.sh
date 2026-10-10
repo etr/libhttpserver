@@ -182,16 +182,23 @@ echo "audit-v3-native-linkage: A1 PASS — no backend/TLS references in the v3 p
 MODE="${V3_TLS_MODE:-no}"
 case "$MODE" in yes|no) ;; *) fail "invalid native TLS mode: $MODE" ;; esac
 # Libtool programs can be shell wrappers. Inspect their real executable.
-BIN="$BUILD_DIR/test/v3_native_linkage"
-if [[ -x "$BUILD_DIR/test/.libs/v3_native_linkage" ]]; then
-    BIN="$BUILD_DIR/test/.libs/v3_native_linkage"
+SUFFIX=""
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) SUFFIX=".exe" ;; esac
+BIN="$BUILD_DIR/test/v3_native_linkage$SUFFIX"
+if [[ -x "$BUILD_DIR/test/.libs/v3_native_linkage$SUFFIX" ]]; then
+    BIN="$BUILD_DIR/test/.libs/v3_native_linkage$SUFFIX"
 fi
 [[ -x "$BIN" ]] || fail "native audit executable missing: $BIN"
 ARCHIVE="$BUILD_DIR/src/.libs/libhttpserver_v3core.a"
 [[ -f "$ARCHIVE" ]] || fail "native archive missing: $ARCHIVE"
 command -v nm >/dev/null 2>&1 || fail "nm is required"
 
-if command -v otool >/dev/null 2>&1; then
+if [[ "$SUFFIX" == .exe ]]; then
+    command -v objdump >/dev/null 2>&1 || fail "objdump is required on MinGW64"
+    deps="$(objdump -p "$BIN")" || fail "objdump failed"
+    [[ "$deps" == *"file format pei"* ]] || fail "malformed PE inspection"
+    libraries="$(printf '%s\n' "$deps" | awk '/DLL Name:/ {print $3}')"
+elif command -v otool >/dev/null 2>&1; then
     deps="$(otool -L "$BIN")" || fail "otool failed"
     libraries="$(printf '%s\n' "$deps" | tail -n +2 | awk '{print $1}')"
 elif command -v ldd >/dev/null 2>&1; then
@@ -216,7 +223,7 @@ while IFS= read -r library; do
             fail "unexpected third-party load dependency: $library" ;;
         *)
             case "$name" in
-                linux-vdso.*|ld-linux*|ld-musl*|libc.so*|libm.so*|libstdc++.*|libstdc++-*|libgcc_s.*|libgcc_s-*|libwinpthread-*|libpthread.*|libthr.*|libexecinfo.*|libatomic.*|libdl.*|librt.*|libresolv.*|libc++.*|libc++abi.*|libsystem.*|kernel32.dll|ws2_32.dll|msvcrt.dll|ucrtbase.dll|api-ms-win-*.dll|advapi32.dll|bcrypt.dll|ntdll.dll) ;;
+                linux-vdso.*|ld-linux*|ld-musl*|ld-elf*.so*|libc.so*|libm.so*|libstdc++.*|libstdc++-*|libgcc_s.*|libgcc_s-*|libwinpthread-*|libpthread.*|libthr.*|libexecinfo.*|libatomic.*|libdl.*|librt.*|libresolv.*|libc++.*|libc++abi.*|libsystem.*|kernel32.dll|ws2_32.dll|msvcrt.dll|ucrtbase.dll|api-ms-win-*.dll|advapi32.dll|bcrypt.dll|bcryptprimitives.dll|crypt32.dll|secur32.dll|user32.dll|kernelbase.dll|ntdll.dll) ;;
                 *) fail "unexpected third-party load dependency: $library" ;;
             esac ;;
     esac
@@ -226,7 +233,7 @@ done <<< "$libraries"
 # Normalize nm output: Mach-O prefixes C symbols with _, GNU nm prints 'U name'.
 for artifact in "$BIN" "$ARCHIVE"; do
     symbols="$(nm -u "$artifact" 2>/dev/null)" || fail "nm failed: $artifact"
-    names="$(printf '%s\n' "$symbols" | awk '{print $NF}' | sed 's/^_//')"
+    names="$(printf '%s\n' "$symbols" | awk '{print $NF}' | sed -E 's/^_*imp_+//; s/^_+//; s/@[0-9]+$//')"
     if printf '%s\n' "$names" | grep -Eq '^(MHD_|gnutls_|nettle_|hogweed_|wslay_|curl_|wolfSSL_|mbedtls_)'; then
         fail "non-native provider symbols in $artifact"
     fi

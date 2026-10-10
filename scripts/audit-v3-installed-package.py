@@ -44,21 +44,35 @@ def load_policy():
 
 
 def family(path):
-    name = Path(path).name
+    name = Path(path).name.lower()
+    frameworks = {'security': 'Security', 'corefoundation': 'CoreFoundation', 'coreservices': 'CoreServices'}
+    if name in frameworks:
+        return frameworks[name]
+    if name.endswith('.exe'):
+        name = name[:-4]
     match = re.match(r'lib(.+?)(?:\.[0-9]|\.dylib|\.so|\.a|-[0-9])', name)
     return match[1] if match else 'consumer' if name in ('consumer', 'v3_package_consumer', 'v3_native_linkage') else name
 
 
 RUNTIME = ('libSystem.*', 'libc++.*', 'libc++abi.*', 'libstdc++.*', 'libgcc_s.*',
            'libc.so*', 'libm.so*', 'libpthread.*', 'libthr.*', 'libdl.*', 'librt.*',
-           'libatomic.*', 'libresolv.*', 'libexecinfo.*', 'ld-linux*', 'ld-musl*')
+           'libatomic.*', 'libresolv.*', 'libexecinfo.*', 'ld-linux*', 'ld-musl*', 'ld-elf*.so*')
 BACKEND_TYPE = re.compile(r'\b(?:MHD_\w+|gnutls_\w+|SSL_CTX|SSL|X509|BIO|OSSL_\w+)\b')
 LEGACY_SYMBOL = re.compile(r'^(MHD_|gnutls_|nettle_|hogweed_|wslay_|curl_|wolfSSL_|mbedtls_)')
 TLS_SYMBOL = re.compile(r'^(SSL_|TLS_|DTLS_|OPENSSL_|OpenSSL_|CRYPTO_|EVP_|BIO_|ERR_|OSSL_|X509_|RAND_|BN_|PEM_|ASN1_)')
 
 
 def runtime(path):
-    trusted_roots = ('/usr/lib', '/lib', '/lib64', '/usr/lib64', '/usr/local/lib/gcc', '/opt/homebrew/Cellar/gcc', '/opt/homebrew/Cellar/llvm')
+    if platform.system() == 'Windows':
+        location = Path(path).resolve()
+        system = Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32'
+        if location.is_relative_to(system.resolve()) and windows_system(Path(path).name):
+            return True
+        toolchain = os.environ.get('V3_PACKAGE_TOOLCHAIN')
+        return bool(toolchain and location.is_relative_to(Path(toolchain).resolve()) and
+                    any(fnmatch.fnmatch(location.name.lower(), pattern) for pattern in
+                        ('libstdc++-*.dll', 'libgcc_s_*.dll', 'libwinpthread-*.dll')))
+    trusted_roots = ('/libexec', '/usr/lib', '/lib', '/lib64', '/usr/lib64', '/usr/local/lib/gcc', '/opt/homebrew/Cellar/gcc', '/opt/homebrew/Cellar/llvm')
     return (any(fnmatch.fnmatch(Path(path).name, pattern) for pattern in RUNTIME)
             and any(Path(path).is_relative_to(Path(root)) for root in trusted_roots))
 
@@ -91,7 +105,55 @@ DYLD_LEAVES = {'/usr/lib/libSystem.B.dylib', '/usr/lib/libc++.1.dylib', '/usr/li
                '/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices'}
 
 
+WINDOWS_SYSTEM = {'kernel32.dll', 'kernelbase.dll', 'ntdll.dll', 'msvcrt.dll', 'ucrtbase.dll',
+                  'ws2_32.dll', 'advapi32.dll', 'bcrypt.dll', 'bcryptprimitives.dll', 'crypt32.dll',
+                  'secur32.dll', 'user32.dll', 'iphlpapi.dll', 'winmm.dll', 'ole32.dll', 'shell32.dll',
+                  'userenv.dll', 'ncrypt.dll', 'gdi32.dll', 'shlwapi.dll', 'comdlg32.dll'}
+
+
+def windows_system(name):
+    name = name.lower()
+    return name in WINDOWS_SYSTEM or bool(re.fullmatch(r'(?:api|ext)-ms-win-[a-z0-9-]+\.dll', name))
+
+
+def parse_pe(output):
+    if not re.search(r'file format pei?-(?:x86-64|i386)', output):
+        raise AuditError('missing/malformed PE inspection')
+    names = re.findall(r'^\s*DLL Name:\s*(\S+\.dll)\s*$', output, re.M | re.I)
+    if not names or output.lower().count('dll name:') != len(names):
+        raise AuditError('empty/malformed PE imports')
+    return [name.lower() for name in names]
+
+
+def resolve_pe(name):
+    name = name.lower()
+    if windows_system(name):
+        return str(Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32' / name)
+    roots = os.environ.get('V3_PACKAGE_DLL_DIRS', '').split(os.pathsep)
+    for root in filter(None, roots):
+        directory = Path(root)
+        if directory.is_dir():
+            matches = [path for path in directory.iterdir() if path.name.lower() == name and path.is_file()]
+            if len(matches) == 1:
+                return str(matches[0].resolve())
+    raise AuditError('unresolved PE import: ' + name)
+
+
+def package_artifacts(prefix):
+    artifacts = [path for directory in (prefix / 'lib', prefix / 'bin') if directory.is_dir()
+                 for path in directory.iterdir() if path.is_file() and path.name.lower().startswith('libhttpserver')]
+    archives = [path for path in artifacts if path.name == 'libhttpserver.a']
+    shared = [path for path in artifacts if path.name.lower().endswith(('.dll', '.dylib')) or '.so' in path.name]
+    if not archives or not shared:
+        raise AuditError('installed shared/static aggregate missing (import archives are not static libraries)')
+    return sorted(shared), archives
+
+
 def platform_inspector(path):
+    if platform.system() == 'Windows':
+        if runtime(path) and windows_system(Path(path).name):
+            return []
+        return [(name, resolve_pe(name)) for name in parse_pe(run(['objdump', '-p', path]))]
     if platform.system() == 'Darwin':
         names = parse_otool(run(['otool', '-L', path]), path)
         resolved = []
@@ -109,7 +171,7 @@ def platform_inspector(path):
             raise AuditError('missing ELF dynamic section: ' + path)
         names = re.findall(r'\(NEEDED\).*\[(.*?)\]', dynamic)
         if not names:
-            if runtime(path) and Path(path).name.startswith(('ld-linux', 'ld-musl')):
+            if runtime(path):
                 return []
             raise AuditError('empty ELF dependency inspection')
         resolved = run(['ldd', path])
@@ -130,11 +192,12 @@ def dependency_graph(roots, inspector=platform_inspector):
         identity = str(Path(path).resolve())
         if identity in visited:
             return identity
-        if not Path(identity).is_file() and not (platform.system() == 'Darwin' and identity in DYLD_LEAVES):
+        platform_leaf = (platform.system() == 'Darwin' and identity in DYLD_LEAVES) or (platform.system() == 'Windows' and runtime(identity) and windows_system(Path(identity).name))
+        if not Path(identity).is_file() and not platform_leaf:
             raise AuditError('unresolved dependency: ' + path)
         visited.add(identity)
-        cached = platform.system() == 'Darwin' and identity in DYLD_LEAVES and not Path(identity).exists()
-        nodes.append({'id': identity, 'provenance': 'sealed macOS dyld cache platform leaf' if cached else 'platform inspector',
+        cached = platform_leaf and not Path(identity).exists()
+        nodes.append({'id': identity, 'provenance': 'OS/API-set platform leaf' if cached else 'platform inspector',
                       'sha256': None if cached else hashlib.sha256(Path(identity).read_bytes()).hexdigest()})
         dependencies = [] if cached else inspector(identity)
         if not isinstance(dependencies, list):
@@ -164,7 +227,8 @@ def graph_violations(graph, mode, tls, surface, policy, provider_prefix):
         if child not in identities or parent not in identities:
             violations.append('missing dependency node: ' + str(edge))
             continue
-        dep, owner = family(child), family(parent)
+        dep = family(child)
+        owner = graph.get('consumer_roles', {}).get(parent, family(parent))
         if runtime(child):
             continue
         if dep == 'httpserver' and surface == 'aggregate' and child in identities:
@@ -174,6 +238,9 @@ def graph_violations(graph, mode, tls, surface, policy, provider_prefix):
                 violations.append('unselected native provider: ' + child)
             continue
         if surface == 'aggregate' and mode == 'pre-cutover' and dep in policy.get('legacy_edges', {}).get(owner, []):
+            roots = list(filter(None, os.environ.get('V3_PACKAGE_PREREQUISITES', '').split(os.pathsep)))
+            if roots and not any(Path(child).is_relative_to(Path(root).resolve()) for root in roots) and child not in DYLD_LEAVES:
+                violations.append('unselected transitional dependency: ' + child)
             continue
         violations.append(f'undeclared dependency ({surface}/{mode}): {parent} -> {child}')
     return violations
@@ -182,7 +249,9 @@ def graph_violations(graph, mode, tls, surface, policy, provider_prefix):
 def symbol_violations(output, surface, tls, mode):
     violations = []
     for line in output.splitlines():
-        symbol = line.split()[-1].lstrip('_') if line.split() else ''
+        symbol = line.split()[-1] if line.split() else ''
+        symbol = re.sub(r'^_*imp_+', '', symbol).lstrip('_')
+        symbol = re.sub(r'@[0-9]+$', '', symbol)
         if LEGACY_SYMBOL.match(symbol) and (surface == 'native' or mode == 'strict' or symbol.startswith(('curl_', 'wolfSSL_', 'mbedtls_', 'wslay_'))):
             violations.append('legacy archive symbol: ' + symbol)
         if TLS_SYMBOL.match(symbol) and tls != 'yes':
@@ -197,6 +266,7 @@ def layout_violations(headers):
 def header_violations(effective, includes, forbidden_roots=()):
     violations = ['backend declaration: ' + match.group() for match in BACKEND_TYPE.finditer(effective)]
     for include in includes:
+        include = include.replace('\\', '/')
         if re.search(r'/(?:openssl/|gnutls/|microhttpd(?:_ws)?\.h|sys/(?:socket|uio)\.h|httpserver/detail/)', include) or include.endswith('_impl.hpp'):
             violations.append('backend/private include: ' + include)
         if any(Path(include).is_relative_to(Path(root).resolve()) for root in forbidden_roots):
@@ -240,7 +310,7 @@ def audit_headers(prefix, source, build, compiler):
         run(args + ['-fsyntax-only'], input=unit, env=clean_environment())
         includes = re.findall(r'^# \d+ "([^"]+)"', effective, re.M)
         actual = [p for p in includes if not p.startswith('<')]
-        if gated and str(include / name) not in actual:
+        if gated and (include / name).resolve() not in [Path(path).resolve() for path in actual]:
             raise AuditError('installed gated header not reachable through umbrella: ' + name)
         traces[name] = sorted(set(actual))
         violations += header_violations(effective, actual, (source, build))
@@ -249,7 +319,7 @@ def audit_headers(prefix, source, build, compiler):
         for line in effective.splitlines():
             marker = re.match(r'^# \d+ "([^"]+)"', line)
             if marker:
-                current = marker[1].startswith(str(include) + '/')
+                current = not marker[1].startswith('<') and Path(marker[1]).resolve().is_relative_to(include.resolve())
             elif current and line.strip():
                 public.append(line.strip())
         declarations[name] = hashlib.sha256('\n'.join(public).encode()).hexdigest()
@@ -271,21 +341,17 @@ def audit(prefix, build, consumer, tls, mode, provider_prefix, compiler='c++'):
     if mode == 'pre-cutover' and ('-lmicrohttpd' not in provenance['src/Makefile.am'] or
                                   'libmicrohttpd' not in provenance['installed/libhttpserver.pc']):
         raise AuditError('transitional declaration provenance missing')
-    artifacts = sorted(p for p in (prefix / 'lib').iterdir() if p.is_file() and
-                       (p.name.endswith('.dylib') or '.so' in p.name or p.suffix == '.a'))
-    archives = [p for p in artifacts if p.suffix == '.a']
-    shared = [p for p in artifacts if p.suffix != '.a']
-    if not archives or not shared:
-        raise AuditError('installed shared/static aggregate missing')
+    shared, archives = package_artifacts(prefix)
     consumers = [consumer]
-    static_consumer = consumer.parent / 'static_consumer'
+    static_consumer = consumer.parent / ('static_consumer.exe' if platform.system() == 'Windows' else 'static_consumer')
     if static_consumer.is_file():
         consumers.append(static_consumer)
     aggregate = dependency_graph([str(p) for p in consumers + shared])
     violations += graph_violations(aggregate, mode, tls, 'aggregate', policy, provider_prefix)
-    native_bin = build / 'test/.libs/v3_native_linkage'
+    suffix = '.exe' if platform.system() == 'Windows' else ''
+    native_bin = build / ('test/.libs/v3_native_linkage' + suffix)
     if not native_bin.exists():
-        native_bin = build / 'test/v3_native_linkage'
+        native_bin = build / ('test/v3_native_linkage' + suffix)
     native_archive = build / 'src/.libs/libhttpserver_v3core.a'
     native = dependency_graph([str(native_bin)])
     violations += graph_violations(native, mode, tls, 'native', policy, provider_prefix)

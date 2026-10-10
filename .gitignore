@@ -127,3 +127,8 @@ __pycache__/
 !test/integ/behavior_parity_h2.py
 !test/integ/behavior_parity_h3.py
 !test/integ/behavior_parity_client_test.py
+
+# TASK-182 package matrix tools.
+!scripts/test-v3-installed-consumer.py
+!scripts/test-v3-package-workflow.py
+!scripts/prepare-v3-package-ci.py

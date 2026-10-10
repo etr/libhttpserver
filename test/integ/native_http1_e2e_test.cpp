@@ -66,6 +66,7 @@
 #include <httpserver/server/server.hpp>
 
 #include "./digest_client.hpp"
+#include "./nonce_expiry_wait.hpp"
 #include "../integ/raw_http_client.hpp"
 #include "../unit/response_source_rig.hpp"
 #include "./littletest.hpp"
@@ -1695,8 +1696,10 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, digest_stale_nonce_rechallenges)
     const auto parsed = dclient::parse_www_authenticate(*first_challenge);
     LT_CHECK(parsed.has_value());
     if (!parsed.has_value()) return;
-    // ttl=0: the offered nonce expires when the wall clock advances.
-    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    LT_ASSERT(httpserver_test::wait_for_nonce_expiry(parsed->nonce, [] {
+        return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+    }, [] { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }, std::chrono::seconds(5)));
     LT_CHECK(client.send(
         "GET /digest-stale HTTP/1.1\r\nHost: h\r\nAuthorization: "
         + answered_digest(*parsed, dclient::digest_hash::md5, "bob",
