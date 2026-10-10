@@ -1,7 +1,7 @@
 # libhttpserver — Task Plans
 
 **Status:** v2 historical plan; v3.0 task plan approved for implementation
-**Last updated:** 2026-09-29
+**Last updated:** 2026-10-10
 **Owner:** Sebastiano Merlino
 **Inputs:** [product specs](../product_specs.md), [architecture](../architecture/)
 
@@ -9,11 +9,11 @@
 
 ## v3.0 plan
 
-90 tasks, TASK-096–TASK-185, across M8–M13. M1–M7 and TASK-001–TASK-095 remain the v2 plan. All v3 tasks start as `Not Started`. Estimates are S ≈ 1 day, M ≈ 2 days, L ≈ 3 days of focused implementation and tests; interoperability work may take longer.
+104 tasks, TASK-096–TASK-199, across M8–M14. The 14 M14 repairs implement the 2026-10-10 instruction to fix all remaining local release failures and missing public capabilities; TASK-185 runs after those dependencies. See the [repair roadmap](v3-release-repair-roadmap.md). M1–M7 and TASK-001–TASK-095 remain the v2 plan. Current task states appear in the status table and task cards. Estimates are S ≈ 1 day, M ≈ 2 days, L ≈ 3 days of focused implementation and tests; interoperability work may take longer.
 
 ### v3 integration branch
 
-The base and integration branch for every TASK-096–TASK-185 is **`v3`**. Before executing a task, confirm that `v3` exists, contains the approved v3 specs and task files, and is the checked-out base branch. Create the task's branch and worktree from `v3`; validate and merge the completed task back into `v3`. If a Groundwork workflow reports another `base_branch`, stop before implementation or merge and correct the branch context. Integration of `v3` into `main` is a separate release decision.
+The base and integration branch for every TASK-096–TASK-199 is **`v3`**. Before executing a task, confirm that `v3` exists, contains the approved v3 specs and task files, and is the checked-out base branch. Create the task's branch and worktree from `v3`; validate and merge the completed task back into `v3`. If a Groundwork workflow reports another `base_branch`, stop before implementation or merge and correct the branch context. Integration of `v3` into `main` is a separate release decision.
 
 ### v3 milestones
 
@@ -25,6 +25,7 @@ The base and integration branch for every TASK-096–TASK-185 is **`v3`**. Befor
 | [M11: First HTTP/3 slice](M11-http3-first-slice/) | Owned QUIC v1 and static-QPACK HTTP/3 serve bounded GET/POST through the shared exchange. | 15 |
 | [M12: Full HTTP/3](M12-http3-full/) | QUIC recovery and migration, dynamic QPACK, H3 drain, and WebSockets over H3 pass independent-client gates. | 15 |
 | [M13: v3.0 release](M13-v3-release/) | Parity, cross-platform packages, resource limits, documentation, and all protocol/security release gates pass. | 7 |
+| [M14: v3 local release readiness repairs](M14-v3-release-repairs/) | Complete public TLS/H2/H3 and credential integration, repair local failures, and supply native benchmarks before the final release gate. | 14 |
 
 ### v3 dependency graph
 
@@ -37,7 +38,8 @@ M10 108 → 129 → 130 → 131 → 132 [TLS]; 137 → 138 → 139–145 [HTTP/2
                     131 → 133–136 [mTLS/PSK/ACME]; 146–148 [IOCP/audit]
 M11 149–158 [owned QUIC]; 159 [static QPACK] → 160–163 [first H3 slice]
 M12 164–178 [QUIC/H3 recovery, migration, dynamic QPACK, WebSocket]
-M13 179–184 [migration, package, platform gates] → 185 [release gate]
+M13 179–184 [migration, package, platform gates]
+M14 186–199 [local repairs, public transports, native benchmarks] → 185 [release gate]
 ```
 
 The graph shows the main tracks; each task file and the status table below give exact blockers. The longest path by task count has 27 tasks:
@@ -327,10 +329,24 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-179 | [Audit v2-to-v3 behavior parity across all protocols](M13-v3-release/TASK-179.md) | M13 | Complete | TASK-128, TASK-145, TASK-178 |
 | TASK-180 | [Verify hierarchical resource limits and slow-peer plateaus across engines](M13-v3-release/TASK-180.md) | M13 | Complete | TASK-128, TASK-145, TASK-178 |
 | TASK-181 | [Expose bounded diagnostic callbacks and counters](M13-v3-release/TASK-181.md) | M13 | Complete | TASK-108, TASK-145, TASK-178 |
-| TASK-182 | [Complete four-platform managed/external-loop package validation](M13-v3-release/TASK-182.md) | M13 | In Progress | TASK-125, TASK-126, TASK-127, TASK-146, TASK-178 |
+| TASK-182 | [Complete four-platform managed/external-loop package validation](M13-v3-release/TASK-182.md) | M13 | Complete | TASK-125, TASK-126, TASK-127, TASK-146, TASK-178 |
 | TASK-183 | [Publish v2-to-v3 migration guide and API examples](M13-v3-release/TASK-183.md) | M13 | Complete | TASK-179 |
 | TASK-184 | [Remove MHD build/link paths and bump v3 SOVERSION](M13-v3-release/TASK-184.md) | M13 | Complete | TASK-179, TASK-182, TASK-183 |
-| TASK-185 | [Run final dependency, conformance, sanitizer and performance release gates](M13-v3-release/TASK-185.md) | M13 | Not Started | TASK-180, TASK-181, TASK-182, TASK-183, TASK-184 |
+| TASK-185 | [Run final dependency, conformance, sanitizer and performance release gates](M13-v3-release/TASK-185.md) | M13 | In Progress | TASK-180, TASK-181, TASK-182, TASK-183, TASK-184, TASK-199 |
+| TASK-186 | [Repair concurrency consumer lifetime and sanitizer-owned allocation coverage](M14-v3-release-repairs/TASK-186.md) | M14 | Not Started | None |
+| TASK-187 | [Repair response-source and multipart coroutine lifetimes](M14-v3-release-repairs/TASK-187.md) | M14 | Not Started | TASK-186 |
+| TASK-188 | [Eliminate peer-policy mutation starvation](M14-v3-release-repairs/TASK-188.md) | M14 | Not Started | TASK-187 |
+| TASK-189 | [Repair native HTTP/1 WebSocket handshake and flood progress](M14-v3-release-repairs/TASK-189.md) | M14 | Not Started | TASK-188 |
+| TASK-190 | [Repair HTTP/2 conformance route-effect ordering](M14-v3-release-repairs/TASK-190.md) | M14 | Not Started | TASK-189 |
+| TASK-191 | [Repair independent HTTP/3 semantic drain completion](M14-v3-release-repairs/TASK-191.md) | M14 | Not Started | TASK-190 |
+| TASK-192 | [Supply current-v3 cookie parity witnesses](M14-v3-release-repairs/TASK-192.md) | M14 | Not Started | TASK-191 |
+| TASK-193 | [Install public credentials and serve native TCP TLS](M14-v3-release-repairs/TASK-193.md) | M14 | Not Started | TASK-192 |
+| TASK-194 | [Complete public TLS profiles, live rotation and ACME selection](M14-v3-release-repairs/TASK-194.md) | M14 | Not Started | TASK-193 |
+| TASK-195 | [Route negotiated public HTTP/2 streams through native listeners](M14-v3-release-repairs/TASK-195.md) | M14 | Not Started | TASK-190, TASK-194 |
+| TASK-196 | [Add production UDP QUIC ownership and public HTTP/3 routing](M14-v3-release-repairs/TASK-196.md) | M14 | Not Started | TASK-191, TASK-193, TASK-195 |
+| TASK-197 | [Complete public HTTP/3 lifecycle, policy and WebSocket parity](M14-v3-release-repairs/TASK-197.md) | M14 | Not Started | TASK-194, TASK-196 |
+| TASK-198 | [Provide native public throughput and latency benchmarks](M14-v3-release-repairs/TASK-198.md) | M14 | Not Started | TASK-195, TASK-197 |
+| TASK-199 | [Deliver packaged public-capability and benchmark adapters for release execution](M14-v3-release-repairs/TASK-199.md) | M14 | Not Started | TASK-198 |
 
 ## PRD requirement coverage
 

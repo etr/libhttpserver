@@ -26,4 +26,4 @@ Provide four-platform managed/external-loop package validation for libhttpserver
 
 **Status:** Complete
 
-**Implementation evidence:** `docs/task-182-package-validation-evidence.md` records the local gates and the nonlocal execution boundary. Status remains In Progress for runner-owned validation and finalization.
+**Implementation evidence:** `docs/task-182-package-validation-evidence.md` records the local gates and the nonlocal execution boundary. Local validation and finalization are complete; nonlocal runtime checks remain CI/v3-PR owned under AGENTS.md.

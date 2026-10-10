@@ -14,7 +14,7 @@ Provide final dependency, conformance, sanitizer and performance release gates f
 - [ ] Require every v3.0 in-scope gate to pass before tagging.
 
 **Dependencies:**
-- Blocked by: TASK-180, TASK-181, TASK-182, TASK-183, TASK-184
+- Blocked by: TASK-180, TASK-181, TASK-182, TASK-183, TASK-184, TASK-199
 - Blocks: None
 
 **Acceptance Criteria:**
@@ -24,4 +24,12 @@ Provide final dependency, conformance, sanitizer and performance release gates f
 **Related Requirements:** PRD-V3N-REQ-001, PRD-V3N-REQ-002, PRD-V3N-REQ-003, PRD-V3N-REQ-004, PRD-V3N-REQ-005, PRD-V3N-REQ-006, PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** In Progress
+
+**Authorized repair continuation (2026-10-10):** The user instructed that all
+remaining failures and missing capabilities be fixed. TASK-186–TASK-199 deliver
+those dependencies serially on `v3`; this task remains open in its preserved
+worktree until the complete required local release inventory passes on a fresh
+package. Preserve earlier repairs, validation findings and unsuccessful receipts.
+See the [repair roadmap](../v3-release-repair-roadmap.md). Nonlocal checks remain
+CI/v3-PR owned; no tag, push, publication or deployment is part of this batch.
