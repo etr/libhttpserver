@@ -27,6 +27,6 @@
 - Blocks: TASK-187, TASK-185
 **Related Requirements:** PRD-V3N-REQ-024, PRD-V3N-REQ-025, PRD-V3N-REQ-031, PRD-V3N-REQ-037; owned-engine sanitizer acceptance.
 **Related Decisions:** DR-V3-003, DR-V3-006, DR-V3-008.
-**Status:** In Progress
+**Status:** Complete
 
-**Implementation evidence:** [TASK-186 implementation evidence](../../architecture/v3/TASK-186-implementation-evidence.md). All six local concurrency lanes and staged consumers pass; In Progress pending caller-owned Groundwork validation/finalization. Original normal/ASan reclaim executes both winners; this target has no explicit allocation-failure test. Only its allocation-hook case skips under sanitizer allocator ownership, with two race cases still active.
+**Implementation evidence:** [TASK-186 implementation evidence](../../architecture/v3/TASK-186-implementation-evidence.md). All six local concurrency lanes and staged consumers pass; Groundwork validation passed in one iteration with eight approvals, zero fixes and zero unworked findings. Implementation logs/journal are retained under `/home/etr/progs/libhttpserver/build/task186-evidence/implementation-3f5ee853` with an artifact hash manifest. Original normal/ASan reclaim executes both winners; this target has no explicit allocation-failure test. Only its allocation-hook case skips under sanitizer allocator ownership, with two race cases still active.
