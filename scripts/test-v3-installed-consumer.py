@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Package matrix and bounded subprocess regressions (not runtime receipts)."""
 import copy
+import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
+import signal
+import socket
 import sys
 import tempfile
 import unittest
@@ -11,6 +15,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
 import v3_package_matrix as matrix
+import v3_package_commands as commands
 import v3_package_process as process
 import v3_package_traffic as traffic
 
@@ -152,6 +157,90 @@ class TrafficTest(unittest.TestCase):
         for size in ('-1', '20000'):
             with self.assertRaises(RuntimeError):
                 traffic.response(self.connection([b'HTTP/1.1 200 OK\r\nContent-Length: ' + size.encode() + b'\r\n\r\n']))
+
+
+class CommandsTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.runner = commands.Commands(self.root)
+
+    def command(self, code):
+        return [sys.executable, '-u', '-c', code]
+
+    def assert_descendant_retired(self, parent_code, timeout):
+        ready = self.root / 'descendant.json'
+        worker = ("import json, os, socket, time; from pathlib import Path; "
+                  "s=socket.socket(); s.bind(('127.0.0.1', 0)); "
+                  "Path('descendant.json').write_text(json.dumps([os.getpid(), s.getsockname()[1]])); "
+                  "time.sleep(30)")
+        code = ("import subprocess, sys, time; from pathlib import Path; "
+                f"subprocess.Popen({self.command(worker)!r}); "
+                "\nwhile not Path('descendant.json').exists(): time.sleep(.01)\n" + parent_code)
+        retired = False
+        try:
+            with self.assertRaisesRegex(RuntimeError, 'deadline/output budget exceeded'):
+                self.runner(self.command(code), self.root, os.environ, timeout=timeout)
+            self.assertTrue(ready.exists(), 'descendant must start before command failure')
+            _, port = json.loads(ready.read_text())
+            with socket.socket() as probe:
+                try:
+                    probe.bind(('127.0.0.1', port))
+                except OSError:
+                    self.fail('descendant retained its socket after command failure')
+            retired = True
+            receipt = json.loads((self.root / 'commands.json').read_text())[0]
+            self.assertIn('deadline/output budget exceeded', receipt['error'])
+            self.assertTrue(Path(receipt['log']).exists())
+        finally:
+            # Keep RED runs from leaking the deliberately long-lived worker.
+            if not retired and ready.exists():
+                pid, _ = json.loads(ready.read_text())
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+
+    def test_timeout_retires_descendants_and_retains_failure_receipt(self):
+        self.assert_descendant_retired('time.sleep(30)', timeout=1)
+
+    def test_timeout_retires_descendants_after_parent_has_exited(self):
+        self.assert_descendant_retired('raise SystemExit(0)', timeout=1)
+
+    def test_output_overflow_retires_descendants_and_bounds_log(self):
+        self.assert_descendant_retired(
+            "import os\nwhile True: os.write(1, b'x' * 65536)", timeout=5)
+        self.assertLessEqual((self.root / 'command-0000.log').stat().st_size, 64 * 1024 * 1024)
+
+    def test_fast_exiting_oversized_writer_cannot_bypass_output_budget(self):
+        with self.assertRaisesRegex(RuntimeError, 'deadline/output budget exceeded'):
+            self.runner(self.command("import os; os.write(1, b'x' * (65 * 1024 * 1024))"),
+                        self.root, os.environ, timeout=5)
+        self.assertLessEqual((self.root / 'command-0000.log').stat().st_size, 64 * 1024 * 1024)
+        receipt = json.loads((self.root / 'commands.json').read_text())[0]
+        self.assertIn('deadline/output budget exceeded', receipt['error'])
+
+    def test_success_and_allowed_failure_keep_output_and_hash_receipts(self):
+        for status in (0, 7):
+            with self.subTest(status=status):
+                output = self.runner(self.command(f"print('out'); print('err', file=__import__('sys').stderr); raise SystemExit({status})"),
+                                     self.root, os.environ, timeout=5, allow_failure=True)
+                self.assertEqual(['out', 'err'], output.splitlines())
+                record = self.runner.records[-1]
+                data = Path(record['log']).read_bytes()
+                self.assertEqual(status, record['exit'])
+                self.assertEqual(len(data), record['bytes'])
+                self.assertEqual(hashlib.sha256(data).hexdigest(), record['sha256'])
+
+    def test_nonzero_exit_retains_output_and_failure_receipt(self):
+        with self.assertRaisesRegex(RuntimeError, 'matrix command failed:'):
+            self.runner(self.command("print('failure detail'); raise SystemExit(7)"),
+                        self.root, os.environ, timeout=5)
+        receipt = json.loads((self.root / 'commands.json').read_text())[0]
+        self.assertEqual(7, receipt['exit'])
+        self.assertIn('failure detail', receipt['error'])
+        self.assertIn(b'failure detail', Path(receipt['log']).read_bytes())
 
 
 class ProcessTest(unittest.TestCase):
