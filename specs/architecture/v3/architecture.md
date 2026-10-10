@@ -359,3 +359,24 @@ Protocol engines report lifecycle terminals once and flow-control stalls on
 blocked transitions. Shared drain scopes arbitrate completion versus expiry
 under their existing lock; event delivery remains explicit and independent.
 See `docs/task-181-diagnostics.md` for counter semantics and application usage.
+
+
+### Public native certificate TLS (TASK-193; DR-V3-004/006/007/008)
+
+`server::tls_credentials` is a shared opaque value handle over the existing
+immutable credential registry. Listeners retain explicit stores, accepted
+sessions acquire one complete generation, and replacement builds off-path then
+publishes atomically. No provider, private snapshot or runtime handle enters the
+installed API. Public certificate-only H1 credentials are available in TLS-on;
+TLS-off keeps the same declarations and typed unavailability. Later tasks own
+public mTLS/PSK/ACME and H2/H3 integration.
+
+Native listeners bind transactionally before activating accepts. One existing
+connection engine reserves admission before TLS allocation, counts its handshake
+in the drain scope and uses its existing serialized I/O owner for the explicit
+handshake followed by H1 tasks. Certificate provider steps use the existing
+bounded private runtime. TLS socket views retain immutable selection and genuine
+peer metadata through session/child completion retirement; hooks and routes run
+outside listener/I/O locks. Both loop modes advance the same network and deadline
+operations. See [the design comparison](TASK-193-design.md) and implementation
+evidence for disproving tests and installed-package identities.

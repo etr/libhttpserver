@@ -22,16 +22,17 @@ TCP/TLS/QUIC transport evidence; these are different kinds of proof.
 | --- | --- | --- |
 | Plaintext HTTP/1.0 and HTTP/1.1 | Managed and external listeners available | `v3_routes`, `v3_external_event_loop` |
 | HTTP/1.1 WebSocket Upgrade | Coroutine API available without legacy WS build flags | `v3_websocket_echo` |
-| TLS, HTTP/2 and HTTP/3 listeners | `native_server::listen()` returns `not_supported` before binding any endpoint | `v3_protocol_options` |
+| Certificate TCP TLS HTTP/1 listeners | Public credential store, managed/external listeners in TLS-on builds | `test/installed/v3_tls_consumer.cpp` |
+| HTTP/2 and HTTP/3 listeners | `native_server::listen()` returns `not_supported` before binding any endpoint | `v3_protocol_options` |
 | Common HTTP/1.1, HTTP/2, HTTP/3 handlers | Semantic exchange contract exercised for each version | `test/unit/v3_examples_test.cpp` |
-| Certificate rotation | Private registry only; no public credential installation or rotation API | `test/examples/v3_tls_rotation.cpp`, TLS rotation tests |
+| Certificate rotation | Public `tls_credentials::replace`, immutable accepted selections | `test/examples/v3_tls_rotation.cpp`, installed TLS runner |
 
 `server_options::validate()` checks configuration semantics, not transport
 availability. A TLS-on build can validate certificate-profile H2/H3 options and
 still refuse `listen()`. `query_features()` distinguishes provider availability
-from public transports. Mixed plaintext/TLS configurations are also rejected
-before binding. The private audit's encrypted handshakes and Extended CONNECT
-journeys do not make public encrypted listeners available.
+from public transports. Valid credential-backed mixed plaintext/TLS listeners
+serve HTTP/1; missing credentials reject atomically. Private H2/H3 and Extended
+CONNECT evidence remains distinct from public protocol availability.
 
 ## Server construction and routing
 
@@ -157,20 +158,28 @@ exclusions, not failed parity observations.
 
 Native TLS selects optional OpenSSL at build time with `--enable-v3-tls`; the
 current build gate requires stable OpenSSL **3.5.x patch 9 or later** and its QUIC
-TLS callbacks. v2 GnuTLS server options and PSK callbacks have no native public
-credential-installation mapping. `server_options::tls()` selects semantic
-provider/profile options. External PSK is restricted to HTTP/1; enabling H2/H3
-with that profile returns `not_supported`. Initial-handshake client auth supports
-optional verified or required certificates; post-handshake auth is unavailable.
+TLS callbacks. Public certificate values go through `server::tls_credentials`;
+`listener_options::credentials` associates the store. `server_options::tls()`
+selects provider/profile policy. Public mTLS/PSK/ACME scenarios remain TASK-194
+work; their native listener requests reject honestly. Private initial-handshake
+client-auth/PSK suites retain existing coverage; post-handshake auth is unavailable.
 
-The [private rotation demonstration](../test/examples/v3_tls_rotation.cpp) uses
-`detail::tls_credentials_registry::replace()` and `acquire()`: successful
-publication replaces the active generation, old selections retain their contexts,
-and failed replacement leaves the active generation unchanged. Its private header
-requires `HTTPSERVER_COMPILATION` and is not installed. The independent verified
-TLS peers in [tls_credentials_rotation_test.cpp](../test/unit/tls_credentials_rotation_test.cpp)
-prove established sessions continue after replacement. This example is
-repository-internal and cannot be compiled against installed public headers.
+The [public publication demonstration](../test/examples/v3_tls_rotation.cpp)
+uses `server::tls_credentials::replace()`: successful publication replaces the
+active generation, accepted sessions retain their contexts, and failed
+replacement leaves the active publication unchanged. It uses only installed
+public headers. `check-v3-public-tls.py` verifies selected certificates and held
+handshakes/connections across replacement through installed shared/static
+libraries. The private rotation suite remains supporting lifetime evidence.
 
 BSD, Windows and other nonlocal runs belong to CI and the v3 PR; the
 [TASK-183 local evidence](task-183-migration-evidence.md) records what ran locally.
+
+
+TASK-193 adds public certificate TCP TLS through
+[`server::tls_credentials`](native-tls-build.md#public-certificate-credentials-and-native-tcp-tls).
+Associate a shared store with each TLS listener and publish PEM values with
+`replace`; accepted sessions retain immutable selections during replacement.
+Managed and external loops support the same HTTP/1 routes. Public mTLS/PSK/ACME
+profiles and H2/H3 listeners remain subsequent repair tasks; unsupported requests
+still return typed pre-bind outcomes.

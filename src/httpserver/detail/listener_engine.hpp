@@ -44,6 +44,7 @@
 #define SRC_HTTPSERVER_DETAIL_LISTENER_ENGINE_HPP_
 
 #include <cstdint>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -81,16 +82,19 @@ class listener_engine final
     listener_engine& operator=(const listener_engine&) = delete;
 
     // Binds @p endpoint (address spellings per the options contract,
-    // port 0 = ephemeral), adopts the listener in the backend, and
-    // spawns the accept loop. @p index names the listener in the
+    // port 0 = ephemeral) without admitting connections until activate().
+    // @p index names the listener in the
     // server's configuration order and derives its transport id (kept
     // out of the backend's fabricated-connection id range). Fails typed
     // when the bind does; the transport is closed either way.
     http::outcome listen(const server::listener_options& endpoint,
-                         std::size_t index);
+                         std::size_t index, std::shared_ptr<class tls_psk_runtime> runtime = {});
+
+    // Activate only after every endpoint has bound successfully.
+    void activate();
 
     // The resolved host-order port (0 until listen() succeeds).
-    std::uint16_t bound_port() const noexcept { return bound_port_; }
+    std::uint16_t bound_port() const noexcept { return bound_port_.load(std::memory_order_acquire); }
 
     // The drain path (begin_drain, TASK-110): stop accepting (the
     // listener releases; racing accepts release their own transports)
@@ -138,7 +142,11 @@ class listener_engine final
     drain_scope& scope_;
     connection_engine_config config_;
     std::uint64_t id_ = 0;
-    std::uint16_t bound_port_ = 0;
+    std::atomic<std::uint16_t> bound_port_{0};
+    pollsys::native_socket_t pending_listener_ = pollsys::k_invalid_socket;
+    bool activated_ = false;
+    server::listener_options endpoint_;
+    std::shared_ptr<class tls_psk_runtime> handshake_runtime_;
 
     mutable std::mutex mu_;
     std::unordered_map<std::uint64_t,

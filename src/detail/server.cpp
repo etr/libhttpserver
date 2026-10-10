@@ -26,9 +26,16 @@
 // erased by then), the route registry, and the budget scope it
 // reserves against. See server/server.hpp for the lifecycle contract.
 
+#include "config.h"
 #include <httpserver/server/server.hpp>
+#ifdef NATIVE_V3_TLS
+#include <httpserver/detail/tls_credentials.hpp>
+#include <httpserver/detail/tls_credentials_access.hpp>
+#include <httpserver/detail/tls_psk_runtime.hpp>
+#endif
 
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -135,8 +142,26 @@ class native_server::impl {
         }
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             if (options_.listener(i).tls) {
+#ifdef NATIVE_V3_TLS
+                if (options_.tls().profile != tls_profile::certificates
+                        || detail::resolved_client_certificate_mode(options_.tls().profile, options_.tls().client_auth)
+                            != tls_client_certificate_mode::none) {
+                    return {http::outcome_code::not_supported, "native_server: TLS profile unavailable"};
+                }
+                const auto& credentials = options_.listener(i).credentials;
+                const auto snapshot = credentials ? engine::tls_credentials_access::acquire(*credentials) : nullptr;
+                if (!snapshot) {
+                    return {http::outcome_code::invalid_argument, "native_server: TLS listener needs published credentials"};
+                }
+                for (const auto& host : snapshot->hosts()) {
+                    if (!options_.protocols().contains(http::protocol::http_1_1) && !host.alpn.empty()) {
+                        return {http::outcome_code::invalid_argument, "native_server: credential ALPN requires enabled HTTP/1.1"};
+                    }
+                }
+#else
                 return {http::outcome_code::not_supported,
                         "native_server: requested TLS transport is unavailable"};
+#endif
             }
         }
         if (!registry_state_.ok()) return registry_state_;
@@ -162,6 +187,8 @@ class native_server::impl {
         engine::connection_engine_config config =
             engine::connection_engine_config::from_budget_limits(options_.budgets());
         config.diagnostics = options_.diagnostic_channel();
+        config.protocols = options_.protocols();
+        config.drain_owner = scope_;
         config.timeouts = options_.timeouts();
         auto pages = std::make_shared<engine::error_page_factories>();
         pages->not_found = options_.not_found_response();
@@ -184,12 +211,21 @@ class native_server::impl {
             if (!seeded.ok()) return seeded;
         }
 
+#ifdef NATIVE_V3_TLS
+        for (std::size_t i = 0; i < options_.listener_count(); ++i) {
+            if (options_.listener(i).tls && !handshake_runtime_) {
+                engine::tls_psk_runtime_options limits;
+                limits.handshake_timeout = options_.timeouts().handshake;
+                handshake_runtime_ = std::make_shared<engine::tls_psk_runtime>(limits);
+            }
+        }
+#endif
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             listeners_.push_back(std::make_shared<engine::listener_engine>(
                 *backend_, pool_, registry_, hooks_, budget_, peers_,
                 *scope_, config));
             const http::outcome bound =
-                listeners_.back()->listen(options_.listener(i), i);
+                listeners_.back()->listen(options_.listener(i), i, handshake_runtime_);
             if (!bound.ok()) {
                 // Terminal for this object: stop what bound and fail
                 // typed. The listeners stay owned until the destructor
@@ -198,6 +234,7 @@ class native_server::impl {
                 return bound;
             }
         }
+        for (const auto& listener : listeners_) listener->activate();
         backend_->activate_external();
         running_.store(true, std::memory_order_release);
         return http::outcome::okay();
@@ -218,6 +255,14 @@ class native_server::impl {
         // Terminal-fails every pending operation; the completions queue
         // onto the pool, and the drain joins the engines' unwinding.
         static_cast<void>(backend_->close());
+#ifdef NATIVE_V3_TLS
+        if (handshake_runtime_) {
+            handshake_runtime_->stop();
+            // Certificate provider steps are bounded and contain no user code.
+            // Retire them before closing their completion executor.
+            static_cast<void>(handshake_runtime_->drain(std::chrono::steady_clock::now() + options_.timeouts().handshake));
+        }
+#endif
         pool_.drain_and_join();
     }
 
@@ -248,21 +293,20 @@ class native_server::impl {
                 http::outcome_code::invalid_state,
                 "native_server: begin_drain() ran twice");
         }
-        // The cancel hook copies the listener shared_ptrs by value: it
-        // fires on a waiter's thread at deadline expiry, possibly long
-        // after this impl's members began dying, and must not touch
-        // them. The counted-thread predicate may capture this: the
-        // scope's ordering contract keeps it reachable only while
-        // counted work is live, which keeps impl alive.
-        std::vector<std::shared_ptr<engine::listener_engine>> listeners =
-            listeners_;
+        // The ticket can outlive this server. Weak listener captures avoid
+        // a scope -> listener -> scope ownership cycle while a live
+        // connection keeps its listener available for cancellation.
+        // Compare executor identity without dereferencing the pool:
+        // a retiring provider step may retain the counted scope after stop.
+        std::vector<std::weak_ptr<engine::listener_engine>> listeners;
+        listeners.reserve(listeners_.size());
+        for (const auto& listener : listeners_) listeners.push_back(listener);
         const auto deadline = std::chrono::steady_clock::now() + budget;
         scope_->arm(deadline,
-                    [this] { return pool_.is_current(); },
+                    [identity = static_cast<const executor*>(&pool_)] { return current_executor() == identity; },
                     [listeners] {
-                        for (const std::shared_ptr<engine::listener_engine>&
-                                 listener : listeners) {
-                            listener->request_stop(http::outcome_code::timeout);
+                        for (const auto& weak : listeners) {
+                            if (auto listener = weak.lock()) listener->request_stop(http::outcome_code::timeout);
                         }
                     });
         for (const std::shared_ptr<engine::listener_engine>& listener :
@@ -318,6 +362,7 @@ class native_server::impl {
     // live window. peer_policy() (native_server) hands out the
     // consumer-side view.
     mutable server::peer_policy peers_;
+    std::shared_ptr<engine::tls_psk_runtime> handshake_runtime_;
     std::vector<std::shared_ptr<engine::listener_engine>> listeners_;
     engine::worker_pool pool_;
     std::unique_ptr<engine::io_socket_backend> backend_;

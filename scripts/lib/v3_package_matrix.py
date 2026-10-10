@@ -5,6 +5,32 @@ import re
 
 ROOT = Path(__file__).resolve().parents[2]
 
+PUBLIC_TLS_CASES = (
+    'sni_a',
+    'sni_b',
+    'second_b',
+    'unknown_sni',
+    'absent_sni',
+    'isolated_store',
+    'http1.0',
+    'http1.1',
+    'atomic_replacement_and_caller_lifetime',
+    'handshake_failure_no_handler',
+    'peer_policy_before_tls',
+    'bounded_handshake_timeout_and_recovery',
+    'timer_budget_retirement',
+    'storage_budget_retirement',
+    'stop_pending',
+    'drain_pending',
+    'handler_stop',
+    'handler_drain',
+    'accept_hook_safe_stop',
+    'mixed_valid_listeners',
+    'disabled10_before_handler',
+    'disabled11_before_handler',
+    'partial_bind_rollback',
+)
+
 
 def parse_inventory(text):
     def unique(pairs):
@@ -33,12 +59,21 @@ def validate(inventory):
         raise ValueError('incomplete platform/backend inventory')
     if not inventory['cases'] or len(set(inventory['cases'])) != len(inventory['cases']):
         raise ValueError('missing/duplicate configuration cases')
+    public = inventory.get('public_tls_scenarios', [])
+    if len(public) != len(PUBLIC_TLS_CASES) or set(public) != set(PUBLIC_TLS_CASES):
+        raise ValueError('missing/duplicate public TLS scenarios')
     required = {'native_http1_e2e', 'external_http1_e2e', 'external_readiness_adapter',
                 'readiness_contract', 'io_backend_contract'}
     tls = {'tls_io_loopback', 'native_http1_tls_parity', 'tls_selection', 'tls_mtls',
            'tls_credentials_rotation', 'tls_psk_runtime'}
     if not required <= set(inventory['common_suites']) or not tls <= set(inventory['tls_suites']):
         raise ValueError('required suite absent')
+
+
+def check_scenarios(rows, expected):
+    names = [row['case'] for row in rows]
+    if len(names) != len(expected) or set(names) != set(expected):
+        raise ValueError('missing, duplicate or unexpected public TLS scenario')
 
 
 def cells(inventory, platform):
@@ -102,14 +137,14 @@ def check_tls_witnesses(output, backend):
             raise ValueError('missing encrypted backend witness: ' + witness)
 
 
-def configuration_results(output, inventory, loop="managed"):
+def configuration_results(output, inventory, loop="managed", *, tls):
+    if tls not in ('yes', 'no') or loop not in ('managed', 'external'):
+        raise ValueError('invalid configuration lane')
     rows = re.findall(r'^PACKAGE_CASE (\w+) (\w+) (bound|unbound)$', output, re.M)
     results = {}
     for name, outcome, binding in rows:
         expected = ('ok', 'bound') if name == 'plaintext' else ('not_supported', 'unbound') if name in (
-            'tls_listener', 'http2', 'http3', 'mixed_rejection') else ('invalid_argument', 'unbound')
-        if name == 'provider_profile_mismatch' and loop == 'external':
-            expected = ('not_supported', 'unbound')
+            'http2', 'http3', 'mixed_rejection') or (name == 'tls_listener' and tls == 'no') else ('invalid_argument', 'unbound')
         if name in results or (outcome, binding) != expected:
             raise ValueError('configuration outcome diverged: ' + name)
         results[name] = {'outcome': outcome, 'binding': binding}

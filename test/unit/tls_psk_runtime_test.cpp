@@ -14,6 +14,7 @@
 #include <type_traits>
 #include <utility>
 #include <httpserver/detail/tls_psk_runtime.hpp>
+#include <httpserver/server/options.hpp>
 #include <httpserver/detail/tls_psk_attempt.hpp>
 #include "./littletest.hpp"
 namespace hd = httpserver::detail;
@@ -265,6 +266,18 @@ LT_BEGIN_AUTO_TEST(psk_runtime_suite, runtime_rejects_nonfinite_budgets_and_retu
     LT_CHECK_EQ(counts.releases.load(), 1u);
     LT_CHECK_EQ(counts.dirty.load(), 0u);
 LT_END_AUTO_TEST(runtime_rejects_nonfinite_budgets_and_returned_keys)
+LT_BEGIN_AUTO_TEST(psk_runtime_suite, certificate_runtime_accepts_native_handshake_timeout_ceiling)
+    hd::tls_psk_runtime_options options;
+    options.handshake_timeout = httpserver::server::max_timeout;
+    bool accepted = false;
+    try {
+        hd::tls_psk_runtime runtime(options);
+        accepted = runtime.handshake_timeout() == options.handshake_timeout;
+        runtime.stop();
+        accepted = accepted && runtime.drain(std::chrono::steady_clock::now() + 1s);
+    } catch (const std::invalid_argument&) {}
+    LT_CHECK(accepted);
+LT_END_AUTO_TEST(certificate_runtime_accepts_native_handshake_timeout_ceiling)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

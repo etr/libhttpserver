@@ -557,3 +557,5 @@ EXTRA_DIST += scripts/test-v3-installed-consumer.py scripts/test-v3-package-work
 EXTRA_DIST += docs/v2-to-v3-migration.md docs/v3-api.md docs/task-183-migration-evidence.md examples/README.md
 
 EXTRA_DIST += scripts/audit-v3-native-linkage.sh scripts/test-v3-cutover.py scripts/check-v3-runtime-coexistence.py docs/task-184-cutover-evidence.md
+
+EXTRA_DIST += scripts/check-v3-public-tls.py test/installed/v3_tls_consumer.cpp

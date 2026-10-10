@@ -44,6 +44,7 @@
 #define SRC_HTTPSERVER_DETAIL_LIFECYCLE_SINK_HPP_
 
 #include <cstdint>
+#include <memory>
 #include <utility>
 
 #include <httpserver/exchange.hpp>
@@ -72,9 +73,10 @@ class lifecycle_sink final : public exchange_sink {
     // whose stand-in sink never refuses) counts as always-accepted.
     lifecycle_sink(exchange_sink& inner, const server::hook_bus& bus,
                    const http::request_head& head,
-                   const bool* engine_refusal = nullptr) noexcept
+                   const bool* engine_refusal = nullptr,
+                   std::shared_ptr<const server::tls_peer_metadata> tls = {}) noexcept
         : inner_(inner), bus_(bus), head_(head),
-          engine_refusal_(engine_refusal) { }
+          engine_refusal_(engine_refusal), tls_(std::move(tls)) { }
 
     // Tags the next commit's provenance; the dispatcher sets it before
     // every commit path.
@@ -160,7 +162,7 @@ class lifecycle_sink final : public exchange_sink {
     // from on_respond's gated branch (the copies exist exactly when
     // the hooks do).
     void fire_after(http::status& s, http::fields& f) const {
-        server::after_handler_ctx ctx{head_, s, std::move(f)};
+        server::after_handler_ctx ctx{head_, s, std::move(f), tls_};
         // The action is ignored by contract: after_handler mutates,
         // full replacement is not offered (the v2 delta).
         (void)bus_.fire<server::hook_phase::after_handler>(ctx);
@@ -170,7 +172,7 @@ class lifecycle_sink final : public exchange_sink {
 
     void fire_sent() const {
         if (!bus_.any_hooks(server::hook_phase::response_sent)) return;
-        server::response_sent_ctx ctx{head_, status_};
+        server::response_sent_ctx ctx{head_, status_, tls_};
         (void)bus_.fire<server::hook_phase::response_sent>(ctx);
     }
 
@@ -178,6 +180,7 @@ class lifecycle_sink final : public exchange_sink {
     const server::hook_bus& bus_;
     const http::request_head& head_;
     const bool* engine_refusal_ = nullptr;
+    std::shared_ptr<const server::tls_peer_metadata> tls_;
     provenance next_ = provenance::handler;
     bool responded_ = false;
     bool refused_ = false;

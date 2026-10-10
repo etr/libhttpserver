@@ -22,7 +22,13 @@
 // TASK-108: the accept loop and connection bookkeeping of one native
 // listener. See listener_engine.hpp for the design contract.
 
+#include "config.h"
 #include <httpserver/detail/listener_engine.hpp>
+#ifdef NATIVE_V3_TLS
+#include <httpserver/detail/tls_credentials.hpp>
+#include <httpserver/detail/tls_credentials_access.hpp>
+#include <httpserver/detail/tls_socket_backend.hpp>
+#endif
 
 #include <memory>
 #include <string>
@@ -31,10 +37,27 @@
 
 #include <httpserver/detail/io_poll_sys.hpp>
 #include <httpserver/detail/diagnostics_access.hpp>
+#include <httpserver/detail/drain_scope.hpp>
 
 namespace httpserver {
 
 namespace detail {
+
+namespace {
+#ifdef NATIVE_V3_TLS
+struct tls_admission_lifetime {
+    std::shared_ptr<drain_scope> scope_owner;
+    drain_scope::unit counted;
+    std::shared_ptr<server::reservation> seat;
+    server::reservation timer, storage;
+    tls_admission_lifetime(std::shared_ptr<drain_scope> scope,
+            std::shared_ptr<server::reservation> connection,
+            server::reservation timer_seat, server::reservation storage_seat)
+        : scope_owner(std::move(scope)), counted(*scope_owner), seat(std::move(connection)),
+          timer(std::move(timer_seat)), storage(std::move(storage_seat)) {}
+};
+#endif
+}  // namespace
 
 listener_engine::listener_engine(io_socket_backend& backend, worker_pool& pool,
                                  const server::route_registry& routes,
@@ -55,7 +78,8 @@ listener_engine::listener_engine(io_socket_backend& backend, worker_pool& pool,
 }
 
 http::outcome listener_engine::listen(
-    const server::listener_options& endpoint, std::size_t index) {
+    const server::listener_options& endpoint, std::size_t index,
+    std::shared_ptr<tls_psk_runtime> runtime) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (bound_ || stopped_) {
@@ -74,16 +98,26 @@ http::outcome listener_engine::listen(
                 + endpoint.address + ":" + std::to_string(endpoint.port));
     }
     const std::uint64_t id = k_listener_id_base + index;
-    backend_.adopt_listener(id, transport);
     {
         std::lock_guard<std::mutex> lock(mu_);
         id_ = id;
+        pending_listener_ = transport;
+        endpoint_ = endpoint;
+        handshake_runtime_ = std::move(runtime);
         bound_port_ = port;
         bound_ = true;
     }
-    spawn(pool_, accept_loop(shared_from_this()),
-          [](task_result<void>) { });
     return http::outcome::okay();
+}
+
+void listener_engine::activate() {
+    {
+        std::lock_guard lock(mu_);
+        if (stopped_ || activated_ || !bound_) return;
+        backend_.adopt_listener(id_, std::exchange(pending_listener_, pollsys::k_invalid_socket));
+        activated_ = true;
+    }
+    spawn(pool_, accept_loop(shared_from_this()), [](task_result<void>) {});
 }
 
 void listener_engine::collect_live_locked(
@@ -105,6 +139,10 @@ void listener_engine::quiesce(std::chrono::steady_clock::time_point server_deadl
         std::lock_guard<std::mutex> lock(mu_);
         release = !stopped_;
         stopped_ = true;
+        if (pending_listener_ != pollsys::k_invalid_socket) {
+            pollsys::close_socket(pending_listener_);
+            bound_port_.store(0, std::memory_order_release);
+        }
         collect_live_locked(live);
     }
     // Listener first (a pending accept completes connection_closed and
@@ -123,6 +161,10 @@ void listener_engine::request_stop(http::outcome_code reason) noexcept {
         std::lock_guard<std::mutex> lock(mu_);
         release = !stopped_;
         stopped_ = true;
+        if (pending_listener_ != pollsys::k_invalid_socket) {
+            pollsys::close_socket(pending_listener_);
+            bound_port_.store(0, std::memory_order_release);
+        }
         collect_live_locked(live);
     }
     // Same release-once rule as quiesce(); the shutdown pass itself
@@ -181,11 +223,52 @@ void listener_engine::adopt_accepted(std::uint64_t connection,
             backend_.release_connection(connection);
             return;
         }
-        engine = std::make_shared<connection_engine>(
-            backend_, pool_, routes_, hooks_, budget_, scope_, config_,
-            connection, [this, connection] { erase(connection); }, peer,
-            &peers_);
-        connections_.emplace(connection, engine);
+        connection_admission admission;
+        admission.seat = std::make_shared<server::reservation>();
+        if (!budget_.reserve(server::resource::connections, 1, *admission.seat).ok()) {
+            server::diagnostic_event event{server::diagnostic_kind::connection_rejected,
+                server::diagnostic_reason::capacity, http::outcome_code::limit_exceeded};
+            event.listener_id = id_;
+            event.connection_id = connection;
+            diagnostics_access::record(config_.diagnostics, event);
+            backend_.release_connection(connection);
+            return;
+        }
+        std::shared_ptr<io_socket_backend> transport;
+        try {
+#ifdef NATIVE_V3_TLS
+            if (endpoint_.tls) {
+                server::reservation timer, storage;
+                // Three fixed record buffers cover input, provider-step output
+                // and in-flight ciphertext. The lease also retains admission
+                // and the drain count until child/provider retirement.
+                if (!budget_.reserve(server::resource::timers, 1, timer).ok()
+                        || !budget_.reserve(server::resource::body_buffer_bytes, 3 * 16384, storage).ok()) {
+                    backend_.release_connection(connection);
+                    return;
+                }
+                admission.retirement = std::make_shared<tls_admission_lifetime>(
+                    config_.drain_owner, admission.seat, std::move(timer), std::move(storage));
+                const auto snapshot = tls_credentials_access::acquire(*endpoint_.credentials);
+                tls_handshake_context handshake{tls_transport::tcp, bound_port(), config_.diagnostics};
+                handshake.runtime = handshake_runtime_;
+                handshake.lifetime = admission.retirement;
+                handshake.allow_http11 = config_.protocols.contains(http::protocol::http_1_1);
+                transport = std::make_shared<tls_socket_backend>(backend_, pool_, connection,
+                    snapshot->select_default(), std::move(handshake));
+            }
+#endif
+            // The reserved seat bounds TLS allocation and counts the handshake
+            // in the same engine scope as established H1 work.
+            engine = std::make_shared<connection_engine>(
+                backend_, pool_, routes_, hooks_, budget_, scope_, config_,
+                connection, [self = shared_from_this(), connection] { self->erase(connection); }, peer,
+                &peers_, std::move(transport), std::move(admission));
+            connections_.emplace(connection, engine);
+        } catch (...) {
+            backend_.release_connection(connection);
+            return;
+        }
     }
     // Outside the lock: a budget-refusing engine reports its stop from
     // inside start(), and the erase callback takes the same mutex.

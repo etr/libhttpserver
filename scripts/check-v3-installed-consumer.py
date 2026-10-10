@@ -99,6 +99,9 @@ def package_lane(args, source, output, mode, inventory):
         private_libraries = libraries + (shlex.split(env['V3_TLS_LIBS']) if mode == 'yes' else [])
         integrations[linkage] = run_suites(inventory, platform.system(), mode, linkage, private_dir, prefix,
                                           source, build, args.compiler, cflags, private_libraries, command, runtime_env, audit)
+    command([sys.executable, str(source / 'scripts/check-v3-public-tls.py'), '--prefix', str(prefix),
+             '--provider-prefix', str(args.provider_prefix), '--build', str(build), '--tls', mode,
+             '--compiler', args.compiler, '--output', str(lane / 'public-tls')], source, runtime_env)
     receipt = audit.audit(prefix, build, consumer_dir / ('v3_package_consumer' + suffix), mode,
                           'strict', args.provider_prefix, args.compiler)
     receipt.update(consumer_metadata=metadata, public=public, integrations=integrations)

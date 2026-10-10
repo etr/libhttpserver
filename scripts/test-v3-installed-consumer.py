@@ -45,6 +45,21 @@ class MatrixTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             matrix.cells(self.inventory, 'MSYS')
 
+    def test_public_tls_inventory_requires_every_case_once(self):
+        for value in ([], ['sni_a'], ['sni_a', 'sni_a']):
+            bad = copy.deepcopy(self.inventory)
+            bad['public_tls_scenarios'] = value
+            with self.assertRaises(ValueError):
+                matrix.validate(bad)
+
+    def test_public_tls_result_rejects_missing_duplicate_and_unknown_cases(self):
+        expected = ['a', 'b']
+        matrix.check_scenarios([{'case': 'a'}, {'case': 'b'}], expected)
+        for rows in ([], [{'case': 'a'}], [{'case': 'a'}, {'case': 'a'}],
+                     [{'case': 'a'}, {'case': 'b'}, {'case': 'unknown'}]):
+            with self.assertRaises(ValueError):
+                matrix.check_scenarios(rows, expected)
+
     def test_duplicate_inventory_keys_cannot_hide_platform_cells(self):
         with self.assertRaises(ValueError):
             matrix.parse_inventory('{"platforms":{"Linux":"epoll","Linux":"poll"}}')
@@ -84,17 +99,19 @@ class MatrixTest(unittest.TestCase):
                                           Path('/prefix'), Path('/source'), Path('/build'), private)
 
     def test_missing_configuration_case_or_different_outcome_is_rejected(self):
-        output = '\n'.join('PACKAGE_CASE ' + case + ' ' +
-                            ('ok bound' if case == 'plaintext' else
-                             'not_supported unbound' if case in ('tls_listener', 'http2', 'http3', 'mixed_rejection') else
-                             'invalid_argument unbound') for case in self.inventory['cases'])
-        self.assertEqual(len(self.inventory['cases']), len(matrix.configuration_results(output, self.inventory)))
-        external = output.replace('provider_profile_mismatch invalid_argument', 'provider_profile_mismatch not_supported')
-        self.assertEqual(len(self.inventory['cases']), len(matrix.configuration_results(external, self.inventory, 'external')))
-        for broken in (output.replace('PACKAGE_CASE http3', 'MISSING http3'),
-                       output.replace('not_supported unbound', 'ok bound')):
-            with self.assertRaises(ValueError):
-                matrix.configuration_results(broken, self.inventory)
+        for tls in ('yes', 'no'):
+            output = '\n'.join('PACKAGE_CASE ' + case + ' ' +
+                ('ok bound' if case == 'plaintext' else
+                 'invalid_argument unbound' if case == 'tls_listener' and tls == 'yes' else
+                 'not_supported unbound' if case in ('tls_listener', 'http2', 'http3', 'mixed_rejection') else
+                 'invalid_argument unbound') for case in self.inventory['cases'])
+            for loop in ('managed', 'external'):
+                self.assertEqual(len(self.inventory['cases']),
+                                 len(matrix.configuration_results(output, self.inventory, loop, tls=tls)))
+                for broken in (output.replace('PACKAGE_CASE http3', 'MISSING http3'),
+                               output.replace('not_supported unbound', 'ok bound')):
+                    with self.assertRaises(ValueError):
+                        matrix.configuration_results(broken, self.inventory, loop, tls=tls)
 
     def test_private_external_probe_can_use_the_named_host_helper_only(self):
         matrix.check_dependencies(['/source/examples/v3_host_poll.hpp'], Path('/prefix'),

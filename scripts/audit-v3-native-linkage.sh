@@ -60,6 +60,7 @@ src/httpserver/concurrency/cancellation.hpp
 src/httpserver/concurrency/resume_signal.hpp
 src/httpserver/server/budgets.hpp
 src/httpserver/server/options.hpp
+src/httpserver/server/tls_credentials.hpp
 src/httpserver/server/routes.hpp
 src/httpserver/server/configuration.hpp
 src/httpserver/server/server.hpp
@@ -81,6 +82,7 @@ src/httpserver/websocket/session.hpp
 
 V3CORE_SOURCES="
 src/detail/features.cpp
+src/detail/server_tls_credentials.cpp
 src/detail/io_operation.cpp
 src/detail/io_udp_backend.cpp
 src/detail/quic_invariant_header.cpp

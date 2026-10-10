@@ -205,6 +205,10 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, duplicate_listener_fails)
     distinct.tls().provider = srv::tls_provider::system_default;
     distinct.tls().profile = srv::tls_profile::certificates;
     LT_CHECK(validates_ok(distinct));
+    srv::server_options ephemeral;
+    ephemeral.add_listener({"127.0.0.1", 0, false});
+    ephemeral.add_listener({"127.0.0.1", 0, false});
+    LT_CHECK(ephemeral.validate().ok());
 LT_END_AUTO_TEST(duplicate_listener_fails)
 
 // V4: 0 workers means auto and is valid; only the ceiling is rejected.
@@ -443,7 +447,7 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, loop_selection_is_semantic_and
     options.loop() = srv::loop_mode::external;
     options.tls().provider = srv::tls_provider::system_default;
     options.tls().profile = srv::tls_profile::certificates;
-    LT_CHECK(options.validate().code() == outcome_code::not_supported);
+    LT_CHECK(options.validate().ok());
     options.tls() = {};
     options.protocols().enable(http::protocol::http_2);
     LT_CHECK(options.validate().code() == outcome_code::not_supported);

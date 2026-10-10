@@ -31,7 +31,7 @@ srv::server_options options(srv::loop_mode loop, std::string_view name = "plaint
     return result;
 }
 
-void configuration_cases(srv::loop_mode loop) {
+void configuration_cases(srv::loop_mode loop, bool tls_enabled) {
     for (const std::string_view name : {"plaintext", "invalid_listener", "invalid_workers", "invalid_timeout",
                                       "invalid_budget", "provider_profile_mismatch", "tls_listener", "http2", "http3", "mixed_rejection"}) {
         auto configured = options(loop, name);
@@ -45,12 +45,15 @@ void configuration_cases(srv::loop_mode loop) {
             configured.tls().profile = srv::tls_profile::certificates;
             if (name == "http2") configured.protocols().enable(http::protocol::http_2);
             if (name == "http3") configured.protocols().enable(http::protocol::http_3);
-            if (name == "mixed_rejection") configured.add_listener({"127.0.0.1", 0, true});
+            if (name == "mixed_rejection") {
+                configured.add_listener({"127.0.0.1", 0, true});
+                configured.protocols().enable(http::protocol::http_2);
+            }
         }
         srv::native_server boundary(configured);
         const auto result = boundary.listen();
         const auto expected = name == "plaintext" ? http::outcome_code::ok :
-            (transport || (name == "provider_profile_mismatch" && loop == srv::loop_mode::external)) ?
+            (transport && (name != "tls_listener" || !tls_enabled)) ?
                 http::outcome_code::not_supported : http::outcome_code::invalid_argument;
         if (result.code() != expected) throw std::runtime_error("configuration outcome: " + std::string(name));
         bool bound = false;
@@ -69,11 +72,11 @@ int main(int argc, char** argv) {
     const std::string_view tls_mode(argv[1]), loop_name(argv[2]);
     if ((tls_mode != "yes" && tls_mode != "no") || (loop_name != "managed" && loop_name != "external")) return 1;
     const auto features = httpserver::query_features();
-    if (features.tls_provider != (tls_mode == "yes") || features.tcp_tls || features.http2 || features.http3) return 2;
+    if (features.tls_provider != (tls_mode == "yes") || features.tcp_tls != (tls_mode == "yes") || features.http2 || features.http3) return 2;
     std::cerr << "PACKAGE_PROVIDER " << features.provider_version << '\n';
     const auto loop = loop_name == "external" ? srv::loop_mode::external : srv::loop_mode::managed;
     try {
-        configuration_cases(loop);
+        configuration_cases(loop, tls_mode == "yes");
         srv::native_server server(options(loop));
         const auto respond = [](const http::request_head&, std::span<const std::byte> body) {
             srv::sync_response response;

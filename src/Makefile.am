@@ -21,7 +21,7 @@ METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver.la
 # Native objects form both the shipped library and the private linkage gate.
 noinst_LTLIBRARIES = libhttpserver_v3core.la
-libhttpserver_v3core_la_SOURCES = detail/features.cpp detail/io_operation.cpp detail/io_udp_backend.cpp detail/quic_invariant_header.cpp detail/quic_datagram_dispatch.cpp detail/io_connection_owner.cpp detail/fake_io_backend.cpp detail/io_poll_backend.cpp detail/io_epoll_backend.cpp detail/io_kqueue_backend.cpp detail/io_iocp_backend.cpp detail/io_managed_backend.cpp detail/io_managed_socket_backend.cpp detail/io_external_adapter.cpp detail/io_wake_source.cpp detail/worker_pool.cpp detail/connection_engine.cpp detail/connection_engine_request.cpp detail/listener_engine.cpp detail/drain_scope.cpp detail/server.cpp detail/auth_basic.cpp detail/auth_digest.cpp detail/forms_urlencoded.cpp detail/forms_multipart.cpp detail/forms_multipart_files.cpp detail/server_hooks.cpp detail/request_lifecycle.cpp detail/net_address.cpp detail/peer_policy.cpp detail/websocket_codec.cpp detail/websocket_driver.cpp detail/websocket_session_state.cpp detail/websocket_session.cpp detail/http1_websocket_handshake.cpp detail/connection_engine_websocket.cpp
+libhttpserver_v3core_la_SOURCES = detail/server_tls_credentials.cpp detail/features.cpp detail/io_operation.cpp detail/io_udp_backend.cpp detail/quic_invariant_header.cpp detail/quic_datagram_dispatch.cpp detail/io_connection_owner.cpp detail/fake_io_backend.cpp detail/io_poll_backend.cpp detail/io_epoll_backend.cpp detail/io_kqueue_backend.cpp detail/io_iocp_backend.cpp detail/io_managed_backend.cpp detail/io_managed_socket_backend.cpp detail/io_external_adapter.cpp detail/io_wake_source.cpp detail/worker_pool.cpp detail/connection_engine.cpp detail/connection_engine_request.cpp detail/listener_engine.cpp detail/drain_scope.cpp detail/server.cpp detail/auth_basic.cpp detail/auth_digest.cpp detail/forms_urlencoded.cpp detail/forms_multipart.cpp detail/forms_multipart_files.cpp detail/server_hooks.cpp detail/request_lifecycle.cpp detail/net_address.cpp detail/peer_policy.cpp detail/websocket_codec.cpp detail/websocket_driver.cpp detail/websocket_session_state.cpp detail/websocket_session.cpp detail/http1_websocket_handshake.cpp detail/connection_engine_websocket.cpp
 
 libhttpserver_la_SOURCES =
 # Select the C++ driver for this object-only aggregate, including platforms
@@ -194,3 +194,7 @@ noinst_HEADERS += httpserver/detail/base64.hpp httpserver/detail/entropy_sys.hpp
 
 libhttpserver_v3core_la_SOURCES += cookie.cpp
 nobase_include_HEADERS += httpserver/http/cookie.hpp
+
+nobase_include_HEADERS += httpserver/server/tls_credentials.hpp
+
+noinst_HEADERS += httpserver/detail/tls_credentials_access.hpp

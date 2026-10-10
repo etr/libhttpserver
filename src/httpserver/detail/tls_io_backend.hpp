@@ -22,11 +22,16 @@ namespace httpserver::detail {
 // Contexts are immutable after construction. No provider types escape this seam.
 enum class tls_negotiated_protocol { unknown, none, http1, h2, h3, other };
 enum class tls_transport { unknown, tcp, quic };
+class tls_psk_runtime;
 // Trusted listener metadata; unknown transport/port cannot serve challenges.
 struct tls_handshake_context {
     tls_transport transport = tls_transport::unknown;
     std::uint16_t local_port = 0;
     server::diagnostics diagnostics;
+    std::shared_ptr<tls_psk_runtime> runtime;
+    bool allow_http11 = true;
+    // Native admission/storage/drain ownership spans retiring provider steps.
+    std::shared_ptr<void> lifetime;
 };
 struct tls_credentials_selection;
 struct tls_psk_config;

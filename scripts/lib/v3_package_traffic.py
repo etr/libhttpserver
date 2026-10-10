@@ -70,7 +70,7 @@ def traffic(executable, cell, cwd, env, inventory):
         child.stop()
         results.append(dict(case='shutdown', exit=0))
     process = json.loads(receipt.read_text())
-    configurations = configuration_results(process['stderr'], inventory, cell['loop'])
+    configurations = configuration_results(process['stderr'], inventory, cell['loop'], tls=cell['tls'])
     if cell['loop'] == 'external' and 'PACKAGE_EXTERNAL ' not in process['stderr']:
         raise RuntimeError('external dispatch witness absent')
     return dict(**cell, port=port, traffic=results, configurations=configurations, process=str(receipt), exit=0)
