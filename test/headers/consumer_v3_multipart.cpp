@@ -149,6 +149,9 @@ static_assert(std::is_same_v<
     decltype(make_multipart_route),
     srv::route_handler(multipart_limits, multipart_route_handler)>);
 static_assert(std::is_same_v<
+    decltype(&read_multipart),
+    task<multipart_read> (*)(exchange&, const multipart_limits&, part_sink&)>);
+static_assert(std::is_same_v<
     decltype(read_multipart(std::declval<exchange&>(),
                             std::declval<const multipart_limits&>(),
                             std::declval<part_sink&>())),

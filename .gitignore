@@ -136,3 +136,5 @@ __pycache__/
 !test/integ/v3_examples_test.py
 !scripts/test-v3-cutover.py
 !scripts/check-v3-runtime-coexistence.py
+
+.debug/

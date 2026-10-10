@@ -267,9 +267,8 @@ http::outcome decode_multipart(std::span<const std::byte> body,
     return http::outcome::okay();
 }
 
-task<multipart_read> read_multipart(exchange& x,
-                                    const multipart_limits& limits,
-                                    part_sink& sink) {
+static task<multipart_read> read_multipart_snapshot(
+    exchange& x, multipart_limits limits, part_sink& sink) {
     // The read owns its admission, so the byte cap rides the engine
     // side too; a caller that admitted already gets invalid_state.
     const http::outcome admitted =
@@ -309,6 +308,13 @@ task<multipart_read> read_multipart(exchange& x,
         co_return multipart_read{done, adapter.completed()};
     }
     co_return multipart_read{http::outcome::okay(), adapter.completed()};
+}
+
+task<multipart_read> read_multipart(exchange& x,
+                                    const multipart_limits& limits,
+                                    part_sink& sink) {
+    // This non-coroutine entry copies before the caller's temporary expires.
+    return read_multipart_snapshot(x, limits, sink);
 }
 
 // The adapter's per-request sequence, named so the factory and the
