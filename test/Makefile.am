@@ -2053,7 +2053,7 @@ io_iocp_backend_SOURCES = unit/io_iocp_backend_test.cpp
 io_iocp_backend_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 io_iocp_backend_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
-EXTRA_DIST += installed/v3_package_consumer.cpp
+EXTRA_DIST += installed/v3_package_consumer.cpp installed/v3-package-matrix.json
 
 check_PROGRAMS += io_datagram io_udp_backend quic_invariant_header quic_datagram_dispatch
 io_datagram_SOURCES = unit/io_datagram_test.cpp
@@ -2531,3 +2531,10 @@ diagnostic_dispatch_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 consumer_v3_diagnostics_SOURCES = headers/consumer_v3_diagnostics.cpp
 consumer_v3_diagnostics_CPPFLAGS = -I$(top_srcdir)/src
 consumer_v3_diagnostics_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+
+EXTRA_DIST += unit/package_backend_witness.hpp
+
+check_PROGRAMS += nonce_expiry_wait
+nonce_expiry_wait_SOURCES = unit/nonce_expiry_wait_test.cpp integ/nonce_expiry_wait.hpp
+nonce_expiry_wait_CPPFLAGS = -I$(top_srcdir)/test
+nonce_expiry_wait_LDADD =

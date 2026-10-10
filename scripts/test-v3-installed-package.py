@@ -2,6 +2,7 @@
 """Adversarial policy fixtures; these are not installed-package proof."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -15,6 +16,10 @@ spec.loader.exec_module(audit)
 
 class AuditTest(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop('V3_PACKAGE_PREREQUISITES', None)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -232,6 +237,12 @@ class AuditTest(unittest.TestCase):
         audit.run(['c++', '-std=c++20', '-fsyntax-only', '-x', 'c++', '-I' + str(source / 'src'), '-'],
                   input='#include <httpserver.hpp>\nhttpserver::create_test_request builder;\n')
 
+    def test_named_static_suite_uses_declared_metadata_closure(self):
+        graph = self.graph({'native_http1_e2e': ['libgnutls.dylib'], 'libgnutls.dylib': []})
+        graph['consumer_roles'] = {graph['roots'][0]: 'static_consumer'}
+        self.assertEqual([], self.violations(graph))
+        self.assertTrue(self.violations(graph, mode='strict'))
+
     def test_static_consumer_uses_same_declared_legacy_policy(self):
         graph = self.graph({'static_consumer': ['libmicrohttpd.dylib'], 'libmicrohttpd.dylib': []})
         self.assertEqual([], self.violations(graph))
@@ -268,6 +279,73 @@ class AuditTest(unittest.TestCase):
         self.assertTrue(self.violations(graph, mode='strict'))
         graph = self.graph({'static_consumer': ['libcurl.dylib'], 'libcurl.dylib': []})
         self.assertTrue(self.violations(graph))
+
+    def test_declared_legacy_names_require_selected_prerequisite_location(self):
+        graph = self.graph({'consumer': ['libmicrohttpd.so'], 'libmicrohttpd.so': []})
+        with patch.dict('os.environ', {'V3_PACKAGE_PREREQUISITES': str(self.root / 'selected')}):
+            self.assertTrue(self.violations(graph))
+        with patch.dict('os.environ', {'V3_PACKAGE_PREREQUISITES': str(self.root)}):
+            self.assertEqual([], self.violations(graph))
+
+    def test_windows_header_trace_separators_cannot_hide_private_backend(self):
+        for include in (r'C:\prefix\include\openssl\ssl.h',
+                        r'C:\prefix\include\httpserver\detail\io.hpp'):
+            self.assertTrue(audit.header_violations('', [include]))
+
+    def test_case_insensitive_pe_system_leaf_provenance(self):
+        with patch.object(audit.platform, 'system', return_value='Windows'), \
+                patch.dict('os.environ', {'SystemRoot': str(self.root / 'Windows')}):
+            graph = audit.dependency_graph([audit.resolve_pe('api-ms-win-core-file-l1-1-0.dll')])
+            self.assertEqual('OS/API-set platform leaf', graph['nodes'][0]['provenance'])
+            self.assertEqual([], graph['edges'])
+            self.assertFalse(audit.runtime(str(self.root / 'kernel32.dll')))
+
+    def test_pe_import_parser_fails_closed(self):
+        self.assertEqual(['kernel32.dll', 'libssl-3-x64.dll'], audit.parse_pe(
+            'example.exe: file format pei-x86-64\n DLL Name: KERNEL32.dll\n DLL Name: libssl-3-x64.dll\n'))
+        for output in ('', 'not a PE', 'file format pei-x86-64\n DLL Name: '):
+            with self.assertRaises(audit.AuditError):
+                audit.parse_pe(output)
+
+    def test_windows_families_and_import_symbols(self):
+        for name, family in (('libhttpserver-3.dll', 'httpserver'), ('libssl-3-x64.dll', 'ssl'),
+                             ('LIBCRYPTO-3-X64.DLL', 'crypto'), ('consumer.exe', 'consumer')):
+            self.assertEqual(family, audit.family(name))
+        for symbol in ('__imp_SSL_new', '__imp__MHD_start_daemon', '_gnutls_init@4'):
+            self.assertTrue(audit.symbol_violations(' U ' + symbol, 'native', 'no', 'strict'))
+
+    def test_windows_import_library_cannot_replace_static_archive(self):
+        (self.root / 'bin').mkdir()
+        (self.root / 'lib').mkdir()
+        (self.root / 'bin/libhttpserver-3.dll').touch()
+        (self.root / 'lib/libhttpserver.dll.a').touch()
+        with self.assertRaises(audit.AuditError):
+            audit.package_artifacts(self.root)
+        (self.root / 'lib/libhttpserver.a').touch()
+        shared, archives = audit.package_artifacts(self.root)
+        self.assertEqual(['libhttpserver-3.dll'], [p.name for p in shared])
+        self.assertEqual(['libhttpserver.a'], [p.name for p in archives])
+
+    def test_pe_resolution_uses_explicit_roots_and_rejects_msys(self):
+        root = self.root / 'toolchain'
+        root.mkdir()
+        (root / 'libstdc++-6.dll').touch()
+        with patch.object(audit.platform, 'system', return_value='Windows'), \
+                patch.dict('os.environ', {'V3_PACKAGE_DLL_DIRS': str(root), 'V3_PACKAGE_TOOLCHAIN': str(root)}):
+            self.assertEqual(str(root / 'libstdc++-6.dll'), audit.resolve_pe('LIBSTDC++-6.DLL'))
+            self.assertTrue(audit.runtime(str(root / 'libstdc++-6.dll')))
+            with self.assertRaises(audit.AuditError):
+                audit.resolve_pe('unresolved.dll')
+            (root / 'msys-2.0.dll').touch()
+            self.assertFalse(audit.runtime(str(root / 'msys-2.0.dll')))
+            self.assertTrue(self.violations(self.graph({'consumer.exe': ['msys-2.0.dll'], 'msys-2.0.dll': []})))
+
+    def test_freebsd_runtime_leaf_with_dynamic_section(self):
+        with patch.object(audit.platform, 'system', return_value='FreeBSD'), \
+                patch.object(audit, 'run', return_value='Dynamic section at offset 0 contains 1 entry:\n (NULL) 0x0'):
+            self.assertEqual([], audit.platform_inspector('/lib/libc.so.7'))
+        self.assertTrue(audit.runtime('/libexec/ld-elf.so.1'))
+        self.assertFalse(audit.runtime('/tmp/ld-elf.so.1'))
 
     def test_current_umbrella_has_no_backend_types(self):
         # Compile the real current umbrella as a consumer, comments removed by cpp.

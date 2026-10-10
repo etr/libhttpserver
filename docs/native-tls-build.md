@@ -92,3 +92,15 @@ TASK-130 establishes a private nonblocking TCP TLS adapter over owned raw I/O
 operations. Its [local evidence](task-130-tls-io-evidence.md) covers the adapter
 and independent loopback peers. Public TCP TLS availability remains false until
 listeners have a usable credential/configuration path.
+
+## Installed four-platform package gate
+
+`make check-v3-installed-consumer INSTALL_AUDIT_ARGS="..."` runs independent
+TLS-off/on installs, shared/static public consumers in managed/external modes,
+and applicable integration tools linked to the installed libraries. See
+[the package evidence contract](task-182-package-validation-evidence.md) for
+commands, the platform/backend matrix, private test-header provenance, current
+public transport rejection behavior, and nonlocal CI ownership. The opt-in
+runner requires a genuine selected shared OpenSSL provider satisfying configure;
+CI prepares checksummed OpenSSL 3.5.9. Policy and orchestration fixture tests run
+through `make check-v3-installed-package-fixtures`.

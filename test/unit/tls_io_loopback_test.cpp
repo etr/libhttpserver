@@ -10,6 +10,7 @@
 #include <array>
 #include <chrono>
 #include <memory>
+#include <iostream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -17,6 +18,7 @@
 #include <httpserver/detail/io_poll_backend.hpp>
 #include "./io_loopback.hpp"
 #include "./tls_io_fixture.hpp"
+#include "./package_backend_witness.hpp"
 #include "./littletest.hpp"
 namespace hd = httpserver::detail;
 namespace hh = httpserver::http;
@@ -70,7 +72,7 @@ void external_tick(hd::io_socket_backend& raw) {
     }
     raw.dispatch(events, std::chrono::steady_clock::now());
 }
-void scenario(littletest::test_runner* __lt_tr__, const char* __lt_name__, bool kqueue, bool external) {
+void scenario(littletest::test_runner* __lt_tr__, const char* __lt_name__, bool kqueue, bool external, bool native = false) {
     httpserver::manual_executor ex;
     hd::io_connection_owner owner(ex);
     std::unique_ptr<hd::io_socket_backend> raw;
@@ -79,6 +81,7 @@ void scenario(littletest::test_runner* __lt_tr__, const char* __lt_name__, bool 
         raw = std::make_unique<hd::io_kqueue_backend>();
     }
 #endif
+    if (native) raw = hd::make_socket_backend(srv::loop_mode::managed);
     if (!raw) {
         raw = std::make_unique<hd::io_poll_backend>(external ? srv::loop_mode::external : srv::loop_mode::managed);
     }
@@ -173,6 +176,12 @@ void scenario(littletest::test_runner* __lt_tr__, const char* __lt_name__, bool 
     raw->release_connection(1);
     raw->close();
     ex.run_pending();
+    if (native) {
+        std::cout << "PACKAGE_BACKEND " << package_test::native_backend(*raw) << '\n';
+        std::cout << "PACKAGE_TLS managed\n";
+    } else if (external) {
+        std::cout << "PACKAGE_TLS external\n";
+    }
 }
 }  // namespace
 LT_BEGIN_SUITE(tls_io_loopback_suite)
@@ -182,6 +191,9 @@ LT_END_SUITE(tls_io_loopback_suite)
 LT_BEGIN_AUTO_TEST(tls_io_loopback_suite, poll_peer_roundtrip)
     scenario(__lt_tr__, __lt_name__, false, false);
 LT_END_AUTO_TEST(poll_peer_roundtrip)
+LT_BEGIN_AUTO_TEST(tls_io_loopback_suite, native_managed_factory_roundtrip)
+    scenario(__lt_tr__, __lt_name__, false, false, true);
+LT_END_AUTO_TEST(native_managed_factory_roundtrip)
 LT_BEGIN_AUTO_TEST(tls_io_loopback_suite, external_readiness_peer_roundtrip)
     scenario(__lt_tr__, __lt_name__, false, true);
 LT_END_AUTO_TEST(external_readiness_peer_roundtrip)
