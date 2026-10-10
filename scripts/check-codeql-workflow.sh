@@ -150,15 +150,12 @@ else
     fail=1
 fi
 
-# (h) The libmicrohttpd download must be followed by a sha256sum verification
-# step. Without it a tampered S3 object would be compiled and executed inside
-# the CodeQL runner with no detection. The checksum used by verify-build.yml
-# (libmicrohttpd-1.0.3) is the authoritative source; both workflows must agree.
-if grep -qF 'sha256sum -c' "$WF"; then
-    echo "  (h) libmicrohttpd download checksum verification (sha256sum -c) present"
-else
-    echo "  (h) missing sha256sum verification for the libmicrohttpd download — add 'echo \"7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz\" | sha256sum -c' after the curl line" >&2
+# (h) Native builds must not restore obsolete provider downloads or flags.
+if grep -qiE 'microhttpd|LIBMICROHTTPD' "$WF"; then
+    echo "  (h) obsolete provider build path present" >&2
     fail=1
+else
+    echo "  (h) native-only build prerequisites"
 fi
 
 if [ "$fail" -ne 0 ]; then
@@ -166,4 +163,4 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "check-codeql-workflow: PASS — CodeQL workflow SHA-pinned, autobuild-free, explicit build, least-privilege permissions, checksum-verified download"
+echo "check-codeql-workflow: PASS — CodeQL workflow SHA-pinned, autobuild-free, explicit build, least-privilege permissions, native-only prerequisites"

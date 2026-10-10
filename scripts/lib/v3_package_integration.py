@@ -53,7 +53,7 @@ def run_suites(inventory, host, mode, linkage, directory, prefix, source, build,
                 matrix.check_linkage(graph, linkage, prefix)
             elif linkage == 'static':
                 matrix.check_linkage(graph, linkage, prefix)
-            violations = audit.graph_violations(graph, 'pre-cutover', mode, 'aggregate', audit.load_policy(), Path(env['V3_PROVIDER_PREFIX']))
+            violations = audit.graph_violations(graph, 'strict', mode, 'aggregate', audit.load_policy(), Path(env['V3_PROVIDER_PREFIX']))
             if violations:
                 raise ValueError('\n'.join(violations))
             started = time.monotonic()

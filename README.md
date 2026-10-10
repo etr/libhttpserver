@@ -38,8 +38,13 @@ Build native examples with `./bootstrap`, an out-of-tree configure using
 `--enable-v3-tls` and genuine OpenSSL 3.5.x patch 9 or later as described in
 [the native TLS build guide](docs/native-tls-build.md). Provider availability
 and configuration validation do not imply public encrypted listener availability.
-The transitional aggregate still needs legacy MHD/GnuTLS dependencies;
-TASK-184 owns their removal and the ABI cutover.
+The installed library is native-only: TLS-off needs C++20, threads and platform
+socket libraries; TLS-on adds the selected private OpenSSL provider. MHD and
+GnuTLS are no longer build or package prerequisites. Version **3.0.0** uses ELF
+SONAME `libhttpserver.so.3`; ABI-2 and ABI-3 versioned runtime files coexist for
+separate executables. Headers, pkg-config metadata, static archives and the
+unversioned library link retain shared development-package names. Parallel
+development-package installation and same-process ABI coexistence are not promised.
 
 ## Legacy v2 reference manual
 
@@ -402,7 +407,7 @@ the complete sources.
 
 Lambdas suffice when each HTTP method is independent. When several methods
 on one path share state — a counter, a cache, a mutex — derive from
-[`http_resource`](src/httpserver/http_resource.hpp) and register the
+`http_resource` and register the
 subclass once:
 
 ```cpp
@@ -461,7 +466,7 @@ in its own section.
     `http_response::deferred`, `http_response::unauthorized`.
 * **`http_method`** — strongly-typed enum of HTTP verbs (GET, POST, PUT,
   DELETE, HEAD, OPTIONS, PATCH, CONNECT, TRACE). Declared in
-  [`http_method.hpp`](src/httpserver/http_method.hpp).
+  `http_method.hpp`.
 * **`method_set`** — small bitset of `http_method` values, used by
   `route()` for atomic multi-method registration.
 * **`iovec_entry`** — element type for `http_response::iovec` scatter-gather
@@ -930,7 +935,7 @@ allocate.
 |---|---|---|
 | `get_path()` | `std::string_view` | The decoded path |
 | `get_path_pieces()` | `const std::vector<...>&` | Split path components |
-| `get_method()` | `httpserver::http_method` | Strongly-typed enum; see [`http_method.hpp`](src/httpserver/http_method.hpp) |
+| `get_method()` | `httpserver::http_method` | Strongly-typed enum; see `http_method.hpp` |
 | `get_version()` | `std::string_view` | `"HTTP/1.1"`, `"HTTP/2"`, … |
 | `get_querystring()` | `std::string_view` | Raw query string (no decoding) |
 | `get_connection_id()` | uintptr-style id | Stable identifier for the underlying connection |
@@ -1022,7 +1027,7 @@ rule. `http_request` is **single-threaded per request**: sharing one
 ### Method enum
 
 `http_method` (declared in
-[`http_method.hpp`](src/httpserver/http_method.hpp)) covers the canonical
+`http_method.hpp`) covers the canonical
 HTTP methods. `method_set` is a bitset used by atomic multi-method
 registration on `route()` (see [Routing](#routing)).
 
@@ -1568,7 +1573,7 @@ for runnable demonstrations.
 libhttpserver provides a set of constants and helpers to help you build
 your HTTP server. The full list of named constants (status codes, common
 methods, common content types, named algorithms) lives in
-[`src/httpserver/http_utils.hpp`](src/httpserver/http_utils.hpp) — it
+`src/httpserver/http_utils.hpp` — it
 would be redundant to enumerate it here.
 
 The following utility functions are available on `http::http_utils`:

@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Prerequisites
-        run: sudo apt-get update && sudo apt-get install -y clang autoconf automake libtool pkg-config python3 perl libgnutls28-dev libunistring-dev libcurl4-openssl-dev binutils
+        run: sudo apt-get update && sudo apt-get install -y clang autoconf automake libtool pkg-config python3 perl libcurl4-openssl-dev binutils
       - name: Build selected prerequisites
         run: python3 scripts/prepare-v3-package-ci.py --output package-evidence/prerequisites
       - name: Bootstrap
@@ -23,7 +23,6 @@ jobs:
         run: >-
           python3 scripts/check-v3-installed-consumer.py --output package-evidence/matrix
           --provider-prefix "$PWD/package-evidence/prerequisites/provider"
-          --prerequisite-prefix "$PWD/package-evidence/prerequisites/legacy" --prerequisite-prefix /usr
           --pkg-config-dir /usr/lib/x86_64-linux-gnu/pkgconfig --pkg-config-dir /usr/share/pkgconfig
           --compiler clang++ --cc clang --jobs 2
       - if: always()
@@ -38,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Prerequisites
-        run: brew install autoconf automake libtool pkg-config python gnutls curl
+        run: brew install autoconf automake libtool pkg-config python curl
       - name: Build selected prerequisites
         run: python3 scripts/prepare-v3-package-ci.py --output package-evidence/prerequisites
       - name: Bootstrap
@@ -46,9 +45,7 @@ jobs:
       - name: Installed matrix
         run: >-
           python3 scripts/check-v3-installed-consumer.py --output package-evidence/matrix
-          --provider-prefix "$PWD/package-evidence/prerequisites/provider"
-          --prerequisite-prefix "$PWD/package-evidence/prerequisites/legacy"
-          --prerequisite-prefix "$(brew --prefix)" --pkg-config-dir "$(brew --prefix)/share/pkgconfig"
+          --provider-prefix "$PWD/package-evidence/prerequisites/provider" --pkg-config-dir "$(brew --prefix)/share/pkgconfig"
           --compiler clang++ --cc clang --jobs 2
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -71,8 +68,7 @@ jobs:
           install: >-
             autotools base-devel perl
             mingw-w64-x86_64-clang mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils
-            mingw-w64-x86_64-python mingw-w64-x86_64-pkgconf mingw-w64-x86_64-libtool
-            mingw-w64-x86_64-gnutls mingw-w64-x86_64-curl mingw-w64-x86_64-libsystre
+            mingw-w64-x86_64-python mingw-w64-x86_64-pkgconf mingw-w64-x86_64-libtool mingw-w64-x86_64-curl mingw-w64-x86_64-libsystre
       - name: Build selected prerequisites
         run: /mingw64/bin/python scripts/prepare-v3-package-ci.py --output package-evidence/prerequisites
       - name: Bootstrap
@@ -80,9 +76,7 @@ jobs:
       - name: Installed matrix (native Python; IOCP and WSAPoll)
         run: >-
           /mingw64/bin/python scripts/check-v3-installed-consumer.py --output package-evidence/matrix
-          --provider-prefix "$(cygpath -m "$PWD/package-evidence/prerequisites/provider")"
-          --prerequisite-prefix "$(cygpath -m "$PWD/package-evidence/prerequisites/legacy")"
-          --prerequisite-prefix "$(cygpath -m /mingw64)" --toolchain-prefix "$(cygpath -m /mingw64)"
+          --provider-prefix "$(cygpath -m "$PWD/package-evidence/prerequisites/provider")" --toolchain-prefix "$(cygpath -m /mingw64)"
           --compiler clang++ --cc clang --jobs 2
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -101,13 +95,12 @@ jobs:
           release: '14.3'
           mem: 8192
           cpu: 2
-          prepare: pkg install -y bash autoconf automake libtool pkgconf python311 gmake gnutls curl binutils perl5 llvm
+          prepare: pkg install -y bash autoconf automake libtool pkgconf python311 gmake curl binutils perl5 llvm
           run: |
             python3.11 scripts/prepare-v3-package-ci.py --output package-evidence/prerequisites --make gmake
             ./bootstrap
             python3.11 scripts/check-v3-installed-consumer.py --output package-evidence/matrix \
               --provider-prefix "$PWD/package-evidence/prerequisites/provider" \
-              --prerequisite-prefix "$PWD/package-evidence/prerequisites/legacy" --prerequisite-prefix /usr/local \
               --pkg-config-dir /usr/local/share/pkgconfig --compiler clang++ --cc clang --make gmake --jobs 2
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

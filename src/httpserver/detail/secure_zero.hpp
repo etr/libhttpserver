@@ -72,8 +72,7 @@
 #include <cstddef>
 
 // HAVE_EXPLICIT_BZERO and HAVE_MEMSET_S are emitted as -D flags by
-// configure.ac (pushed into AM_CXXFLAGS, mirroring the HAVE_GNUTLS /
-// HAVE_BAUTH propagation pattern). This header therefore consults them
+// configure.ac pushes this declaration into AM_CXXFLAGS. This header consults it
 // without an explicit config.h include.
 
 #if defined(_WIN32)

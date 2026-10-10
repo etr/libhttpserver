@@ -26,7 +26,7 @@
 // Transfer-Encoding and Content-Length field occurrences (RFC 9112
 // section 6.3). The engine computes the mode exactly once, right after
 // take(); the decoder and the body adapter consume it and never
-// recompute. Every strictness delta vs the v2 (libmicrohttpd-backed)
+// recompute. Every strictness delta vs the v2
 // framing is pre-approved for v3 and recorded as a migration note at
 // its rejection site.
 

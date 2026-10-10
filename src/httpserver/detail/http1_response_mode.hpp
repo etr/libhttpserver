@@ -28,7 +28,7 @@
 // and the handler's response field occurrences (RFC 9112 section 6.3).
 // The engine computes the mode exactly once, at response-commit time
 // (sink start()); the framer and the outbox consume it and never
-// recompute. Every strictness delta vs the v2 (libmicrohttpd-backed)
+// recompute. Every strictness delta vs the v2
 // emission is pre-approved for v3 and recorded as a migration note at
 // its site.
 

@@ -134,5 +134,5 @@ __pycache__/
 !scripts/prepare-v3-package-ci.py
 
 !test/integ/v3_examples_test.py
-!scripts/doxygen-class-fragments.py
-!scripts/test-doxygen-class-fragments.py
+!scripts/test-v3-cutover.py
+!scripts/check-v3-runtime-coexistence.py

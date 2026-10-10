@@ -1,3 +1,8 @@
+Version 3.0.0 - 2026-10-10
+* Ship the C++20 native engine with SOVERSION 3 and native public headers.
+* Remove MHD and GnuTLS configure, source, build, link and package prerequisites.
+* Require strict TLS-on/off installed audits and validate versioned ABI-2/3 runtime coexistence.
+
 Version 2.0.0
 
 	Fixed macOS CI failure when verifying the pinned libmicrohttpd

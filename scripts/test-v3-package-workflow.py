@@ -2,6 +2,7 @@
 """Dedicated package workflow contract and mutation checks."""
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +39,17 @@ class WorkflowTest(unittest.TestCase):
     def test_complete_workflow(self):
         self.assertEqual([], violations(self.text))
 
+    def test_native_matrix_shell_commands_are_well_formed(self):
+        # Fold YAML's >- command blocks, preserving shell quotes verbatim.
+        for block in re.findall(r'run: >-\n((?:          .*\n)+)', self.text):
+            command = ' '.join(line.strip() for line in block.splitlines())
+            with self.subTest(command=command):
+                result = subprocess.run(['bash', '-n'], input=command, text=True,
+                                        capture_output=True)
+                self.assertEqual(0, result.returncode, result.stderr)
+        self.assertNotIn('prerequisites/legacy', self.text)
+        self.assertNotIn('\\ \\', self.text)
+
     def test_missing_platform_matrix_provider_or_failure_upload_is_rejected(self):
         for original, replacement in (('  freebsd:', '  missing:'),
                                       ('scripts/check-v3-installed-consumer.py', 'missing.py'),
@@ -49,7 +61,7 @@ class WorkflowTest(unittest.TestCase):
     def test_provider_downloads_are_checksummed(self):
         script = (ROOT / 'scripts/prepare-v3-package-ci.py').read_text()
         self.assertIn('hashlib.sha256', script)
-        self.assertIn('7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a', script)
+        self.assertIn('603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a', script)
         self.assertIn('shared', script)
         self.assertIn('3.5.9', script)
 
