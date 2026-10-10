@@ -23,15 +23,15 @@ missing-scheme	8.2	feed	stream 1 1	-
 bad-value	8.2	feed	stream 1 1	-
 content-length-end	8.2	feed	stream 1 1	-
 valid-te	8.2	feed	ok 0 0	1
-content-length-data	8.2	feed	stream 1 1	1
-malformed-trailer	8.2	feed	stream 1 1	1
+content-length-data	8.2	dispatch	stream 1 1	1
+malformed-trailer	8.2	dispatch	stream 1 1	1
 idle-data	5.1	feed	connection 1 0	-
 idle-reset	5.1	feed	connection 1 0	-
 even-head	5.1.1	feed	connection 1 0	-
 zero-head	6.2	feed	connection 1 0	-
-closed-data	5.1	feed	stream 5 1	1
+closed-data	5.1	dispatch	stream 5 1	1
 closed-reset	5.1	feed	ok 0 0	-
-stream-window-overflow	6.9.1	feed	stream 3 1	1
+stream-window-overflow	6.9.1	dispatch	stream 3 1	1
 connection-window-overflow	6.9.1	feed	connection 3 0	-
 padded-data	6.1	feed	ok 0 0	1
 interleaved-continuation	4.3	feed	connection 1 0	-
@@ -48,6 +48,6 @@ peer-reset-data	5.1	pump	connection 5 0	1
 peer-reset-head	5.1	pump	connection 5 0	1
 closed-head	5.1	pump	connection 5 0	1
 implicit-closed-head	5.1.1	pump	connection 1 0	1
-half-closed-head	5.1	feed	stream 5 1	1
+half-closed-head	5.1	dispatch	stream 5 1	1
 peer-reset-invalid-hpack	4.3	pump	connection 9 0	1
 closed-invalid-hpack	4.3	pump	connection 9 0	1
