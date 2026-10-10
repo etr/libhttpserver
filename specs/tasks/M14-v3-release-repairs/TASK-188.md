@@ -9,10 +9,10 @@
 **Workflow:** Follow `../v3-release-repair-workflow.md`; resolve TASK-188 with the worktree helper, require `base_branch=v3`, root-cause investigation and verified RED/GREEN before changes, then Groundwork validation/finalization.
 
 **Action Items:**
-- [ ] Reproduce the frozen `peer_policy/concurrent_mutation_and_reads` stall. Inspect test joining/termination and `src/detail/peer_policy.cpp` shared-mutex paths; collect bounded writer-progress observations before concluding starvation, deadlock or test lifecycle error.
-- [ ] Add a bounded concurrency regression which holds reader pressure until a writer completes, asserts consistent classifications and fails on missing mutation progress. Terminate/join every thread on failure; do not solve this by weakening the number of mutations/readers, adding sleeps, raising the release deadline or making the readers stop before writers need progress.
-- [ ] Apply the proven repair. Prefer architecture's immutable generation publication with serialized writers if shared-mutex starvation is established; preserve atomic stance/list consistency, deny/allow precedence, typed invalid patterns, armed fast path and live mutation from handlers. Clear concurrency doubts with tests before committing.
-- [ ] Check concurrent add/remove/mode/enabled publication and real public listener live policy changes; retain parser/truth-table compatibility and update architecture if the implementation publication model changes.
+- [x] Reproduce the frozen `peer_policy/concurrent_mutation_and_reads` stall. Inspect test joining/termination and `src/detail/peer_policy.cpp` shared-mutex paths; collect bounded writer-progress observations before concluding starvation, deadlock or test lifecycle error.
+- [x] Add a bounded concurrency regression which holds reader pressure until a writer completes, asserts consistent classifications and fails on missing mutation progress. Terminate/join every thread on failure; do not solve this by weakening the number of mutations/readers, adding sleeps, raising the release deadline or making the readers stop before writers need progress.
+- [x] Apply the proven repair. Prefer architecture's immutable generation publication with serialized writers if shared-mutex starvation is established; preserve atomic stance/list consistency, deny/allow precedence, typed invalid patterns, armed fast path and live mutation from handlers. Clear concurrency doubts with tests before committing.
+- [x] Check concurrent add/remove/mode/enabled publication and real public listener live policy changes; retain parser/truth-table compatibility and update architecture if the implementation publication model changes.
 
 **Acceptance Criteria:**
 - Existing `peer_policy` finishes within the unchanged 180-second release deadline under normal TLS-off/on; the bounded writer-progress regression passes under normal, ASan/UBSan and TSan.
@@ -24,4 +24,6 @@
 - Blocks: TASK-189, TASK-185
 **Related Requirements:** PRD-V3N-REQ-014, PRD-V3N-REQ-025, PRD-V3N-REQ-038.
 **Related Decisions:** DR-V3-001, DR-V3-006, DR-V3-008; architecture §3 immutable policy generations.
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** [TASK-188 implementation evidence](../../architecture/v3/TASK-188-implementation-evidence.md). Six local C++20 normal/ASan/UBSan/TSan TLS-off/on lanes and installed managed/external live-policy consumers pass; Groundwork validation passed in one iteration with eight approvals, zero fixes and zero unworked findings (run `476f15d40115b153d901c612b1b6473d`). All implementation build/debug receipts are retained beneath `build/task188-evidence/implementation-2cc58b4b/` in the primary worktree, with a SHA256 archive manifest.
