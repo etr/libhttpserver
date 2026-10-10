@@ -143,11 +143,6 @@ class native_server::impl {
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             if (options_.listener(i).tls) {
 #ifdef NATIVE_V3_TLS
-                if (options_.tls().profile != tls_profile::certificates
-                        || detail::resolved_client_certificate_mode(options_.tls().profile, options_.tls().client_auth)
-                            != tls_client_certificate_mode::none) {
-                    return {http::outcome_code::not_supported, "native_server: TLS profile unavailable"};
-                }
                 const auto& credentials = options_.listener(i).credentials;
                 const auto snapshot = credentials ? engine::tls_credentials_access::acquire(*credentials) : nullptr;
                 if (!snapshot) {
@@ -184,6 +179,18 @@ class native_server::impl {
             return ready;
         }
 
+#ifdef NATIVE_V3_TLS
+        std::vector<std::shared_ptr<const engine::tls_credentials_binding>> bindings(options_.listener_count());
+        for (std::size_t i = 0; i < options_.listener_count(); ++i) {
+            const auto& endpoint = options_.listener(i);
+            if (!endpoint.tls) continue;
+            engine::tls_credentials_binding policy{options_.tls().profile,
+                detail::resolved_client_certificate_mode(options_.tls().profile, options_.tls().client_auth),
+                options_.protocols().contains(http::protocol::http_1_1)};
+            const auto bound = engine::tls_credentials_access::bind(*endpoint.credentials, policy, bindings[i]);
+            if (!bound.ok()) return bound;
+        }
+#endif
         engine::connection_engine_config config =
             engine::connection_engine_config::from_budget_limits(options_.budgets());
         config.diagnostics = options_.diagnostic_channel();
@@ -225,7 +232,12 @@ class native_server::impl {
                 *backend_, pool_, registry_, hooks_, budget_, peers_,
                 *scope_, config));
             const http::outcome bound =
-                listeners_.back()->listen(options_.listener(i), i, handshake_runtime_);
+                listeners_.back()->listen(options_.listener(i), i, handshake_runtime_,
+#ifdef NATIVE_V3_TLS
+                    std::move(bindings[i]));
+#else
+                    {});
+#endif
             if (!bound.ok()) {
                 // Terminal for this object: stop what bound and fail
                 // typed. The listeners stay owned until the destructor

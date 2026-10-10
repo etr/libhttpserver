@@ -1740,7 +1740,7 @@ endif
 if NATIVE_V3_TLS
 check_PROGRAMS += v3_tls_rotation
 v3_tls_rotation_SOURCES = examples/v3_tls_rotation.cpp
-v3_tls_rotation_CPPFLAGS = -I$(top_srcdir)/src -DTLS_TEST_DIR='"$(top_srcdir)/test"'
+v3_tls_rotation_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/examples
 v3_tls_rotation_LDADD = $(tls_io_LDADD)
 v3_tls_rotation_LDFLAGS = $(tls_io_LDFLAGS)
 endif
@@ -1775,3 +1775,11 @@ check_PROGRAMS += consumer_v3_tls_credentials
 consumer_v3_tls_credentials_SOURCES = headers/consumer_v3_tls_credentials.cpp
 consumer_v3_tls_credentials_CPPFLAGS = -I$(top_srcdir)/src
 consumer_v3_tls_credentials_LDADD = $(top_builddir)/src/libhttpserver.la
+
+if NATIVE_V3_TLS
+check_PROGRAMS += public_tls_profiles
+public_tls_profiles_SOURCES = unit/public_tls_profiles_test.cpp
+public_tls_profiles_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -DTLS_TEST_DIR='"$(abs_top_srcdir)/test"'
+public_tls_profiles_LDADD = $(top_builddir)/src/libhttpserver.la
+public_tls_profiles_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+endif

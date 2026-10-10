@@ -11,6 +11,7 @@
 #include <openssl/x509v3.h>
 #include <ctime>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -259,18 +260,45 @@ std::optional<tls_credentials_selection> tls_credentials_snapshot::select_acme(s
     if (found == challenges_.end() || now >= found->second.expires_at) return std::nullopt;
     return tls_credentials_selection{shared_from_this(), found->second.context};
 }
-http::outcome tls_credentials_registry::publish_locked(std::shared_ptr<tls_credentials_snapshot> candidate,
+namespace {
+bool compatible(const tls_credentials_binding& policy, const tls_credentials_snapshot& snapshot) {
+    for (const auto& host : snapshot.hosts()) {
+        if (policy.profile != host.profile || policy.mode != host.client_certificate_mode || (!policy.http11 && !host.alpn.empty())) return false;
+    }
+    return true;
+}
+}  // namespace
+http::outcome tls_credentials_registry::bind(tls_credentials_binding policy, std::shared_ptr<const tls_credentials_binding>& lease) {
+    std::lock_guard lock(publication_);
+    const auto snapshot = acquire();
+    if (!snapshot || !compatible(policy, *snapshot)) {
+        return {http::outcome_code::invalid_argument, "TLS credentials conflict with listener policy"};
+    }
+    auto binding = std::make_shared<const tls_credentials_binding>(policy);
+    std::erase_if(bindings_, [](const auto& weak) { return weak.expired(); });
+    bindings_.push_back(binding);
+    lease = std::move(binding);
+    return {};
+}
+http::outcome tls_credentials_registry::publish_locked(const std::shared_ptr<tls_credentials_snapshot>& candidate,
     std::shared_ptr<const tls_credentials_snapshot>& retired) {
+    std::erase_if(bindings_, [](const auto& weak) { return weak.expired(); });
+    for (const auto& weak : bindings_) {
+        if (const auto binding = weak.lock(); binding && !compatible(*binding, *candidate)) {
+            return {http::outcome_code::invalid_argument, "TLS credentials conflict with bound listener policy"};
+        }
+    }
     if (generation_ == std::numeric_limits<std::uint64_t>::max()) {
         return {http::outcome_code::limit_exceeded, "TLS generation limit exceeded"};
     }
     candidate->generation_ = ++generation_;
-    retired = std::atomic_exchange_explicit(&active_, std::shared_ptr<const tls_credentials_snapshot>(std::move(candidate)), std::memory_order_acq_rel);
+    retired = std::atomic_exchange_explicit(&active_, std::shared_ptr<const tls_credentials_snapshot>(candidate), std::memory_order_acq_rel);
     return {};
 }
 http::outcome tls_credentials_registry::publish_acme(const tls_acme_challenge& input) {
     error_scope errors;
     std::shared_ptr<const tls_credentials_snapshot> retired;
+    std::shared_ptr<tls_credentials_snapshot> candidate;
     try {
         auto name = canonical_tls_host(input.host);
         auto context = tls_context::server_acme(input);
@@ -278,9 +306,9 @@ http::outcome tls_credentials_registry::publish_acme(const tls_acme_challenge& i
         const auto current = acquire();
         if (!current) return {http::outcome_code::invalid_state, "TLS credentials unavailable"};
         require(input.expires_at > std::chrono::system_clock::now());
-        auto candidate = std::make_shared<tls_credentials_snapshot>(*current);
+        candidate = std::make_shared<tls_credentials_snapshot>(*current);
         candidate->challenges_.insert_or_assign(std::move(name), tls_credentials_snapshot::acme_entry{std::move(context), input.expires_at});
-        return publish_locked(std::move(candidate), retired);
+        return publish_locked(candidate, retired);
     } catch (const std::invalid_argument&) {
         return {http::outcome_code::invalid_argument, "TLS credentials invalid"};
     }
@@ -288,14 +316,15 @@ http::outcome tls_credentials_registry::publish_acme(const tls_acme_challenge& i
 http::outcome tls_credentials_registry::remove_acme(std::string_view host) {
     error_scope errors;
     std::shared_ptr<const tls_credentials_snapshot> retired;
+    std::shared_ptr<tls_credentials_snapshot> candidate;
     try {
         const auto name = canonical_tls_host(std::string(host));
         std::lock_guard lock(publication_);
         const auto current = acquire();
         if (!current || !current->challenges_.contains(name)) return {};
-        auto candidate = std::make_shared<tls_credentials_snapshot>(*current);
+        candidate = std::make_shared<tls_credentials_snapshot>(*current);
         candidate->challenges_.erase(name);
-        return publish_locked(std::move(candidate), retired);
+        return publish_locked(candidate, retired);
     } catch (const std::invalid_argument&) {
         return {http::outcome_code::invalid_argument, "TLS credentials invalid"};
     }
@@ -328,7 +357,7 @@ http::outcome tls_credentials_registry::replace(const tls_credentials_config& co
     {
         std::lock_guard lock(publication_);
         if (const auto current = acquire()) candidate->challenges_ = current->challenges_;
-        return publish_locked(std::move(candidate), retired);
+        return publish_locked(candidate, retired);
     }
 }
 }  // namespace httpserver::detail

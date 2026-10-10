@@ -21,6 +21,7 @@ from v3_package_integration import compile_probe
 from v3_package_matrix import check_linkage, check_scenarios, load
 from v3_package_process import Consumer
 from v3_package_traffic import response
+from v3_public_tls_profiles import scenarios as profile_scenarios, example as rotation_example
 
 
 def check(value, message):
@@ -289,7 +290,9 @@ def main():
         inputs = sorted(path for path in (ROOT / 'src').rglob('*')
                         if path.is_file() and path.suffix in ('.cpp', '.hpp'))
         inputs += [ROOT / name for name in ('src/Makefile.am', 'configure.ac',
-                   'scripts/check-v3-public-tls.py', 'test/installed/v3-package-matrix.json')]
+                   'scripts/check-v3-public-tls.py', 'scripts/lib/v3_public_tls_profiles.py', 'scripts/lib/v3_package_matrix.py',
+                   'test/installed/v3-package-matrix.json', 'test/installed/v3_tls_consumer.cpp',
+                   'test/installed/v3_tls_profiles.cpp', 'test/installed/v3_tls_client.cpp', 'test/examples/v3_tls_rotation.cpp')]
         receipt['source_hashes'] = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                                     for path in inputs}
         receipt['source_identity'] = hashlib.sha256(json.dumps(receipt['source_hashes'], sort_keys=True).encode()).hexdigest()
@@ -305,10 +308,30 @@ def main():
         check(not audit.consumer_flag_violations(cflags, (ROOT, args.build)), 'contaminated public compile flags')
         consumer = Path(tempfile.mkdtemp(prefix='task193-public-tls-client-'))
         receipt['consumer_directory'] = str(consumer)
-        for unit in ('test/installed/v3_tls_consumer.cpp', 'examples/v3_host_poll.hpp'):
+        for unit in ('test/installed/v3_tls_consumer.cpp', 'test/installed/v3_tls_profiles.cpp', 'test/installed/v3_tls_client.cpp', 'test/examples/v3_tls_rotation.cpp', 'examples/v3_host_poll.hpp'):
             shutil.copyfile(ROOT / unit, consumer / Path(unit).name)
         fixtures = consumer / 'fixtures'
         shutil.copytree(ROOT / 'test/data/tls_credentials', fixtures)
+        (fixtures / 'client-valid-fingerprint.txt').write_text(hashlib.sha256(ssl.PEM_cert_to_DER_cert((fixtures / 'client-valid.pem').read_text())).hexdigest())
+        for identity in ('client-valid', 'client-other'):
+            chain = (fixtures / (identity + '.pem')).read_bytes()
+            if identity == 'client-valid':
+                chain += (fixtures / 'client-intermediate.pem').read_bytes()
+            (fixtures / (identity + '-chain.pem')).write_bytes(chain)
+        independent = consumer / 'independent-client'
+        command_log([args.compiler, '-std=c++20', '-I' + str(args.provider_prefix / 'include'),
+                     consumer / 'v3_tls_client.cpp', '-L' + str(args.provider_prefix / 'lib'),
+                     '-Wl,-rpath,' + str(args.provider_prefix / 'lib'), '-lssl', '-lcrypto', '-o', independent], consumer, env)
+        receipt['independent_client'] = dict(executable=str(independent),
+            sha256=hashlib.sha256(independent.read_bytes()).hexdigest(), dependencies=audit.dependency_graph([str(independent)]))
+        check('libhttpserver' not in json.dumps(receipt['independent_client']['dependencies']), 'client links server library')
+        command_log([independent, 'fixtures', fixtures], consumer, env, timeout=10)
+        (fixtures / 'malformed.pem').write_text('malformed certificate')
+        (fixtures / 'malformed-key.pem').write_text('malformed private key')
+        command_log([args.provider_prefix / 'bin/openssl', 'pkey', '-in', fixtures / 'acme-key.pem', '-aes-256-cbc', '-passout', 'pass:task194-test-only', '-out', fixtures / 'encrypted-key.pem'], consumer, env)
+        (fixtures / 'extra.pem').write_bytes((fixtures / 'acme.pem').read_bytes() * 2)
+        for name in ('mismatch-key', 'past-expiry', 'late-expiry'):
+            shutil.copyfile(fixtures / 'acme.pem', fixtures / (name + '.pem'))
         receipt['fixture_hashes'] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in fixtures.iterdir() if path.is_file()}
         for linkage in ('shared', 'static'):
             flags = ['--libs'] + (['--static'] if linkage == 'static' else [])
@@ -323,6 +346,16 @@ def main():
             executable = consumer / (linkage + ('.exe' if os.name == 'nt' else ''))
             provenance = compile_probe(args.compiler, [consumer / 'v3_tls_consumer.cpp'], cflags + shlex.split(args.sanitize),
                                        libraries, executable, command_log, env, ROOT, args.build.resolve(), prefix, False)
+            profiles = consumer / (linkage + '-profiles' + ('.exe' if os.name == 'nt' else ''))
+            profile_compile = compile_probe(args.compiler, [consumer / 'v3_tls_profiles.cpp'], cflags + shlex.split(args.sanitize),
+                                           libraries, profiles, command_log, env, ROOT, args.build.resolve(), prefix, False)
+            example = consumer / (linkage + '-rotation-example' + ('.exe' if os.name == 'nt' else ''))
+            example_compile = compile_probe(args.compiler, [consumer / 'v3_tls_rotation.cpp'], cflags + shlex.split(args.sanitize),
+                                           libraries, example, command_log, env, ROOT, args.build.resolve(), prefix, False)
+            example_graph = audit.dependency_graph([str(example)])
+            check_linkage(example_graph, linkage, prefix)
+            profile_graph = audit.dependency_graph([str(profiles)])
+            check_linkage(profile_graph, linkage, prefix)
             graph = audit.dependency_graph([str(executable)])
             check_linkage(graph, linkage, prefix)
             for loop in ('managed', 'external'):
@@ -330,6 +363,14 @@ def main():
                 cell.mkdir()
                 result = dict(linkage=linkage, loop=loop, compile=provenance, dependencies=graph)
                 result['scenarios'] = scenarios(executable, loop, args.tls, cell, env, fixtures)
+                profile_rows = profile_scenarios(profiles, independent, loop, args.tls, cell, env, fixtures)
+                result['profile_compile'], result['profile_dependencies'] = profile_compile, profile_graph
+                if args.tls == 'yes':
+                    result['scenarios'] += profile_rows
+                    result['scenarios'].append(rotation_example(example, loop, cell, env, fixtures))
+                    result['example_compile'], result['example_dependencies'] = example_compile, example_graph
+                else:
+                    result['profile_scenarios'] = profile_rows
                 receipt['cells'].append(result)
                 print('PASS public TLS', args.tls, linkage, loop, len(result['scenarios']), flush=True)
         check(len(receipt['cells']) == 4, 'incomplete public matrix')

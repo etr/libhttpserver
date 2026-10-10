@@ -85,7 +85,7 @@ void configuration(const std::string& directory, srv::loop_mode loop, bool enabl
     }
     auto profile = options(loop, store);
     profile.tls().profile = srv::tls_profile::mutual_tls;
-    unbound(profile, http::outcome_code::not_supported);
+    unbound(profile, enabled ? http::outcome_code::invalid_argument : http::outcome_code::not_supported);
     std::cerr << "PUBLIC_TLS_CONFIGURATION " << (enabled ? 15 : 14) << "\n";
 }
 int main(int argc, char** argv) {

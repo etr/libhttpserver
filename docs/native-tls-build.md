@@ -26,8 +26,8 @@ cross builds must run the smoke on the target in CI.
 
 `<httpserver/features.hpp>` exposes the same compiled `query_features()` declaration
 in both builds, without backend headers or configuration macros. Availability of
-the provider is distinct from availability of TCP TLS, HTTP/2, and HTTP/3. TCP TLS is available in TLS-on builds for certificate-authenticated HTTP/1.0
-and HTTP/1.1 in both managed and external modes. HTTP/2 and HTTP/3 remain
+the provider is distinct from availability of TCP TLS, HTTP/2, and HTTP/3. TCP TLS is available in TLS-on builds for certificate, initial mTLS and eligible
+external-PSK HTTP/1.0 and HTTP/1.1 in both managed and external modes. HTTP/2 and HTTP/3 remain
 unavailable until their owning tasks implement public listeners. `listen()`
 rejects unsupported protocol/profile requests before binding;
 `server_options::validate()` remains semantic.
@@ -58,7 +58,7 @@ checks configure/build provenance, installed metadata, effective public headers,
 recursive dependency graphs and all static-archive members, including unused
 members. Provider build proof remains distinct from encrypted listener or QUIC
 interoperability proof. Nonlocal BSD, macOS and Windows execution belongs to CI
-and the v3 PR; public H2/H3 listeners and expanded TLS profiles remain later-task work.
+and the v3 PR; public H2/H3 listeners remain later-task work.
 
 Run the clean installed-consumer matrix from a bootstrapped source checkout:
 
@@ -163,12 +163,10 @@ requests before binding. Every endpoint binds before admission activates; failur
 on a later bind synchronously releases earlier endpoints and reports no bound
 ports. A bind failure is terminal for that server instance.
 
-TASK-193 supports public certificate/default/SNI configuration and replacement
-lifetime safety. Public mTLS, external PSK and ACME operations remain TASK-194
-work; native requests for unsupported profiles reject honestly. Private profile
-suites continue to test their existing support. The rotation example now uses the
-public store and demonstrates typed publication outcomes; expanded installed
-profile/rotation examples belong to TASK-194.
+TASK-193 supplies public certificate/default/SNI configuration and generation
+lifetime safety. TASK-194 extends the same store to initial mTLS, HTTP/1 external
+PSK and ACME, and exercises live listener rotation through installed packages.
+Private profile suites remain supporting protocol evidence.
 
 Run the installed certificate capability matrix after staging a package:
 
@@ -186,3 +184,70 @@ Unknown/absent SNI checks verify the chain and compare the selected certificate
 with its independently hostname-verified named certificate. TLS-off runs the same
 configuration code and requires typed unavailability. Nonlocal platform checks
 remain CI/v3-PR owned.
+
+## Public initial client authentication, external PSK and ACME
+
+`server/tls_credentials.hpp` supplies provider-neutral host trust, authentication,
+owned keys and a bounded callback runtime. Set `tls_host_credentials::profile`
+and the listener's `options.tls().profile` consistently. For mTLS, set
+`trust_roots_pem` to the client CA roots. `mutual_tls` defaults to `require`;
+explicit `client_auth.mode = tls_client_certificate_mode::request` verifies any
+presented chain while allowing anonymous peers. `require` refuses absent or
+untrusted client chains. Set the same resolved mode on the listener. Authentication
+is initial-handshake only. Exchanges and request hooks own immutable verified
+leaf identity, fingerprint and validity metadata.
+
+A bound store rejects publication that contradicts any active listener's profile,
+resolved mode or enabled HTTP/1 policy. Bind registration and publication share
+one private writer transaction; a concurrent writer cannot downgrade authentication
+between validation and admission. Compatible listeners hold independent leases;
+stopping admission releases that listener's lease. Already accepted sessions keep
+their pinned generation. Invalid material and policy leave the active generation
+unchanged. Mixed profiles in one store cannot attach to a listener configured for
+one contradictory profile.
+
+For HTTP/1 external PSK, create `tls_psk_runtime` with finite `lookup_workers`
+(1–64) and `lookup_queue` (0–65536), supply `tls_psk_config::lookup` and its shared
+runtime, and set the host/listener profile to `external_psk`. Certificate/key/trust
+material must be empty for PSK. Return `tls_psk_result` with an accepted status and
+move-only `tls_psk_key` built from owned bytes. Identity/context references last
+one invocation; retain copies when needed. TLS1.3 identities are binary; TLS1.2
+exposes textual NUL-terminated identities. The context owns canonical selected
+host, generation identity, absolute monotonic deadline and cancellation token.
+Callbacks can run concurrently and must synchronize mutable captured state.
+
+The lookup runtime is distinct from native server-owned provider workers. It
+counts active and queued callbacks together; ignored cancellation retains a slot
+until callback return, including across rotation. Late keys are wiped and never
+route requests. `request_stop()` is nonblocking. Call it before
+`wait_retired(absolute_deadline)` to observe actual callback retirement: timeout
+means application work remains; waiting from that runtime's callback returns
+`would_deadlock`. Destruction requests stop without joining arbitrary application
+code. Captured resources must be owned through retirement. A native handler's
+`request_stop()` or `begin_drain()` does not stop a shared application runtime;
+one server stopping cannot disable another server using that runtime.
+
+Normal certificate sessions have a host/context namespace. Same-generation
+resumption may reuse authentication; replacements create fresh contexts, so an
+old session cannot bypass the replacement or cross host/store identity. External
+PSK authentication differs from ticket resumption: PSK profiles and ACME disable
+tickets/session caching. Every ACME handshake sends its challenge certificate.
+Application 0-RTT remains disabled; early requests never enter routes.
+
+`tls_credentials::publish_acme(tls_acme_challenge)` validates a supplied challenge
+certificate/key, canonical DNS host, 32-byte authorization digest and future
+absolute system-clock expiry no later than certificate expiry. The certificate
+must have exactly one matching DNS SAN and one critical ACME authorization digest
+extension. `remove_acme(host)` is canonical and idempotent. Publication validation
+is independent of listener port. Selection requires matching exact canonical SNI,
+sole `acme-tls/1`, TCP, and the socket's actual local port443. Other ALPN offers and
+ordinary HTTP use normal credentials; challenge sessions cannot route HTTP. This
+API performs no certificate issuance or challenge-client orchestration.
+
+TLS-off installs identical declarations and secure key operations, with typed
+`not_supported` for credential/runtime/ACME availability. Public H2/H3 listeners
+remain later-task work; external PSK remains HTTP/1-only. The installed rotation
+example takes `certificate-directory managed|external port`, opens a real public
+listener and accepts `replace`, `invalid` and `stop` on stdin. Its independent
+installed witness holds a usable connection across rotation and validates the
+new certificate plus rejected-publication preservation.

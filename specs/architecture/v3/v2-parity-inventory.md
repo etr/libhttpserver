@@ -242,13 +242,21 @@ cells have explicit applicability notes. Supporting semantic, engine-frame,
 provider/BIO and real transport checks remain separately labeled.
 
 HTTP/2/3 now use the shared lifecycle dispatcher, preserving captures,
-405/Allow/default pages, hook composition and exactly-once cancellation. Native
-HTTP/1 TLS uses a private socket-owner adapter; HEAD persistence and TLS WebSocket
-reader handoff were repaired with failing regressions. This does not enable public
-TLS/H2/H3 listeners: prelisten rejection remains a documented release gap.
+405/Allow/default pages, hook composition and exactly-once cancellation. At TASK-179, native
+HTTP/1 TLS used a private socket-owner adapter; HEAD persistence and TLS WebSocket
+reader handoff were repaired with failing regressions. Public encrypted listeners
+were still unavailable at that task; TASK-193/194 public HTTP/1 evidence follows below.
 
 See [TASK-179 evidence and precise migrations](../../../docs/task-179-behavior-parity.md)
 and the fail-closed `scripts/run-v3-behavior-parity.py` receipt checker. Exact
 observations, named executable evidence, migrations, source hashes and retained
 commands are generated in a fresh task-local build receipt directory. BSD/Windows
 checks remain CI/v3-PR owned.
+
+
+TASK-194 adds installed public mTLS request/require, HTTP/1 external PSK,
+immutable live rotation and application-supplied ACME publish/remove witnesses.
+Independent clients exercise managed/external loops and shared/static packages,
+including authentic TCP443 selection. Earlier TASK-179 private transport evidence
+remains historical supporting proof; public HTTP/2/3 listeners remain pending
+TASK-195..199. See [TASK-194 implementation evidence](TASK-194-implementation-evidence.md).

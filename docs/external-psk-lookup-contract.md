@@ -42,8 +42,10 @@ Historical seams characterized at TASK-134's base `d1349b59`, before TASK-135:
 
 ## Callback shape
 
-The installed provider-neutral types are in `detail/tls_psk.hpp` (internal,
-excluded from installed public headers). The callback shape is:
+The original private types remain in `detail/tls_psk.hpp`. TASK-194 exposes the
+provider-neutral public equivalents in `server/tls_credentials.hpp`: `tls_psk_version`,
+`tls_psk_context`, `tls_psk_result`, `tls_psk_lookup` and move-only `tls_psk_key`.
+The private callback shape is:
 
 ```cpp
 enum class psk_tls_version { tls12, tls13 };
@@ -208,7 +210,7 @@ late-result wiping and retirement against this contract. Local acceptance is rec
 `tls_psk_runtime_options` defaults to two handshake workers and two lookup
 workers, with sixteen additional outstanding slots on each lane and a five
 second handshake timeout. Validation permits 1–64 workers per lane, 0–65536
-additional slots and a timeout greater than zero and at most ten minutes.
+additional slots and a timeout greater than zero and at most 24 hours.
 Admission counts running and queued jobs together (`workers + queue`); a reserved
 worker slot may still be queued while its worker wakes. Running callbacks never
 exceed the worker count. Queued and running jobs share one absolute deadline.
@@ -258,3 +260,28 @@ authentication, binary TLS 1.3 identities, SNI/mixed profiles, replacement,
 0-RTT rejection, admission, timeouts, cancellation/destruction, late-key wiping,
 local TLS-on/off gates and fully instrumented local sanitizer runs. BSD, Windows
 and other nonlocal checks remain assigned to CI and the v3 PR.
+
+## Public runtime ownership
+
+`server::tls_psk_runtime::create(options, output)` reports typed configuration or
+availability failures and preserves output on failure. Public options configure
+only the callback lane: 1–64 workers and 0–65536 additional queued slots. The
+native server separately owns bounded provider steps. Publication retains the
+public runtime and copied callable; repeated generations never replenish capacity
+occupied by an unreturned callback. Caller handles and PEM buffers may die while
+listeners/generations retain their owners. Callback references last one invocation.
+
+`request_stop()` requests cancellation without joining; call it before
+`wait_retired(deadline)`. Incomplete retirement returns `timeout`; self-wait returns
+`would_deadlock`. Runtime destruction never waits for arbitrary callback code.
+Owned captured state lasts through actual callback retirement, including late
+results after connection timeout/cancellation. Native server stop never implicitly
+stops a shared application lookup runtime. Stop handlers must remain nonblocking.
+The private runtime retains its existing scheduling implementation and defaults;
+the current private timeout ceiling is 24 hours, matching `server::max_timeout`.
+
+Both public TLS builds expose the same declarations and secure key operations.
+TLS-off runtime creation and credential/ACME operations return `not_supported`.
+The installed public matrix adds real TCP independent TLS1.2/1.3 PSK, binary
+identity, negative authentication, early-data, blocked-callback and retirement
+witnesses; private memory-BIO/provider suites remain supporting evidence.
