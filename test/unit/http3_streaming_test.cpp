@@ -7,6 +7,7 @@
 #include "./http3_request_fixture.hpp"
 #include "../support/http3_semantic_routes.hpp"
 #include "./littletest.hpp"
+#include <httpserver/server/diagnostics.hpp>
 namespace hd = httpserver::detail;
 namespace http = httpserver::http;
 using httpserver::exchange;
@@ -630,6 +631,82 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, semantic_large_writer_parks_on_send_cr
     LT_CHECK_EQ(finished, 1u);
 LT_END_AUTO_TEST(semantic_large_writer_parks_on_send_credit_and_resumes_exactly)
 
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, diagnostics_count_normal_and_cancelled_requests_without_payload)
+    h3test::request_fixture f;
+    httpserver::server::diagnostics channel([](const auto&) {});
+    hd::request_dispatch_context context;
+    context.diagnostics = channel;
+    f.engine =
+        std::make_unique<hd::http3_request_engine>(f.pool.data(), f.pool.critical(), f.flow, f.recovery, f.routes, f.executor,
+                                                  hd::http3_request_limits{}, 77, httpserver::net::peer_address{}, context);
+    LT_ASSERT(f.routes
+                  .route(http::method::known(http::method_id::get), "/hello",
+                         [](exchange& x) -> task<void> {
+                             x.respond(http::status::from_code(204), {});
+                             co_return;
+                         })
+                  .ok());
+    f.open(0);
+    LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true));
+    f.executor.run_pending();
+    f.drain();
+    using kind = httpserver::server::diagnostic_kind;
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_admitted)], 1u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_completed)], 1u);
+    f.open(4);
+    LT_ASSERT(f.feed(4, h3test::headers(h3test::get())));
+    f.engine->disconnect({http::outcome_code::cancelled, "test stop"});
+    f.executor.run_pending();
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_cancelled)], 1u);
+LT_END_AUTO_TEST(diagnostics_count_normal_and_cancelled_requests_without_payload)
+
+
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, destructor_reports_live_stream_cancellation_once)
+    httpserver::server::diagnostics channel([](const auto&) {});
+    hd::request_dispatch_context context; context.diagnostics = channel;
+    {
+        h3test::request_fixture f;
+        f.engine = std::make_unique<hd::http3_request_engine>(f.pool.data(), f.pool.critical(), f.flow, f.recovery, f.routes, f.executor,
+                                                            hd::http3_request_limits{}, 77, httpserver::net::peer_address{}, context);
+        f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get())));
+        f.executor.run_pending(); f.engine.reset();
+    }
+    using kind = httpserver::server::diagnostic_kind;
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_cancelled)], 1u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_completed)], 0u);
+LT_END_AUTO_TEST(destructor_reports_live_stream_cancellation_once)
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, flow_stalls_are_transitions_and_resume_on_transport_credit)
+    h3test::request_fixture f({}, 0);
+    httpserver::server::diagnostics channel([](const auto&) {});
+    hd::request_dispatch_context context; context.diagnostics = channel;
+    f.engine = std::make_unique<hd::http3_request_engine>(f.pool.data(), f.pool.critical(), f.flow, f.recovery, f.routes, f.executor,
+                                                        hd::http3_request_limits{}, 77, httpserver::net::peer_address{}, context);
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true));
+    f.executor.run_pending(); f.engine->pump_output(); f.engine->pump_output();
+    using kind = httpserver::server::diagnostic_kind;
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::flow_stalled)], 1u);
+    LT_ASSERT(f.flow.apply({hd::quic_flow_kind::max_stream_data, 65536, 0}));
+    f.drain();
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_completed)], 1u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::flow_stalled)], 1u);
+LT_END_AUTO_TEST(flow_stalls_are_transitions_and_resume_on_transport_credit)
+
+LT_BEGIN_AUTO_TEST(http3_streaming_suite, semantic_capacity_refusal_reports_stream_resource)
+    hd::http3_request_limits limits; limits.max_active_requests = 1;
+    h3test::request_fixture f(limits);
+    std::vector<httpserver::server::diagnostic_event> seen;
+    httpserver::server::diagnostics channel([&](const auto& event) { seen.push_back(event); });
+    hd::request_dispatch_context context; context.diagnostics = channel;
+    f.engine = std::make_unique<hd::http3_request_engine>(f.pool.data(), f.pool.critical(), f.flow, f.recovery, f.routes, f.executor,
+                                                        limits, 77, httpserver::net::peer_address{}, context);
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get())));
+    f.open(4); LT_ASSERT(f.feed(4, h3test::headers(h3test::get())));
+    channel.dispatch();
+    bool streams_refused = false;
+    for (const auto& event : seen) if (event.kind == httpserver::server::diagnostic_kind::resource_refused)
+        streams_refused = event.resource_kind == httpserver::server::resource::streams && event.outcome == http::outcome_code::limit_exceeded;
+    LT_CHECK(streams_refused);
+LT_END_AUTO_TEST(semantic_capacity_refusal_reports_stream_resource)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

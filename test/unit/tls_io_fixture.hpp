@@ -34,6 +34,7 @@ struct pair {
     std::size_t fragment = 31;
     std::size_t sends = 0;
     bool hold_writes = false;
+    explicit pair(hd::tls_handshake_context context = {}) : server(server_raw, ex, 1, hd::tls_context::server_pem(pem("cert.pem"), pem("key.pem")), true, context) {}
     ~pair() {
         client.close();
         server.close();

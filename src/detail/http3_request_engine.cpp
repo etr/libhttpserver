@@ -109,6 +109,7 @@ body_push_result http3_request_engine::state::stream::push_end(const http::field
 }
 void http3_request_engine::state::fail(http3_error failure) {
     if (error) return;
+    observe(server::diagnostic_kind::protocol_failure, 0, failure.outcome, server::diagnostic_reason::malformed_input);
     interrupt_drain();
     error = failure;
     disconnected = true;
@@ -119,6 +120,7 @@ void http3_request_engine::state::fail(http3_error failure) {
 }
 void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
     if (r.cancelled) return;
+    terminal(r, false, reason);
     if (r.drain_unit && phase == drain_phase::draining) drain_failed = true;
     r.drain_unit.reset();
     r.cancelled = true;
@@ -181,6 +183,7 @@ void http3_request_engine::state::reap(record& r) {
     }
     if (!r.cancelled && s.handler.done() && s.streaming && !s.body.finished()) reset(r, 0x102);
     if (r.cancelled || retired(r)) {
+        terminal(r, true, http::outcome_code::ok);
         r.semantic.reset();
         --active;
     }
@@ -294,6 +297,7 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
         return false;
     }
     if (active == limits.max_active_requests) {
+        observe(server::diagnostic_kind::resource_refused, r.transport->id(), http::outcome_code::limit_exceeded, server::diagnostic_reason::capacity);
         reset(r, 0x107);
         return false;
     }
@@ -332,6 +336,7 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
     r.semantic = std::move(value);
     ++active;
     r.accepted = true;
+    observe(server::diagnostic_kind::stream_admitted, r.transport->id());
     r.drain_unit.emplace(*scope);
     const auto id = r.transport->id();
     highest_accepted = highest_accepted ? std::max(*highest_accepted, id) : id;

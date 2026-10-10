@@ -322,3 +322,26 @@ v2 DR-001 (C++20) and DR-011 (SOVERSION policy) carry forward in principle. v2 D
 - WebSocket and Extended CONNECT: [RFC 6455](https://www.rfc-editor.org/rfc/rfc6455.html), [RFC 8441](https://www.rfc-editor.org/rfc/rfc8441.html), [RFC 9220](https://www.rfc-editor.org/rfc/rfc9220.html); ACME TLS-ALPN-01: [RFC 8737](https://www.rfc-editor.org/rfc/rfc8737.html).
 - OpenSSL third-party QUIC TLS callbacks: https://docs.openssl.org/3.5/man3/SSL_set_quic_tls_cbs/.
 - OS I/O: https://man7.org/linux/man-pages/man7/epoll.7.html and https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports.
+
+### Bounded diagnostics (TASK-181; DR-V3-001)
+
+`server::diagnostics` is an optional shared channel supplied through
+`server_options::diagnostic_channel()`. Native engines update fixed atomic
+counters and enqueue scalar-only events into 128 fixed slots using `try_lock`.
+Contention/full queues increment dropped-event accounting; cumulative event
+counts saturate and survive delivery loss. No logging runtime or background
+thread is added. Hierarchical budget accounting updates aggregate seat and
+charged response-storage gauges after committed admission and release.
+Refusals are recorded after rollback, once per charge chain.
+
+Applications explicitly dispatch on their own thread. Dispatch releases the
+queue mutex before callbacks, rejects concurrent/reentrant dispatch, contains
+callback exceptions, and bounds a call by its entry queue size. Producers never
+run callbacks under an I/O or drain lock. Shared ownership keeps producers and
+in-progress dispatch alive; destruction does not dispatch. Retained channels
+can observe shutdown records after server destruction. Records have no freeform
+text, request payloads, network identities or TLS credentials/metadata.
+Protocol engines report lifecycle terminals once and flow-control stalls on
+blocked transitions. Shared drain scopes arbitrate completion versus expiry
+under their existing lock; event delivery remains explicit and independent.
+See `docs/task-181-diagnostics.md` for counter semantics and application usage.

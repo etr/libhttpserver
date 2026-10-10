@@ -2522,3 +2522,12 @@ resource_limits_LDADD = $(http3_headers_LDADD)
 resource_limits_LDFLAGS = $(http3_headers_LDFLAGS)
 
 TESTS += ../scripts/lib/resource_limits_probe_test.py
+
+check_PROGRAMS += server_diagnostics diagnostic_dispatch consumer_v3_diagnostics
+server_diagnostics_SOURCES = unit/server_diagnostics_test.cpp
+server_diagnostics_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+diagnostic_dispatch_SOURCES = unit/diagnostic_dispatch_test.cpp
+diagnostic_dispatch_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+consumer_v3_diagnostics_SOURCES = headers/consumer_v3_diagnostics.cpp
+consumer_v3_diagnostics_CPPFLAGS = -I$(top_srcdir)/src
+consumer_v3_diagnostics_LDADD = $(top_builddir)/src/libhttpserver_v3core.la

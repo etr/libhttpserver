@@ -197,6 +197,53 @@ LT_BEGIN_AUTO_TEST(tls_io_suite, oversized_credentials_are_rejected_before_provi
     LT_CHECK_THROW(hd::tls_context::server_pem(cert, std::string_view(key.data(), oversized)));
     LT_CHECK_THROW(hd::tls_context::server_pem("malformed", key));
 LT_END_AUTO_TEST(oversized_credentials_are_rejected_before_provider_reads)
+
+LT_BEGIN_AUTO_TEST(tls_io_suite, handshake_diagnostics_have_one_terminal_record_and_no_credentials)
+    unsigned callbacks = 0;
+    httpserver::server::diagnostics channel([&](const auto&) { ++callbacks; });
+    hd::tls_handshake_context context;
+    context.diagnostics = channel;
+    {
+        tls_test::pair p(context);
+        LT_ASSERT(p.handshake());
+    }
+    using kind = httpserver::server::diagnostic_kind;
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_completed)], 1u);
+    LT_CHECK_EQ(callbacks, 0u);
+    channel.dispatch();
+    LT_CHECK_EQ(callbacks, 1u);
+    {
+        manual_executor ex;
+        hd::io_connection_owner owner(ex);
+        hd::fake_io_backend raw;
+        hd::tls_io_backend tls(raw, ex, 1, hd::tls_context::server_pem(tls_test::pem("cert.pem"), tls_test::pem("key.pem")), true, context);
+        hd::tls_handshake_operation op(owner, 1);
+        op.submit(tls);
+        ex.run_pending();
+        for (auto pending : raw.pending_ops())
+            if (pending->kind() == hd::io_op_kind::read) raw.complete(*pending, {hh::outcome_code::connection_closed});
+        ex.run_pending();
+        LT_CHECK(op.state()->applied());
+        LT_CHECK(op.state()->stored_result().code == hh::outcome_code::protocol_error);
+        tls.close();
+        ex.run_pending();
+    }
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_failed)], 1u);
+    {
+        manual_executor ex;
+        hd::io_connection_owner owner(ex);
+        hd::fake_io_backend raw;
+        hd::tls_io_backend tls(raw, ex, 1, hd::tls_context::client(), false, context);
+        hd::tls_handshake_operation op(owner, 1);
+        op.submit(tls);
+        ex.run_pending();
+        tls.request_cancel(*op.state());
+        ex.run_pending();
+        tls.close();
+        ex.run_pending();
+    }
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_failed)], 1u);
+LT_END_AUTO_TEST(handshake_diagnostics_have_one_terminal_record_and_no_credentials)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

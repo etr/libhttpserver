@@ -131,6 +131,7 @@ bool http2_request_engine::state::frame_websocket_data(stream& value) {
         active_used = 0; active_stream = selected = value.id; active_body = 0; active_end = true;
         return true;
     }
+    flow_stall(value, progress.output_pending && !maximum);
     if (!maximum || !progress.output_pending) return false;
     if (!reserve(server::resource::response_queue_bytes, maximum + 9 + 128, active_charge)) {
         fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded)); return false;

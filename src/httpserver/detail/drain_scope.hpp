@@ -50,6 +50,7 @@
 #include <httpserver/concurrency/executor.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/server.hpp>
+#include <httpserver/server/diagnostics.hpp>
 
 namespace httpserver {
 
@@ -67,6 +68,8 @@ namespace detail {
 // outside mu_ and are never touched by a late wait on an idle scope.
 class drain_scope final {
  public:
+    explicit drain_scope(server::diagnostics channel = {}) noexcept
+        : diagnostics_(std::move(channel)) {}
     // Counts one unit up.
     void enter() noexcept;
 
@@ -116,6 +119,9 @@ class drain_scope final {
  private:
     concurrency::unique_function<void()> claim_expiry_locked(
         std::chrono::steady_clock::time_point now) noexcept;
+    void complete_locked() noexcept;
+    server::diagnostics diagnostics_;
+    bool diagnostic_terminal_ = false;
     mutable std::mutex mu_;
     std::condition_variable cv_;
     std::size_t active_ = 0;   // guarded by mu_

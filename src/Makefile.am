@@ -200,3 +200,7 @@ libhttpserver_v3core_la_SOURCES += detail/http3_websocket_handshake.cpp detail/h
 libhttpserver_v3core_la_SOURCES += detail/http3_websocket_stream.cpp
 
 noinst_HEADERS += httpserver/detail/resource_charge.hpp
+
+libhttpserver_v3core_la_SOURCES += detail/server_diagnostics.cpp
+nobase_include_HEADERS += httpserver/server/diagnostics.hpp
+noinst_HEADERS += httpserver/detail/diagnostics_access.hpp

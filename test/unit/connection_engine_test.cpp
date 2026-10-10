@@ -38,6 +38,7 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <future>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -52,6 +53,7 @@
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/concurrency/task.hpp>
 #include <httpserver/detail/connection_engine.hpp>
+#include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/worker_pool.hpp>
@@ -1304,6 +1306,93 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, refused_head_closes_and_fails)
                 static_cast<int>(http::outcome_code::invalid_argument));
 LT_END_AUTO_TEST(refused_head_closes_and_fails)
 
+LT_BEGIN_AUTO_TEST(connection_engine_suite, diagnostics_are_redacted_and_dispatch_can_stop_engine)
+    scenario s;
+    unsigned callbacks = 0;
+    srv::diagnostics channel([&](const srv::diagnostic_event& event) {
+        ++callbacks;
+        LT_CHECK_EQ(event.connection_id, kConnId);
+        channel.counters();
+        s.engine->shutdown();
+    });
+    s.config.diagnostics = channel;
+    httpserver::detail::diagnostics_access::attach(s.root, channel);
+    LT_ASSERT(s.start_engine());
+    const std::string request = "POST /echo?secret-target HTTP/1.1\r\nHost: h\r\nAuthorization: secret-auth\r\nCookie: secret-cookie\r\nContent-Length: 11\r\n\r\nsecret-body";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const auto response = s.next_response(s.pair.peer());
+    LT_CHECK(response.has_value());
+    LT_CHECK_EQ(callbacks, 0u);
+    channel.dispatch(1);
+    const bool stopped = wait_until([&] { return s.stopped.load(); });
+    if (!stopped) force_stop(s);
+    LT_CHECK(stopped);
+    auto counts = channel.counters();
+    LT_CHECK_EQ(counts.events[static_cast<std::size_t>(srv::diagnostic_kind::connection_accepted)], 1u);
+    LT_CHECK_EQ(counts.events[static_cast<std::size_t>(srv::diagnostic_kind::connection_closed)], 1u);
+    LT_CHECK_EQ(counts.events[static_cast<std::size_t>(srv::diagnostic_kind::stream_admitted)], 1u);
+    LT_CHECK_EQ(counts.active_connections, 0u);
+    LT_CHECK_EQ(counts.active_streams, 0u);
+    LT_CHECK_EQ(counts.charged_response_queue_bytes, 0u);
+LT_END_AUTO_TEST(diagnostics_are_redacted_and_dispatch_can_stop_engine)
+
+
+LT_BEGIN_AUTO_TEST(connection_engine_suite, diagnostic_callback_stall_allows_real_io_and_shutdown)
+    scenario s;
+    std::promise<void> entered, release;
+    auto released = release.get_future().share();
+    srv::diagnostics channel([&](const auto&) { entered.set_value(); released.wait(); });
+    s.config.diagnostics = channel;
+    LT_ASSERT(s.start_engine());
+    auto dispatch = std::async(std::launch::async, [&] { return channel.dispatch(1); });
+    const bool called = entered.get_future().wait_for(kBudget) == std::future_status::ready;
+    const std::string request = "GET /hello HTTP/1.1\r\nHost: h\r\n\r\n";
+    io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+    const auto response = s.next_response(s.pair.peer());
+    s.engine->shutdown();
+    const bool stopped = wait_until([&] { return s.stopped.load(); });
+    release.set_value();
+    LT_CHECK(called); LT_CHECK(response.has_value()); LT_CHECK(stopped);
+    LT_CHECK_EQ(dispatch.get().delivered, 1u);
+    if (!stopped) force_stop(s);
+LT_END_AUTO_TEST(diagnostic_callback_stall_allows_real_io_and_shutdown)
+LT_BEGIN_AUTO_TEST(connection_engine_suite, diagnostic_failures_and_cancellation_preserve_engine_outcomes)
+    using kind = srv::diagnostic_kind;
+    {
+        scenario s;
+        srv::diagnostics channel([](const auto&) {}); s.config.diagnostics = channel;
+        LT_ASSERT(s.start_engine());
+        const std::string request = "BROKEN\r\n\r\n";
+        io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+        const auto response = s.next_response(s.pair.peer());
+        LT_CHECK(response.has_value());
+        LT_CHECK(wait_until([&] { return s.stopped.load(); })); force_stop(s);
+        LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::protocol_failure)], 1u);
+        LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_admitted)], 0u);
+    }
+    {
+        srv::budget_limits limits; limits.set(srv::resource::connections, 1);
+        scenario s(limits); srv::diagnostics channel([](const auto&) {}); s.config.diagnostics = channel;
+        httpserver::detail::diagnostics_access::attach(s.root, channel);
+        srv::reservation occupied; LT_ASSERT(s.root.reserve(srv::resource::connections, 1, occupied).ok());
+        LT_ASSERT(s.start_engine()); LT_CHECK(wait_until([&] { return s.stopped.load(); }));
+        LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::connection_rejected)], 1u);
+        LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::resource_refused)], 1u);
+        occupied.release(); LT_CHECK_EQ(channel.counters().active_connections, 0u);
+    }
+    {
+        scenario s; srv::diagnostics channel([](const auto&) {}); s.config.diagnostics = channel;
+        gated_gate = resume_signal{}; gated_entered.store(false);
+        LT_ASSERT(s.start_engine());
+        const std::string request = "GET /gated HTTP/1.1\r\nHost: h\r\n\r\n";
+        io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+        LT_CHECK(wait_until([] { return gated_entered.load(); }));
+        s.engine->shutdown(); gated_gate.signal();
+        LT_CHECK(wait_until([&] { return s.stopped.load(); })); force_stop(s);
+        LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_cancelled)], 1u);
+        LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_completed)], 0u);
+    }
+LT_END_AUTO_TEST(diagnostic_failures_and_cancellation_preserve_engine_outcomes)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 #include <memory>
+#include <httpserver/server/diagnostics.hpp>
 #include <httpserver/detail/quic_address_token.hpp>
 #include <httpserver/detail/quic_datagram_dispatch.hpp>
 namespace httpserver::detail {
@@ -14,6 +15,7 @@ struct quic_admission_limits {
     std::size_t cid_length = 8, max_pending = 64, max_retained_bytes = 1024 * 1024, max_routes = 4096;
     std::uint64_t pending_lifetime_seconds = 10, listener_id = 0;
     bool require_retry = true;
+    server::diagnostics diagnostics;
 };
 class quic_admission_reply final {
  public:

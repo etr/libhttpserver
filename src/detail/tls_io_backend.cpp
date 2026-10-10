@@ -18,6 +18,7 @@
 #include <httpserver/detail/io_connection_owner.hpp>
 #include <httpserver/detail/tls_session.hpp>
 #include <httpserver/detail/tls_credentials.hpp>
+#include <httpserver/detail/diagnostics_access.hpp>
 namespace httpserver::detail {
 using http::outcome_code;
 struct tls_io_backend::core : std::enable_shared_from_this<core> {
@@ -50,16 +51,23 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
     bool dead = false;
     std::atomic<bool> close_requested{false};
     bool established = false;
+    bool handshake_recorded = false;
+    server::diagnostics diagnostics;
     std::shared_ptr<const server::tls_peer_metadata> peer;
     std::atomic<tls_negotiated_protocol> protocol{tls_negotiated_protocol::unknown};
     std::atomic<std::uint64_t> sequence{1};
     std::shared_ptr<request> control, reader, writer;
     std::shared_ptr<op_state> raw_read, raw_write;
     const tls_read_cancel_policy read_cancel;
-    explicit core(io_backend& transport, executor& executor, std::uint64_t id, tls_credentials_selection selection, bool server, tls_handshake_context handshake,
-        tls_read_cancel_policy cancellation)
-        : raw(transport), ex(executor), connection(id), child_owner(executor), session(std::make_unique<tls_session>(std::move(selection), server, handshake)),
-          handshake_runtime(session->handshake_runtime()), read_cancel(cancellation) {}
+    explicit core(io_backend& transport, executor& executor, std::uint64_t id, tls_credentials_selection selection, bool server, tls_handshake_context handshake, tls_read_cancel_policy cancellation)
+        : raw(transport),
+          ex(executor),
+          connection(id),
+          child_owner(executor),
+          session(std::make_unique<tls_session>(std::move(selection), server, handshake)),
+          handshake_runtime(session->handshake_runtime()),
+          diagnostics(handshake.diagnostics),
+          read_cancel(cancellation) {}
     void enqueue(executor::handler event, const std::shared_ptr<op_state>& tracked = nullptr) {
         bool schedule = false;
         {
@@ -100,6 +108,15 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
             registered.erase(op.get());
         }
         if (op->claim_terminal()) {
+            if (op->kind() == io_op_kind::tls_handshake && !handshake_recorded) {
+                handshake_recorded = true;
+                if (result.code != outcome_code::cancelled && result.code != outcome_code::connection_closed) {
+                    server::diagnostic_event event{result.code == outcome_code::ok ? server::diagnostic_kind::tls_completed : server::diagnostic_kind::tls_failed, server::diagnostic_reason::handshake,
+                                                   result.code};
+                    event.connection_id = connection;
+                    diagnostics_access::record(diagnostics, event);
+                }
+            }
             op->owner()->enqueue(op, result);
         }
     }

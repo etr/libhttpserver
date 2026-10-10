@@ -34,6 +34,8 @@ struct quic_tls_config {
     std::size_t maximum_peer_parameters = 4096;
     std::span<const std::byte> local_parameters;
     quic_parameter_cid_context peer_cids;
+    server::diagnostics diagnostics;
+    std::uint64_t connection_id = 0;
 };
 // Owner-thread serialized. Configuration spans are copied at construction.
 // keys must outlive this session. copy_output never consumes retransmittable data;

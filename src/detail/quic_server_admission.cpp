@@ -8,6 +8,7 @@
 #include <vector>
 #include <httpserver/detail/quic_server_admission.hpp>
 #include <httpserver/detail/quic_crypto.hpp>
+#include <httpserver/detail/diagnostics_access.hpp>
 namespace httpserver::detail {
 namespace {
 std::span<const std::byte> cid_bytes(const quic_cid& cid) { return std::span(cid.bytes).first(cid.size); }
@@ -143,6 +144,11 @@ quic_server_admission::result quic_server_admission::retain(std::shared_ptr<cons
         }
     }
     if (pending_.size() >= limits_.max_pending || packet->bytes.capacity() > limits_.max_retained_bytes - retained_bytes_) {
+        server::diagnostic_event event{server::diagnostic_kind::resource_refused, server::diagnostic_reason::capacity, http::outcome_code::limit_exceeded};
+        event.protocol = http::protocol::http_3;
+        event.listener_id = limits_.listener_id;
+        event.resource_kind = server::resource::connections;
+        diagnostics_access::record(limits_.diagnostics, event);
         return {quic_admission_code::capacity_exhausted, {}, {}};
     }
     auto entry = std::make_shared<pending_entry>();
@@ -192,6 +198,10 @@ std::optional<quic_server_admission::promotion> quic_server_admission::promote(c
         routes_.remove(*registered);
         return std::nullopt;
     }
+    server::diagnostic_event event{server::diagnostic_kind::connection_accepted};
+    event.protocol = http::protocol::http_3;
+    event.listener_id = limits_.listener_id;
+    diagnostics_access::record(limits_.diagnostics, event);
     return promotion{std::move(*registered), std::move(*facts)};
 }
 }  // namespace httpserver::detail

@@ -9,9 +9,9 @@
 Provide bounded diagnostic callbacks and counters for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Emit structured accept, stream, TLS, limit and drain diagnostics.
-- [ ] Expose bounded counters without runtime logging dependency.
-- [ ] Test redaction and callback dispatch outside I/O locks.
+- [x] Emit structured accept, stream, TLS, limit and drain diagnostics.
+- [x] Expose bounded counters without runtime logging dependency.
+- [x] Test redaction and callback dispatch outside I/O locks.
 
 **Dependencies:**
 - Blocked by: TASK-108, TASK-145, TASK-178
@@ -24,4 +24,4 @@ Provide bounded diagnostic callbacks and counters for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-014, PRD-V3N-REQ-037
 **Related Decisions:** DR-V3-001
 
-**Status:** Not Started
+**Status:** In Progress

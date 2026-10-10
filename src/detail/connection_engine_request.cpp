@@ -114,11 +114,13 @@ task<bool> connection_engine::serve_one(
         co_return false;
     }
     if (!valid_http1_host(head)) {
+        self->observe_failure(http::outcome_code::protocol_error);
         self->emit_error(400);
         co_return false;
     }
     const http1_body_mode mode = http1_body_mode::compute(head);
     if (mode.kind == http1_body_kind::rejected) {
+        self->observe_failure(mode.failure.code());
         self->emit_error(
             self->error_code_for(mode.failure.code()));
         co_return false;
@@ -140,6 +142,7 @@ task<bool> connection_engine::serve_one(
         std::lock_guard<std::mutex> lock(self->mu_);
         return self->next_sequence_++;
     }();
+    self->observe(server::diagnostic_kind::stream_admitted, sequence, http::outcome_code::ok, server::diagnostic_reason::none, head.request_protocol);
     // TASK-118: the engine's head-acceptance verdict, shared by the
     // engine sink (writer) and the lifecycle interceptor (reader) --
     // both live in this frame.
@@ -188,7 +191,9 @@ task<bool> connection_engine::serve_one(
         std::lock_guard<std::mutex> lock(self->mu_);
         self->current_ = nullptr;
     }
-    if (!self->finish_exchange(forwarding, routed, engine_sink, mode)) {
+    const bool keep = self->finish_exchange(forwarding, routed, engine_sink, mode);
+    self->observe_stream_end(routed, sequence);
+    if (!keep) {
         co_return false;
     }
     // A rejected length-framed body drains to its counted remainder
@@ -333,6 +338,7 @@ task<void> connection_engine::route_loop(
             if (failure.ok()) {
                 self->request_close();
             } else {
+                self->observe_failure(failure.code(), server::resource::header_bytes);
                 self->emit_error(self->error_code_for(failure.code()));
             }
             break;
