@@ -155,6 +155,35 @@ LT_BEGIN_AUTO_TEST(tls_io_race_suite, dropped_handles_and_destroyed_awaiter_are_
     LT_CHECK(!state->claim_terminal());
 LT_END_AUTO_TEST(dropped_handles_and_destroyed_awaiter_are_safe)
 
+LT_BEGIN_AUTO_TEST(tls_io_race_suite, rejected_overlap_does_not_record_cancelled_handshake_failure)
+    unsigned callbacks = 0;
+    httpserver::server::diagnostics channel([&](const auto&) { ++callbacks; });
+    hd::tls_handshake_context context;
+    context.diagnostics = channel;
+    tls_test::pair p(context);
+    hd::tls_handshake_operation admitted(p.owner, 1), rejected(p.owner, 1);
+
+    admitted.submit(p.server);
+    rejected.submit(p.server);
+    p.ex.run_pending();
+    const auto cancellation = p.server.request_cancel(*admitted.state());
+    p.ex.run_pending();
+    p.server.close();
+    p.ex.run_pending();
+    channel.dispatch();
+
+    LT_CHECK(rejected.state()->applied());
+    LT_CHECK(rejected.state()->stored_result().code == hh::outcome_code::invalid_state);
+    LT_CHECK(cancellation == hh::outcome_code::ok);
+    LT_CHECK(admitted.state()->applied());
+    LT_CHECK(admitted.state()->stored_result().code == hh::outcome_code::cancelled);
+    LT_CHECK_EQ(p.server_raw.pending_count(), std::size_t{0});
+    using kind = httpserver::server::diagnostic_kind;
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_completed)], 0u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_failed)], 0u);
+    LT_CHECK_EQ(callbacks, 0u);
+LT_END_AUTO_TEST(rejected_overlap_does_not_record_cancelled_handshake_failure)
+
 LT_BEGIN_AUTO_TEST(tls_io_race_suite, stalled_session_keeps_pool_and_unrelated_io_live)
     hd::worker_pool ex(4);
     hd::io_connection_owner owner(ex);

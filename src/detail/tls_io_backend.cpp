@@ -102,13 +102,13 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         }
         ex.post([self = shared_from_this()] { self->run(); });
     }
-    void deliver(const std::shared_ptr<op_state>& op, io_result result) {
+    void deliver(const std::shared_ptr<op_state>& op, io_result result, bool admitted = false) {
         {
             std::lock_guard lock(mu);
             registered.erase(op.get());
         }
         if (op->claim_terminal()) {
-            if (op->kind() == io_op_kind::tls_handshake && !handshake_recorded) {
+            if (admitted && op->kind() == io_op_kind::tls_handshake && !handshake_recorded) {
                 handshake_recorded = true;
                 if (result.code != outcome_code::cancelled && result.code != outcome_code::connection_closed) {
                     server::diagnostic_event event{result.code == outcome_code::ok ? server::diagnostic_kind::tls_completed : server::diagnostic_kind::tls_failed, server::diagnostic_reason::handshake,
@@ -128,7 +128,7 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         if (req->timer) {
             raw.request_cancel(*req->timer);
         }
-        deliver(req->op, result);
+        deliver(req->op, result, true);
     }
     void abort(outcome_code code = outcome_code::connection_closed, const std::shared_ptr<op_state>& initiator = nullptr) {
         if (dead) {

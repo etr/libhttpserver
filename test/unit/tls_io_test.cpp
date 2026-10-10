@@ -198,6 +198,38 @@ LT_BEGIN_AUTO_TEST(tls_io_suite, oversized_credentials_are_rejected_before_provi
     LT_CHECK_THROW(hd::tls_context::server_pem("malformed", key));
 LT_END_AUTO_TEST(oversized_credentials_are_rejected_before_provider_reads)
 
+LT_BEGIN_AUTO_TEST(tls_io_suite, rejected_overlap_preserves_admitted_handshake_success_diagnostic)
+    std::vector<httpserver::server::diagnostic_event> events;
+    httpserver::server::diagnostics channel([&](const auto& event) { events.push_back(event); });
+    hd::tls_handshake_context context;
+    context.diagnostics = channel;
+    tls_test::pair p(context);
+    hd::tls_handshake_operation admitted(p.owner, 1), rejected(p.owner, 1), client(p.owner, 1);
+
+    admitted.submit(p.server);
+    rejected.submit(p.server);
+    p.ex.run_pending();
+    client.submit(p.client);
+    p.drive();
+    p.server.close();
+    p.ex.run_pending();
+    channel.dispatch();
+
+    LT_CHECK(rejected.state()->applied());
+    LT_CHECK(rejected.state()->stored_result().code == hh::outcome_code::invalid_state);
+    LT_CHECK(admitted.state()->applied());
+    LT_CHECK(admitted.state()->stored_result().code == hh::outcome_code::ok);
+    LT_CHECK(client.state()->applied());
+    LT_CHECK(client.state()->stored_result().code == hh::outcome_code::ok);
+    using kind = httpserver::server::diagnostic_kind;
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_completed)], 1u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_failed)], 0u);
+    LT_ASSERT_EQ(events.size(), std::size_t{1});
+    LT_CHECK(events.front().kind == kind::tls_completed);
+    LT_CHECK(events.front().outcome == hh::outcome_code::ok);
+    LT_CHECK_EQ(events.front().connection_id, 1u);
+LT_END_AUTO_TEST(rejected_overlap_preserves_admitted_handshake_success_diagnostic)
+
 LT_BEGIN_AUTO_TEST(tls_io_suite, handshake_diagnostics_have_one_terminal_record_and_no_credentials)
     unsigned callbacks = 0;
     httpserver::server::diagnostics channel([&](const auto&) { ++callbacks; });
