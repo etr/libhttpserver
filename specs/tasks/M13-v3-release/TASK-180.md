@@ -24,6 +24,6 @@ Provide hierarchical resource limits and slow-peer plateaus across engines for l
 **Related Requirements:** PRD-V3N-REQ-014, PRD-V3N-REQ-016, PRD-V3N-REQ-021, PRD-V3N-REQ-027
 **Related Decisions:** DR-V3-001, DR-V3-006
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation Evidence:** [Resource limits and slow-peer receipts](../../../docs/task-180-resource-limits.md). Local implementation checks pass; final completion/publication remains runner-owned.
