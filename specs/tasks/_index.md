@@ -326,7 +326,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-178 | [Gate full HTTP/3 and WebSocket-over-H3 conformance](M12-http3-full/TASK-178.md) | M12 | Complete | TASK-173, TASK-174, TASK-175, TASK-176, TASK-177 |
 | TASK-179 | [Audit v2-to-v3 behavior parity across all protocols](M13-v3-release/TASK-179.md) | M13 | Complete | TASK-128, TASK-145, TASK-178 |
 | TASK-180 | [Verify hierarchical resource limits and slow-peer plateaus across engines](M13-v3-release/TASK-180.md) | M13 | Complete | TASK-128, TASK-145, TASK-178 |
-| TASK-181 | [Expose bounded diagnostic callbacks and counters](M13-v3-release/TASK-181.md) | M13 | Not Started | TASK-108, TASK-145, TASK-178 |
+| TASK-181 | [Expose bounded diagnostic callbacks and counters](M13-v3-release/TASK-181.md) | M13 | Complete | TASK-108, TASK-145, TASK-178 |
 | TASK-182 | [Complete four-platform managed/external-loop package validation](M13-v3-release/TASK-182.md) | M13 | Not Started | TASK-125, TASK-126, TASK-127, TASK-146, TASK-178 |
 | TASK-183 | [Publish v2-to-v3 migration guide and API examples](M13-v3-release/TASK-183.md) | M13 | Not Started | TASK-179 |
 | TASK-184 | [Remove MHD build/link paths and bump v3 SOVERSION](M13-v3-release/TASK-184.md) | M13 | Not Started | TASK-179, TASK-182, TASK-183 |
