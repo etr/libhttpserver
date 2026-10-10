@@ -61,7 +61,7 @@ application work still consumes a worker.
 | Merged `get_arg` query/form/path map | Separate raw query, `path_args()`, and opt-in `forms::decode_urlencoded` / bounded form adapters | Intentional migration: decide source precedence and decoding limits explicitly |
 | `get_content` | `admit_body(body_policy{cap})`, then `co_await body().collect(cap)` or incremental `read_some()` | Admission before reads; typed limits, cancellation and protocol errors |
 | `get_footers` | `body().trailers()` after end-of-body | Trailers remain separate from initial fields |
-| Multipart uploaded-file map and cleanup callbacks | `forms::read_multipart`, `part_sink`, `temp_file_part_sink`, `temp_file_options::should_keep` | Partial parts abort exactly once; disk files clean up on abort/destruction; keep callback runs once per completed file, throws mean remove; client names sanitized |
+| Multipart uploaded-file map and cleanup callbacks | `forms::read_multipart`, `part_sink`, `temp_file_part_sink`, `temp_file_options::should_keep` | Limits are snapshotted at invocation; exchange and part sink remain borrowed through task completion. Partial parts abort exactly once; disk files clean up on abort/destruction; keep callback runs once per completed file, throws mean remove; client names sanitized |
 | `get_cookie` / response `with_cookie` | Ordered Cookie/Set-Cookie fields; parse and render cookie values in application code | Preserve repeated fields; no native request/response convenience aliases |
 
 Form/query decoding is optional, bounded, and reports malformed encodings.
@@ -79,7 +79,7 @@ Set-Cookie field values; applications own value parsing and rendering.
 | File factory | `response_definition::reopen_file`, `co_await send_definition(...)` | Each send reopens the file and gets its own cursor; missing file fails before commit and the route boundary sanitizes it to 500 |
 | Deferred producer | `response_definition::factory` with a fresh producer per send | Share immutable definition, never a mutable producer cursor across concurrent sends |
 | Owned file / pipe | `response_definition::owned_file` / `owned_pipe` | Ownership transferred; one-shot claim rejects replay; pipe EOF ends an unbounded body |
-| Borrowed binary storage | `response_definition::borrowed` with a nonempty `body_lease` | Keep the lease alive through each send; immutable storage can be replayed |
+| Borrowed binary storage | `response_definition::borrowed` with a nonempty `body_lease` | The lease must own the exact borrowed storage; an unrelated keeper cannot extend a temporary payload. Keep the definition and exchange alive through each send; immutable storage can be replayed |
 | Iovec factory | No direct native iovec factory | Write bounded spans through the coroutine writer or supply a producer |
 | Shared response with per-request headers | Immutable `response_definition` plus `response_overlay` | Separate shared definition from each request's fields and source state |
 

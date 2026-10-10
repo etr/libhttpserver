@@ -90,6 +90,14 @@ std::string of(std::span<const std::byte> data) {
     return out;
 }
 
+struct leased_payload {
+    leased_payload(std::shared_ptr<std::atomic<int>> releases, std::string value)
+        : releases(std::move(releases)), value(std::move(value)) { }
+    ~leased_payload() { releases->fetch_add(1, std::memory_order_relaxed); }
+    std::shared_ptr<std::atomic<int>> releases;
+    const std::string value;
+};
+
 http::request_head make_head() {
     http::request_head head;
     head.raw_target = "/things";
@@ -385,10 +393,10 @@ LT_BEGIN_AUTO_TEST(response_sources_suite, borrowed_destruction_releases_keeper_
     auto count = std::make_shared<std::atomic<int>>(0);
     response_definition def;
     {
-        auto keeper = std::make_shared<fake::tracked_keeper>(count);
+        auto keeper = std::make_shared<leased_payload>(count, "kept");
         http::fields f;
         LT_CHECK(response_definition::borrowed(
-            http::status::from_code(200), f, fake::byte_span("kept"),
+            http::status::from_code(200), f, fake::byte_span(keeper->value),
             body_lease(keeper), def).ok());
 
         capturing_sink sink;
@@ -397,6 +405,9 @@ LT_BEGIN_AUTO_TEST(response_sources_suite, borrowed_destruction_releases_keeper_
         manual_executor ex;
         const send_report report = run_send(x, ex, def, {});
         LT_CHECK(report.status.ok());
+        LT_CHECK_EQ(report.body_bytes, static_cast<std::size_t>(4));
+        LT_CHECK_EQ(out.drain(64), static_cast<std::size_t>(4));
+        LT_CHECK(of(out.drained_bytes()) == "kept");
         keeper.reset();
         // The definition (and its copy) still hold the lease.
         LT_CHECK_EQ(count->load(), 0);
@@ -411,6 +422,135 @@ LT_BEGIN_AUTO_TEST(response_sources_suite, borrowed_destruction_releases_keeper_
     LT_CHECK(!def.valid());
     LT_CHECK_EQ(count->load(), 1);
 LT_END_AUTO_TEST(borrowed_destruction_releases_keeper_once)
+
+LT_BEGIN_AUTO_TEST(response_sources_suite, borrowed_delayed_send_and_copy_replay)
+    auto releases = std::make_shared<std::atomic<int>>(0);
+    auto owner = std::make_shared<leased_payload>(releases, "delayed payload");
+    response_definition def;
+    LT_CHECK(response_definition::borrowed(
+        http::status::from_code(200), {}, fake::byte_span(owner->value),
+        body_lease(owner), def).ok());
+    response_definition copy = def;
+    for (const response_definition* replay : {&def, &copy}) {
+        capturing_sink sink;
+        fake::scripted_body_sink out;
+        exchange x(make_head(), &sink, 0, nullptr, &out);
+        manual_executor ex;
+        auto operation = send_definition(x, *replay, {});
+        owner.reset();
+        LT_CHECK_EQ(releases->load(), 0);
+        LT_CHECK_EQ(sink.respond_calls, 0);
+        int deliveries = 0;
+        spawn(ex, std::move(operation), [&](task_result<send_report> r) {
+            ++deliveries;
+            LT_CHECK(r.has_value());
+            if (r.has_value()) {
+                LT_CHECK(r.value().status.ok());
+                LT_CHECK_EQ(r.value().body_bytes, 15u);
+            }
+        });
+        ex.run_pending();
+        LT_CHECK_EQ(deliveries, 1);
+        LT_CHECK_EQ(out.drain(64), 15u);
+        LT_CHECK(of(out.drained_bytes()) == "delayed payload");
+        LT_CHECK_EQ(out.end_calls(), 1);
+        LT_CHECK_EQ(releases->load(), 0);
+    }
+    def = response_definition{};
+    LT_CHECK_EQ(releases->load(), 0);
+    copy = response_definition{};
+    LT_CHECK_EQ(releases->load(), 1);
+LT_END_AUTO_TEST(borrowed_delayed_send_and_copy_replay)
+
+LT_BEGIN_AUTO_TEST(response_sources_suite, borrowed_parked_write_pins_payload)
+    auto releases = std::make_shared<std::atomic<int>>(0);
+    auto owner = std::make_shared<leased_payload>(releases, repeating(128));
+    response_definition def;
+    LT_CHECK(response_definition::borrowed(
+        http::status::from_code(200), {}, fake::byte_span(owner->value),
+        body_lease(owner), def).ok());
+    capturing_sink sink;
+    fake::scripted_body_sink out(4);
+    exchange x(make_head(), &sink, 0, nullptr, &out);
+    manual_executor ex;
+    int deliveries = 0;
+    spawn(ex, send_definition(x, def, {}), [&](task_result<send_report> r) {
+        ++deliveries;
+        LT_CHECK(r.has_value());
+        if (r.has_value()) {
+            LT_CHECK(r.value().status.ok());
+            LT_CHECK_EQ(r.value().body_bytes, 128u);
+        }
+    });
+    ex.run_pending();
+    LT_CHECK(out.parked());
+    LT_CHECK_EQ(deliveries, 0);
+    owner.reset();
+    LT_CHECK_EQ(releases->load(), 0);
+    for (int i = 0; i < 64 && deliveries == 0; ++i) {
+        out.drain(4);
+        ex.run_pending();
+    }
+    out.drain(4);
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK(of(out.drained_bytes()) == repeating(128));
+    LT_CHECK(out.max_queued() <= 4);
+    LT_CHECK_EQ(out.end_calls(), 1);
+    LT_CHECK_EQ(releases->load(), 0);
+    def = response_definition{};
+    LT_CHECK_EQ(releases->load(), 1);
+LT_END_AUTO_TEST(borrowed_parked_write_pins_payload)
+
+LT_BEGIN_AUTO_TEST(response_sources_suite, borrowed_parked_terminal_releases_once)
+    for (const bool disconnect : {false, true}) {
+        auto releases = std::make_shared<std::atomic<int>>(0);
+        auto owner = std::make_shared<leased_payload>(releases, repeating(128));
+        response_definition def;
+        LT_CHECK(response_definition::borrowed(
+            http::status::from_code(200), {}, fake::byte_span(owner->value),
+            body_lease(owner), def).ok());
+        capturing_sink sink;
+        fake::scripted_body_sink out(4);
+        exchange x(make_head(), &sink, 0, nullptr, &out);
+        manual_executor ex;
+        if (disconnect) {
+            spawn(ex, fake::watch_stop_and_resume(x, out), [](task_result<void>) { });
+        }
+        int deliveries = 0;
+        spawn(ex, send_definition(x, def, {}), [&](task_result<send_report> r) {
+            ++deliveries;
+            LT_CHECK(r.has_value());
+            if (r.has_value()) {
+                LT_CHECK(r.value().status.code() == http::outcome_code::cancelled);
+            }
+        });
+        ex.run_pending();
+        LT_CHECK(out.parked());
+        LT_CHECK_EQ(deliveries, 0);
+        owner.reset();
+        LT_CHECK_EQ(releases->load(), 0);
+        if (disconnect) {
+            LT_CHECK(x.disconnect(http::outcome_code::connection_closed, "peer left").ok());
+            LT_CHECK(drain_until(ex, deliveries, 400));
+        } else {
+            out.cancel();
+            ex.run_pending();
+        }
+        const auto produced = out.produced();
+        out.cancel();
+        out.drain(64);
+        ex.run_pending();
+        LT_CHECK_EQ(deliveries, 1);
+        LT_CHECK_EQ(out.produced(), produced);
+        LT_CHECK_EQ(produced, 4u);
+        LT_CHECK(of(out.drained_bytes()) == repeating(4));
+        LT_CHECK(out.max_queued() <= 4);
+        LT_CHECK_EQ(out.end_calls(), 0);
+        LT_CHECK_EQ(releases->load(), 0);
+        def = response_definition{};
+        LT_CHECK_EQ(releases->load(), 1);
+    }
+LT_END_AUTO_TEST(borrowed_parked_terminal_releases_once)
 
 // -----------------------------------------------------------------------
 // F - owned_file: a transferred std::FILE* is one-shot and closed

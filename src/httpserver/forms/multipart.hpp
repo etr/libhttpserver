@@ -183,7 +183,9 @@ http::outcome decode_multipart(std::span<const std::byte> body,
 // ~512-byte reads (the raw body is never buffered whole), drives @p
 // sink, and fires on_part_abort exactly once per begun part on every
 // non-ok end (disconnect, cancellation, rejection, sink failure). The
-// sink must outlive the task. A caller that already admitted the body
+// limits are copied at invocation, before the lazy task starts; later
+// caller mutations do not affect the read. The exchange and sink must
+// outlive the task. A caller that already admitted the body
 // gets invalid_state; a Content-Type without a usable boundary is a
 // typed invalid_argument verdict.
 task<multipart_read> read_multipart(exchange& x,

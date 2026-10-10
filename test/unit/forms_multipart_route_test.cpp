@@ -222,12 +222,18 @@ bool drain_until(manual_executor& ex, int& flag, int spins) {
 class counting_sink final : public forms::part_sink {
  public:
     http::outcome on_part_begin(
-        const forms::part_descriptor&) override {
+        const forms::part_descriptor& part) override {
+        names.emplace_back(part.name);
+        values.emplace_back();
         ++begins;
         return http::outcome::okay();
     }
 
-    http::outcome on_part_data(std::span<const std::byte>) override {
+    http::outcome on_part_data(std::span<const std::byte> data) override {
+        for (const std::byte b : data) {
+            payload += static_cast<char>(b);
+            values.back() += static_cast<char>(b);
+        }
         ++datas;
         return http::outcome::okay();
     }
@@ -242,12 +248,21 @@ class counting_sink final : public forms::part_sink {
         abort_code = reason.code();
     }
 
+    std::string payload;
+    std::vector<std::string> names;
+    std::vector<std::string> values;
     int begins = 0;
     int datas = 0;
     int ends = 0;
     int aborts = 0;
     http::outcome_code abort_code = http::outcome_code::ok;
 };
+
+httpserver::task<forms::multipart_read> delayed_read(
+    exchange& x, forms::part_sink& sink) {
+    return forms::read_multipart(
+        x, forms::multipart_limits{65536, 2, 7, 8192}, sink);
+}
 
 }  // namespace
 
@@ -652,6 +667,106 @@ LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, multipart_route_segmented)
     LT_CHECK(seen.rendered == "a=1");
 LT_END_AUTO_TEST(multipart_route_segmented)
 
+LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, read_captures_limits_at_invocation)
+    capturing_sink sink;
+    fake::scripted_body_source source;
+    fake::scripted_body_sink responses;
+    source.stage(bytes(two_part_body()));
+    source.stage_end();
+    exchange x(make_head(k_type), &sink, 0, &source, &responses);
+    counting_sink parts;
+    forms::multipart_limits limits{65536, 2, 7, 8192};
+    auto operation = forms::read_multipart(x, limits, parts);
+    limits = forms::multipart_limits{1, 1, 1, 1};
+    manual_executor ex;
+    int deliveries = 0;
+    spawn(ex, std::move(operation), [&](task_result<forms::multipart_read> r) {
+        ++deliveries;
+        LT_CHECK(r.has_value());
+        if (r.has_value()) {
+            LT_CHECK(r.value().ok());
+            LT_CHECK_EQ(r.value().parts_completed, 2u);
+        }
+    });
+    LT_CHECK_EQ(sink.admit_calls, 0);
+    drain(ex);
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK_EQ(sink.admitted_bytes, 65536u);
+    LT_CHECK_EQ(parts.begins, 2);
+    LT_CHECK_EQ(parts.ends, 2);
+    LT_CHECK_EQ(parts.aborts, 0);
+    LT_CHECK(parts.payload == "1payload");
+    LT_CHECK(parts.names == std::vector<std::string>({"a", "file"}));
+    LT_CHECK(parts.values == std::vector<std::string>({"1", "payload"}));
+LT_END_AUTO_TEST(read_captures_limits_at_invocation)
+
+LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, read_temporary_limits_survive_helper_return)
+    capturing_sink sink;
+    fake::scripted_body_source source;
+    fake::scripted_body_sink responses;
+    source.stage(bytes(two_part_body()));
+    source.stage_end();
+    exchange x(make_head(k_type), &sink, 0, &source, &responses);
+    counting_sink parts;
+    auto operation = delayed_read(x, parts);
+    manual_executor ex;
+    int deliveries = 0;
+    spawn(ex, std::move(operation), [&](task_result<forms::multipart_read> r) {
+        ++deliveries;
+        LT_CHECK(r.has_value());
+        if (r.has_value()) {
+            LT_CHECK(r.value().ok());
+            LT_CHECK_EQ(r.value().parts_completed, 2u);
+        }
+    });
+    LT_CHECK_EQ(sink.admit_calls, 0);
+    drain(ex);
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK_EQ(parts.begins, 2);
+    LT_CHECK_EQ(parts.ends, 2);
+    LT_CHECK_EQ(parts.aborts, 0);
+    LT_CHECK(parts.payload == "1payload");
+    LT_CHECK(parts.names == std::vector<std::string>({"a", "file"}));
+    LT_CHECK(parts.values == std::vector<std::string>({"1", "payload"}));
+LT_END_AUTO_TEST(read_temporary_limits_survive_helper_return)
+
+LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, read_parked_cancellation_aborts_once)
+    capturing_sink sink;
+    fake::scripted_body_source source;
+    fake::scripted_body_sink responses;
+    source.stage(bytes("--PARITY096B\r\n"
+                       "Content-Disposition: form-data; name=\"a\"\r\n"
+                       "\r\n"));
+    exchange x(make_head(k_type), &sink, 0, &source, &responses);
+    counting_sink parts;
+    manual_executor ex;
+    int deliveries = 0;
+    spawn(ex, forms::read_multipart(x, forms::multipart_limits{}, parts),
+          [&](task_result<forms::multipart_read> r) {
+              ++deliveries;
+              LT_CHECK(r.has_value());
+              if (r.has_value()) {
+                  LT_CHECK(r.value().status.code() == http::outcome_code::cancelled);
+                  LT_CHECK_EQ(r.value().parts_completed, 0u);
+              }
+          });
+    ex.run_pending();
+    LT_CHECK(source.parked());
+    LT_CHECK_EQ(parts.begins, 1);
+    LT_CHECK_EQ(deliveries, 0);
+    source.cancel();
+    drain(ex);
+    source.cancel();
+    source.stage_end();
+    drain(ex);
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK_EQ(parts.ends, 0);
+    LT_CHECK_EQ(parts.aborts, 1);
+    LT_CHECK(parts.abort_code == http::outcome_code::cancelled);
+    LT_CHECK_EQ(sink.respond_calls, 0);
+    LT_CHECK_EQ(responses.push_calls(), 0);
+LT_END_AUTO_TEST(read_parked_cancellation_aborts_once)
+
 // (9) A disconnect mid-body: the streaming read fires on_part_abort
 // exactly once for the begun part and nothing commits (the
 // cancellation contract; the partial-file removal it drives is the
@@ -675,8 +790,12 @@ LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, read_disconnect_aborts_once)
         spawn(ex, forms::read_multipart(x, forms::multipart_limits{}, parts),
               [&](task_result<forms::multipart_read> r) {
                   ++deliveries;
+                  LT_CHECK(r.has_value());
                   if (r.has_value()) {
                       LT_CHECK(!r.value().ok());
+                      LT_CHECK(r.value().status.code()
+                               == http::outcome_code::cancelled);
+                      LT_CHECK_EQ(r.value().parts_completed, 0u);
                   }
               });
         ex.run_pending();  // the watcher parks; the read parks in feed
@@ -691,6 +810,12 @@ LT_BEGIN_AUTO_TEST(forms_multipart_route_suite, read_disconnect_aborts_once)
 
         LT_CHECK_EQ(deliveries, 1);
         LT_CHECK_EQ(parts.begins, 1);
+        LT_CHECK_EQ(parts.aborts, 1);
+        LT_CHECK_EQ(parts.ends, 0);
+        source.cancel();
+        static_cast<void>(x.disconnect(http::outcome_code::connection_closed, "again"));
+        drain(ex);
+        LT_CHECK_EQ(deliveries, 1);
         LT_CHECK_EQ(parts.aborts, 1);
         LT_CHECK(parts.abort_code == http::outcome_code::cancelled
                  || parts.abort_code
