@@ -2538,3 +2538,21 @@ check_PROGRAMS += nonce_expiry_wait
 nonce_expiry_wait_SOURCES = unit/nonce_expiry_wait_test.cpp integ/nonce_expiry_wait.hpp
 nonce_expiry_wait_CPPFLAGS = -I$(top_srcdir)/test
 nonce_expiry_wait_LDADD =
+
+check_PROGRAMS += v3_examples
+v3_examples_SOURCES = unit/v3_examples_test.cpp
+v3_examples_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+v3_examples_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+EXTRA_DIST += integ/v3_examples_test.py
+if BUILD_EXAMPLES
+TESTS += integ/v3_examples_test.py
+endif
+
+if NATIVE_V3_TLS
+check_PROGRAMS += v3_tls_rotation
+v3_tls_rotation_SOURCES = examples/v3_tls_rotation.cpp
+v3_tls_rotation_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+v3_tls_rotation_LDADD = $(tls_io_LDADD)
+v3_tls_rotation_LDFLAGS = $(tls_io_LDFLAGS)
+endif
+TESTS += ../scripts/test-doxygen-class-fragments.py
