@@ -133,6 +133,7 @@ int main(int argc, char** argv) {
         srv::drain_ticket ticket;
         std::atomic<unsigned> accepted{0}, handled{0}, observed{0};
         std::atomic<bool> failed{false}, stopping{false};
+        std::atomic<bool> handler_shutdown{false};
         auto accept_hook = server.hooks().add<srv::hook_phase::accept_decision>([&](srv::accept_decision_ctx& ctx) {
             if (ctx.peer.address.to_string() != "127.0.0.1" || !ctx.peer.port) failed = true;
             ++accepted;
@@ -157,8 +158,14 @@ int main(int argc, char** argv) {
                 const auto* bytes = reinterpret_cast<const std::byte*>(body.data());
                 co_await x.writer().write({bytes, body.size()});
                 co_await x.writer().finish();
-                if (scenario == "handler_stop") server.request_stop();
-                if (scenario == "handler_drain") require(server.begin_drain(1s, ticket).ok(), "handler drain");
+                if (scenario == "handler_stop") {
+                    server.request_stop();
+                    handler_shutdown.store(true, std::memory_order_release);
+                }
+                if (scenario == "handler_drain") {
+                    require(server.begin_drain(1s, ticket).ok(), "handler drain");
+                    handler_shutdown.store(true, std::memory_order_release);
+                }
             }).ok(), "route");
         require(server.listen().ok(), "public TLS listen");
         // Options and caller handles can die: the server owns its own association.
@@ -185,6 +192,20 @@ int main(int argc, char** argv) {
             if (line == "stop") break;
             if (line == "stats") {
                 std::cout << accepted << ' ' << handled << ' ' << observed << std::endl;
+            } else if (line == "handler_shutdown") {
+                // Publish the handler's return (and drain ticket) to this
+                // coordinator before it can close the peer or request stop.
+                if (!handler_shutdown.load(std::memory_order_acquire)) {
+                    std::cout << "PENDING" << std::endl;
+                } else if (scenario == "handler_stop") {
+                    require(!server.is_running(), "handler stop did not stop admission");
+                    std::cout << "STOPPED" << std::endl;
+                } else {
+                    srv::drain_result result;
+                    require(ticket.wait(result).ok() && result.status == srv::drain_status::completed
+                            && !result.remaining, "handler drain wait");
+                    std::cout << "DRAINED" << std::endl;
+                }
             } else if (line == "replace") {
                 require(store->replace({{host(directory, "b")}, 0}).ok(), "replace");
                 std::cout << "REPLACED" << std::endl;

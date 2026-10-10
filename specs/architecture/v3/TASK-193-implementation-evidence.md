@@ -40,12 +40,12 @@ Public receipts under `build/task193/`:
 
 | Lane | Receipt |
 | --- | --- |
-| Normal off | `normal-off/public-probe-r4qt_59p/matrix/receipt.json` |
-| Normal on | `normal-on/public-probe-wd6z5s3j/matrix/receipt.json` |
-| ASan off | `asan-off/public-probe-maop2szs/matrix/receipt.json` |
-| ASan on | `asan-on/public-probe-ly4e3f6y/matrix/receipt.json` |
-| TSan off | `tsan-off/public-probe-xjvjqzto/matrix/receipt.json` |
-| TSan on | `tsan-on/public-probe-x8583v2y/matrix/receipt.json` |
+| Normal off | `validation-repair-iter1/normal-off/receipt.json` |
+| Normal on | `validation-repair-iter1/normal-on/receipt.json` |
+| ASan off | `validation-repair-iter1/asan-off/receipt.json` |
+| ASan on | `validation-repair-iter1/asan-on/receipt.json` |
+| TSan off | `validation-repair-iter1/tsan-off/receipt.json` |
+| TSan on | `validation-repair-iter1/tsan-on/receipt.json` |
 
 Each cell checks staged public-only compilation outside source/build trees, exact pkg-config identity, shared/static linkage and dependency graphs. TLS-on scenarios cover H1.0/H1.1, named/default/absent/unknown SNI, listener isolation, atomic invalid/valid replacement, held handshake and established session, concurrent publication, caller destruction, policy-before-TLS, failed/stalled handshakes, capacity/timeout/recovery, pending stop/drain, reentrant hook/handler stop/drain, mixed plaintext/TLS, disabled protocols and partial bind rollback.
 
@@ -60,3 +60,15 @@ No unresolved local required blocker remains. BSD/macOS/Windows execution and no
 ## Reuse notes
 
 No configured agent memory store exists. Autotools VPATH setup: `./bootstrap`, configure with Clang 18/C++20 and `--disable-examples`; place selected provider `-L`/rpath in `V3_TLS_LIBS`. Build `src` before scoped `test` targets, setting `check_PROGRAMS`, `TESTS` and `noinst_PROGRAMS` together. Install both `src` and root `install-pkgconfigDATA`. Littletest cases live under `test/unit`/`test/integ`, use `LT_CHECK` and expose counts/no-skip receipts. Macro-free public consumers live under `test/headers`/`test/installed`. ASan requires execution outside ptrace with LSan/stack diagnostics. Git worktree/ref mutations require sandbox escalation. Keep source mutation serialized with library/test builds to avoid stale ABI. Preserve registration identity and other task worktrees.
+
+## Validation repair iteration 1
+
+Two public witness gaps were repaired without changing production code or installed libraries. The connection-budget excess peer must now close within 200 ms, separated from the configured 500 ms stalled-handshake timeout. Its refusal elapsed time, both deadlines and later healthy recovery attempts are retained independently in each public receipt.
+
+Handler stop/drain now has an atomic completion acknowledgement published only after the handler's own shutdown call returns. The runner polls it while its peer is still open and before coordinator stop. The fixture checks `is_running() == false` for stop and a successful typed ticket wait with `drain_status::completed` and zero remaining work for drain. The ticket publication uses release/acquire synchronization. Handler entry counts alone cannot pass either witness.
+
+`build/task193/validation-repair-iter1/red.json` records initial RED: capacity-five fixtures timed out at the new refusal deadline in managed/external modes, and the original consumer could not acknowledge handler shutdown. `mutations.json` in that directory records six decisive rejected cells: capacity five, omitted handler `request_stop`, and omitted handler `begin_drain`, each managed/external. The latter mutations preserve the new acknowledgement stores; the stopped-admission/typed-ticket checks still reject them. Mutation source, executable and library hashes, exact compilation commands and process error receipts are retained.
+
+All six refreshed public lanes in the table above pass shared/static × managed/external: 12 TLS-on cells × 23 scenarios and 12 TLS-off same-source cells. ASan/UBSan retains leak, stack-use-after-return and use-after-scope diagnostics; TSan retains halt-on-error. No suppressions were added. The complete affected tooling suites pass (26 runner contracts and 35 package-policy fixtures), as do changed-file cpplint and whitespace checks. Exact commands, sanitizer environment, source/consumer/library identities and reuse checks are in `build/task193/validation-repair-iter1/summary.json` and its referenced receipts.
+
+Production/lifecycle suites and packaging declarations are unchanged. Their original suite logs were verified against recorded hashes and all installed library hashes match the original six lane receipts. Original package/layout/distribution evidence is retained for those unchanged invariants; the refreshed public receipts supersede the earlier public witnesses. Nonlocal checks remain CI/v3-PR owned.

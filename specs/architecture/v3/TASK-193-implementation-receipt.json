@@ -683,8 +683,8 @@
           "artifact_sha256": "cfbc862dc428736d3558911cc7801f2b0bb6087f49685bba08c074a6ce8f5bc6"
         }
       },
-      "public_receipt": "build/task193/normal-off/public-probe-r4qt_59p/matrix/receipt.json",
-      "public_receipt_sha256": "6480d2e44907eb552c840fabbf0bac618abf5a3821a754ae37f8d064baef7a36",
+      "public_receipt": "build/task193/validation-repair-iter1/normal-off/receipt.json",
+      "public_receipt_sha256": "60ebc0c4ce09899f619c560a557244a2ea1c94975e80d5299cbfddb93bc37e87",
       "public_cases": [
         1,
         1,
@@ -772,7 +772,9 @@
             "/usr/lib/python3.12/lib-dynload/_ssl.cpython-312-x86_64-linux-gnu.so"
           ]
         }
-      }
+      },
+      "prior_public_receipt": "build/task193/normal-off/public-probe-r4qt_59p/matrix/receipt.json",
+      "prior_public_receipt_sha256": "6480d2e44907eb552c840fabbf0bac618abf5a3821a754ae37f8d064baef7a36"
     },
     "normal-on": {
       "unit_commands": "build/task193/normal-on/commands-_jss32bl",
@@ -1748,8 +1750,8 @@
           "artifact_sha256": "025a0ee67162da01e26ff11334790f3dffe2fc62c6344bff637b9cc4bc4a6ae6"
         }
       },
-      "public_receipt": "build/task193/normal-on/public-probe-wd6z5s3j/matrix/receipt.json",
-      "public_receipt_sha256": "6fe2d06a8067430a628b37bb06ac58c3c611b96ff0ecb1c81f4521f8a01573dc",
+      "public_receipt": "build/task193/validation-repair-iter1/normal-on/receipt.json",
+      "public_receipt_sha256": "04da27c2e278b6d02b5eeb9dac73a31426a8305c1260f6a766a252844fc052ce",
       "public_cases": [
         23,
         23,
@@ -1837,7 +1839,9 @@
             "/usr/lib/python3.12/lib-dynload/_ssl.cpython-312-x86_64-linux-gnu.so"
           ]
         }
-      }
+      },
+      "prior_public_receipt": "build/task193/normal-on/public-probe-wd6z5s3j/matrix/receipt.json",
+      "prior_public_receipt_sha256": "6fe2d06a8067430a628b37bb06ac58c3c611b96ff0ecb1c81f4521f8a01573dc"
     },
     "asan-off": {
       "unit_commands": "build/task193/asan-off/commands-z_qhx9av",
@@ -2174,8 +2178,8 @@
           "artifact_sha256": "2f18dc40b041b5733e0e200effebfde65c3fb7c34fa5807465fd4f9966416c9a"
         }
       },
-      "public_receipt": "build/task193/asan-off/public-probe-maop2szs/matrix/receipt.json",
-      "public_receipt_sha256": "4b2e522ead2c3a901784d530a5dde854c569da24ad82d63ac8a12a3c13d3c7ec",
+      "public_receipt": "build/task193/validation-repair-iter1/asan-off/receipt.json",
+      "public_receipt_sha256": "1cb5f43ab7afc3f051ffc8ffa27198bcd9cecb1012e8b449793e9af8edd1df2d",
       "public_cases": [
         1,
         1,
@@ -2263,7 +2267,9 @@
             "/usr/lib/python3.12/lib-dynload/_ssl.cpython-312-x86_64-linux-gnu.so"
           ]
         }
-      }
+      },
+      "prior_public_receipt": "build/task193/asan-off/public-probe-maop2szs/matrix/receipt.json",
+      "prior_public_receipt_sha256": "4b2e522ead2c3a901784d530a5dde854c569da24ad82d63ac8a12a3c13d3c7ec"
     },
     "asan-on": {
       "unit_commands": "build/task193/asan-on/commands-kmc8z0fq",
@@ -2820,8 +2826,8 @@
           "artifact_sha256": "1df8a31f88c1e82ee2eaaa931d07f0a732d3907db824efbd1fd7a7bd087dbf64"
         }
       },
-      "public_receipt": "build/task193/asan-on/public-probe-ly4e3f6y/matrix/receipt.json",
-      "public_receipt_sha256": "81bb05a206d80bda4987747ca3b7e827eb1077465b99c0779387b0a4e1dc7a0a",
+      "public_receipt": "build/task193/validation-repair-iter1/asan-on/receipt.json",
+      "public_receipt_sha256": "6e31be326cbc286eb707f8a3e929483d1f1d0412ae957ae9efc07b77fc9b983d",
       "public_cases": [
         23,
         23,
@@ -2909,7 +2915,9 @@
             "/usr/lib/python3.12/lib-dynload/_ssl.cpython-312-x86_64-linux-gnu.so"
           ]
         }
-      }
+      },
+      "prior_public_receipt": "build/task193/asan-on/public-probe-ly4e3f6y/matrix/receipt.json",
+      "prior_public_receipt_sha256": "81bb05a206d80bda4987747ca3b7e827eb1077465b99c0779387b0a4e1dc7a0a"
     },
     "tsan-off": {
       "unit_commands": "build/task193/tsan-off/commands-g63leiov",
@@ -3066,8 +3074,8 @@
           "artifact_sha256": "4e5d21743b811cd6cd4f9ee7329c1a5559b1ea42bff2e8f4638a378aa4df1f2d"
         }
       },
-      "public_receipt": "build/task193/tsan-off/public-probe-xjvjqzto/matrix/receipt.json",
-      "public_receipt_sha256": "b256bbea05df92e7c215dae18269eb9ef8f635682fc54e663ba0b42a50735b82",
+      "public_receipt": "build/task193/validation-repair-iter1/tsan-off/receipt.json",
+      "public_receipt_sha256": "e4e975dee8b1e400b153f3313893487a5272bc01225bfd62fa05a596fc0e3882",
       "public_cases": [
         1,
         1,
@@ -3155,7 +3163,9 @@
             "/usr/lib/python3.12/lib-dynload/_ssl.cpython-312-x86_64-linux-gnu.so"
           ]
         }
-      }
+      },
+      "prior_public_receipt": "build/task193/tsan-off/public-probe-xjvjqzto/matrix/receipt.json",
+      "prior_public_receipt_sha256": "b256bbea05df92e7c215dae18269eb9ef8f635682fc54e663ba0b42a50735b82"
     },
     "tsan-on": {
       "unit_commands": "build/task193/tsan-on/commands-5ytyyn2n",
@@ -3400,8 +3410,8 @@
           "artifact_sha256": "113b027601794f3368583ca52eeb13932ce6b2e254afcf3a3e7fd6002adcd237"
         }
       },
-      "public_receipt": "build/task193/tsan-on/public-probe-x8583v2y/matrix/receipt.json",
-      "public_receipt_sha256": "615e00aa2d3a93dbc7804cd318ad630e39ca04e74ca31703d7744d954cf779ea",
+      "public_receipt": "build/task193/validation-repair-iter1/tsan-on/receipt.json",
+      "public_receipt_sha256": "d41660f7c3b3f85d9e63c6ae615b58f6422e48d91623e6574b5f8a5959bbb3fa",
       "public_cases": [
         23,
         23,
@@ -3489,10 +3499,12 @@
             "/usr/lib/python3.12/lib-dynload/_ssl.cpython-312-x86_64-linux-gnu.so"
           ]
         }
-      }
+      },
+      "prior_public_receipt": "build/task193/tsan-on/public-probe-x8583v2y/matrix/receipt.json",
+      "prior_public_receipt_sha256": "615e00aa2d3a93dbc7804cd318ad630e39ca04e74ca31703d7744d954cf779ea"
     }
   },
-  "source_identity": "4636d82aaa09450792d08b48e65efa9e47be9f3697c1d432aab2ef16d62ab2ba",
+  "source_identity": "59192a2aeadc8eb86bdc7b8c8a87ab519040e294fc649b96aba92b41bd759bb6",
   "package": {
     "summary": {
       "status": "passed",
@@ -3519,5 +3531,17 @@
     "public_helper_sha256": "7bc84b312732940fd1079ba4b56a6c19f1d030daef57d80129ba966bf4d27f94"
   },
   "worktree_path": "/home/etr/progs/libhttpserver/.worktrees/TASK-193",
-  "nonlocal_checks": "BSD/macOS/Windows execution deferred to CI and v3 PR under AGENTS.md"
+  "nonlocal_checks": "BSD/macOS/Windows execution deferred to CI and v3 PR under AGENTS.md",
+  "validation_repairs": {
+    "iteration": 1,
+    "summary": "build/task193/validation-repair-iter1/summary.json",
+    "summary_sha256": "c6b1d6d8e19e791c7fdbfe75d9d827e50572cac068c81cba69cd72c0fcafd63b",
+    "mutations": "build/task193/validation-repair-iter1/mutations.json",
+    "mutations_sha256": "ceef2f37d409c43dfce57b63653cf32447bc65dff1b43429e5eb6fe981b7e9b2",
+    "checks": "build/task193/validation-repair-iter1/contracts/commands.json",
+    "checks_sha256": "404eb578be91af239746bb69c21133fc0804402da40c465cd4294a9c5a18c59f",
+    "public_cells": 24,
+    "tls_on_scenarios_per_cell": 23,
+    "reuse": "Unchanged production/lifecycle suite logs verified against original hashes; installed library hashes match original lane receipts. Package/layout/distribution receipts remain original evidence for unchanged packaging declarations."
+  }
 }

@@ -166,15 +166,21 @@ def scenarios(executable, loop, mode, directory, env, fixtures):
         port = int(child.line().split()[0])
         stalled = [socket.create_connection(('127.0.0.1', port), timeout=3) for _ in range(4)]
         accepted(child, 4)
+        refusal_started = time.monotonic()
         with socket.create_connection(('127.0.0.1', port), timeout=3) as overflow:
-            overflow.settimeout(3)
+            # Admission refusal must precede the 500 ms handshake timeout.
+            # Otherwise an admitted fifth stalled handshake looks like refusal.
+            overflow.settimeout(.2)
             check(overflow.recv(1) == b'', 'handshake connection budget bypassed')
+        refusal_seconds = time.monotonic() - refusal_started
         for peer in stalled:
             peer.settimeout(3)
             check(peer.recv(1) == b'', 'stalled handshake deadline missed')
             peer.close()
         attempts = recover(port, context)
-        rows.append(dict(case='bounded_handshake_timeout_and_recovery', stalled=4, recovery_attempts=attempts))
+        rows.append(dict(case='bounded_handshake_timeout_and_recovery', stalled=4,
+                         refusal_seconds=refusal_seconds, refusal_deadline_seconds=.2,
+                         handshake_deadline_seconds=.5, recovery_attempts=attempts))
         child.stop()
     for scenario in ('timer_budget', 'storage_budget'):
         with launch(scenario) as child:
@@ -201,15 +207,20 @@ def scenarios(executable, loop, mode, directory, env, fixtures):
                 peer.close()
             else:
                 with connect(port, context) as peer:
-                    # Handler stop may close before flush; prove invocation and
-                    # bounded teardown separately from ordinary response proof.
+                    # Keep the peer open until the handler's own shutdown call
+                    # returns. Coordinator stop cannot supply this witness.
                     peer.sendall(b'GET /installed HTTP/1.1\r\nHost: a.example\r\n\r\n')
                     deadline = time.monotonic() + 3
-                    while time.monotonic() < deadline and int(command(child, 'stats').split()[1]) == 0:
+                    acknowledgement = 'PENDING'
+                    while time.monotonic() < deadline and acknowledgement == 'PENDING':
+                        acknowledgement = command(child, 'handler_shutdown')
                         time.sleep(.005)
-                    check(int(command(child, 'stats').split()[1]) == 1, 'handler shutdown not invoked')
+                    expected = 'STOPPED' if scenario == 'handler_stop' else 'DRAINED'
+                    check(acknowledgement == expected, 'handler shutdown did not complete: ' + acknowledgement)
+                    check(int(command(child, 'stats').split()[1]) == 1, 'handler count differs')
                 child.stop()
-            rows.append(dict(case=scenario))
+            rows.append(dict(case=scenario, **({} if scenario.endswith('pending') else
+                             dict(handler_shutdown=acknowledgement))))
     with launch('accept_stop') as child:
         port = int(child.line().split()[0])
         with socket.create_connection(('127.0.0.1', port), timeout=3) as peer:
