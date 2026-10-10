@@ -24,6 +24,6 @@ Provide four-platform managed/external-loop package validation for libhttpserver
 **Related Requirements:** PRD-V3N-REQ-001, PRD-V3N-REQ-002, PRD-V3N-REQ-003, PRD-V3N-REQ-015
 **Related Decisions:** DR-V3-001
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** `docs/task-182-package-validation-evidence.md` records the local gates and the nonlocal execution boundary. Status remains In Progress for runner-owned validation and finalization.
