@@ -204,3 +204,105 @@ The unchanged file-size gate still reports `src/detail/io_poll_backend.cpp`
 not relaxed. Changed C++ paths pass cpplint, Python compiles and `git diff
 --check` passes. Runner-owned publication and task completion follow this
 implementation handoff; the task card remains In Progress.
+
+## Validation recovery
+
+The validation process originally exited when reviewer creation reached the
+agent thread limit. Reviewer creation succeeds in the fresh repair session.
+A bounded review then identified premature shared quota release after a
+partial HTTP/1 response write: consuming 511 of 512 bytes retained the whole
+buffer but charged only one byte, permitting an enclosing-budget sibling.
+The regression's RED receipt is
+`build/task180-on/recovery-regression-red-test.log`.
+
+Partial consumption now keeps the retained prefix charged. Complete drain
+frees the buffer before returning capacity; a refill replaces and frees the
+old buffer before returning its consumed prefix's capacity. The regression
+verifies sibling refusal, refill bytes, complete release, and readmission.
+The bounded closure review reports no remaining finding in this repair.
+Recovery build and test receipts use the `recovery-repair-*` prefix in the
+affected build directories; the earlier five-lane receipts above describe
+the implementation before this follow-up repair. Follow-up normal TLS-on
+passes six selected suites, including the slow-peer memory executable and
+Python receipt checks; normal TLS-off passes four selected suites. TLS-on
+ASan/nonrecovering UBSan passes the three repaired owner suites. All selected
+suites pass with zero skips or errors. The resource suite now passes 20 cases
+and 777 checks in each of these three lanes. The other sanitizer lanes were
+not repeated during recovery. Changed C++ files pass cpplint and the diff
+passes whitespace checks. Task completion, validation retry, and commits
+remain runner-owned.
+
+
+## Blocking validation repair, iteration 1
+
+The initial validation audit identified two further allocation boundaries.
+Coalesced bodyless H1 requests released parser residue's header charge without
+admitting its new receive owner. The route path now reserves the existing
+three-copy receive bound before copying or consuming residue, including when
+all residue belongs to the next bodyless request. Seed assembly moves the
+existing charged tail and prefixes the admitted residue; the bodyless tail
+then takes the seed by move. One owning receive allocation remains through
+handler suspension, and the regression compares its actual retained capacity
+with the shared charge. Refusal emits the existing
+413 close response before dispatch. Paused-handler regressions cover parent
+and child bottlenecks, absent excess dispatch, exact ancestor usage, recycling
+and restored sibling admission.
+
+Output reservations now cover each slot's retained string capacity, including
+unused capacity. Before growth, a candidate reserves a geometric allocation
+bound of `max(required_wire_bound, 2 * previous_capacity)` while the old buffer
+remains charged. Its capacity is checked before publication; a candidate that
+exceeds the bound is freed and refused. The old allocation is freed before its
+reservation returns. Partial refill compacts and reuses charged storage;
+complete drain frees it. Final-head serialization preserves any existing
+interim allocation until acceptance, and rejection frees the candidate before
+returning its charge. Interim, final, body, end and upgrade serialization all
+use the same allocation admission. Upgrade output includes a queued interim
+prefix in its allocation bound and accounts each emitted byte once.
+
+The primary RED receipt is
+`build/task180-on/repair-iter1-red-test.log`: 24 cases, 821 checks and 16
+expected failures against the prior owners. A causal upgrade-after-interim
+regression then produced three expected failures in
+`build/task180-on/repair-iter1-upgrade-red-test.log`. Current TLS-on libraries
+were rebuilt before the final focused checks. The final receipt is
+`build/task180-on/repair-iter1-green-test.log`: eight passing gates, comprising
+resource_limits, H1 parser, body mode/decoder/source, response outbox,
+connection engine and the Python receipt contract. The resource suite now
+passes 25 cases and 830 checks. All selected gates have zero skips or errors.
+
+Changed C++ paths pass cpplint and the diff passes whitespace checks. The
+unchanged file-size violation remains `src/detail/io_poll_backend.cpp` at
+509 SLOC; all changed library sources remain below 500. No configured capacity
+or public API was changed. Other final lanes and closure reviews remain owned
+by the coordinator; nonlocal platform checks remain assigned to CI.
+
+## Seed-publication closure repair, iteration 2
+
+The bounded reader-interleaving probe found an ownership gap in iteration 1:
+the route frame moved admitted residue out of engine-visible storage before
+publication. A real reader absorb in that interval reduced an 81-byte charge
+to 15 and publication discarded its byte, leaving 27 bytes instead of 28.
+The body path similarly staged only the original prefix, leaving intervening
+reader bytes behind. Assertion-enhanced RED receipts are
+`build/task180-on/repair-iter2-seed-red.log` and
+`build/task180-on/repair-iter2-body-red.log`.
+
+Head preparation now admits and prefixes residue directly into the
+engine-owned pending tail under its mutex. Bodyless input stays in that owner;
+body staging moves the entire tail into early storage while changing the gate
+under the same mutex. Reader input therefore remains visible to receive quota
+accounting and follows the seed in wire order throughout preparation. The
+existing private fixture invokes the production preparation, absorb, staging
+and recycle paths deterministically. Its regressions check exact bytes and
+charges, retained-capacity coverage, body rejection and next-head recycling,
+and reader refusal followed by owner release and capacity readmission.
+
+Current TLS-on libraries and the six focused executables were rebuilt before
+`build/task180-on/repair-iter2-green-test.log`: resource_limits,
+connection_engine, http1_body_source, http1_body_decoder,
+http1_websocket_upgrade and websocket_drain_race all pass with zero skips,
+failures or errors. The resource suite passes 28 cases and 855 checks.
+Changed C++ files pass cpplint and the diff passes whitespace checks. The
+settled outbox repair and public contracts are preserved. Final affected lanes
+and closure review remain coordinator-owned; nonlocal checks remain with CI.

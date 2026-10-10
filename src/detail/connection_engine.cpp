@@ -260,17 +260,19 @@ std::uint16_t connection_engine::error_code_for(
     return 400;
 }
 
-bool connection_engine::stage_body(const http1_body_mode& mode,
-                                   std::string seed) {
+bool connection_engine::stage_body(const http1_body_mode& mode) {
     {
         std::lock_guard<std::mutex> lock(mu_);
-        const auto needed = 3 * seed.size();
+        const auto needed = 3 * pending_tail_.size();
         if (needed > tail_charge_.units() && !tail_charge_.grow(needed - tail_charge_.units())) return false;
         body_ = std::make_unique<http1_body_source>(mode, config_.body, [weak = weak_from_this()] {
             if (auto engine = weak.lock()) engine->wake_loops_ordered();
         }, budget_);
         gate_ = body_gate::pending;
-        early_bytes_ = std::move(seed);
+        // Include every reader byte received since head preparation. The
+        // owner and gate change together, so later absorbs append in order.
+        early_bytes_ = std::move(pending_tail_);
+        std::string().swap(pending_tail_);
     }
     // The reader may already be gated on the early cap (or becomes so
     // now), and the watchdog's candidate set changed.

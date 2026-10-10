@@ -2,12 +2,25 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include "./http2_request_fixture.hpp"
 #include "./http2_websocket_fixture.hpp"
 #include "./http3_websocket_fixture.hpp"
 #include "./http3_request_fixture.hpp"
 #include "./websocket_engine_helpers.hpp"
+namespace httpserver::detail {
+struct http1_outbox_test_access {
+    static std::size_t retained_capacity(http1_response_outbox& outbox) {
+        std::lock_guard lock(outbox.mu_);
+        std::size_t total = 0;
+        for (const auto& slot : outbox.slots_) {
+            if (slot->bytes_.capacity() > std::string().capacity()) total += slot->bytes_.capacity();
+        }
+        return total;
+    }
+};
+}  // namespace httpserver::detail
 namespace hd = httpserver::detail;
 namespace hs = httpserver::server;
 namespace http = httpserver::http;
@@ -165,6 +178,233 @@ LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_output_retirement_restores_shared_c
     outbox.consume_front(outbox.queued_bytes());
     LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 0u);
 LT_END_AUTO_TEST(h1_output_retirement_restores_shared_capacity_for_a_long_response)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_partial_output_keeps_retained_prefix_charged_until_refill_or_drain)
+    auto budget = root(hs::resource::response_queue_bytes, 512);
+    hd::http1_response_outbox outbox({512, 512}, budget);
+    auto& sink = outbox.open(1, {});
+    http::request_head request; request.request_protocol = http::protocol::http_1_1;
+    http::fields fields; fields.append("Content-Length", "1024");
+    LT_ASSERT(sink.start(request, http::status::from_code(200), fields).ok());
+    outbox.consume_front(outbox.queued_bytes());
+    const std::array<std::byte, 512> payload{};
+    LT_ASSERT(sink.push(payload).kind == hd::body_push::accepted);
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 512u);
+    LT_CHECK_EQ(outbox.consume_front(511), 511u);
+    LT_CHECK_EQ(outbox.queued_bytes(), 1u);
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 512u);
+    hd::http1_response_outbox sibling({512, 512}, budget);
+    auto& excess = sibling.open(1, {});
+    LT_CHECK(excess.start(request, http::status::from_code(200), fields).code() == http::outcome_code::limit_exceeded);
+    LT_ASSERT(sink.push(std::span(payload).first(16)).kind == hd::body_push::accepted);
+    LT_CHECK_EQ(outbox.queued_bytes(), 17u);
+    LT_CHECK(budget.in_use(hs::resource::response_queue_bytes) >= hd::http1_outbox_test_access::retained_capacity(outbox));
+    std::array<std::byte, 17> pending{};
+    LT_CHECK_EQ(outbox.copy_front(pending), pending.size());
+    LT_CHECK((pending == std::array<std::byte, 17>{}));
+    outbox.consume_front(pending.size());
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 0u);
+    auto& replacement = sibling.open(2, {});
+    LT_CHECK(replacement.start(request, http::status::from_code(200), fields).ok());
+    sibling.retire();
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(h1_partial_output_keeps_retained_prefix_charged_until_refill_or_drain)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_oversized_output_head_frees_rejected_allocation_preserving_interim)
+    for (bool interim : {false, true}) {
+        auto budget = root(hs::resource::response_queue_bytes, 4096);
+        hd::http1_response_outbox outbox({4096, 1024}, budget);
+        auto& sink = outbox.open(1, {});
+        if (interim) LT_ASSERT(sink.interim(100).ok());
+        const auto before = budget.in_use(hs::resource::response_queue_bytes);
+        const auto queued = outbox.queued_bytes();
+        http::request_head request; request.request_protocol = http::protocol::http_1_1;
+        http::fields fields; fields.append("X", std::string(1000, 'x'));
+
+        LT_CHECK(sink.start(request, http::status::from_code(200), fields).code() == http::outcome_code::limit_exceeded);
+
+        LT_CHECK_EQ(outbox.queued_bytes(), queued);
+        LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), before);
+        LT_CHECK(budget.in_use(hs::resource::response_queue_bytes) >= hd::http1_outbox_test_access::retained_capacity(outbox));
+        if (interim) {
+            std::array<std::byte, 64> wire{};
+            const auto n = outbox.copy_front(wire);
+            LT_CHECK_EQ(std::string(reinterpret_cast<const char*>(wire.data()), n), "HTTP/1.1 100 Continue\r\n\r\n");
+        }
+        outbox.retire();
+        LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 0u);
+    }
+LT_END_AUTO_TEST(h1_oversized_output_head_frees_rejected_allocation_preserving_interim)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_allocator_growth_competes_with_shared_output_sibling)
+    auto budget = root(hs::resource::response_queue_bytes, 512);
+    hd::http1_response_outbox outbox({512, 512}, budget);
+    auto& sink = outbox.open(1, {});
+    http::request_head request; request.request_protocol = http::protocol::http_1_1;
+    http::fields fields; fields.append("Content-Length", "1024");
+    LT_ASSERT(sink.start(request, http::status::from_code(200), fields).ok());
+    outbox.consume_front(outbox.queued_bytes());
+    const std::array<std::byte, 16> payload{};
+
+    LT_ASSERT(sink.push(payload).kind == hd::body_push::accepted);
+
+    const auto retained = hd::http1_outbox_test_access::retained_capacity(outbox);
+    LT_ASSERT(retained >= payload.size());
+    LT_CHECK(budget.in_use(hs::resource::response_queue_bytes) >= retained);
+    hs::reservation excess;
+    LT_CHECK(!budget.reserve(hs::resource::response_queue_bytes, 512 - retained + 1, excess).ok());
+    excess = {};
+    outbox.consume_front(payload.size());
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 0u);
+    LT_CHECK(budget.reserve(hs::resource::response_queue_bytes, 512, excess).ok());
+LT_END_AUTO_TEST(h1_allocator_growth_competes_with_shared_output_sibling)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_upgrade_after_interim_accounts_each_wire_byte_and_retained_allocation)
+    auto budget = root(hs::resource::response_queue_bytes, 1024);
+    hd::http1_response_outbox outbox({1024, 1024}, budget);
+    auto& sink = outbox.open(1, {});
+    LT_ASSERT(sink.interim(100).ok());
+    const std::string expected = "HTTP/1.1 100 Continue\r\n\r\n"
+        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+        "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\nSec-WebSocket-Protocol: chat\r\n\r\n";
+
+    LT_ASSERT(sink.commit_upgrade("s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", "chat").ok());
+
+    LT_CHECK_EQ(outbox.queued_bytes(), expected.size());
+    LT_CHECK(budget.in_use(hs::resource::response_queue_bytes) >= hd::http1_outbox_test_access::retained_capacity(outbox));
+    std::vector<std::byte> wire(expected.size());
+    LT_CHECK_EQ(outbox.copy_front(wire), expected.size());
+    LT_CHECK_EQ(std::string(reinterpret_cast<const char*>(wire.data()), wire.size()), expected);
+    outbox.consume_front(expected.size());
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 0u);
+    LT_CHECK_EQ(outbox.queued_bytes(), 0u);
+LT_END_AUTO_TEST(h1_upgrade_after_interim_accounts_each_wire_byte_and_retained_allocation)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_coalesced_bodyless_pipeline_refuses_parent_or_child_receive_limit)
+    for (bool parent_limit : {false, true}) {
+        httpserver::resume_signal pause;
+        std::atomic<unsigned> calls{0};
+        auto enclosing = root(hs::resource::body_buffer_bytes, parent_limit ? 1 : 8192);
+        ws_engine_test::rig f;
+        f.root = child(enclosing, hs::resource::body_buffer_bytes, 1);
+        LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/", [&](exchange&) -> task<void> {
+            ++calls; co_await pause.wait();
+        }).ok());
+        const std::string head = "GET / HTTP/1.1\r\nHost: h\r\n\r\n";
+        const auto pipeline = head + head;
+        io_loopback::write_all(f.pair.peer(), pipeline.data(), pipeline.size());
+        LT_ASSERT(f.start());
+
+        const bool refused = ws_engine_test::until([&] { return f.stopped.load(); });
+        f.engine->shutdown(); pause.signal();
+        LT_ASSERT(ws_engine_test::until([&] { return f.stopped.load(); }));
+        LT_CHECK(refused);
+        LT_CHECK_EQ(calls.load(), 0u);
+        LT_CHECK_EQ(hd::connection_engine_test_access::queues(*f.engine).tail, 0u);
+        LT_CHECK_EQ(enclosing.in_use(hs::resource::body_buffer_bytes), 0u);
+    }
+LT_END_AUTO_TEST(h1_coalesced_bodyless_pipeline_refuses_parent_or_child_receive_limit)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_coalesced_bodyless_tail_charges_ancestors_until_recycle_and_reopens_capacity)
+    httpserver::resume_signal pause;
+    std::atomic<unsigned> calls{0};
+    const std::string head = "GET / HTTP/1.1\r\nHost: h\r\n\r\n";
+    const auto tail_charge = 3 * head.size();
+    auto enclosing = root(hs::resource::body_buffer_bytes, tail_charge);
+    ws_engine_test::rig f;
+    f.root = child(enclosing, hs::resource::body_buffer_bytes, tail_charge);
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/", [&](exchange& x) -> task<void> {
+        if (++calls == 1) co_await pause.wait();
+        http::fields fields; fields.append("Content-Length", "0");
+        static_cast<void>(x.respond(http::status::from_code(200), fields));
+    }).ok());
+    const auto pipeline = head + head;
+    io_loopback::write_all(f.pair.peer(), pipeline.data(), pipeline.size());
+    LT_ASSERT(f.start());
+    LT_ASSERT(ws_engine_test::until([&] { return calls.load() == 1; }));
+
+    LT_CHECK_EQ(hd::connection_engine_test_access::queues(*f.engine).tail, head.size());
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), tail_charge);
+    LT_CHECK(f.root.in_use(hs::resource::body_buffer_bytes) >= hd::connection_engine_test_access::retained_tail_capacity(*f.engine));
+    LT_CHECK_EQ(enclosing.in_use(hs::resource::body_buffer_bytes), tail_charge);
+    auto sibling = child(enclosing, hs::resource::body_buffer_bytes, tail_charge);
+    hs::reservation refused;
+    LT_CHECK(!sibling.reserve(hs::resource::body_buffer_bytes, 1, refused).ok());
+
+    pause.signal();
+    LT_ASSERT(ws_engine_test::until([&] { return calls.load() == 2 && hd::connection_engine_test_access::http_idle(*f.engine); }));
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), 0u);
+    LT_CHECK_EQ(enclosing.in_use(hs::resource::body_buffer_bytes), 0u);
+    LT_CHECK(sibling.reserve(hs::resource::body_buffer_bytes, tail_charge, refused).ok());
+LT_END_AUTO_TEST(h1_coalesced_bodyless_tail_charges_ancestors_until_recycle_and_reopens_capacity)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_reader_between_head_preparation_and_dispatch_preserves_charged_pipeline)
+    ws_engine_test::rig f;
+    f.root = root(hs::resource::body_buffer_bytes, 4096);
+    f.create_engine();
+    const std::string first = "GET / HTTP/1.1\r\nHost: h\r\n\r\n";
+    const std::string second = "GET /second HTTP/1.1\r\nHost: h\r\n\r\n";
+    const auto prefix = second.substr(0, second.size() - 2);
+    hd::connection_engine_test_access::receive(*f.engine, first + prefix);
+
+    const auto head = hd::connection_engine_test_access::prepare_head(*f.engine);
+
+    LT_CHECK_EQ(hd::connection_engine_test_access::receive_storage(*f.engine).first, prefix);
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), 3 * prefix.size());
+    // Run the real reader in serve_one's head-to-dispatch interval.
+    hd::connection_engine_test_access::receive(*f.engine, "\r\n");
+    LT_CHECK_EQ(hd::connection_engine_test_access::receive_storage(*f.engine).first, second);
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), 3 * second.size());
+    LT_CHECK(f.root.in_use(hs::resource::body_buffer_bytes) >= hd::connection_engine_test_access::retained_tail_capacity(*f.engine));
+    hd::connection_engine_test_access::settle(*f.engine, hd::http1_body_mode::compute(head));
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), 0u);
+    const auto next = hd::connection_engine_test_access::prepare_head(*f.engine);
+    LT_CHECK_EQ(next.raw_target, "/second");
+LT_END_AUTO_TEST(h1_reader_between_head_preparation_and_dispatch_preserves_charged_pipeline)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_reader_between_head_preparation_and_body_staging_stays_ahead_of_pipeline)
+    ws_engine_test::rig f;
+    f.root = root(hs::resource::body_buffer_bytes, 4096);
+    f.create_engine();
+    const std::string first = "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 6\r\n\r\n";
+    const std::string second = "GET /second HTTP/1.1\r\nHost: h\r\n\r\n";
+    hd::connection_engine_test_access::receive(*f.engine, first + "abc");
+    const auto head = hd::connection_engine_test_access::prepare_head(*f.engine);
+    const auto mode = hd::http1_body_mode::compute(head);
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), 9u);
+
+    hd::connection_engine_test_access::receive(*f.engine, "def" + second);
+
+    const std::string expected = "abcdef" + second;
+    LT_CHECK_EQ(hd::connection_engine_test_access::receive_storage(*f.engine).first, expected);
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), 3 * expected.size());
+    LT_ASSERT(hd::connection_engine_test_access::stage_body(*f.engine, mode));
+    const auto staged = hd::connection_engine_test_access::receive_storage(*f.engine);
+    LT_CHECK(staged.first.empty());
+    LT_CHECK_EQ(staged.second, expected);
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), 3 * expected.size());
+    LT_CHECK(f.root.in_use(hs::resource::body_buffer_bytes) >= hd::connection_engine_test_access::retained_tail_capacity(*f.engine));
+    // Reject the unadmitted six-byte body; only the following head recycles.
+    hd::connection_engine_test_access::settle(*f.engine, mode);
+    LT_CHECK_EQ(f.root.in_use(hs::resource::body_buffer_bytes), 0u);
+    const auto next = hd::connection_engine_test_access::prepare_head(*f.engine);
+    LT_CHECK_EQ(next.raw_target, "/second");
+LT_END_AUTO_TEST(h1_reader_between_head_preparation_and_body_staging_stays_ahead_of_pipeline)
+LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_reader_refusal_during_preparation_keeps_seed_charged_until_owner_release)
+    const std::string head = "GET / HTTP/1.1\r\nHost: h\r\n\r\n";
+    const auto capacity = 3 * head.size();
+    auto enclosing = root(hs::resource::body_buffer_bytes, capacity);
+    ws_engine_test::rig f;
+    f.root = child(enclosing, hs::resource::body_buffer_bytes, capacity);
+    f.create_engine();
+    hd::connection_engine_test_access::receive(*f.engine, head + head);
+    static_cast<void>(hd::connection_engine_test_access::prepare_head(*f.engine));
+    LT_CHECK_EQ(enclosing.in_use(hs::resource::body_buffer_bytes), capacity);
+
+    hd::connection_engine_test_access::receive(*f.engine, "G");
+
+    LT_CHECK(hd::connection_engine_test_access::receive_refused(*f.engine));
+    LT_CHECK_EQ(hd::connection_engine_test_access::receive_storage(*f.engine).first, head);
+    LT_CHECK_EQ(enclosing.in_use(hs::resource::body_buffer_bytes), capacity);
+    LT_CHECK(enclosing.in_use(hs::resource::body_buffer_bytes) >= hd::connection_engine_test_access::retained_tail_capacity(*f.engine));
+    hs::reservation sibling;
+    LT_CHECK(!enclosing.reserve(hs::resource::body_buffer_bytes, 1, sibling).ok());
+    f.engine.reset();
+    LT_CHECK_EQ(enclosing.in_use(hs::resource::body_buffer_bytes), 0u);
+    LT_CHECK(enclosing.reserve(hs::resource::body_buffer_bytes, capacity, sibling).ok());
+LT_END_AUTO_TEST(h1_reader_refusal_during_preparation_keeps_seed_charged_until_owner_release)
 LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_websocket_upgrade_reserves_shared_message_and_queue_envelopes)
     httpserver::resume_signal pause;
     std::atomic<bool> upgraded{false};

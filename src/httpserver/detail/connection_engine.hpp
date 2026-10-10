@@ -303,6 +303,10 @@ class connection_engine final
     void enforce_timeout(std::chrono::steady_clock::time_point deadline) noexcept;
     static task<void> route_loop(std::shared_ptr<connection_engine> self);
     static task<bool> serve_one(std::shared_ptr<connection_engine> self);
+    // Admit and publish parser residue in the engine-owned receive tail
+    // before taking its head. mu_ must be held; false leaves it untaken.
+    bool prepare_head_locked(http::request_head& head,
+                             resource_charge& bytes, resource_charge& fields);
     // Parks the route side while a rejection drain runs down its
     // counted remainder (TASK-109). True when the drain completed (or
     // none was armed): the connection may serve its next exchange.
@@ -311,11 +315,11 @@ class connection_engine final
     static task<bool> await_drain(std::shared_ptr<connection_engine> self);
 
     // Stages one exchange's body decoder WITHOUT feeding it: the
-    // drained seed parks as the early-byte buffer and the decoder is
+    // pending tail moves atomically into the early-byte buffer and the decoder is
     // fed only at the admission transition (TASK-109's bounded
     // pre-admission posture). A seed framing failure surfaces at that
     // transition, not here.
-    bool stage_body(const http1_body_mode& mode, std::string seed);
+    bool stage_body(const http1_body_mode& mode);
 
     // The admission transition (called from the exchange sink): feeds
     // the parked early bytes to the decoder, flips the gate, and wakes

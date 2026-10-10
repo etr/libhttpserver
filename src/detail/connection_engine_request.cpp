@@ -79,6 +79,20 @@ task<bool> connection_engine::wait_for_head(
     }
 }
 
+bool connection_engine::prepare_head_locked(http::request_head& head,
+                                             resource_charge& bytes,
+                                             resource_charge& fields) {
+    // Admit the residue before consuming it or releasing its header owner.
+    // Publish it ahead of parked reader bytes under the same lock: every
+    // subsequent absorb sees and charges the complete receive allocation.
+    if (!tail_charge_.grow(3 * parser_.residue_size())) return false;
+    pending_tail_.insert(0, parser_.residue_view());
+    parser_.consume_residue(parser_.residue_size());
+    head = parser_.take(&bytes, &fields);
+    head_routed_ = true;
+    return true;
+}
+
 task<bool> connection_engine::serve_one(
     std::shared_ptr<connection_engine> self) {
     // Seed: the parser's buffered residue plus whatever the reader
@@ -90,15 +104,14 @@ task<bool> connection_engine::serve_one(
     if (!self->budget_.reserve(server::resource::streams, 1, stream_seat).ok()) {
         self->emit_error(503); co_return false;
     }
-    std::string seed;
+    bool receive_refused = false;
     {
         std::lock_guard<std::mutex> lock(self->mu_);
-        seed.assign(self->parser_.residue_view());
-        self->parser_.consume_residue(self->parser_.residue_size());
-        head = self->parser_.take(&head_bytes, &head_fields);
-        self->head_routed_ = true;
-        seed.append(self->pending_tail_);
-        self->pending_tail_.clear();
+        receive_refused = !self->prepare_head_locked(head, head_bytes, head_fields);
+    }
+    if (receive_refused) {
+        self->emit_error(413);
+        co_return false;
     }
     if (!valid_http1_host(head)) {
         self->emit_error(400);
@@ -115,15 +128,12 @@ task<bool> connection_engine::serve_one(
         // The decoder exists now (the exchange ctor needs its pointer)
         // but stays unfed: the seed parks as this exchange's early
         // bytes until the handler admits the body.
-        if (!self->stage_body(mode, std::move(seed))) {
+        if (!self->stage_body(mode)) {
             self->emit_error(413); co_return false;
         }
     } else {
-        // No framing: every seed byte belongs to the next pipelined
-        // head. Park it where the settle recycle and the head-phase
-        // absorb both look, and nudge a reader gated on the tail cap.
-        std::lock_guard<std::mutex> lock(self->mu_);
-        self->pending_tail_.append(seed);
+        // No framing: the already-published tail belongs to the next
+        // pipelined head. Nudge a reader gated on the tail cap.
         self->wake_loops();
     }
     const std::uint64_t sequence = [&self] {
