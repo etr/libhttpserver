@@ -113,6 +113,10 @@ task<bool> connection_engine::serve_one(
         self->emit_error(413);
         co_return false;
     }
+    if (!self->config_.protocols.contains(head.request_protocol)) {
+        self->emit_error(505);
+        co_return false;
+    }
     if (!valid_http1_host(head)) {
         self->observe_failure(http::outcome_code::protocol_error);
         self->emit_error(400);
@@ -156,11 +160,11 @@ task<bool> connection_engine::serve_one(
     // verdict: a refused head never fires response_sent and fails
     // request_completed.
     lifecycle_sink interceptor(engine_sink, self->hooks_, head,
-                               &head_refused);
+                               &head_refused, self->tls_peer_);
     wake_body_sink forwarding(*self);
     exchange routed(head, &interceptor, self->id_,
                     body_present ? self->body_.get() : nullptr, &forwarding,
-                    self->peer_);
+                    self->peer_, self->tls_peer_);
     http1_response_sink& slot = self->outbox_.open(sequence,
                                                    routed.cancellation());
     engine_sink.bind(slot);

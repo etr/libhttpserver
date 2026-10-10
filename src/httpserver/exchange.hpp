@@ -25,6 +25,7 @@
 #include <atomic>
 #include <cstdint>
 #include <optional>
+#include <memory>
 #include <span>
 #include <string>
 #include <utility>
@@ -38,6 +39,7 @@
 #include <httpserver/http/request_head.hpp>
 #include <httpserver/http/status.hpp>
 #include <httpserver/net/address.hpp>
+#include <httpserver/server/tls_peer_metadata.hpp>
 #include <httpserver/response_writer.hpp>
 #include <httpserver/server/routes.hpp>
 #include <httpserver/websocket/session.hpp>
@@ -167,11 +169,12 @@ class exchange {
              std::uint64_t connection_id = 0,
              detail::body_source* body_source = nullptr,
              detail::body_sink* response_sink = nullptr,
-             net::peer_address peer = net::peer_address{}) noexcept
+             net::peer_address peer = net::peer_address{},
+             std::shared_ptr<const server::tls_peer_metadata> tls = {}) noexcept
         : head_(head), sink_(sink), connection_id_(connection_id),
           body_source_(body_source), body_(stop_.get_token()),
           response_sink_(response_sink), writer_(stop_.get_token()),
-          peer_(peer) { }
+          peer_(peer), tls_(std::move(tls)) { }
 
     exchange(exchange&& other) noexcept = default;
     exchange& operator=(exchange&& other) noexcept = default;
@@ -208,6 +211,8 @@ class exchange {
     // a reconnect is a new connection with a new snapshot. Unspec for
     // a rigged exchange.
     const net::peer_address& peer() const noexcept { return peer_; }
+
+    std::shared_ptr<const server::tls_peer_metadata> tls() const noexcept { return tls_; }
 
     // The admitted request body. Operations are legal only after a
     // successful admit_body() and fail typed otherwise.
@@ -423,6 +428,7 @@ class exchange {
     std::vector<server::route_captures> path_args_;
     std::vector<resume_signal> resume_signals_;
     net::peer_address peer_;
+    std::shared_ptr<const server::tls_peer_metadata> tls_;
 };
 
 }  // namespace httpserver

@@ -226,5 +226,30 @@
       "suite": "http3 release pipeline",
       "reason": "TASK-178 release gate owns external interoperability tools; portable http3_exchange retained."
     }
+  ],
+  "public_tls_scenarios": [
+    "sni_a",
+    "sni_b",
+    "second_b",
+    "unknown_sni",
+    "absent_sni",
+    "isolated_store",
+    "http1.0",
+    "http1.1",
+    "atomic_replacement_and_caller_lifetime",
+    "handshake_failure_no_handler",
+    "peer_policy_before_tls",
+    "bounded_handshake_timeout_and_recovery",
+    "timer_budget_retirement",
+    "storage_budget_retirement",
+    "stop_pending",
+    "drain_pending",
+    "handler_stop",
+    "handler_drain",
+    "accept_hook_safe_stop",
+    "mixed_valid_listeners",
+    "disabled10_before_handler",
+    "disabled11_before_handler",
+    "partial_bind_rollback"
   ]
 }

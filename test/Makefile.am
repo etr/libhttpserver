@@ -1740,7 +1740,7 @@ endif
 if NATIVE_V3_TLS
 check_PROGRAMS += v3_tls_rotation
 v3_tls_rotation_SOURCES = examples/v3_tls_rotation.cpp
-v3_tls_rotation_CPPFLAGS = $(tls_io_loopback_CPPFLAGS)
+v3_tls_rotation_CPPFLAGS = -I$(top_srcdir)/src -DTLS_TEST_DIR='"$(top_srcdir)/test"'
 v3_tls_rotation_LDADD = $(tls_io_LDADD)
 v3_tls_rotation_LDFLAGS = $(tls_io_LDFLAGS)
 endif
@@ -1770,3 +1770,8 @@ consumer_v3_cookie_wire_SOURCES = integ/consumer_v3_cookie_wire.cpp
 consumer_v3_cookie_wire_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -I$(top_srcdir)/examples
 consumer_v3_cookie_wire_LDADD = $(top_builddir)/src/libhttpserver.la $(V3_TLS_LIBS)
 consumer_v3_cookie_wire_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+check_PROGRAMS += consumer_v3_tls_credentials
+consumer_v3_tls_credentials_SOURCES = headers/consumer_v3_tls_credentials.cpp
+consumer_v3_tls_credentials_CPPFLAGS = -I$(top_srcdir)/src
+consumer_v3_tls_credentials_LDADD = $(top_builddir)/src/libhttpserver.la

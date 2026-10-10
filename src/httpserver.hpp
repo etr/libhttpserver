@@ -39,6 +39,7 @@
 #include "httpserver/server/budgets.hpp"
 #include "httpserver/server/options.hpp"
 #include "httpserver/server/tls_peer_metadata.hpp"
+#include "httpserver/server/tls_credentials.hpp"
 #include "httpserver/server/routes.hpp"
 #include "httpserver/server/configuration.hpp"
 #include "httpserver/server/server.hpp"

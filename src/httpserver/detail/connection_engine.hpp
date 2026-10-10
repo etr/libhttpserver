@@ -126,11 +126,18 @@ class drain_scope;
 class http1_exchange_sink;
 class wake_body_sink;
 
+struct connection_admission {
+    std::shared_ptr<void> retirement;
+    std::shared_ptr<server::reservation> seat;
+};
+
 // Per-connection tunables projected out of the server budget scope,
 // plus the response Date clock seam (tests inject fixed values; an
 // empty clock omits the Date engine field entirely).
 struct connection_engine_config {
     server::diagnostics diagnostics;
+    server::protocol_set protocols;
+    std::shared_ptr<drain_scope> drain_owner;
     http1_head_budget head;
     http1_body_budget body;
     http1_outbox_budget outbox;
@@ -180,8 +187,11 @@ class connection_engine final
                       drain_scope& scope, connection_engine_config config,
                       std::uint64_t id, stopped_callback on_stopped,
                       net::peer_address peer = net::peer_address{},
-                      const server::peer_policy* peers = nullptr);
+                      const server::peer_policy* peers = nullptr,
+                      std::shared_ptr<io_socket_backend> transport = {},
+                      connection_admission admission = {});
 
+    ~connection_engine();
     connection_engine(const connection_engine&) = delete;
     connection_engine& operator=(const connection_engine&) = delete;
 
@@ -254,6 +264,8 @@ class connection_engine final
     // peer hung up, or the server stopped; true only for the complete
     // head.
     static task<bool> wait_for_head(std::shared_ptr<connection_engine> self);
+    static task<void> handshake_loop(std::shared_ptr<connection_engine> self);
+    void start_http1();
     static task<void> reader_loop(std::shared_ptr<connection_engine> self);
     static task<void> writer_loop(std::shared_ptr<connection_engine> self);
     static task<void> watchdog_loop(std::shared_ptr<connection_engine> self);
@@ -422,7 +434,12 @@ class connection_engine final
     std::atomic<bool> diagnostic_failure_recorded_{false};
     void finalize();
 
+    connection_admission admission_;
+    std::shared_ptr<io_socket_backend> transport_;
     io_socket_backend& backend_;
+    std::shared_ptr<const server::tls_peer_metadata> tls_peer_;
+    bool handshaking_ = false;
+    bool precounted_ = false;
     worker_pool& pool_;
     const server::route_registry& routes_;
     const server::hook_bus& hooks_;

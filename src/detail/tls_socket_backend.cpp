@@ -9,11 +9,16 @@
 #include <stdexcept>
 #include <utility>
 #include <httpserver/detail/io_connection_owner.hpp>
+#include <httpserver/detail/tls_credentials.hpp>
 
 namespace httpserver::detail {
 tls_socket_backend::tls_socket_backend(io_socket_backend& raw, executor& ex, std::uint64_t connection,
                                        std::shared_ptr<const tls_context> context, tls_handshake_context handshake)
     : raw_(raw), connection_(connection), tls_(raw, ex, connection, std::move(context), true, handshake, tls_read_cancel_policy::preserve_session) {}
+
+tls_socket_backend::tls_socket_backend(io_socket_backend& raw, executor& ex, std::uint64_t connection,
+                                       tls_credentials_selection selection, tls_handshake_context handshake)
+    : raw_(raw), connection_(connection), tls_(raw, ex, connection, std::move(selection), true, handshake, tls_read_cancel_policy::preserve_session) {}
 
 tls_socket_backend::~tls_socket_backend() { close(); }
 

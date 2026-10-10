@@ -44,6 +44,8 @@ namespace httpserver {
 
 namespace server {
 
+class tls_credentials;
+
 // Ownership of network readiness and timer advancement; workers are independent.
 enum class loop_mode : std::uint8_t { managed, external };
 
@@ -123,6 +125,7 @@ struct listener_options {
     std::string address;
     std::uint16_t port = 0;
     bool tls = false;
+    std::shared_ptr<tls_credentials> credentials;
 };
 
 // The §3.4 timeout inventory, in milliseconds. Every field must be
@@ -350,11 +353,12 @@ inline http::outcome check_budget(const budget_limits& limits) {
 
 constexpr bool same_listener(const listener_options& a,
                              const listener_options& b) noexcept {
-    return a.address == b.address && a.port == b.port && a.tls == b.tls;
+    return a.port != 0 && b.port != 0
+        && a.address == b.address && a.port == b.port && a.tls == b.tls;
 }
 
 // V2 and V3: every listener address is well-formed and no two listeners
-// are identical.
+// are identical fixed endpoints; each port-zero request binds independently.
 inline http::outcome check_listeners(
         const std::vector<listener_options>& listeners) {
     for (std::size_t i = 0; i < listeners.size(); ++i) {
@@ -538,22 +542,14 @@ inline http::outcome check_peer_policy(
     return http::outcome::okay();
 }
 
-inline http::outcome check_loop_mode(loop_mode loop, const tls_options& tls,
-        const protocol_set& protocols, const std::vector<listener_options>& listeners) {
+inline http::outcome check_loop_mode(loop_mode loop, const tls_options&,
+        const protocol_set&, const std::vector<listener_options>&) {
     if (loop != loop_mode::managed && loop != loop_mode::external) {
         return {http::outcome_code::invalid_argument, "server_options: invalid loop mode"};
     }
-    if (loop == loop_mode::managed) return http::outcome::okay();
-    if (tls.provider != tls_provider::none || multi_version_enabled(protocols)) {
-        return {http::outcome_code::not_supported, "external loop supports plaintext HTTP/1 only"};
-    }
-    for (const auto& listener : listeners) {
-        if (listener.tls) {
-            return {http::outcome_code::not_supported, "external loop does not support TLS listeners"};
-        }
-    }
     return http::outcome::okay();
 }
+
 
 inline tls_client_certificate_mode resolved_client_certificate_mode(tls_profile profile,
         const tls_client_auth_options& auth) noexcept {

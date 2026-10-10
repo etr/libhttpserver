@@ -407,6 +407,7 @@ struct tls_session::impl {
             if (self->acme) return acme_alpn(out, length, input, size);
             if (!self->selection.snapshot || self->metadata().alpn.empty()) return SSL_TLSEXT_ERR_NOACK;
             for (const auto& token : self->metadata().alpn) {
+                if (token == "http/1.1" && !self->handshake_context.allow_http11) continue;
                 if (self->quic ? !quic_protocol(token) : !http_protocol(token)) continue;
                 if (const auto* match = offered(token, input, size)) {
                     *out = match;
@@ -499,6 +500,7 @@ tls_session::tls_session(tls_credentials_selection selection, bool server, tls_h
 }
 tls_session::~tls_session() = default;
 std::shared_ptr<tls_psk_runtime> tls_session::handshake_runtime() const {
+    if (impl_->handshake_context.runtime) return impl_->handshake_context.runtime;
     if (impl_->selection.context->psk_) return impl_->selection.context->psk_->runtime;
     if (impl_->selection.snapshot) {
         for (std::size_t i = 0; i < impl_->selection.snapshot->hosts().size(); ++i) {

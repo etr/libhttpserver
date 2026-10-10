@@ -27,6 +27,8 @@ class tls_socket_backend final : public io_socket_backend {
  public:
     tls_socket_backend(io_socket_backend& raw, executor& ex, std::uint64_t connection,
                        std::shared_ptr<const tls_context> context, tls_handshake_context handshake = {});
+    tls_socket_backend(io_socket_backend& raw, executor& ex, std::uint64_t connection,
+                       tls_credentials_selection selection, tls_handshake_context handshake = {});
     ~tls_socket_backend() override;
     void submit(op_state& op) override;
     http::outcome_code request_cancel(op_state& op) override;

@@ -13,6 +13,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <httpserver/server/options.hpp>
 namespace httpserver::detail {
 namespace {
 using clock = std::chrono::steady_clock;
@@ -153,7 +154,7 @@ void validate(const tls_psk_runtime_options& options) {
     const auto workers = [](auto n) { return n > 0 && n <= 64; };
     if (!workers(options.handshake_workers) || !workers(options.lookup_workers) ||
         options.handshake_queue > 65536 || options.lookup_queue > 65536 ||
-        options.handshake_timeout <= std::chrono::milliseconds::zero() || options.handshake_timeout > std::chrono::minutes(10)) {
+        options.handshake_timeout <= std::chrono::milliseconds::zero() || options.handshake_timeout > server::max_timeout) {
         throw std::invalid_argument("TLS PSK runtime invalid");
     }
 }

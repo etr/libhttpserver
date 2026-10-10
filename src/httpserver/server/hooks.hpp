@@ -118,6 +118,7 @@
 #include <httpserver/http/status.hpp>
 #include <httpserver/net/address.hpp>
 #include <httpserver/server/peer_policy.hpp>
+#include <httpserver/server/tls_peer_metadata.hpp>
 
 namespace httpserver {
 
@@ -222,22 +223,26 @@ struct accept_decision_ctx {
 
 struct request_received_ctx {
     const http::request_head& request;
+    std::shared_ptr<const tls_peer_metadata> tls;
 };
 
 struct route_resolved_ctx {
     const http::request_head& request;
     bool matched = false;            // fires on a hit AND a miss alike
     route_descriptor route;          // empty pattern on a miss
+    std::shared_ptr<const tls_peer_metadata> tls;
 };
 
 struct before_handler_ctx {
     const http::request_head& request;
     route_descriptor route;          // the method-mismatch tier on a 405
+    std::shared_ptr<const tls_peer_metadata> tls;
 };
 
 struct handler_exception_ctx {
     const http::request_head& request;
     std::exception_ptr error;        // the escaped exception
+    std::shared_ptr<const tls_peer_metadata> tls;
 };
 
 // after_handler mutates the about-to-be-committed response in place:
@@ -247,17 +252,20 @@ struct after_handler_ctx {
     const http::request_head& request;
     http::status status;
     http::fields fields;
+    std::shared_ptr<const tls_peer_metadata> tls;
 };
 
 struct response_sent_ctx {
     const http::request_head& request;
     std::uint16_t status = 0;        // the committed head's status
+    std::shared_ptr<const tls_peer_metadata> tls;
 };
 
 struct request_completed_ctx {
     const http::request_head& request;
     bool succeeded = true;
     http::outcome end;               // ok on success; typed end reason
+    std::shared_ptr<const tls_peer_metadata> tls;
 };
 
 namespace detail {

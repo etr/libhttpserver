@@ -165,7 +165,7 @@ task<bool> consult_exception_chain(const server::hook_bus& bus,
     if (!bus.any_hooks(server::hook_phase::handler_exception)) {
         co_return false;
     }
-    server::handler_exception_ctx ctx{x.head(), std::move(error)};
+    server::handler_exception_ctx ctx{x.head(), std::move(error), x.tls()};
     server::hook_action action =
         bus.fire<server::hook_phase::handler_exception>(ctx);
     if (!action.is_pass()) {
@@ -236,7 +236,7 @@ task<void> dispatch_method_miss(const server::hook_bus& bus,
     const std::string allow = render_allow(resolved);
     std::exception_ptr contained;
     if (bus.any_hooks(server::hook_phase::before_handler)) {
-        server::before_handler_ctx ctx{x.head(), describe(resolved)};
+        server::before_handler_ctx ctx{x.head(), describe(resolved), x.tls()};
         server::hook_action action =
             bus.fire<server::hook_phase::before_handler>(ctx, contained);
         if (!action.is_pass()) {
@@ -267,7 +267,7 @@ task<void> dispatch_hit(const server::hook_bus& bus,
                         exchange& x, dispatch_state& st) {
     std::exception_ptr contained;
     if (bus.any_hooks(server::hook_phase::before_handler)) {
-        server::before_handler_ctx ctx{x.head(), describe(resolved)};
+        server::before_handler_ctx ctx{x.head(), describe(resolved), x.tls()};
         server::hook_action action =
             bus.fire<server::hook_phase::before_handler>(ctx, contained);
         if (!action.is_pass()) {
@@ -299,7 +299,7 @@ task<bool> short_circuit_request_received(const server::hook_bus& bus,
     if (!bus.any_hooks(server::hook_phase::request_received)) {
         co_return false;
     }
-    server::request_received_ctx ctx{x.head()};
+    server::request_received_ctx ctx{x.head(), x.tls()};
     std::exception_ptr contained;
     server::hook_action action =
         bus.fire<server::hook_phase::request_received>(ctx, contained);
@@ -328,7 +328,7 @@ task<bool> fire_route_resolved(const server::hook_bus& bus, exchange& x,
                               lifecycle_sink& sink, dispatch_state& st) {
     if (!bus.any_hooks(server::hook_phase::route_resolved)) co_return false;
     server::route_resolved_ctx ctx{
-        x.head(), resolved.kind == resolve_kind::hit, describe(resolved)};
+        x.head(), resolved.kind == resolve_kind::hit, describe(resolved), x.tls()};
     std::exception_ptr contained;
     // Observation-only: the action is ignored by contract.
     (void)bus.fire<server::hook_phase::route_resolved>(ctx, contained);
@@ -368,7 +368,7 @@ void fire_completed(const server::hook_bus& bus, const exchange& x,
             || x.state() == exchange_state::upgraded);
     server::request_completed_ctx ctx{
         x.head(), settled_clean,
-        settled_clean ? http::outcome::okay() : end_reason_of(x, sink)};
+        settled_clean ? http::outcome::okay() : end_reason_of(x, sink), x.tls()};
     (void)bus.fire<server::hook_phase::request_completed>(ctx);
 }
 

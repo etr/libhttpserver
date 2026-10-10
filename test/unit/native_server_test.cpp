@@ -41,6 +41,7 @@
 #include <utility>
 
 #include <httpserver/exchange.hpp>
+#include <httpserver/features.hpp>
 #include <httpserver/detail/io_poll_sys.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/request_head.hpp>
@@ -345,9 +346,9 @@ LT_BEGIN_AUTO_TEST(native_server_suite, managed_has_no_driver_and_external_valid
     options.tls().provider = srv::tls_provider::system_default;
     options.tls().profile = srv::tls_profile::certificates;
     srv::native_server external(options);
-    LT_CHECK(external.listen().code() == http::outcome_code::not_supported);
-    LT_CHECK_EQ(external.get_bound_port(0), 0);
-    LT_CHECK(!external.readiness()->interests().wake.has_value());
+    LT_CHECK(external.listen().ok());
+    LT_CHECK(external.get_bound_port(0) != 0);
+    LT_CHECK(external.readiness()->interests().wake.has_value());
 LT_END_AUTO_TEST(managed_has_no_driver_and_external_validation_precedes_bind)
 
 #if !defined(_WIN32)
@@ -411,7 +412,8 @@ LT_BEGIN_AUTO_TEST(native_server_suite, unsupported_transports_rejected_before_a
         LT_CHECK(options.validate().ok());
         srv::native_server server(options);
         const auto result = server.listen();
-        LT_CHECK(result.code() == http::outcome_code::not_supported);
+        LT_CHECK(result.code() == (version == http::protocol::http_1_1 && httpserver::query_features().tcp_tls
+            ? http::outcome_code::invalid_argument : http::outcome_code::not_supported));
         LT_CHECK(!result.message().empty());
         LT_CHECK(!server.is_running());
         LT_CHECK_EQ(server.get_bound_port(0), 0);

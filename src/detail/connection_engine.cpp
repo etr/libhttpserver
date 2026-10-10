@@ -24,7 +24,11 @@
 // connection_engine_request.cpp. See connection_engine.hpp for the
 // design contract.
 
+#include "config.h"
 #include <httpserver/detail/connection_engine.hpp>
+#ifdef NATIVE_V3_TLS
+#include <httpserver/detail/tls_socket_backend.hpp>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -49,8 +53,14 @@ connection_engine::connection_engine(io_socket_backend& backend, worker_pool& po
                                      std::uint64_t id,
                                      stopped_callback on_stopped,
                                      net::peer_address peer,
-                                     const server::peer_policy* peers)
-    : backend_(backend),
+                                     const server::peer_policy* peers,
+                                     std::shared_ptr<io_socket_backend> transport,
+                                     connection_admission admission)
+    : admission_(std::move(admission)),
+      transport_(std::move(transport)),
+      backend_(transport_ ? *transport_ : backend),
+      handshaking_(static_cast<bool>(transport_)),
+      precounted_(admission_.seat && admission_.seat->owns()),
       pool_(pool),
       routes_(routes),
       hooks_(hooks),
@@ -70,6 +80,11 @@ connection_engine::connection_engine(io_socket_backend& backend, worker_pool& po
         // custom factories.
         config_.pages = std::make_shared<const error_page_factories>();
     }
+    if (precounted_ && !admission_.retirement) scope_.enter();
+}
+
+connection_engine::~connection_engine() {
+    if (precounted_ && !started_ && !admission_.retirement) scope_.leave();
 }
 
 void connection_engine::observe(server::diagnostic_kind kind, std::uint64_t stream, http::outcome_code code, server::diagnostic_reason reason, std::optional<http::protocol> protocol) const noexcept {
@@ -100,9 +115,9 @@ void connection_engine::start() {
         std::lock_guard<std::mutex> lock(mu_);
         if (started_) return;
         started_ = true;
-        live_loops_ = 4;
+        live_loops_ = handshaking_ ? 1 : 4;
     }
-    if (!budget_.reserve(server::resource::connections, 1, seat_).ok()) {
+    if (!precounted_ && !budget_.reserve(server::resource::connections, 1, seat_).ok()) {
         observe(server::diagnostic_kind::connection_rejected, 0, http::outcome_code::limit_exceeded, server::diagnostic_reason::capacity);
         // Budget exhaustion: no response (the accept path closes the
         // transport); report the stop so the record is erased.
@@ -120,7 +135,16 @@ void connection_engine::start() {
     // completion condition rides on it (finalize drops it only after
     // every loop finished and the writer flushed).
     observe(server::diagnostic_kind::connection_accepted);
-    scope_.enter();
+    if (!precounted_) scope_.enter();
+    if (handshaking_) {
+        auto self = shared_from_this();
+        spawn(pool_, handshake_loop(self), [self](task_result<void>) { self->loop_finished(); });
+        return;
+    }
+    start_http1();
+}
+
+void connection_engine::start_http1() {
     std::shared_ptr<connection_engine> self = shared_from_this();
     spawn(pool_, reader_loop(self),
           [self](task_result<void>) { self->loop_finished(); });
@@ -130,6 +154,33 @@ void connection_engine::start() {
           [self](task_result<void>) { self->loop_finished(); });
     spawn(pool_, watchdog_loop(self),
           [self](task_result<void>) { self->loop_finished(); });
+}
+
+task<void> connection_engine::handshake_loop(std::shared_ptr<connection_engine> self) {
+#ifdef NATIVE_V3_TLS
+    tls_handshake_operation operation(self->owner_, self->id_,
+        std::chrono::steady_clock::now() + self->config_.timeouts.handshake);
+    operation.submit(self->backend_);
+    const auto result = co_await operation;
+    auto& transport = static_cast<tls_socket_backend&>(self->backend_);
+    const auto protocol = transport.negotiated_protocol();
+    if (result.code != http::outcome_code::ok
+            || (protocol != tls_negotiated_protocol::none && protocol != tls_negotiated_protocol::http1)) {
+        self->shutdown(result.code == http::outcome_code::ok ? http::outcome_code::not_supported : result.code);
+        co_return;
+    }
+    {
+        std::lock_guard lock(self->mu_);
+        if (self->shutdown_ || self->quiescing_) co_return;
+        self->tls_peer_ = transport.peer_metadata();
+        self->handshaking_ = false;
+        self->live_loops_ += 4;
+    }
+    self->start_http1();
+#else
+    self->shutdown(http::outcome_code::not_supported);
+#endif
+    co_return;
 }
 
 void connection_engine::shutdown(http::outcome_code reason) noexcept {
@@ -149,13 +200,19 @@ void connection_engine::shutdown(http::outcome_code reason) noexcept {
 
 void connection_engine::quiesce(std::chrono::steady_clock::time_point server_deadline) noexcept {
     std::shared_ptr<websocket_driver> driver;
+    bool cancel_handshake = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (shutdown_ || quiescing_) return;
         quiescing_ = true;
+        cancel_handshake = handshaking_;
         if (server_deadline != std::chrono::steady_clock::time_point::max()) server_drain_deadline_ = server_deadline;
         driver = websocket_;
         if (!driver && current_ == nullptr) close_after_drain_ = true;
+    }
+    if (cancel_handshake) {
+        shutdown();
+        return;
     }
     if (driver) static_cast<void>(driver->begin_close(1001, "server drain"));
     wake_loops();
@@ -737,7 +794,7 @@ void connection_engine::finalize() {
         seat_.release(); outbox_.retire();
     }
     observe(server::diagnostic_kind::connection_closed);
-    scope_.leave();
+    if (!admission_.retirement) scope_.leave();
     backend_.release_connection(id_);
     stopped_callback done;
     {

@@ -29,7 +29,7 @@ int main(int argc, char**) {
     const char* mode = std::getenv("V3_TLS_MODE");
     const bool expected = argc > 1 || (mode && std::string_view(mode) == "yes");
     if (features.tls_provider != expected) return 1;
-    if (features.tcp_tls || features.http2 || features.http3) return 2;
+    if (features.tcp_tls != expected || features.http2 || features.http3) return 2;
     if (features.provider_version.empty() == expected) return 3;
     std::cout << "Native provider: " << features.provider_version << '\n';
     return 0;
