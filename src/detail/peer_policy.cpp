@@ -19,20 +19,13 @@
      02110-1301 USA
 */
 
-// TASK-119 step 2: the peer policy storage (server/peer_policy.hpp).
-// Two pattern lists under ONE shared mutex (a classify() snapshot is
-// consistent across both; v2 used one mutex per list and could observe
-// a deny from before a mutation and an allow from after it). The
-// prefix-order insert keeps each list free of covering pairs, so
-// membership is a plain scan. armed() is an atomic recomputed under
-// the same lock at every mutation, keeping the zero-cost gate
-// consistent with the store it summarizes.
+// Readers retain one immutable generation while scanning. Writers serialize
+// read-modify-publish operations; no reader-held lock spans a pattern scan.
 
 #include <atomic>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <shared_mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -103,9 +96,10 @@ class peer_policy_impl {
                       " spelling");
         }
         {
-            std::unique_lock<std::shared_mutex> lock(mu_);
-            insert_aware(denying ? deny_ : allow_, *parsed);
-            recompute_armed_locked();
+            std::lock_guard<std::mutex> lock(writers_);
+            auto next = std::make_shared<generation>(*current_.load(std::memory_order_acquire));
+            insert_aware(denying ? next->deny : next->allow, *parsed);
+            publish(std::move(next));
         }
         return http::outcome::okay();
     }
@@ -121,9 +115,10 @@ class peer_policy_impl {
                       " spelling");
         }
         {
-            std::unique_lock<std::shared_mutex> lock(mu_);
+            std::lock_guard<std::mutex> lock(writers_);
+            auto next = std::make_shared<generation>(*current_.load(std::memory_order_acquire));
             std::vector<net::address_pattern>& list =
-                denying ? deny_ : allow_;
+                denying ? next->deny : next->allow;
             for (std::size_t i = 0; i < list.size(); ++i) {
                 if (list[i] == *parsed) {
                     list.erase(list.begin()
@@ -131,68 +126,79 @@ class peer_policy_impl {
                     break;
                 }
             }
-            recompute_armed_locked();
+            publish(std::move(next));
         }
         return http::outcome::okay();
     }
 
     void set_mode(peer_policy_mode mode) noexcept {
-        std::unique_lock<std::shared_mutex> lock(mu_);
-        mode_ = mode;
-        recompute_armed_locked();
+        std::lock_guard<std::mutex> lock(writers_);
+        auto next = std::make_shared<generation>(*current_.load(std::memory_order_acquire));
+        next->mode = mode;
+        publish(std::move(next));
     }
 
     peer_policy_mode mode() const noexcept {
-        std::shared_lock<std::shared_mutex> lock(mu_);
-        return mode_;
+        return current_.load(std::memory_order_acquire)->mode;
     }
 
     void set_enabled(bool enabled) noexcept {
-        std::unique_lock<std::shared_mutex> lock(mu_);
-        enabled_ = enabled;
-        recompute_armed_locked();
+        std::lock_guard<std::mutex> lock(writers_);
+        auto next = std::make_shared<generation>(*current_.load(std::memory_order_acquire));
+        next->enabled = enabled;
+        publish(std::move(next));
     }
 
     bool enabled() const noexcept {
-        std::shared_lock<std::shared_mutex> lock(mu_);
-        return enabled_;
+        return current_.load(std::memory_order_acquire)->enabled;
     }
 
     bool armed() const noexcept {
         return armed_.load(std::memory_order_acquire);
     }
 
-    // The consistent snapshot decision: both lists under one shared
-    // lock, then the v2 truth table.
     peer_verdict classify(const net::peer_address& peer) {
         if (!armed()) return peer_verdict{};
-        std::shared_lock<std::shared_mutex> lock(mu_);
-        const bool denied = matches_locked(deny_, peer.address);
-        const bool allowed = matches_locked(allow_, peer.address);
-        return decide(mode_, denied, allowed);
+        const auto snapshot = current_.load(std::memory_order_acquire);
+        // A concurrent disarm may have published after the gate was observed.
+        if (!snapshot->armed) return peer_verdict{};
+        const bool denied = matches(snapshot->deny, peer.address);
+        const bool allowed = matches(snapshot->allow, peer.address);
+        return decide(snapshot->mode, denied, allowed);
     }
 
  private:
-    static bool matches_locked(const std::vector<net::address_pattern>& list,
-                               const net::address& candidate) noexcept {
+    static bool matches(const std::vector<net::address_pattern>& list,
+                        const net::address& candidate) noexcept {
         for (const net::address_pattern& entry : list) {
             if (entry.matches(candidate)) return true;
         }
         return false;
     }
 
-    void recompute_armed_locked() noexcept {
-        const bool armed = enabled_
-            && (mode_ == peer_policy_mode::reject_all || !deny_.empty()
-                || !allow_.empty());
+    struct generation {
+        std::vector<net::address_pattern> deny;
+        std::vector<net::address_pattern> allow;
+        peer_policy_mode mode = peer_policy_mode::accept_all;
+        bool enabled = true;
+        bool armed = false;
+    };
+
+    void publish(std::shared_ptr<generation> next) noexcept {
+        next->armed = next->enabled
+            && (next->mode == peer_policy_mode::reject_all || !next->deny.empty()
+                || !next->allow.empty());
+        const bool armed = next->armed;
+        // Publish ownership before releasing the scalar gate. Readers arriving
+        // during publication may use an older complete generation; readers
+        // synchronized after a mutation see its gate and generation together.
+        current_.store(std::move(next), std::memory_order_release);
         armed_.store(armed, std::memory_order_release);
     }
 
-    mutable std::shared_mutex mu_;
-    std::vector<net::address_pattern> deny_;
-    std::vector<net::address_pattern> allow_;
-    peer_policy_mode mode_ = peer_policy_mode::accept_all;
-    bool enabled_ = true;
+    std::mutex writers_;
+    std::atomic<std::shared_ptr<const generation>> current_{
+        std::make_shared<const generation>()};
     std::atomic<bool> armed_{false};
 };
 

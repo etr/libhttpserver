@@ -51,6 +51,10 @@ route/admission/lifecycle services + semantic HTTP stream
 
 Each connection has one serialized protocol-state owner; request handlers may run concurrently on configured workers. State-changing operations from handlers return to the connection owner. Shared route tables, IP policy, hooks, and TLS snapshots publish immutable generations so readers need no global hot-path lock. This is a target responsibility split, not a direct transplant of v2's MHD callback services.
 
+Peer policy implements this split with an atomic `shared_ptr<const generation>` owning both pattern vectors, enabled state, mode and derived armed state. A writer mutex serializes read-modify-publish operations against the latest generation, preventing lost independent updates. Parsing happens before serialization. Each reader retains one owned generation through both scans; no reader-held shared mutex spans the scan. Atomic shared-pointer operations are not promised to be lock-free. The scalar `armed()` acquire load remains the unused-policy gate. Writers release-publish the generation before release-storing that gate; after passing the gate, classification acquire-loads a generation and checks its own armed state, including disabled acceptance. Overlapping calls may use an older complete generation; operations synchronized after a completed mutation observe the published update.
+
+Candidate construction leaves the previous generation intact on failure. Pattern mutators retain their existing throwing allocation behavior and typed invalid-pattern outcomes. The existing `noexcept` mode/enabled setters now allocate to copy a generation: allocation failure terminates, rather than silently dropping an update. These setters already offered no recoverable failure channel for synchronization failures. Generation lifetime is bounded by the current publication and in-flight readers; the policy introduces no reclamation queue or custom hazard-pointer scheme. TASK-188's bounded progress, independent-writer and installed listener evidence pins this publication contract.
+
 ### 3.1 Public semantic interface (illustrative, not final signatures)
 
 ```cpp

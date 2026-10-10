@@ -1745,3 +1745,9 @@ endif
 
 # Native fixture dependencies must accompany their translation units in distributions.
 noinst_HEADERS += integ/raw_http_client.hpp parity/case_wire.hpp parity/v3_dispatch_replay.hpp unit/response_source_rig.hpp
+
+check_PROGRAMS += consumer_v3_peer_policy_runtime
+consumer_v3_peer_policy_runtime_SOURCES = integ/consumer_v3_peer_policy_runtime.cpp
+consumer_v3_peer_policy_runtime_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/examples
+consumer_v3_peer_policy_runtime_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+consumer_v3_peer_policy_runtime_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

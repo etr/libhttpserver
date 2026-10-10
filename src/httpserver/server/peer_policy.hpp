@@ -22,10 +22,10 @@
 // TASK-119 (plan D5): the v3 peer policy store -- the v3 equivalent
 // of v2's deny_ip/allow_ip sets with default_policy (PRD-V3N-REQ-014,
 // DR-V3-008). One server-wide policy: two pattern lists (deny, allow)
-// under one lock, a mode (the v2 default_policy), and an enabled
-// flag. Runtime-mutable from any thread including inside handlers:
-// every member is synchronized, and classify() takes a consistent
-// snapshot of both lists.
+// in an immutable generation with a mode (the v2 default_policy) and
+// an enabled flag. Runtime-mutable from any thread including handlers:
+// writers serialize publication; classify() retains one complete generation
+// without holding a shared mutex across the scan.
 //
 // Pattern vocabulary: net::parse_pattern (exact literals, trailing-*
 // IPv4 wildcards, CIDR over both families). Pattern spellings that
@@ -53,7 +53,7 @@
 // (not_on_allow_list) and accept_all admits it.
 //
 // Zero-cost-when-unused: armed() is one atomic load, false when the
-// policy is disabled, the mode is accept_all, and both lists are
+// policy is disabled OR the mode is accept_all and both lists are
 // empty; an engine that observes !armed() may skip classify()
 // entirely (the observable verdict is the same).
 //

@@ -723,6 +723,15 @@ LT_END_AUTO_TEST(refused_head_not_reported_sent)
 // plain global new; the measured window is one on_respond call over a
 // multi-entry fields object (a copy would allocate repeatedly).
 
+// Sanitizers that own global new cannot link the allocation-count override.
+#if defined(LHS_SANITIZER_OWNS_OPERATOR_NEW) || defined(__SANITIZE_THREAD__)
+#define LHS_SKIP_NEW_OVERRIDE 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer) || __has_feature(memory_sanitizer) || __has_feature(leak_sanitizer)
+#define LHS_SKIP_NEW_OVERRIDE 1
+#endif
+#endif
+#ifndef LHS_SKIP_NEW_OVERRIDE
 namespace alloc_probe {
 inline std::atomic<int> allocations{0};
 }
@@ -743,6 +752,7 @@ void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+#endif
 
 namespace {
 
@@ -761,9 +771,11 @@ class code_sink final : public detail::exchange_sink {
     std::uint16_t code = 0;
 };
 
+#ifndef LHS_SKIP_NEW_OVERRIDE
 int allocations_now() {
     return alloc_probe::allocations.load(std::memory_order_relaxed);
 }
+#endif
 
 }  // namespace
 
@@ -780,20 +792,34 @@ LT_BEGIN_AUTO_TEST(request_lifecycle_suite,
     const http::status ok = http::status::from_code(200);
 
     sink.begin(detail::lifecycle_sink::provenance::handler);
+#ifndef LHS_SKIP_NEW_OVERRIDE
     int before = allocations_now();
+#endif
     sink.on_respond(ok, loaded);
+#ifndef LHS_SKIP_NEW_OVERRIDE
     int handler_delta = allocations_now() - before;
+#endif
     LT_CHECK_EQ(inner.respond_calls, 1);
+#ifndef LHS_SKIP_NEW_OVERRIDE
     LT_CHECK_EQ(handler_delta, 0);
+#endif
 
     code_sink pre_inner;
     detail::lifecycle_sink pre_sink(pre_inner, bus, head);
     pre_sink.begin(detail::lifecycle_sink::provenance::pre_handler);
+#ifndef LHS_SKIP_NEW_OVERRIDE
     before = allocations_now();
+#endif
     pre_sink.on_respond(ok, loaded);
+#ifndef LHS_SKIP_NEW_OVERRIDE
     int pre_delta = allocations_now() - before;
+#endif
     LT_CHECK_EQ(pre_inner.respond_calls, 1);
+#ifndef LHS_SKIP_NEW_OVERRIDE
     LT_CHECK_EQ(pre_delta, 0);
+#else
+    LT_SKIP("sanitizer owns operator new; allocation counts run in normal and ASan/UBSan lanes; commit behavior remains checked");
+#endif
 LT_END_AUTO_TEST(zero_hook_commit_allocates_nothing)
 
 // (4b) The factories are user code in the request path and get the

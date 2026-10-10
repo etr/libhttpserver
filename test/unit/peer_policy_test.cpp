@@ -27,7 +27,10 @@
 // unspec peer rule, and concurrent deny/classify.
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <stop_token>
 #include <string>
 #include <thread>
 #include <vector>
@@ -214,50 +217,159 @@ LT_END_AUTO_TEST(families_and_ports_do_not_bleed)
 
 LT_BEGIN_AUTO_TEST(peer_policy_suite, concurrent_mutation_and_reads)
     peer_policy policy;
+    // Long unmatched scans establish overlapping reader ownership before writers.
+    for (int i = 0; i < 1024; ++i) {
+        LT_CHECK(policy.deny("192.0." + std::to_string(i / 256) + "."
+                             + std::to_string(i % 256)).ok());
+    }
+    std::atomic<bool> start{false};
     std::atomic<bool> stop{false};
-    std::atomic<int> refusals{0};
-    std::vector<std::thread> threads;
-    // Two mutators: deny odd / allow even second-octet patterns.
-    for (int t = 0; t < 2; ++t) {
-        threads.emplace_back([&policy, t] {
-            for (int i = 0; i < 200; ++i) {
-                const std::string pattern =
-                    "10." + std::to_string(2 * (i % 25) + t) + ".0.0/16";
-                if ((i + t) % 2 == 0) {
-                    static_cast<void>(policy.deny(pattern));
-                } else {
-                    static_cast<void>(policy.remove_denied(pattern));
-                }
-            }
-        });
-    }
-    // Six classifiers over one hot address.
+    std::atomic<int> readers_ready{0};
+    std::atomic<int> writers_done{0};
+    std::atomic<int> mutations{0};
+    std::atomic<int> reads{0};
+    std::atomic<bool> valid{true};
+    std::vector<std::jthread> threads;
     for (int t = 0; t < 6; ++t) {
-        threads.emplace_back([&policy, &stop, &refusals] {
-            const net::peer_address probe = peer("10.4.0.1");
-            while (!stop.load(std::memory_order_acquire)) {
-                if (!policy.classify(probe).accepted) refusals.fetch_add(1);
-                // armed implies enabled (the invariant the gate sums up).
-                if (policy.armed()) {
-                    if (!policy.enabled()) refusals.store(-1);
-                }
+        threads.emplace_back([&](std::stop_token token) {
+            const auto probe = peer("10.4.0.1");
+            readers_ready.fetch_add(1);
+            while (!start.load() && !token.stop_requested()) std::this_thread::yield();
+            while (!stop.load() && !token.stop_requested()) {
+                const auto verdict = policy.classify(probe);
+                if (verdict != accepted()
+                        && verdict != refused(peer_refusal::denied)) valid = false;
+                static_cast<void>(policy.enabled());
+                static_cast<void>(policy.mode());
+                reads.fetch_add(1);
             }
         });
     }
-    for (std::size_t i = 0; i < 2; ++i) {
-        threads[i].join();
+    while (readers_ready.load() != 6) std::this_thread::yield();
+    start = true;
+    while (reads.load() < 600) std::this_thread::yield();
+    const auto began = std::chrono::steady_clock::now();
+    for (int t = 0; t < 2; ++t) {
+        threads.emplace_back([&, t](std::stop_token token) {
+            try {
+                for (int i = 0; i < 200 && !stop.load() && !token.stop_requested(); ++i) {
+                    const std::string pattern = "10."
+                        + std::to_string(2 * (i % 25) + t) + ".0.0/16";
+                    const auto outcome = (i + t) % 2 == 0
+                        ? policy.deny(pattern) : policy.remove_denied(pattern);
+                    if (!outcome.ok()) valid = false;
+                    mutations.fetch_add(1);
+                }
+            } catch (...) { valid = false; }
+            writers_done.fetch_add(1);
+        });
     }
-    stop.store(true, std::memory_order_release);
-    for (std::size_t i = 2; i < threads.size(); ++i) {
-        threads[i].join();
-    }
-    LT_CHECK(refusals.load() >= 0);
-    // The store stays consistent after the storm.
-    const http::outcome settled = policy.deny("203.0.113.1");
-    LT_CHECK(settled.ok());
-    LT_CHECK(policy.classify(peer("203.0.113.1"))
-             == refused(peer_refusal::denied));
+    const auto deadline = began + std::chrono::seconds(15);
+    while (writers_done.load() != 2 && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::yield();
+    const bool completed = writers_done.load() == 2;
+    const int before_cleanup = mutations.load();
+    const int reader_progress = reads.load();
+    // Record failure before releasing reader pressure; assert only after joins.
+    stop = true;
+    for (auto& thread : threads) thread.join();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - began).count();
+    std::printf("peer progress: completed=%d mutations=%d/400 cleanup=%d "
+                "reads=%d elapsed_ms=%jd bound_ms=15000\n", completed,
+                before_cleanup, mutations.load(), reader_progress,
+                static_cast<std::intmax_t>(elapsed));
+    LT_CHECK(completed);
+    LT_CHECK_EQ(before_cleanup, 400);
+    LT_CHECK(reader_progress >= 600);
+    LT_CHECK(valid.load());
+    LT_CHECK(policy.deny("203.0.113.1").ok());
+    LT_CHECK(policy.classify(peer("203.0.113.1")) == refused(peer_refusal::denied));
 LT_END_AUTO_TEST(concurrent_mutation_and_reads)
+
+LT_BEGIN_AUTO_TEST(peer_policy_suite, independent_writers_retain_additions_and_removals)
+    peer_policy policy;
+    std::atomic<bool> start{false};
+    std::atomic<bool> valid{true};
+    auto mutate = [&](std::stop_token token, int t, bool remove) {
+        while (!start.load() && !token.stop_requested()) std::this_thread::yield();
+        if (token.stop_requested()) return;
+        try {
+            for (int i = 0; i < 200; ++i) {
+                const auto pattern = "10." + std::to_string(t) + ".0." + std::to_string(i);
+                if (!(remove ? policy.remove_denied(pattern) : policy.deny(pattern)).ok()
+                    || !(remove ? policy.remove_allowed(pattern) : policy.allow(pattern)).ok())
+                    valid = false;
+            }
+        } catch (...) { valid = false; }
+    };
+    for (bool remove : {false, true}) {
+        start = false;
+        std::jthread first(mutate, 1, remove);
+        std::jthread second(mutate, 2, remove);
+        std::jthread stance([&](std::stop_token token) {
+            while (!start.load() && !token.stop_requested()) std::this_thread::yield();
+            for (int i = 0; i < 400 && !token.stop_requested(); ++i) {
+                policy.set_enabled(i % 2 == 0);
+                policy.set_mode(i % 2 ? peer_policy_mode::accept_all : peer_policy_mode::reject_all);
+            }
+        });
+        start = true;
+        first.join();
+        second.join();
+        stance.join();
+        policy.set_enabled(true);
+        for (int t : {1, 2}) {
+            for (int i = 0; i < 200; ++i) {
+                const auto address = "10." + std::to_string(t) + ".0." + std::to_string(i);
+                policy.set_mode(peer_policy_mode::accept_all);
+                LT_CHECK(policy.classify(peer(address.c_str())) == accepted());
+                policy.set_mode(peer_policy_mode::reject_all);
+                LT_CHECK(policy.classify(peer(address.c_str())) == refused(remove
+                    ? peer_refusal::not_on_allow_list : peer_refusal::denied));
+            }
+        }
+    }
+    LT_CHECK(valid.load());
+LT_END_AUTO_TEST(independent_writers_retain_additions_and_removals)
+
+LT_BEGIN_AUTO_TEST(peer_policy_suite, enabled_mode_generations_remain_complete)
+    peer_policy policy;
+    LT_CHECK(policy.deny("10.0.0.1").ok());
+    LT_CHECK(policy.allow("10.0.0.1").ok());
+    std::atomic<bool> stop{false};
+    std::atomic<int> reads{0};
+    std::atomic<bool> valid{true};
+    std::vector<std::jthread> readers;
+    for (int i = 0; i < 6; ++i) readers.emplace_back([&](std::stop_token token) {
+        while (!stop.load() && !token.stop_requested()) {
+            const auto both = policy.classify(peer("10.0.0.1"));
+            const auto unspec = policy.classify(net::peer_address{});
+            const auto other = policy.classify(peer("::1"));
+            if ((both != accepted() && both != refused(peer_refusal::denied))
+                || (unspec != accepted() && unspec != refused(peer_refusal::not_on_allow_list))
+                || (other != accepted() && other != refused(peer_refusal::not_on_allow_list)))
+                valid = false;
+            reads.fetch_add(1);
+        }
+    });
+    while (reads.load() < 600) std::this_thread::yield();
+    for (int i = 0; i < 400; ++i) {
+        policy.set_enabled(false);
+        policy.set_mode(i % 2 ? peer_policy_mode::accept_all : peer_policy_mode::reject_all);
+        policy.set_enabled(true);
+    }
+    stop = true;
+    for (auto& thread : readers) thread.join();
+    LT_CHECK(valid.load());
+    policy.set_enabled(false);
+    LT_CHECK(!policy.armed());
+    LT_CHECK(policy.classify(peer("10.0.0.1")) == accepted());
+    policy.set_mode(peer_policy_mode::reject_all);
+    policy.set_enabled(true);
+    LT_CHECK(policy.armed());
+    LT_CHECK(policy.classify(peer("10.0.0.1")) == refused(peer_refusal::denied));
+LT_END_AUTO_TEST(enabled_mode_generations_remain_complete)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
