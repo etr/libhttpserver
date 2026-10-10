@@ -25,7 +25,7 @@
 // build/TLS configuration macro) must compile and link cleanly. The v3
 // concurrency core is header-only, so the empty LDADD of this target is
 // itself part of the contract. The test passes by virtue of compiling
-// and linking; main() asserts nothing.
+// and linking, and delayed resume must deliver the checked outcome once.
 
 #include <exception>
 #include <utility>
@@ -35,6 +35,46 @@
 #include <httpserver/concurrency/executor.hpp>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/concurrency/task.hpp>
+
+namespace {
+httpserver::task<httpserver::resume_outcome> wait_for_resume(
+        httpserver::resume_signal signal, bool* started) {
+    *started = true;
+    co_return co_await signal.wait();
+}
+
+bool check_delayed_resume(bool already_fired, bool cancel_wins) {
+    httpserver::manual_executor manual;
+    httpserver::resume_signal signal;
+    httpserver::resume_signal signal_copy = signal;
+    if (already_fired) {
+        signal.signal();
+        signal_copy.cancel();  // loses to the already-fired signal
+    }
+    bool started = false;
+    bool valid_result = false;
+    int deliveries = 0;
+    auto outcome = httpserver::resume_outcome::timeout;
+    auto pending = wait_for_resume(signal, &started);
+    httpserver::spawn(manual, std::move(pending), [&](auto result) {
+        ++deliveries;
+        valid_result = result.has_value();
+        if (valid_result) outcome = result.value();
+    });
+    if (started || deliveries != 0) return false;
+    manual.run_pending();
+    if (!started || deliveries != (already_fired ? 1 : 0)) return false;
+    if (cancel_wins) signal_copy.cancel();
+    else signal.signal();
+    signal.signal();
+    signal.cancel();
+    manual.run_pending();
+    const auto expected = cancel_wins ? httpserver::resume_outcome::cancelled
+                                      : httpserver::resume_outcome::resumed;
+    return valid_result && deliveries == 1 && outcome == expected
+        && manual.pending() == 0;
+}
+}  // namespace
 
 // Touch every public type once so a missing declaration is a link (not
 // just a compile) failure. No timers are armed here: this sentinel must
@@ -46,8 +86,6 @@ int use_v3_concurrency_types() {
     using httpserver::current_executor;
     using httpserver::inline_executor;
     using httpserver::manual_executor;
-    using httpserver::resume_outcome;
-    using httpserver::resume_signal;
     using httpserver::spawn;
     using httpserver::stop_source;
     using httpserver::stop_token;
@@ -76,9 +114,10 @@ int use_v3_concurrency_types() {
           });
     manual.run_pending();
 
+    bool void_seen = false;
     spawn(manual, []() -> task<void> { co_return; }(),
-          [](task_result<void> result) {
-              if (result.is_exception()) std::rethrow_exception(result.exception());
+          [&](task_result<void> result) {
+              void_seen = result.has_value();
           });
     manual.run_pending();
 
@@ -92,17 +131,9 @@ int use_v3_concurrency_types() {
     const bool stop_possible = token.stop_possible();
 
     // Resume signal: one-shot, idempotent, copyable.
-    resume_signal signal;
-    resume_signal signal_copy = signal;
-    signal.signal();
-    signal_copy.cancel();  // loses the race: no-op
-    resume_outcome outcome = resume_outcome::timeout;
-    spawn(manual, [signal]() -> task<resume_outcome> {
-        co_return co_await signal.wait();
-    }(), [&](task_result<resume_outcome> result) {
-        if (result.has_value()) outcome = result.value();
-    });
-    manual.run_pending();
+    const bool resumed = check_delayed_resume(false, false);
+    const bool cancelled = check_delayed_resume(false, true);
+    const bool already_resumed = check_delayed_resume(true, false);
 
     // The typed cancellation marker is a plain exception type.
     try {
@@ -110,11 +141,11 @@ int use_v3_concurrency_types() {
     } catch (const cancelled_exception&) {
     }
 
-    return (value_seen == 7 && observed == nullptr && !current
+    return (value_seen == 7 && void_seen && observed == nullptr && !current
             && stop_now && stop_seen && stop_possible
-            && outcome == resume_outcome::resumed) ? 0 : 1;
+            && resumed && cancelled && already_resumed) ? 0 : 1;
 }
 
 int main() {
-    return use_v3_concurrency_types() == 0 ? 0 : 0;
+    return use_v3_concurrency_types();
 }

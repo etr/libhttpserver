@@ -333,7 +333,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-183 | [Publish v2-to-v3 migration guide and API examples](M13-v3-release/TASK-183.md) | M13 | Complete | TASK-179 |
 | TASK-184 | [Remove MHD build/link paths and bump v3 SOVERSION](M13-v3-release/TASK-184.md) | M13 | Complete | TASK-179, TASK-182, TASK-183 |
 | TASK-185 | [Run final dependency, conformance, sanitizer and performance release gates](M13-v3-release/TASK-185.md) | M13 | In Progress | TASK-180, TASK-181, TASK-182, TASK-183, TASK-184, TASK-199 |
-| TASK-186 | [Repair concurrency consumer lifetime and sanitizer-owned allocation coverage](M14-v3-release-repairs/TASK-186.md) | M14 | Not Started | None |
+| TASK-186 | [Repair concurrency consumer lifetime and sanitizer-owned allocation coverage](M14-v3-release-repairs/TASK-186.md) | M14 | In Progress | None |
 | TASK-187 | [Repair response-source and multipart coroutine lifetimes](M14-v3-release-repairs/TASK-187.md) | M14 | Not Started | TASK-186 |
 | TASK-188 | [Eliminate peer-policy mutation starvation](M14-v3-release-repairs/TASK-188.md) | M14 | Not Started | TASK-187 |
 | TASK-189 | [Repair native HTTP/1 WebSocket handshake and flood progress](M14-v3-release-repairs/TASK-189.md) | M14 | Not Started | TASK-188 |
