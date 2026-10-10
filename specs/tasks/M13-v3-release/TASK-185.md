@@ -14,7 +14,7 @@ Provide final dependency, conformance, sanitizer and performance release gates f
 - [ ] Require every v3.0 in-scope gate to pass before tagging.
 
 **Dependencies:**
-- Blocked by: TASK-180, TASK-181, TASK-182, TASK-183, TASK-184, TASK-199
+- Blocked by: TASK-180, TASK-181, TASK-182, TASK-183, TASK-184, TASK-200
 - Blocks: None
 
 **Acceptance Criteria:**
@@ -27,7 +27,7 @@ Provide final dependency, conformance, sanitizer and performance release gates f
 **Status:** In Progress
 
 **Authorized repair continuation (2026-10-10):** The user instructed that all
-remaining failures and missing capabilities be fixed. TASK-186–TASK-199 deliver
+remaining failures and missing capabilities be fixed. TASK-186–TASK-200 deliver
 those dependencies serially on `v3`; this task remains open in its preserved
 worktree until the complete required local release inventory passes on a fresh
 package. Preserve earlier repairs, validation findings and unsuccessful receipts.

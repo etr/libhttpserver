@@ -22,7 +22,7 @@
 
 **Dependencies:**
 - Blocked by: TASK-198
-- Blocks: TASK-185
+- Blocks: TASK-200, TASK-185
 **Related Requirements:** PRD-V3N-REQ-001 through PRD-V3N-REQ-038 as applicable to the complete public-capability inventory; TASK-185 native-throughput-latency inventory.
 **Related Decisions:** DR-V3-001 through DR-V3-008; architecture §5 packaging and validation.
 **Status:** Not Started
