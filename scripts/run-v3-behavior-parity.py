@@ -273,8 +273,10 @@ def check_receipt(root, inventory, receipt):
                     errors.append('missing live policy refusal witness')
                 if item.get('mode') in ('h2-tls', 'h3-quic') and type(witness.get('stream')) is not int:
                     errors.append('missing refused stream identity')
-            elif item['name'] not in executed_tests((root / command['log']).read_text()):
-                errors.append('named supporting test did not execute successfully')
+            else:
+                log = (root / command['log']).read_text()
+                if item['name'] not in executed_tests(log) or not matching_execution(command, item['suite'], log):
+                    errors.append('named supporting test lacks matching suite execution provenance')
         outcomes = {}
         for outcome in receipt['outcomes']:
             key = (outcome['capability'], outcome['mode'])
@@ -340,15 +342,51 @@ def check_receipt(root, inventory, receipt):
     return errors
 
 
+def named_execution(binary, suite, log):
+    """Bind named checks to the invoked executable, including libtool wrappers."""
+    actual = binary.parent / '.libs' / binary.name
+    actual = actual if actual.is_file() else binary
+    return {'suite': suite, 'executable': str(actual.resolve()),
+            'sha256': hashlib.sha256(actual.read_bytes()).hexdigest(),
+            'log_sha256': hashlib.sha256(log.encode()).hexdigest(),
+            'tests': len(executed_tests(log)),
+            'checks': int(re.search(r'^(\d+) checks$', log, re.MULTILINE)[1])}
+
+
+def matching_execution(command, suite, log):
+    proof = command.get('named_execution', {})
+    argv = command['argv']
+    cwd = Path(command.get('cwd', ''))
+    if not isinstance(proof, dict) or not cwd.is_absolute() or not argv or proof.get('suite') != suite:
+        return False
+    binary = (cwd / argv[-1]).resolve()
+    if binary.name != suite or not binary.is_file():
+        return False
+    if len(argv) != 1:
+        # The sole supported launcher is the explicitly recorded peer_policy affinity.
+        if suite != 'peer_policy' or len(argv) != 4 or Path(argv[0]).name != 'taskset' \
+                or argv[1] != '-c' or not argv[2].isdigit():
+            return False
+    if not executed_tests(log):
+        return False
+    expected = named_execution(binary, suite, log)
+    return proof == expected and type(proof.get('tests')) is int and type(proof.get('checks')) is int
+
+
 def executed_tests(log):
     """Require completed named Littletest checks, never merely a zero exit."""
-    names = re.findall(r'^Running test \(\d+\): ([\w]+)$', log, re.MULTILINE)
+    running = re.findall(r'^Running test \((\d+)\): ([\w]+)$', log, re.MULTILINE)
+    names = [name for _, name in running]
     completed = re.findall(r'^- Time spent during "([\w]+)":', log, re.MULTILINE)
-    count = re.search(r'^(\d+) tests executed$', log, re.MULTILINE)
-    checks = re.search(r'^(\d+) checks$', log, re.MULTILINE)
-    if not count or not checks or int(checks[1]) < 1 or int(count[1]) != len(names) or names != completed \
-            or len(set(names)) != len(names) or not re.search(r'^-> 0 failures$', log, re.MULTILINE) \
-            or not re.search(r'^-> 0 skipped$', log, re.MULTILINE):
+    counts = [re.findall(pattern, log, re.MULTILINE) for pattern in
+              (r'^(\d+) tests executed$', r'^(\d+) checks$', r'^-> (\d+) successes$',
+               r'^-> (\d+) failures$', r'^-> (\d+) skipped$')]
+    if any(len(values) != 1 for values in counts):
+        return set()
+    tests, checks, successes, failures, skipped = (int(values[0]) for values in counts)
+    if checks < 1 or tests != len(names) or checks != successes or names != completed \
+            or [int(number) for number, _ in running] != list(range(1, tests + 1)) \
+            or len(set(names)) != len(names) or failures or skipped:
         return set()
     return set(names)
 
@@ -419,6 +457,7 @@ def run_audit(root, inventory, tls_on, tls_off, python, openssl, directory):
                 named = executed_tests(log)
                 if not named:
                     raise RuntimeError(lane + '-' + suite + ' has failed, skipped, empty or incomplete named checks')
+                receipt['commands'][-1]['named_execution'] = named_execution(binary, suite, log)
                 if lane == 'on':
                     for name in sorted(named):
                         kinds = {test['kind'] for cap in inventory['capabilities'] for test in cap.get('tests', [])

@@ -27,6 +27,7 @@
 #ifndef SRC_HTTPSERVER_HTTP_HPP_
 #define SRC_HTTPSERVER_HTTP_HPP_
 
+#include <httpserver/http/cookie.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/protocol.hpp>
 #include <httpserver/http/method.hpp>

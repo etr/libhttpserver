@@ -62,14 +62,31 @@ application work still consumes a worker.
 | `get_content` | `admit_body(body_policy{cap})`, then `co_await body().collect(cap)` or incremental `read_some()` | Admission before reads; typed limits, cancellation and protocol errors |
 | `get_footers` | `body().trailers()` after end-of-body | Trailers remain separate from initial fields |
 | Multipart uploaded-file map and cleanup callbacks | `forms::read_multipart`, `part_sink`, `temp_file_part_sink`, `temp_file_options::should_keep` | Limits are snapshotted at invocation; exchange and part sink remain borrowed through task completion. Partial parts abort exactly once; disk files clean up on abort/destruction; keep callback runs once per completed file, throws mean remove; client names sanitized |
-| `get_cookie` / response `with_cookie` | Ordered Cookie/Set-Cookie fields; parse and render cookie values in application code | Preserve repeated fields; no native request/response convenience aliases |
+| `get_cookie` / response `with_cookie` | `http::parse_cookie_header`, `http::render_set_cookie`, ordered Cookie/Set-Cookie fields | Preserve repeated fields; no native request/response convenience aliases |
 
 Form/query decoding is optional, bounded, and reports malformed encodings.
 A query is the substring after `?` in `raw_target`; decoding it does not modify
 the raw target. Body trailers are meaningful only after a completed body read.
 
-The legacy cookie class is removed. Native headers retain repeated Cookie and
-Set-Cookie field values; applications own value parsing and rendering.
+Include `<httpserver/http/cookie.hpp>` directly or `<httpserver/http.hpp>`.
+`http::cookie` owns raw strings and attributes; `parse_cookie_header` returns
+owned pairs in token order. Iterate every `head_fields.all("cookie")` occurrence
+in received order. Parsing trims SP/HT at token/name edges, splits at the first
+`=`, strips one outer quote pair and skips malformed/empty-name tokens. It does
+not URL-decode, trim leading value whitespace or remove interior controls.
+
+`render_set_cookie(value, output)` validates before replacing output and returns
+`http::outcome_code::invalid_argument` on invalid input. Append output to an
+ordinary `Set-Cookie` field only on success, once per cookie. This replaces v2
+fluent setters and throwing rendering; direct mutation is raw until rendering.
+The renderer rejects CR/LF/NUL/semicolon, controls/whitespace/equals in names,
+and commas in Domain/Path. Empty rendered names are invalid. Attribute order is
+Expires, Max-Age, Domain, Path, Secure, HttpOnly, SameSite; None implies Secure.
+Expires uses locale/timezone-independent GMT Unix seconds in years 0000..9999;
+out-of-range times now fail explicitly instead of platform-dependent conversion.
+Signed Max-Age, empty values, case and percent bytes remain unchanged. Existing
+field budgets bound input; there is no cookie jar or cached request convenience.
+The `http_cookie` suite preserves the three named capability-054 witnesses.
 
 ## Response ownership and producers
 

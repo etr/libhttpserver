@@ -59,6 +59,7 @@ const std::vector<const char*>& header_files() {
         "/http.hpp",
         "/features.hpp",
         "/http/fields.hpp",
+        "/http/cookie.hpp",
         "/http/method.hpp",
         "/http/outcome.hpp",
         "/http/protocol.hpp",

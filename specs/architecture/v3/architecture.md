@@ -95,6 +95,16 @@ Headers and trailers preserve wire order and repeated names. Lookup is case-inse
 
 Only one body read and one response write may be outstanding per exchange. Reads release HTTP/2 and QUIC receive credit only as bytes are consumed. Writes await bounded queue capacity, not peer acknowledgement. A response body source returns data, end, or error through typed results; no sentinel values or backend flags. Cancellation is fanned out to body operations, application suspension, response production, and WebSocket work. An application resume signal is idempotent, thread-safe, and becomes cancelled if its exchange ends; deadlines apply while suspended.
 
+The owned `http::cookie` value and explicit `parse_cookie_header` /
+`render_set_cookie` operations live in the semantic layer (TASK-192). Lenient
+parsing preserves raw bytes in owned pairs. Rendering is the single validation
+boundary for parsed/directly mutated data and reports typed `invalid_argument`
+without changing output. Applications compose repeated Cookie/Set-Cookie values
+through ordered fields; no request/response hierarchy or cookie cache is added.
+Expires is bounded civil GMT formatting, independent of locale/timezone/platform.
+See [cookie design and doubts](TASK-192-design-evidence.md) and
+[migration contract](../../../docs/v2-to-v3-migration.md#request-data-forms-and-cookies).
+
 ### 3.2 Response and resource ownership
 
 An ordinary `response` is one-shot. `response_definition` is immutable and shareable only if its body is replayable: owned bytes, a reopenable file descriptor/path policy, or a factory creating a new source per send. Each send owns serialization state, body cursor, cancellation, and optional overlay fields/trailers. A `response_overlay` owns its ordered headers and trailers; they append after definition fields for that send only, and conflicting singleton/framing fields fail validation before headers commit. Concurrent sends create independent body sources and never mutate the definition or another send. A pipe is a unique one-shot source. File and pipe handles either transfer as `owned_file`/`owned_pipe` or are explicitly borrowed with a lifetime lease; borrowed memory requires a lease spanning send completion. Reuse attempts on non-replayable sources fail before writing. Request-specific overlays never mutate the shared definition. Response framing is selected by the protocol engine.

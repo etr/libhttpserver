@@ -35,6 +35,17 @@ provide owned/reopened/leased body sources and per-send producers.
 \include v3_routes.cpp
 \include v3_route_handlers.hpp
 
+\section native_v3_cookies Owned cookie values
+
+Include <httpserver/http/cookie.hpp> directly or through <httpserver/http.hpp>.
+\ref httpserver::http::parse_cookie_header returns owned raw cookie pairs;
+iterate every ordered Cookie field. Construct or modify
+\ref httpserver::http::cookie attributes, then call
+\ref httpserver::http::render_set_cookie and append the output as a separate
+Set-Cookie field only on success. Invalid input yields invalid_argument and
+leaves output unchanged. The migration guide documents exact parsing,
+canonical attribute ordering, SameSite=None and bounded GMT Expires behavior.
+
 \section native_v3_websockets WebSocket sessions
 
 \ref httpserver::exchange::upgrade returns a typed rejection or owning

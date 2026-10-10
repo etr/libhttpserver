@@ -339,7 +339,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-189 | [Repair native HTTP/1 WebSocket handshake and flood progress](M14-v3-release-repairs/TASK-189.md) | M14 | Complete | TASK-188 |
 | TASK-190 | [Repair HTTP/2 conformance route-effect ordering](M14-v3-release-repairs/TASK-190.md) | M14 | Complete | TASK-189 |
 | TASK-191 | [Repair independent HTTP/3 semantic drain completion](M14-v3-release-repairs/TASK-191.md) | M14 | Complete | TASK-190 |
-| TASK-192 | [Supply current-v3 cookie parity witnesses](M14-v3-release-repairs/TASK-192.md) | M14 | Not Started | TASK-191 |
+| TASK-192 | [Implement owned v3 cookie helpers and parity witnesses](M14-v3-release-repairs/TASK-192.md) | M14 | In Progress | TASK-191 |
 | TASK-193 | [Install public credentials and serve native TCP TLS](M14-v3-release-repairs/TASK-193.md) | M14 | Not Started | TASK-192 |
 | TASK-194 | [Complete public TLS profiles, live rotation and ACME selection](M14-v3-release-repairs/TASK-194.md) | M14 | Not Started | TASK-193 |
 | TASK-195 | [Route negotiated public HTTP/2 streams through native listeners](M14-v3-release-repairs/TASK-195.md) | M14 | Not Started | TASK-190, TASK-194 |

@@ -1997,24 +1997,24 @@
       },
       "tests": [
         {
-          "suite": "cookie_render",
+          "suite": "http_cookie",
           "name": "parse_multi_semicolon_separated",
           "kind": "semantic"
         },
         {
-          "suite": "cookie_render",
+          "suite": "http_cookie",
           "name": "render_full_attribute_ordering",
           "kind": "semantic"
         },
         {
-          "suite": "cookie_render",
+          "suite": "http_cookie",
           "name": "render_guard_rejects_cr_in_parsed_value",
           "kind": "semantic"
         }
       ],
       "migration": {
-        "reference": "docs/task-179-behavior-parity.md#request-and-source-migrations",
-        "rationale": "Use ordered fields, pull body readers, standalone decoders and explicit source ownership instead of v2 convenience maps/callback shapes."
+        "reference": "docs/v2-to-v3-migration.md#request-data-forms-and-cookies",
+        "rationale": "Use owned http::cookie and explicit parse/render with typed atomic failure instead of v2 fluent setters and request/response conveniences; Expires outside civil years 0000..9999 now fails explicitly."
       }
     },
     {
