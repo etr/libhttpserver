@@ -119,7 +119,41 @@ void fixtures(const std::string& directory) {
         require(output && PEM_write_X509(output.get(), cert.get()) == 1, "fixture certificate write");
         output.reset();
     }
-    std::cout << "FIXTURES 12" << std::endl;
+    // A separate trust anchor signs replacement material for the original SNI.
+    std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> root_key(EVP_RSA_gen(2048), EVP_PKEY_free);
+    require(static_cast<bool>(root_key), "rotation root key");
+    std::unique_ptr<X509, decltype(&X509_free)> root(X509_new(), X509_free), leaf(X509_new(), X509_free);
+    require(root && leaf, "rotation certificates");
+    for (auto* cert : {root.get(), leaf.get()}) {
+        require(X509_set_version(cert, 2) == 1 && ASN1_INTEGER_set(X509_get_serialNumber(cert), cert == root.get() ? 1940 : 1941) == 1,
+                "rotation version and serial");
+        X509_gmtime_adj(X509_getm_notBefore(cert), -60);
+        X509_gmtime_adj(X509_getm_notAfter(cert), 172800);
+    }
+    auto* root_name = X509_get_subject_name(root.get());
+    X509_NAME_add_entry_by_txt(root_name, "CN", MBSTRING_ASC, reinterpret_cast<const unsigned char*>("TASK-194 rotation root"), -1, -1, 0);
+    require(X509_set_issuer_name(root.get(), root_name) == 1 && X509_set_pubkey(root.get(), root_key.get()) == 1, "rotation root identity");
+    std::unique_ptr<X509_EXTENSION, decltype(&X509_EXTENSION_free)> constraints(
+        X509V3_EXT_conf_nid(nullptr, nullptr, NID_basic_constraints, "critical,CA:TRUE"), X509_EXTENSION_free);
+    require(constraints && X509_add_ext(root.get(), constraints.get(), -1) == 1
+        && X509_sign(root.get(), root_key.get(), EVP_sha256()) > 0, "rotation root signing");
+    X509_NAME_add_entry_by_txt(X509_get_subject_name(leaf.get()), "CN", MBSTRING_ASC,
+        reinterpret_cast<const unsigned char*>("a.example"), -1, -1, 0);
+    require(X509_set_issuer_name(leaf.get(), root_name) == 1 && X509_set_pubkey(leaf.get(), key.get()) == 1, "rotation leaf identity");
+    std::unique_ptr<X509_EXTENSION, decltype(&X509_EXTENSION_free)> san(
+        X509V3_EXT_conf_nid(nullptr, nullptr, NID_subject_alt_name, "DNS:a.example"), X509_EXTENSION_free);
+    require(san && X509_add_ext(leaf.get(), san.get(), -1) == 1
+        && X509_sign(leaf.get(), root_key.get(), EVP_sha256()) > 0, "rotation leaf signing");
+    output.reset(fopen((directory + "/rotation-root.pem").c_str(), "w"));
+    require(output && PEM_write_X509(output.get(), root.get()) == 1, "rotation root write");
+    output.reset(fopen((directory + "/root.pem").c_str(), "a"));
+    require(output && PEM_write_X509(output.get(), root.get()) == 1, "rotation trust bundle");
+    output.reset(fopen((directory + "/a-replacement.pem").c_str(), "w"));
+    require(output && PEM_write_X509(output.get(), leaf.get()) == 1, "rotation leaf write");
+    output.reset(fopen((directory + "/a-replacement-key.pem").c_str(), "w"));
+    require(output && PEM_write_PrivateKey(output.get(), key.get(), nullptr, nullptr, 0, nullptr, nullptr) == 1, "rotation key write");
+    output.reset();
+    std::cout << "FIXTURES 14" << std::endl;
 }
 int main(int argc, char** argv) {
     try {
@@ -154,7 +188,7 @@ int main(int argc, char** argv) {
             SSL_CTX_set_verify(context.get(), SSL_VERIFY_PEER, nullptr);
         }
         std::unique_ptr<SSL_SESSION, decltype(&SSL_SESSION_free)> saved(nullptr, SSL_SESSION_free);
-        for (unsigned turn = 0; turn < 2; ++turn) {
+        for (unsigned turn = 0; turn < (action == "interactive" ? 3U : 2U); ++turn) {
             socket_owner socket;
             socket.fd = ::socket(AF_INET, SOCK_STREAM, 0);
             sockaddr_in address{}; address.sin_family = AF_INET; address.sin_port = htons(port);
@@ -237,7 +271,7 @@ int main(int argc, char** argv) {
                 }
                 require(body.find("HTTP/1.1 200 ") == 0 && body.find("profile-ok\n\n") != std::string::npos, "complete profile response");
             }
-            saved.reset(SSL_get1_session(ssl.get()));
+            if (action != "interactive" || !saved) saved.reset(SSL_get1_session(ssl.get()));
             std::cout << "{\"connected\":true,\"version\":\"" << SSL_get_version(ssl.get())
                 << "\",\"cipher\":\"" << SSL_get_cipher_name(ssl.get()) << "\",\"alpn\":\"" << protocol
                 << "\",\"certificate_sha256\":\"" << digest << "\",\"certificate_messages\":" << messages_state.certificates

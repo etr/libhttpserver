@@ -29,7 +29,7 @@ std::string pem(const std::string& directory, const std::string& name) {
     return {std::istreambuf_iterator<char>(in), {}};
 }
 srv::tls_host_credentials certificate(const std::string& directory, const std::string& name) {
-    return {name + ".example", pem(directory, name + ".pem") + pem(directory, "intermediate.pem"),
+    return {name + ".example", pem(directory, name + ".pem") + pem(directory, name == "a-replacement" ? "rotation-root.pem" : "intermediate.pem"),
             pem(directory, name + "-key.pem"), {"http/1.1"}};
 }
 struct lookup_state {
@@ -202,10 +202,10 @@ int main(int argc, char** argv) {
                 auto candidate = certificate(directory, "b");
                 require(store->replace({{candidate}, 0}).code() == http::outcome_code::invalid_argument, "bound policy weakened");
                 std::cout << "PRESERVED" << std::endl;
-            } else if (line == "rotate") {
+            } else if (line == "rotate" || line == "rotate-same-host") {
                 auto candidate = material;
                 if (!psk) {
-                    auto replacement = certificate(directory, "b");
+                    auto replacement = certificate(directory, line == "rotate-same-host" ? "a-replacement" : "b");
                     candidate.certificate_chain_pem = replacement.certificate_chain_pem;
                     candidate.private_key_pem = replacement.private_key_pem;
                 }

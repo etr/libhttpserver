@@ -104,7 +104,7 @@ class tls_credentials_registry final {
     std::shared_ptr<const tls_credentials_snapshot> acquire() const { return std::atomic_load_explicit(&active_, std::memory_order_acquire); }
 
  private:
-    http::outcome publish_locked(std::shared_ptr<tls_credentials_snapshot> candidate,
+    http::outcome publish_locked(const std::shared_ptr<tls_credentials_snapshot>& candidate,
         std::shared_ptr<const tls_credentials_snapshot>& retired);
     std::shared_ptr<const tls_credentials_snapshot> active_;
     std::function<std::chrono::system_clock::time_point()> selection_clock_;

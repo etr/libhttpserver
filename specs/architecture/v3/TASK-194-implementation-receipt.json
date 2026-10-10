@@ -6,7 +6,7 @@
   "base_revision": "329b110ad9b801addf952f12d874601eee29ab0d",
   "worktree_path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194",
   "status": "implemented_pending_caller_validation",
-  "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a",
+  "source_identity": "0656f8818c550af469b2c1fe614a4f57ec3ca560f28a88de0022de56a59179b0",
   "changed_file_hashes": {
     "Makefile.am": "75c6752ccf86b73d44ffb1427a3db11c321ef033b0ef30b2eb88ace737c07fa6",
     "docs/external-psk-lookup-contract.md": "9a373e686b147f220d8cfa150debed8712d9265661a7956543b1261ba1ff1a0f",
@@ -22,22 +22,22 @@
     "src/detail/listener_engine.cpp": "473c35cd43e4845abc1e3dea770ac96d35d9ce8b4e8934404fc7b2cd1f56894e",
     "src/detail/server.cpp": "ab5859f95c23929dd0fe408740d8d9ea2d95c2cba84c00da48530b79c3342443",
     "src/detail/server_tls_credentials.cpp": "7f387ce5fbcb19f18c7ff49c5a38dec095512db05db83a2ef76e97ede8021e31",
-    "src/detail/tls_credentials.cpp": "b23477e8adb2188ae9c0f4e194cf426c488587a6c5937752046bfd7f0f8065c3",
+    "src/detail/tls_credentials.cpp": "0a5e7e962273dddfa72efccd3715449f2b5ab4519b80b5e382e228acc4207864",
     "src/httpserver/detail/listener_engine.hpp": "98de305b37aff3b065d7efc3ca1c628238a6013999285a140953c6e84c5ab2ad",
-    "src/httpserver/detail/tls_credentials.hpp": "c80d0517755597137216d60383ec5715718c8c816e2f67176ce8e67bc60b700e",
+    "src/httpserver/detail/tls_credentials.hpp": "fa08bef8ec0fa76b489105176f1ee3eff9d30d31ab8b079cc68e3c84e5b13d70",
     "src/httpserver/detail/tls_credentials_access.hpp": "fa3b00b091026d88fac6487424ab7f709ea6d0eaf43fd7e22d91934c1e046fd6",
     "src/httpserver/server/tls_credentials.hpp": "a960a40c862d507ac7c42ab40a7ffd411cef2284d60f3d33188e76bc2cfe0f63",
     "test/Makefile.am": "b2dfc8ac1ab251bc08f5991555041665f6fc67c3edf88d89cc61a59b78c869a8",
     "test/examples/v3_tls_rotation.cpp": "6e09ffbcff65142f61bdcde111e4bda44af9193c6e2c2807fadc1eca363cf00b",
     "test/installed/v3-package-matrix.json": "06a4ab257718317e1f6c3a33e318d1c155d0009761f4b302898399f7213a00c3",
     "test/installed/v3_tls_consumer.cpp": "72dd43f7e5522d50161d05383c2ee9c569f3146fb6fdb1edad0f242e4308a1d5",
-    "scripts/lib/v3_public_tls_profiles.py": "222bda9788fa89c7f536919a7b9c60d0839d48b726773d50a9a6b5639f331f2b",
+    "scripts/lib/v3_public_tls_profiles.py": "022972c7cdb6b104c535561a858e087cb17465f638459a866ac68618aec6c9f3",
     "specs/architecture/v3/TASK-194-design.md": "1b6f08a84a38f3ebb88ef3f6e4b2e95e348574dcb7c77a7eeda592d72cd17c17",
-    "specs/architecture/v3/TASK-194-implementation-evidence.md": "74ed6c4d0827cc0ea05240685abde09eb6cfbeb69f25fb81d82c2009fea3a7db",
+    "specs/architecture/v3/TASK-194-implementation-evidence.md": "72864cc688c005736590cd0db78c1015925db3a0959dce61119cf45e92bf4d04",
     "src/detail/server_tls_psk.cpp": "10d712aad3f1979f02745d53b2787b07acecf9ebbc3f7218895896ae42787ab3",
-    "test/installed/v3_tls_client.cpp": "d089f69904713a7e2d53d579e774aece9cac7b74f39fbb9cf715b4c036911faf",
-    "test/installed/v3_tls_profiles.cpp": "7766029804901653f8c97eaeb22a854b63d513a5720206657364dab4aa8b6dbe",
-    "test/unit/public_tls_profiles_test.cpp": "be2d2fbe794b3d328a161cf76be0e70a401da5e5f4043a891b9f5acd59a9c63b"
+    "test/installed/v3_tls_client.cpp": "78a4be0312eafaf90bc1684ccf122bb28e924094368bde16d21cf64029636f5e",
+    "test/installed/v3_tls_profiles.cpp": "2b53add6477fb23b210f0c5a12cadceaa3ffe37d623b549a81e69f2ca00f9363",
+    "test/unit/public_tls_profiles_test.cpp": "e6078fc7451c3933ca7933bd5f164e87f22637b6a8e6817840c26939ef395200"
   },
   "owners": {
     "normal-off": {
@@ -247,437 +247,449 @@
       "environment": {}
     },
     "normal-on": {
-      "summary": "build/task194/owners-normal-on-final/summary.json",
+      "summary": "build/task194/owners-normal-on-repair1/summary.json",
       "programs": 37,
       "suites": {
         "native_server": {
-          "log": "build/task194/normal-on/test/native_server.log",
-          "sha256": "8667882dccf2d5431bf94e3f871851752327134df46c6d21be10d5b488b0a726",
-          "tests": 20,
-          "checks": 108,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/native_server.log",
+          "sha256": "9ce2d28811dfabdafd672ba2aa364b67b51de3fb44dd5bbf3dff98f5b34d5b16",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/native_server",
             "sha256": "5be7efc40612533d1414ad4481d431ccefd783f9fc489784db54288dadf071aa"
-          }
+          },
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0
         },
         "server_options_validate": {
-          "log": "build/task194/normal-on/test/server_options_validate.log",
-          "sha256": "166fbc32d3ae92c58f0f0dee43ec36d740ddcf6c3b91cffb2c5d354a40120ae8",
-          "tests": 19,
-          "checks": 182,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/server_options_validate.log",
+          "sha256": "f4009d4d23d05799f925da7ba7f281e19117ac302e7d0438d135ce7b4cf806fd",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/server_options_validate",
             "sha256": "847004243943ae017cd63c2865e6687e47cde4871a817539dc71ce4aca697718"
-          }
+          },
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0
         },
         "native_http1_e2e": {
-          "log": "build/task194/normal-on/test/native_http1_e2e.log",
-          "sha256": "d356c52ee3c2c12d8d0f2425ee4caa3825d89607d267e8edb122823b7aada822",
+          "log": "build/task194/owners-normal-on-repair1/native_http1_e2e.log",
+          "sha256": "809032d94313cc0e5cc03d64b98d07326ddf7abd52c21453f78372fdae58ac1f",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_e2e",
+            "sha256": "58f5f690481a99c31e594817bc905fa7761bafa500189c62d92bd5200df66b04"
+          },
           "tests": 60,
           "checks": 708,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_e2e",
-            "sha256": "593d876a73587690f1022e15bda062fcbad6304844d5530185714c522b141f08"
-          }
+          "skipped": 0
         },
         "native_http1_parity": {
-          "log": "build/task194/normal-on/test/native_http1_parity.log",
-          "sha256": "682265d9959c5a862634f8955f100d0dff9a768f93ef15f2483ccf0a164353f8",
+          "log": "build/task194/owners-normal-on-repair1/native_http1_parity.log",
+          "sha256": "811111811ffd806ddc47410af4729fde7f50b7fb703a849592d6fc82935d0204",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_parity",
+            "sha256": "ad5470ac5a7c57a13a163f29d46f531c30e1036d9de4a76dd9eab6d52214d761"
+          },
           "tests": 6,
           "checks": 35,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_parity",
-            "sha256": "7746e0363f383ec87a0d725344457a6635bc1469ee6e983ac541e06c976b74dc"
-          }
+          "skipped": 0
         },
         "external_http1_e2e": {
-          "log": "build/task194/normal-on/test/external_http1_e2e.log",
-          "sha256": "89bf7c42fb4b3337816651477c1780068fe4fc788e5c810caee8697e3df873f4",
+          "log": "build/task194/owners-normal-on-repair1/external_http1_e2e.log",
+          "sha256": "bb02d2fd9e419ba9904acaf961ab4e284afd2e57f6d7302635882b6316df29d1",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/external_http1_e2e",
+            "sha256": "d78d0a8e9355ab0cabe552dcc528a4af9016188656b651bbc5c3298e5cddd50e"
+          },
           "tests": 4,
           "checks": 52,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/external_http1_e2e",
-            "sha256": "47fb62b4f0b9b26258bc13c11ce2aaea240be28ad578ecf624b1aed93f642ac9"
-          }
+          "skipped": 0
         },
         "external_readiness_adapter": {
-          "log": "build/task194/normal-on/test/external_readiness_adapter.log",
-          "sha256": "f792e85b0252bd3d9bdcf1f4863bee2fdc6d992bf8b90b9fa0ed40bcfc9b108a",
-          "tests": 27,
-          "checks": 491,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/external_readiness_adapter.log",
+          "sha256": "d419773482bf07fe5a838efa37ac470f1f40f7b782cf69cd873decb23c21a78c",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/external_readiness_adapter",
             "sha256": "70d1450d3e00a4f8e0822979247452fe89284c2a0a36fe43ce124e2009ea93a3"
-          }
+          },
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0
         },
         "readiness_contract": {
-          "log": "build/task194/normal-on/test/readiness_contract.log",
-          "sha256": "b5f4aac9efdc9d84ab021dc7df9dcb9b7cbe59557a7ded4bc382acc055636af2",
-          "tests": 4,
-          "checks": 30,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/readiness_contract.log",
+          "sha256": "5bc0f2e72299df5f5e99eed3c146ceb2b0798bb2072478f8a399358471d76f9e",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/readiness_contract",
             "sha256": "434e210675410f90cd0586596a1024c6178d390a2847a2d3c1f6acbd509b9d85"
-          }
+          },
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0
         },
         "io_backend_contract": {
-          "log": "build/task194/normal-on/test/io_backend_contract.log",
-          "sha256": "55209b79a9823ee703dbf365ea23d554ec9bc5fa5af01985260c531f6201ab75",
-          "tests": 42,
-          "checks": 743,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/io_backend_contract.log",
+          "sha256": "e7263455f5b5dee37cae6ce5755bef9ebea178f00e8f6ef9f1d83e1f8eb0713d",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/io_backend_contract",
             "sha256": "b79135eecef6ee130d0485b076d0ab0eba3c8d3f7dfd428091157f05af88da01"
-          }
+          },
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0
         },
         "connection_engine": {
-          "log": "build/task194/normal-on/test/connection_engine.log",
-          "sha256": "35f2201d094626b8b1393517e2299196a0debe5b37328e8af53f324c8533fe03",
-          "tests": 39,
-          "checks": 239,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/connection_engine.log",
+          "sha256": "4485501505ae7820863470b2f4afc8c36a7fb89463e3ba7e61b376df98220e5a",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/connection_engine",
             "sha256": "7c61ec0f7cf023b6de62cb453f78e3f47d7e4ca559b9c84abf31e8ba75d09f4b"
-          }
+          },
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0
         },
         "drain_scope": {
-          "log": "build/task194/normal-on/test/drain_scope.log",
-          "sha256": "83e65d821f896344fbf1b178a279a5ca890059366ec5eb58f7c3a6cc15cbe60a",
-          "tests": 11,
-          "checks": 54,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/drain_scope.log",
+          "sha256": "f208ed066fc3e2919be4f334a8edbd2a17bea0912948b50f085b430ef7e35097",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/drain_scope",
             "sha256": "d1efe97b221015c94710e204185dc782faad61ac4adec3fea183968a12d8d4bd"
-          }
+          },
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0
         },
         "worker_pool": {
-          "log": "build/task194/normal-on/test/worker_pool.log",
-          "sha256": "91f08053946ab545fe3cb4bbf9721aad7964d21a29ff23f09cda7e3a4121f463",
-          "tests": 9,
-          "checks": 76,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/worker_pool.log",
+          "sha256": "7c9b8989d8c34d43338c02cbe167600e0401d0847c9f12c140fb776cacdffd0b",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/worker_pool",
             "sha256": "9dafb8b38513de66bda19fc3bfe8fefa327657cd35ccd364ecac3b7a97d3b8d9"
-          }
+          },
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0
         },
         "server_hooks": {
-          "log": "build/task194/normal-on/test/server_hooks.log",
-          "sha256": "b327b3fdabf60088558868adc561aa498da4c45586f40bdd16272462c077f0a5",
-          "tests": 13,
-          "checks": 61,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/server_hooks.log",
+          "sha256": "a6bb673a7bf5fbce76724717cf2b23158c5383eb73235cb1df61f58e36f9be4b",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/server_hooks",
             "sha256": "b1e41742b20bd97cf5a088b96532802bde0db022f5d3593dc596ade736cf4d30"
-          }
+          },
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0
         },
         "request_lifecycle": {
-          "log": "build/task194/normal-on/test/request_lifecycle.log",
-          "sha256": "f29527c6f3471cacf321997a4368650d6b834e449066d8bccfd232c4ff66e560",
-          "tests": 31,
-          "checks": 173,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/request_lifecycle.log",
+          "sha256": "71edec4e4772e9dad824d31e4ae66af9f898a19a27ac89a2bf75d39f56822c74",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/request_lifecycle",
             "sha256": "6eacdf019333754b9bead02110c19e0e26271035c082b052e417428dda7ad01b"
-          }
+          },
+          "tests": 31,
+          "checks": 173,
+          "failures": 0,
+          "skipped": 0
         },
         "task_stop_inside_handler": {
-          "log": "build/task194/normal-on/test/task_stop_inside_handler.log",
-          "sha256": "52fc7ff8e63604f25bdc8fb46c3d13c6f67a276f5576da81cddc66c87a48f97c",
-          "tests": 2,
-          "checks": 211,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/task_stop_inside_handler.log",
+          "sha256": "02b7b05266c9976901dd3cdb6eec0f86be65a8b03d538934766af71411470b77",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/task_stop_inside_handler",
             "sha256": "2f86818cd8c5f668d09c11f92ae8ebecafb4f881b3c612524666a6b4a251899d"
-          }
+          },
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0
         },
         "v3_header_hygiene": {
-          "log": "build/task194/normal-on/test/v3_header_hygiene.log",
-          "sha256": "21075547191dbb15212a48f192e8e7a2010fc57f80391ac375307c9a81160996",
-          "tests": 2,
-          "checks": 2,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/v3_header_hygiene.log",
+          "sha256": "4b9e9cc2c9159da483a0a86a5f5f52d046c9924b96bc9fb2584baf59f75934fd",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/v3_header_hygiene",
             "sha256": "0c01e93bebab6d368a40ea6dea0ceda74b2c46e40d4b0ed273f5324cab6d9d14"
-          }
+          },
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0
         },
         "public_tls_profiles": {
-          "log": "build/task194/normal-on/test/public_tls_profiles.log",
-          "sha256": "3ef9dfafcad81be44c5ad1e6145ee71aaf9b4f588865caf48a932998d31d8a55",
-          "tests": 5,
-          "checks": 68,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/public_tls_profiles.log",
+          "sha256": "8c50d843152a69590e0e34079e5eb1f08a62e1c2a240a7b79fef366f43f06287",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/public_tls_profiles",
-            "sha256": "e0f01ba453038a4d1d6bd5edf9c9a6380a6e6f4f5f9947a9c96e290afbfe327a"
-          }
+            "sha256": "58ad7a133e953d08059afcc525fb161b7977fe3e05e8749bfb9b21b8f019b615"
+          },
+          "tests": 6,
+          "checks": 78,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_credentials": {
-          "log": "build/task194/normal-on/test/tls_credentials.log",
-          "sha256": "818a14db1af0234a54371eadcc9401b3379b374dcca54d4366e06f0c4d2d8df4",
+          "log": "build/task194/owners-normal-on-repair1/tls_credentials.log",
+          "sha256": "99c88ff3772eebc312abaec026fcbd13b28e69733e483cdff6e4d5178b74c0d4",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_credentials",
+            "sha256": "382c633527988bff05e8919c69093b9cf3fedf1cfa8bbcf1495b53d2d435a7a8"
+          },
           "tests": 6,
           "checks": 216,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_credentials",
-            "sha256": "f4e89fb7b1dc3d71ca6a6e734dd5fde2d303498683530c405cc61c3d41e9d75b"
-          }
+          "skipped": 0
         },
         "tls_credentials_rotation": {
-          "log": "build/task194/normal-on/test/tls_credentials_rotation.log",
-          "sha256": "558bce83f458e96a518de3d5c4fec15286b147f4633493ca176dde57f563f2ca",
+          "log": "build/task194/owners-normal-on-repair1/tls_credentials_rotation.log",
+          "sha256": "16c24f180484a0de5641de1913e3e933b58b199cba97c7729824cd52b18eacd5",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_credentials_rotation",
+            "sha256": "3c210346b9484a6802d098d49f5b35c0a6f2a74079fc2ac001f94edbb0c783a5"
+          },
           "tests": 2,
           "checks": 31,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_credentials_rotation",
-            "sha256": "5c8d8a8ffaf3f87f7faa5b7adcf1c5449064160850557f0a0c546fa56e07e056"
-          }
+          "skipped": 0
         },
         "tls_selection": {
-          "log": "build/task194/normal-on/test/tls_selection.log",
-          "sha256": "337b02a96de1198205177dff50f4198812eea1ec549234db08e5447c5af1afb3",
+          "log": "build/task194/owners-normal-on-repair1/tls_selection.log",
+          "sha256": "faea46a5bb3de9840ec849c8b9f3ea0bb2ee1bf9eb9f7ad54eced5e16f7eab40",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_selection",
+            "sha256": "2be199461aca4c0a0db9b20117b735eb1f8483f0557c44ae3bb16ad7da2f58bc"
+          },
           "tests": 6,
           "checks": 260,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_selection",
-            "sha256": "e7194601f3859569dd65ec87cdf6fd0dc737f6287563a2c9f79225381af98fd8"
-          }
+          "skipped": 0
         },
         "tls_mtls": {
-          "log": "build/task194/normal-on/test/tls_mtls.log",
-          "sha256": "6767739f3571dac03a74e32280251dd41c937e123099a5131451582333c17164",
+          "log": "build/task194/owners-normal-on-repair1/tls_mtls.log",
+          "sha256": "dc028bc739e961d1d1878ac69c3b58615b183e2a7f5e2af41ef26fbda84f1569",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_mtls",
+            "sha256": "0145b47aa2e493f2d34ef88b579bbf2171d033a26891e9405e725eb4806b3a11"
+          },
           "tests": 6,
           "checks": 390,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_mtls",
-            "sha256": "6d05c89178807a73e6241ea8f2c01d4fa4f81f96746e110a15f85b803e4284ea"
-          }
+          "skipped": 0
         },
         "tls_psk_contract": {
-          "log": "build/task194/normal-on/test/tls_psk_contract.log",
-          "sha256": "b5ec248e4f83c085e709793ad1f30131ed54f03dc86848a0aefc9d146e192d87",
-          "tests": 3,
-          "checks": 36,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/tls_psk_contract.log",
+          "sha256": "5787596e898d9135076c6ca3bcfc21b5fb645b1e2a3ce7711c3273fbc7aad060",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_psk_contract",
             "sha256": "101d7610046f2f1f56933affbbd5ff0dd73de9ce9a6085369cfcbfb133ecca38"
-          }
+          },
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_psk": {
-          "log": "build/task194/normal-on/test/tls_psk.log",
-          "sha256": "32bdbac325705654d5c471db38e69e28d5338f1945c3fa66984b526b9b0d5868",
+          "log": "build/task194/owners-normal-on-repair1/tls_psk.log",
+          "sha256": "36637c88a75edec22e38420335e1329a171564ee5af846c6ec4c7d095a3e3cfc",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_psk",
+            "sha256": "e168a5ae79099b65f15a2b61e230501598de1162f9c130b91a1b4225e3d6037a"
+          },
           "tests": 14,
           "checks": 313,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_psk",
-            "sha256": "33cf73f1046d310d24394834dffd2662dcf9b3b083b6459c1331b4bc4d6e8aee"
-          }
+          "skipped": 0
         },
         "tls_psk_runtime": {
-          "log": "build/task194/normal-on/test/tls_psk_runtime.log",
-          "sha256": "89db6230dd03dd3940344684731120d1a556917cbaeb123b116445d15e55e1fc",
-          "tests": 9,
-          "checks": 63,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/tls_psk_runtime.log",
+          "sha256": "d2b908c38a71038cdd7711df3deac60a68108c7485827608e968049268605fd7",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_psk_runtime",
             "sha256": "94c82d57d9a47ee1d9921dac9ad2d5dc5fdc45414c81b13a8883d0b88ce3ec12"
-          }
+          },
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_acme_credentials": {
-          "log": "build/task194/normal-on/test/tls_acme_credentials.log",
-          "sha256": "db53eac13bc87da307a28df73b0801a22f870d625018012acd5f248dbf489e43",
+          "log": "build/task194/owners-normal-on-repair1/tls_acme_credentials.log",
+          "sha256": "a5ff8a6c65175e1f8fe422ce311ec2a68b8fc3677f9cb4cba85551591f5e1159",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_credentials",
+            "sha256": "9785fc3ae9ee8752097bb9fbbfdbca8a553e6e561448f2244896ca1154dfbedf"
+          },
           "tests": 2,
           "checks": 174,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_credentials",
-            "sha256": "554e5fe2bbd380a572bca7a058eb8e080a9c922e4b5e51bdc1ef4ffc2c7a85e0"
-          }
+          "skipped": 0
         },
         "tls_acme_selection": {
-          "log": "build/task194/normal-on/test/tls_acme_selection.log",
-          "sha256": "2008ee4512185168296fea0c7c7b1b8c81475cf09dcaec17b624e0e4a2092699",
+          "log": "build/task194/owners-normal-on-repair1/tls_acme_selection.log",
+          "sha256": "9c3a57eec81ae28ee72c38d23c29df8e52963b57d1c564adaaac6c2adf1e8495",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_selection",
+            "sha256": "39c2050c9ce9adad5671dc977dafd45d880f616872c5fd00149913a1b14a0146"
+          },
           "tests": 6,
           "checks": 277,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_selection",
-            "sha256": "15dad171a724f1d14db81766146c81fac558b0c75be677e54701b38d1e3905bf"
-          }
+          "skipped": 0
         },
         "tls_acme_lifetime": {
-          "log": "build/task194/normal-on/test/tls_acme_lifetime.log",
-          "sha256": "55f0a281ac84fcbea660e2a4143c6e4f258276d88d7783cd76f47bad50618ae3",
+          "log": "build/task194/owners-normal-on-repair1/tls_acme_lifetime.log",
+          "sha256": "8510c61c51e2d72c5efbd2af4bff653235e2f5820d2ebfbdaa1031c1f3184716",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_lifetime",
+            "sha256": "2d5b68fed8d6d825e8454e18d4e14e82f18f69560bf32b85ff1f591f66b04c1d"
+          },
           "tests": 6,
           "checks": 93,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_acme_lifetime",
-            "sha256": "014104a59b7d53d709c73da3a96c6bc3d836d0e2ab8926cc0f1fb2adc7370aaa"
-          }
+          "skipped": 0
         },
         "tls_io": {
-          "log": "build/task194/normal-on/test/tls_io.log",
-          "sha256": "84fbc6afdbd4ef9cd05f99db42452e1c9de9389bd42049860999dc8951e77e9f",
+          "log": "build/task194/owners-normal-on-repair1/tls_io.log",
+          "sha256": "85daafe182b551f116092464faa90d1ef406e846cee324aaeeb5519873dd97d2",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io",
+            "sha256": "01dc9ce39be84e7f3a2c8808e2c151ba613df5f539ac8f511e0d5d76dee854ee"
+          },
           "tests": 11,
           "checks": 161,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io",
-            "sha256": "9d8e9dd133af0dbe5a2607caa796d0c60f99aa2f1e699190bdc85c463a05215b"
-          }
+          "skipped": 0
         },
         "tls_io_race": {
-          "log": "build/task194/normal-on/test/tls_io_race.log",
-          "sha256": "ccbd04e2881cd458356306d767a4130e566e8dd40104ca5e0322f53370dc751c",
+          "log": "build/task194/owners-normal-on-repair1/tls_io_race.log",
+          "sha256": "7213e6394a820c1ab3008c545d17a575f221358e92c9ef599fd689e8ca4b7fa0",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io_race",
+            "sha256": "409f8fd635bc5520744372aa2d66a2a776a8afa2f4c217543b937a5a7e212d2c"
+          },
           "tests": 10,
           "checks": 253,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io_race",
-            "sha256": "d70af3909d013a9883f32118c7ca1b0ef261896ca3afe9d270759ff095688d72"
-          }
+          "skipped": 0
         },
         "tls_io_loopback": {
-          "log": "build/task194/normal-on/test/tls_io_loopback.log",
-          "sha256": "65b052d21d20186d4cafc1a20903da4df7278b5419164d790582bb8a848c1a89",
+          "log": "build/task194/owners-normal-on-repair1/tls_io_loopback.log",
+          "sha256": "534350535a5c7d0b2e19a1050f2df9152314910c4189667cfbad34899c106fa2",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io_loopback",
+            "sha256": "09ede75e27c0a54946c67c073b63e407154cdcf487ce917f8eee4c0ed08da92f"
+          },
           "tests": 3,
           "checks": 48,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_io_loopback",
-            "sha256": "2a6b594c85184e4191f9518b2714359ca64fe61a84040fc8ef533fb9b679d998"
-          }
+          "skipped": 0
         },
         "io_tls_control": {
-          "log": "build/task194/normal-on/test/io_tls_control.log",
-          "sha256": "ce788e1530b7ac7d565ee1d6c16d07fd9cc10ef3c694fec8bb4ae26171234e09",
-          "tests": 1,
-          "checks": 6,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-normal-on-repair1/io_tls_control.log",
+          "sha256": "77f58c7bb63bdcab9372fc62ec37b52047fda430482a9555656df42067e73bf0",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/io_tls_control",
             "sha256": "2b01076d07b409209b5d595454f86478846a4e60cef87a2d02febc67f545d81a"
-          }
+          },
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_policy_concurrency": {
-          "log": "build/task194/normal-on/test/tls_policy_concurrency.log",
-          "sha256": "733444b530a26a89ff4138c47ec2779bea4f2601fc32d08a6d6daa99f65e764e",
+          "log": "build/task194/owners-normal-on-repair1/tls_policy_concurrency.log",
+          "sha256": "17d17ca22a62331d00937a37ce1a071fe5f57b17a7b7413257109f2755926f0a",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_policy_concurrency",
+            "sha256": "dc4487a037d89632c7334a8ab4bfa96f9531c24466ddea18c08246c045865e6b"
+          },
           "tests": 6,
           "checks": 97,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_policy_concurrency",
-            "sha256": "543238de2a7649230fef1b1a4ebccada85fb007dce8edaccfc7673b574663e43"
-          }
+          "skipped": 0
         },
         "tls_policy_hostile_profiles": {
-          "log": "build/task194/normal-on/test/tls_policy_hostile_profiles.log",
-          "sha256": "c345a2f11238a5dfa6810bb7db314f120469a5f4ec2a0fcc948e791d4201e604",
+          "log": "build/task194/owners-normal-on-repair1/tls_policy_hostile_profiles.log",
+          "sha256": "b21e53fcf038bf814bea3c33291c3942584b3d4ef3ebaa8a7f97712af837938f",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_policy_hostile_profiles",
+            "sha256": "6b8b5955630beff61d16b3c7c93594dce455854d054ca8671f5ba078715e7eec"
+          },
           "tests": 6,
           "checks": 474,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/tls_policy_hostile_profiles",
-            "sha256": "d209e33d98e58c7d818abea344f9cfeb41c93c99e725dd8fa508535ad802afa0"
-          }
+          "skipped": 0
         },
         "http2_tls_boundary": {
-          "log": "build/task194/normal-on/test/http2_tls_boundary.log",
-          "sha256": "25971a667fd07cbe44882196ea27dfccc360be719ba5ff7a158a7cdfa59e5dc4",
+          "log": "build/task194/owners-normal-on-repair1/http2_tls_boundary.log",
+          "sha256": "70b717259de00246489c151c129043adf5294646befbb9ce824a060acaaae5e9",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/http2_tls_boundary",
+            "sha256": "cad83802ccf85a2b2e82ececdcfb18d7863c8a44cb035609e50985040307ecbd"
+          },
           "tests": 5,
           "checks": 218,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/http2_tls_boundary",
-            "sha256": "ac16e8a9684f2842c9336ab0db1e99064e96ca71cf5071837c57b5b31d223b08"
-          }
+          "skipped": 0
         },
         "native_http1_tls_parity": {
-          "log": "build/task194/normal-on/test/native_http1_tls_parity.log",
-          "sha256": "be5079f0d48e5eeb0ec2d9d8b1a3d004446d04c61f054e4187bf25f8c311917c",
+          "log": "build/task194/owners-normal-on-repair1/native_http1_tls_parity.log",
+          "sha256": "491364de8b83a5a5dd7c71554a709c1be517fc7b844ac03168d611d2f14453e1",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_tls_parity",
+            "sha256": "9fa81dd2017583d5877f1713ad7d8ff6dc42eeddbf02342bfe277155b744eef7"
+          },
           "tests": 21,
           "checks": 61,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/native_http1_tls_parity",
-            "sha256": "fa7cbfadb1b4679f4ab4ee848ed9e73029b4e33529a2426143406f176f3c5360"
-          }
+          "skipped": 0
         }
       },
       "standalone": [
         {
           "name": "consumer_v3_tls_credentials",
-          "log": "build/task194/normal-on/test/consumer_v3_tls_credentials.log",
-          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+          "log": "build/task194/owners-normal-on-repair1/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/.libs/consumer_v3_tls_credentials",
+            "sha256": "166e3f41df2280ee933d937263a56a77ceec74f081785260651558f1b8078d8c"
+          }
         },
         {
           "name": "consumer_v3_native_server",
-          "log": "build/task194/normal-on/test/consumer_v3_native_server.log",
-          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+          "log": "build/task194/owners-normal-on-repair1/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/consumer_v3_native_server",
+            "sha256": "2b979901ff21c132243c43cb1a1a622a0741f7a4ac4d6c65515d4e79968c6e4f"
+          }
         },
         {
           "name": "consumer_v3_server",
-          "log": "build/task194/normal-on/test/consumer_v3_server.log",
-          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+          "log": "build/task194/owners-normal-on-repair1/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/normal-on/test/consumer_v3_server",
+            "sha256": "f6d6bd9a851264cd4963d789a10978fe7dfa24d7bc7c4b9b617872633ebf5458"
+          }
         }
       ],
-      "tests": 417,
-      "checks": 6404,
+      "tests": 418,
+      "checks": 6414,
       "environment": {}
     },
     "asan-off": {
@@ -890,437 +902,449 @@
       }
     },
     "asan-on": {
-      "summary": "build/task194/owners-asan-on-final/summary.json",
+      "summary": "build/task194/owners-asan-on-repair2/summary.json",
       "programs": 37,
       "suites": {
         "native_server": {
-          "log": "build/task194/asan-on/test/native_server.log",
-          "sha256": "e7a05f1c20ee2a78f70b9a7b428258f9e690c5eb203fddefb3742b2b43ecca09",
-          "tests": 20,
-          "checks": 108,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/native_server.log",
+          "sha256": "fafa113111a2d03e1d60aab13ef434be57c0cb4c95c60bf6d9111633546626ac",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/native_server",
             "sha256": "396f35cb67aa785604a79e4500541cee6a10ac41f369c954e43461a1b5ea7a09"
-          }
+          },
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0
         },
         "server_options_validate": {
-          "log": "build/task194/asan-on/test/server_options_validate.log",
-          "sha256": "8e679a16d02afcdf300039f2a5937877b106359b3fb0f4561ec7e0f57634de1e",
-          "tests": 19,
-          "checks": 182,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/server_options_validate.log",
+          "sha256": "2a4c78da24339b3963807d00ae66838257b46b35d990c83bc1f5ae8b3010af07",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/server_options_validate",
             "sha256": "61ec3c0cbb75563fa6e6e1ab228b6cddd869859be09700fa70221101a79fccfe"
-          }
+          },
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0
         },
         "native_http1_e2e": {
-          "log": "build/task194/asan-on/test/native_http1_e2e.log",
-          "sha256": "d86a2c1d4c7579e4c8ba3339eb400b5cec6e7e3a56b4525c7c6e80c2bf60a89d",
+          "log": "build/task194/owners-asan-on-repair2/native_http1_e2e.log",
+          "sha256": "2c4315358e4e4532408a947b740d8d561d82980327ecfa9d152364604149f652",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_e2e",
+            "sha256": "69c95334a16c487b6e56db3f19d29e16d98c8307cf0d2ff5e349e48be93834d1"
+          },
           "tests": 60,
           "checks": 708,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_e2e",
-            "sha256": "278e8d37e4db4c9a8fd92f10fd069d4a6221dde7cff80006338beffb546d25fc"
-          }
+          "skipped": 0
         },
         "native_http1_parity": {
-          "log": "build/task194/asan-on/test/native_http1_parity.log",
-          "sha256": "43338bb23aaa29c593768be4e97159796d599cb4caa9ebf1259ae2fc75bfc348",
+          "log": "build/task194/owners-asan-on-repair2/native_http1_parity.log",
+          "sha256": "6f3a725b659b725aa516040d9edf54aa714f59712ee230f7e24c8ee878d5f68b",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_parity",
+            "sha256": "268a7e03c2f0c9cb8931cd3c4dbd75cfccb9f1f86882ab15e4330dc0d738f582"
+          },
           "tests": 6,
           "checks": 35,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_parity",
-            "sha256": "2629903704ff0dd8ed3f87ed2e20f9ede6ea25aee90dfc3e283980d15b9ba4ba"
-          }
+          "skipped": 0
         },
         "external_http1_e2e": {
-          "log": "build/task194/asan-on/test/external_http1_e2e.log",
-          "sha256": "95a8b3a17fcbda07a87d7b15887da7280d50e1c49f74a676e7931ca343bd21d7",
+          "log": "build/task194/owners-asan-on-repair2/external_http1_e2e.log",
+          "sha256": "2175ceb02333504431de5b52a351299f185bffed3812547b078aaa49d30d4981",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/external_http1_e2e",
+            "sha256": "5a3c653560cce5f62de86a0b0320c6e192da42a4c58875ae3b8e71c05d885f90"
+          },
           "tests": 4,
           "checks": 52,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/external_http1_e2e",
-            "sha256": "4ba7d75e047c6ce16faea347f371df46a056d6e7d65b6ddb0cae2d832c5c6799"
-          }
+          "skipped": 0
         },
         "external_readiness_adapter": {
-          "log": "build/task194/asan-on/test/external_readiness_adapter.log",
-          "sha256": "633c9063350b901d11839aa066d387ca41a1294fb5b820e7d9dc4ecd3014705a",
-          "tests": 27,
-          "checks": 491,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/external_readiness_adapter.log",
+          "sha256": "e5c85932e1eb7efa27b8ef9d96723cf84e55c6615e9cbc13bbbef5d40e4e0a05",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/external_readiness_adapter",
             "sha256": "543b60bb1e8f2e31607c574b537c1a267276abb37f71e4fdb4bf0aa54085c4ce"
-          }
+          },
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0
         },
         "readiness_contract": {
-          "log": "build/task194/asan-on/test/readiness_contract.log",
-          "sha256": "de42949e1bf73c48243af8cbbe77d22c73cac28057d3327421bf8b9c5616dbd7",
-          "tests": 4,
-          "checks": 30,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/readiness_contract.log",
+          "sha256": "351ce8448d337bf7aae8c48e282af054211f1add2b10c1383d86ecca476a9dd0",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/readiness_contract",
             "sha256": "6c719058dd5c0265bced94068219f8f1845bb47f93d5d392b40debd548108344"
-          }
+          },
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0
         },
         "io_backend_contract": {
-          "log": "build/task194/asan-on/test/io_backend_contract.log",
-          "sha256": "0b610f199f126cbeb12cbef545698b93ba3d6dd1d9dac86f12cbc9324b20327c",
-          "tests": 42,
-          "checks": 743,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/io_backend_contract.log",
+          "sha256": "10a5a36ffc271214c3e6c871991d3fce00665aaf592550002ca6800ba6e0b60c",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/io_backend_contract",
             "sha256": "5b0ce17fc7d774ac7dfe249dd8b74be019b2ec44a8679dc9bf2b6da44ccb1dd8"
-          }
+          },
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0
         },
         "connection_engine": {
-          "log": "build/task194/asan-on/test/connection_engine.log",
-          "sha256": "9d4a63df04e26889ecd3e6bbb82bb4df6246775f9daa27d4a6437c6dae3b0760",
-          "tests": 39,
-          "checks": 239,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/connection_engine.log",
+          "sha256": "a8a4c02ec8aa93f4e3e3ae8ff8f20753767a4285d61d2503ec7194b8282ae189",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/connection_engine",
             "sha256": "ba943d1768d3d177bd45d2c30a2aec08295f84f4e83ffc8079e038d108cce5de"
-          }
+          },
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0
         },
         "drain_scope": {
-          "log": "build/task194/asan-on/test/drain_scope.log",
-          "sha256": "28e974f76ee5a24803cf1cbd1ea482ca655383eff8fd222adca02bd2f0dbc431",
-          "tests": 11,
-          "checks": 54,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/drain_scope.log",
+          "sha256": "4aa3e15cf8cec17fa6430c9b1883868463ff861dd7f222f41d60ce3de0d06818",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/drain_scope",
             "sha256": "36584c643a00112cd0c6307aeb5980cf9794f42cb2aee3a3df9da719a2e14a4f"
-          }
+          },
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0
         },
         "worker_pool": {
-          "log": "build/task194/asan-on/test/worker_pool.log",
-          "sha256": "baf26e6e1468de5c2cb6fa408fb1c06aeca878f0c2a32b363eee632c76a71924",
-          "tests": 9,
-          "checks": 76,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/worker_pool.log",
+          "sha256": "ce550089b1e1df816c9e7b880ee577cc7bd6713bebb249064e1043f48808a6b7",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/worker_pool",
             "sha256": "aa168e74b9cda7d064fb3e527ca86c6a0bf2f83ee8a44fdcbf28fde2fc079fe7"
-          }
+          },
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0
         },
         "server_hooks": {
-          "log": "build/task194/asan-on/test/server_hooks.log",
-          "sha256": "c85521e672543ce190deba1c6c9a0a1d52b1309239ca7309d154c87a2b50b993",
-          "tests": 13,
-          "checks": 61,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/server_hooks.log",
+          "sha256": "ea2efd3c10c62c605086bd0459347ce4cf61dcff5b6d7f13e7f26131e04cc978",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/server_hooks",
             "sha256": "27f4dcd7c72f1cb587c4173f4e44bf119c48b03285c2b27729442f03279f786d"
-          }
+          },
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0
         },
         "request_lifecycle": {
-          "log": "build/task194/asan-on/test/request_lifecycle.log",
-          "sha256": "b6c3cec265fd44bf598044f284acd0375b2596c5e3b41519861a2bd1f6c98a4b",
-          "tests": 31,
-          "checks": 173,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/request_lifecycle.log",
+          "sha256": "13ff39c818b9b82c27c900a6a7643dbb879188e6ea5f882bf96976c6349ac65a",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/request_lifecycle",
             "sha256": "ea591f06eb562dc75fdd7bc1abf2f1aaf45fa77b06ed4903565fd4fa0d480027"
-          }
+          },
+          "tests": 31,
+          "checks": 173,
+          "failures": 0,
+          "skipped": 0
         },
         "task_stop_inside_handler": {
-          "log": "build/task194/asan-on/test/task_stop_inside_handler.log",
-          "sha256": "67c8a433e63999ce0147a5d0aff22e1b2c9299468af116badafd43edae8a1129",
-          "tests": 2,
-          "checks": 211,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/task_stop_inside_handler.log",
+          "sha256": "2fff92d07eb44901deac33f49c755a7f5161a8bfe99728dc6a487a62acdb227e",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/task_stop_inside_handler",
             "sha256": "bee8b6ce8bf28afd8af63a9940f51504ccd51857cb756da3d5bc991f8eb6ace1"
-          }
+          },
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0
         },
         "v3_header_hygiene": {
-          "log": "build/task194/asan-on/test/v3_header_hygiene.log",
-          "sha256": "bf3af6c68a3b6e55a6abed922c87fbb874b3a20e93f0fcbeb437ae9efc3c6917",
-          "tests": 2,
-          "checks": 2,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/v3_header_hygiene.log",
+          "sha256": "7f999e70bed84f0b6d948f1e340cc32ce14eb8826ba47dcc1fbd580a465f0b5a",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/v3_header_hygiene",
             "sha256": "0773d329cd38888b5438482613ef4cce9319f9ea55977a71fcd8faaa77cdb1fe"
-          }
+          },
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0
         },
         "public_tls_profiles": {
-          "log": "build/task194/asan-on/test/public_tls_profiles.log",
-          "sha256": "4a29e6db095d5d6b7bd7619363f4d5b9204f1ae3a509eb0e6871b7522515c123",
-          "tests": 5,
-          "checks": 68,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/public_tls_profiles.log",
+          "sha256": "af76096d1058c63678d2439ed56ce1df57dd09659902f3efcd7286d2f031a021",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/public_tls_profiles",
-            "sha256": "2b102e60d612400f2833e1c2c3f03e2c7a235c90848c46bc6eabf1e1aed2225e"
-          }
+            "sha256": "0250c40bbe8eae5e9e004a43a4b83dcabc6ec6b3eb98e2fae1555e8581891324"
+          },
+          "tests": 6,
+          "checks": 78,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_credentials": {
-          "log": "build/task194/asan-on/test/tls_credentials.log",
-          "sha256": "637dc09e31374139ec3bc377a3a55b1cc3d9d5afd67921c49a73a07f1c0903f8",
+          "log": "build/task194/owners-asan-on-repair2/tls_credentials.log",
+          "sha256": "8864d5cffaf1a56b0508b3ddf5ac380579ad3e7f05b38c07b06c3445263386d8",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_credentials",
+            "sha256": "21ed1855d77efcd398df53a3c96ad9949a3e097a59b1490c6946d5c76a3edfda"
+          },
           "tests": 6,
           "checks": 216,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_credentials",
-            "sha256": "068d8ae6820fd9159a59864a10f412356756ac540ad8144ba66d19069acda4c0"
-          }
+          "skipped": 0
         },
         "tls_credentials_rotation": {
-          "log": "build/task194/asan-on/test/tls_credentials_rotation.log",
-          "sha256": "ac07820c8587971cf72237774028dbf0f33180d1fc249ec8a140631fee82460e",
+          "log": "build/task194/owners-asan-on-repair2/tls_credentials_rotation.log",
+          "sha256": "a12c1791c86c76ea8b346ef7ca2fac202ed99eeaf4ef21c33a2ff510900c594d",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_credentials_rotation",
+            "sha256": "68ed528715c2887b190376ee737587532aadad1981c232cfea59bb8c40cfa3cc"
+          },
           "tests": 2,
           "checks": 31,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_credentials_rotation",
-            "sha256": "e8b0bb6ac7226219de731588168f0e40a1487fe3dfbe6e23156031a1a8475d5f"
-          }
+          "skipped": 0
         },
         "tls_selection": {
-          "log": "build/task194/asan-on/test/tls_selection.log",
-          "sha256": "d9a64cc2a07daaf6fd4a5504f7be6dd624566042a32d38947b90e25317f7c28a",
+          "log": "build/task194/owners-asan-on-repair2/tls_selection.log",
+          "sha256": "cb30de9a49ec14390871fa8bacdefdc82eecf6d682eff9464698b1397586ce11",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_selection",
+            "sha256": "1b8d2edf68bf81d853666def123095dd1780ae95e3cda5f3742ab6e4e59d2faa"
+          },
           "tests": 6,
           "checks": 260,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_selection",
-            "sha256": "28ea0ac3f2659e6844a3d38f94e556f2ad2bbc50014364441e4076718e81112f"
-          }
+          "skipped": 0
         },
         "tls_mtls": {
-          "log": "build/task194/asan-on/test/tls_mtls.log",
-          "sha256": "068e8fa8ced9ac0e73a626a77e160a7a00f0bf4a773eb54c383320d873e078e8",
+          "log": "build/task194/owners-asan-on-repair2/tls_mtls.log",
+          "sha256": "30d67df79726b7a75ca988196a89da2eca2e7f87d900944ad19849f1326a734c",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_mtls",
+            "sha256": "1f88569287b9664766fe9d9c575135b2f451c8a06348f8affbea020915c6de3c"
+          },
           "tests": 6,
           "checks": 390,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_mtls",
-            "sha256": "4c0eb74dab730f0b04bf231473a5dea8dcb6bb61d9d1f72bc2c0995f5b8bf588"
-          }
+          "skipped": 0
         },
         "tls_psk_contract": {
-          "log": "build/task194/asan-on/test/tls_psk_contract.log",
-          "sha256": "6d10a1498d6d663276c5735ee1ec3f8597e6cd3fb96b8253ea53175c6bed1100",
-          "tests": 3,
-          "checks": 36,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/tls_psk_contract.log",
+          "sha256": "0545330a7bd30e43e8ed9a0a64ba178eb60fb1f7ff27ab799f1206a1cd1b133b",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_psk_contract",
             "sha256": "ae88249432ed04351e47a5e532d9703f0eb686b3123c6ac845070ecf67d9f9c6"
-          }
+          },
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_psk": {
-          "log": "build/task194/asan-on/test/tls_psk.log",
-          "sha256": "91561868ad0a1702c5ccd0935bb94b457e715bf00e4b20a043909997b9ed4aa5",
+          "log": "build/task194/owners-asan-on-repair2/tls_psk.log",
+          "sha256": "02a8777fd9f5ed6cccf938a8860bc2647ab6da602930603089f2bc9540c68fe9",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_psk",
+            "sha256": "24208a1636c7ba704b067a86691c24d94ae2392fdb520d48363c24ea90f69ace"
+          },
           "tests": 14,
           "checks": 313,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_psk",
-            "sha256": "510809924ab0bc9911016f6c8cbf5ef07d55b046239f53edb69dcc890edb28e7"
-          }
+          "skipped": 0
         },
         "tls_psk_runtime": {
-          "log": "build/task194/asan-on/test/tls_psk_runtime.log",
-          "sha256": "b3e040beb362270ec421ee9caaf7324b5ada8255025a7864adae593ef9974402",
-          "tests": 9,
-          "checks": 63,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/tls_psk_runtime.log",
+          "sha256": "d29a174e04fe441a177c7fbdd191c7b81bae1b4a1362e17938ce9d96204a6e56",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_psk_runtime",
             "sha256": "711575c957be8070f4cfd51a20c4323497910c6dfd2b06a29deaa02119fa2474"
-          }
+          },
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_acme_credentials": {
-          "log": "build/task194/asan-on/test/tls_acme_credentials.log",
-          "sha256": "59518caec061785b3d4efd69b2ace45ed1c22d98545299d24604c417d4dd4a73",
+          "log": "build/task194/owners-asan-on-repair2/tls_acme_credentials.log",
+          "sha256": "80716b3c4d6baf9c518b7e2e8439998e67eefd2409fedb6697555bd96d44309e",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_credentials",
+            "sha256": "8c131d9f7a814e8581e375396158d7a63192349c2b41f401fa0fe1afdbe948de"
+          },
           "tests": 2,
           "checks": 174,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_credentials",
-            "sha256": "a676d66814f8478490c40b60cc3f3f75f161eabdb6bfa77fef34ba6acad17204"
-          }
+          "skipped": 0
         },
         "tls_acme_selection": {
-          "log": "build/task194/asan-on/test/tls_acme_selection.log",
-          "sha256": "20e96865db207e6661607d77da785eb5ab5d70a873425bf32b30cb926e2792a2",
+          "log": "build/task194/owners-asan-on-repair2/tls_acme_selection.log",
+          "sha256": "ad69b3b2a422ddc18916cfe106893659d518e165c8eb08419c35736de8aeaee8",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_selection",
+            "sha256": "46e110fadceef396f2838c483fffddab667277b30ae2559bfb87a418e7fa6aaf"
+          },
           "tests": 6,
           "checks": 277,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_selection",
-            "sha256": "fd07040d7321df7fb19f5ce7f4b30a338108f95109b36b813e132b31de3e8c83"
-          }
+          "skipped": 0
         },
         "tls_acme_lifetime": {
-          "log": "build/task194/asan-on/test/tls_acme_lifetime.log",
-          "sha256": "9e6e60cf51091a53140b50a2f86de2946718d845813e0b18ff815963a2650e8b",
+          "log": "build/task194/owners-asan-on-repair2/tls_acme_lifetime.log",
+          "sha256": "c1fc0051ee413b1cd02be661e9c79ca2f86ddd7d1ca903f42cf713807c178e6c",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_lifetime",
+            "sha256": "2bc2345d299e439308b2dc6bc835a4bab5112d68a16944cdccd2725ce50af8d6"
+          },
           "tests": 6,
           "checks": 93,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_acme_lifetime",
-            "sha256": "c4641bd1e53e4e8c6847f0942c15806e41f25d25daabfc4a3bb694068c460315"
-          }
+          "skipped": 0
         },
         "tls_io": {
-          "log": "build/task194/asan-on/test/tls_io.log",
-          "sha256": "52dd8807731ebf7731c1699e66c0ffbd8b9aed27e0128a6e90b1aa510297c066",
+          "log": "build/task194/owners-asan-on-repair2/tls_io.log",
+          "sha256": "7d83a0689d297317145229b94d1ae9f44b1bd33370883254cb18ab195eef8c17",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io",
+            "sha256": "d7f1d8729677feb99e8eef7e962ebadcba5c61c9728c100a5c4c13c528631b2f"
+          },
           "tests": 11,
           "checks": 161,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io",
-            "sha256": "fdca1678f3158c4505eccd5359e912e509865c4634e4845d6759889cd1ff5aa7"
-          }
+          "skipped": 0
         },
         "tls_io_race": {
-          "log": "build/task194/asan-on/test/tls_io_race.log",
-          "sha256": "8575b7ace022689c33d3f8acc0478847e6389e1ff61ed421123a77c91b276246",
+          "log": "build/task194/owners-asan-on-repair2/tls_io_race.log",
+          "sha256": "960dba35d65c5435dbb972d232bac063ec10cea8144efd0fd93eaee486c5f0f8",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io_race",
+            "sha256": "a59ad704906147e4a61138f1cb66f07d50ea9764fa4eda5768178784220fd89c"
+          },
           "tests": 10,
           "checks": 253,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io_race",
-            "sha256": "769d25a4447a24576b6e0e84caceb98ed38954a083be4afe541528c6edb03af2"
-          }
+          "skipped": 0
         },
         "tls_io_loopback": {
-          "log": "build/task194/asan-on/test/tls_io_loopback.log",
-          "sha256": "2896968e11ee7e4e68211c311dc4c2bfd04b3fbdc1c0a1aa27b6f39d235f17cd",
+          "log": "build/task194/owners-asan-on-repair2/tls_io_loopback.log",
+          "sha256": "1473e6e1fdfd7f5cb915a7df463c79866967f55336386c24be5b201134b9deac",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io_loopback",
+            "sha256": "c0b420b3974d79e88fb75dbaff04c44d6d0280a436ebcb2ecf07490c881ede31"
+          },
           "tests": 3,
           "checks": 48,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_io_loopback",
-            "sha256": "f5d7d93dea1e93436cfdc5abad4566ddc51101835c08b8e642fd901ef5325313"
-          }
+          "skipped": 0
         },
         "io_tls_control": {
-          "log": "build/task194/asan-on/test/io_tls_control.log",
-          "sha256": "65aa34e986532872bf25a5d87e1416e6f075092a817e70ab56194bb222222a06",
-          "tests": 1,
-          "checks": 6,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-asan-on-repair2/io_tls_control.log",
+          "sha256": "dc4a6e22beb97e3f0d3e23c39c4126cdbc6ede785b2ccea91ac03a5964f65263",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/io_tls_control",
             "sha256": "073afc07da672944f00e1ef8a83615cde505f86fa2f7aba0c7f7acf44a44afbf"
-          }
+          },
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_policy_concurrency": {
-          "log": "build/task194/asan-on/test/tls_policy_concurrency.log",
-          "sha256": "d9e90208c11049427039dc1d41a2230fcb8fa264d0019864d452adcf954e4b15",
+          "log": "build/task194/owners-asan-on-repair2/tls_policy_concurrency.log",
+          "sha256": "dd02dcea1ddd9e2bc5bca09f5699d24772584ccca0855eb9c4659be50f5c896b",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_policy_concurrency",
+            "sha256": "f4663cea793c98f9df1c82eb39cfe9f76ea8a67c0b0122697b05f99d8e5eb3a1"
+          },
           "tests": 6,
           "checks": 97,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_policy_concurrency",
-            "sha256": "0bdd8e0581a18d259cc40a084287e6ed77e415a989dd1e9ec76d7b958a902f9a"
-          }
+          "skipped": 0
         },
         "tls_policy_hostile_profiles": {
-          "log": "build/task194/asan-on/test/tls_policy_hostile_profiles.log",
-          "sha256": "b8c6c75433ec610978b17cd0b70751efb3c10e8ef4b0842b057adb9a9228be06",
+          "log": "build/task194/owners-asan-on-repair2/tls_policy_hostile_profiles.log",
+          "sha256": "1bf0f97e47d0f1d61c5061c9b3db3a6503a41d43bdcda728c965baa60d088531",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_policy_hostile_profiles",
+            "sha256": "90f70cb3163591b69f9994d6ea57b69e497546dcf602ec1dea2ea25c8313f5ec"
+          },
           "tests": 6,
           "checks": 474,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/tls_policy_hostile_profiles",
-            "sha256": "d851c72b4c4a98389bc5343f8da822e9c2e8395a38ed6e86bf3fe1e3bea1aa2e"
-          }
+          "skipped": 0
         },
         "http2_tls_boundary": {
-          "log": "build/task194/asan-on/test/http2_tls_boundary.log",
-          "sha256": "f7b289cc53ed4467df34fe90b19acb58249ffbb6f6961af484e4c39ee9f19ac4",
+          "log": "build/task194/owners-asan-on-repair2/http2_tls_boundary.log",
+          "sha256": "e8750de51d94f5272115c3210b2dd0178ab2fd28a31e967f69d1739e41a0021f",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/http2_tls_boundary",
+            "sha256": "738e29415e298d26ff252a902194cd86f2f147247aabe3f8f6f7b936ca318c75"
+          },
           "tests": 5,
           "checks": 218,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/http2_tls_boundary",
-            "sha256": "7977a3262cca2e35a9af9373fe0994512c53696b4eebe593fe0d83b584e0ccbc"
-          }
+          "skipped": 0
         },
         "native_http1_tls_parity": {
-          "log": "build/task194/asan-on/test/native_http1_tls_parity.log",
-          "sha256": "018a906840ab6c8e7ba6f1bfa6902c0d9f1d638a61b7fe5f4f7ea886ca1b0380",
+          "log": "build/task194/owners-asan-on-repair2/native_http1_tls_parity.log",
+          "sha256": "09b76c53a727ae2f441d3eba9613b6b712494078832d6f4aea6293c8702c2615",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_tls_parity",
+            "sha256": "bd4a6e71d0ac01a0d5539fdc2915e9b2c4cb5c6623dda7209b2dadedc60c4445"
+          },
           "tests": 21,
           "checks": 61,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/native_http1_tls_parity",
-            "sha256": "245f9044e636bce865f1ee5cbabef7d01e23650972c7787f635c8549b5e2ed8d"
-          }
+          "skipped": 0
         }
       },
       "standalone": [
         {
           "name": "consumer_v3_tls_credentials",
-          "log": "build/task194/asan-on/test/consumer_v3_tls_credentials.log",
-          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+          "log": "build/task194/owners-asan-on-repair2/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/.libs/consumer_v3_tls_credentials",
+            "sha256": "0e673ab98ff47025cc35207091c9e349fc8eb92e497069bc3aee29b79bfad933"
+          }
         },
         {
           "name": "consumer_v3_native_server",
-          "log": "build/task194/asan-on/test/consumer_v3_native_server.log",
-          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+          "log": "build/task194/owners-asan-on-repair2/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/consumer_v3_native_server",
+            "sha256": "9657cd7eb6bdea47dba5b29f5d44316f01a02a3570452c8f4a21bbdad65810dd"
+          }
         },
         {
           "name": "consumer_v3_server",
-          "log": "build/task194/asan-on/test/consumer_v3_server.log",
-          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+          "log": "build/task194/owners-asan-on-repair2/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/asan-on/test/consumer_v3_server",
+            "sha256": "f3a6818692dcd0a768f7c737cc8ba44dba88290119daa6c8c308f01f9d276d7f"
+          }
         }
       ],
-      "tests": 417,
-      "checks": 6404,
+      "tests": 418,
+      "checks": 6414,
       "environment": {
         "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
         "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
@@ -1536,438 +1560,450 @@
       }
     },
     "tsan-on": {
-      "summary": "build/task194/owners-tsan-on-final/summary.json",
+      "summary": "build/task194/owners-tsan-on-repair1/summary.json",
       "programs": 37,
       "suites": {
         "native_server": {
-          "log": "build/task194/tsan-on/test/native_server.log",
-          "sha256": "5573923cbca8aa9043deeda88c0bca0c58d80fde6f12715853cc1d5079785e70",
-          "tests": 20,
-          "checks": 108,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/native_server.log",
+          "sha256": "1c69ebba25982b28001323552d2ba342b5387cec7f0881864b5e9c8a9690d6ff",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/native_server",
             "sha256": "59d73ce774b92a8d95e572e4cd7a6e47a50d73e79e989c7f377f61be8c27a4c0"
-          }
+          },
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "skipped": 0
         },
         "server_options_validate": {
-          "log": "build/task194/tsan-on/test/server_options_validate.log",
-          "sha256": "56f8b12fa79c986642abbbfbf0a8daec21ca38091e2f146c021d7c4b64b647cc",
-          "tests": 19,
-          "checks": 182,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/server_options_validate.log",
+          "sha256": "272e1d109273079eb7da8d112c958de1b60957b423331eb151bb57c079fd1f01",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/server_options_validate",
             "sha256": "28ad38d490b5c5a3591deb3e5bd0c23ac11344a29e2093ca9441600731c41051"
-          }
+          },
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "skipped": 0
         },
         "native_http1_e2e": {
-          "log": "build/task194/tsan-on/test/native_http1_e2e.log",
-          "sha256": "436de7cc526767aa754eceadf3f48d9c4eefbed64ea8b68db56918c7431489b1",
+          "log": "build/task194/owners-tsan-on-repair1/native_http1_e2e.log",
+          "sha256": "158eeb1693264e63e42c6ae0acb235a63c5b063752ba62408777f78e1dcf4be6",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_e2e",
+            "sha256": "84cc90eb25e468b02985a9096c70accc9cea861ca63bad8fe9bf32ebb06a4264"
+          },
           "tests": 60,
           "checks": 708,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_e2e",
-            "sha256": "a77f21fde47026130917d0bbcca51dfde4d889cd7754a38373d899c563230d1c"
-          }
+          "skipped": 0
         },
         "native_http1_parity": {
-          "log": "build/task194/tsan-on/test/native_http1_parity.log",
-          "sha256": "72e2115670a8250cf76dc3a0ecfca19cdffc5bd39c2c69e2043d8989f2c4661f",
+          "log": "build/task194/owners-tsan-on-repair1/native_http1_parity.log",
+          "sha256": "666d5c51d917c8f5241d604957ebe7b6976fbb8fef57b4f6c049f9bbeac625ee",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_parity",
+            "sha256": "831dda0d845a675bb8cff54ee6c819c8305e1074d98c7e5c59d35378e6573e4a"
+          },
           "tests": 6,
           "checks": 35,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_parity",
-            "sha256": "b4be773ff952b46512ad20f8d7abe8687ca46a0889b4f6d8bb48cd7be21df814"
-          }
+          "skipped": 0
         },
         "external_http1_e2e": {
-          "log": "build/task194/tsan-on/test/external_http1_e2e.log",
-          "sha256": "774cfb3593cf9e599fb1783b91ec95ea0dd7e89dabc541d9afc63c340a49c008",
+          "log": "build/task194/owners-tsan-on-repair1/external_http1_e2e.log",
+          "sha256": "1864da50d7ce2cc2f59042afdb76ee53aca43b1378dc59be45e9d08214ab5ffd",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/external_http1_e2e",
+            "sha256": "e62fb799fb6e4faf4d9f80b5fa8991f497fe90d4cb06487743fc0bc0b41fb2ca"
+          },
           "tests": 4,
           "checks": 52,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/external_http1_e2e",
-            "sha256": "c84e8245d75d3a7c2c8818d2a43922a03644459cc9bfd14b3c641d1f875d6154"
-          }
+          "skipped": 0
         },
         "external_readiness_adapter": {
-          "log": "build/task194/tsan-on/test/external_readiness_adapter.log",
-          "sha256": "64770840bacfc4e9e3f69fd6129c787d04111062dca5e82a2512db53cf155efa",
-          "tests": 27,
-          "checks": 491,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/external_readiness_adapter.log",
+          "sha256": "54575452ede06d052c3a54d56a24a65915a0fe1b445888b9a556efcf5c9408ad",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/external_readiness_adapter",
             "sha256": "1f5b88e60edf0f715e58da72eb4d86aeac2efc15db4eac7f89e8bc2d5b60891a"
-          }
+          },
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "skipped": 0
         },
         "readiness_contract": {
-          "log": "build/task194/tsan-on/test/readiness_contract.log",
-          "sha256": "86afe62c08b262b7bbc37e819f05e94e9d60d895790c526329bae89bc1d5a881",
-          "tests": 4,
-          "checks": 30,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/readiness_contract.log",
+          "sha256": "3b750e0fa429cdddb19d9588cc35835801f267997c051eca744cab57142d193a",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/readiness_contract",
             "sha256": "7d3aad6531393dd1f270448702ca97fa9908cfffd85f09eda40956141d89b66c"
-          }
+          },
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "skipped": 0
         },
         "io_backend_contract": {
-          "log": "build/task194/tsan-on/test/io_backend_contract.log",
-          "sha256": "763e8a7959992f18c05b3edaf0b69f30cd32ca5e47dfddbebaa6a6b57eb188ff",
-          "tests": 42,
-          "checks": 743,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/io_backend_contract.log",
+          "sha256": "85092415c46e2142665f0cff91b01c4cd6aeec9001850b40f5e52d82dc0b5c0b",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/io_backend_contract",
             "sha256": "9b74c33fce319b7f08533192b3d3f1df2fb6f0df3541db8f4942246351ada254"
-          }
+          },
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "skipped": 0
         },
         "connection_engine": {
-          "log": "build/task194/tsan-on/test/connection_engine.log",
-          "sha256": "becaeb5d8458f40f7a44c65dcab5626a29603304721f8980e7fe3e79d339d49f",
-          "tests": 39,
-          "checks": 239,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/connection_engine.log",
+          "sha256": "e0ea99bfc4fd7369a753024df82eccfa7b842010ff56e8a0fd1ab3889720aff6",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/connection_engine",
             "sha256": "a6b9d3b6622591dc3f59eb6cd52c18b6896284a6325eeab9e9aa3d7505dfe188"
-          }
+          },
+          "tests": 39,
+          "checks": 239,
+          "failures": 0,
+          "skipped": 0
         },
         "drain_scope": {
-          "log": "build/task194/tsan-on/test/drain_scope.log",
-          "sha256": "c90425ff89b9bc7676d59d77850a2e261c31294c73bacb5813c8450a1c27ff43",
-          "tests": 11,
-          "checks": 54,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/drain_scope.log",
+          "sha256": "23db2a022316b8e3afc4bbfec07026b9f2fc99e26752708b467925f6dfa49be7",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/drain_scope",
             "sha256": "832a80e005b9a510ec5afdaad0bf738296d6228beafe7a15a8d492ee273dba07"
-          }
+          },
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "skipped": 0
         },
         "worker_pool": {
-          "log": "build/task194/tsan-on/test/worker_pool.log",
-          "sha256": "8d77dd7f09972490188fed682c8ab2189087f704ff4899c7decebc45f727a54c",
-          "tests": 9,
-          "checks": 76,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/worker_pool.log",
+          "sha256": "c59db3bd18bb45aeb30721035c6eb2f1cdc7bd15e204f354adf43f5fc57a629c",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/worker_pool",
             "sha256": "a7ef83e3eadad20b4613fbb1ae6eedf039fff639cf6747fd4e668a6191fc50a1"
-          }
+          },
+          "tests": 9,
+          "checks": 76,
+          "failures": 0,
+          "skipped": 0
         },
         "server_hooks": {
-          "log": "build/task194/tsan-on/test/server_hooks.log",
-          "sha256": "2e6f2d3cbb9a3209730ea7580dab19e89b7582b0818af1d0a927594e1505ab03",
-          "tests": 13,
-          "checks": 61,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/server_hooks.log",
+          "sha256": "80e4ef851e01639e059fe46a31575631e18f0b9a02c0755680db90a4cd9dbf3b",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/server_hooks",
             "sha256": "dd0fdfdf818a414d5745b1a8e088d70f7987e589160a12c8ea72052b576324dc"
-          }
+          },
+          "tests": 13,
+          "checks": 61,
+          "failures": 0,
+          "skipped": 0
         },
         "request_lifecycle": {
-          "log": "build/task194/tsan-on/test/request_lifecycle.log",
-          "sha256": "5676b9b210722d772645f1315a187125385615d3627409f7d31d7a96b768d3d3",
+          "log": "build/task194/owners-tsan-on-repair1/request_lifecycle.log",
+          "sha256": "c78886c0f87a2b56d437fb944ae75faf7a914fa3f44984affd92a0c3ff3cddee",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/request_lifecycle",
+            "sha256": "aacb609ae598fe17329973978f371aff96cf4f50b6cc0f5c633801d64f1c8c7e"
+          },
           "tests": 31,
           "checks": 171,
           "failures": 0,
           "skipped": 1,
-          "exclusion": "Existing zero_hook_commit_allocates_nothing allocation-count-only sanitizer ownership guard; functional commit assertions retained; root accepted TASK-186/188 boundary, normal/ASan allocation checks pass.",
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/request_lifecycle",
-            "sha256": "aacb609ae598fe17329973978f371aff96cf4f50b6cc0f5c633801d64f1c8c7e"
-          }
+          "exclusion": "Existing zero_hook_commit_allocates_nothing allocation-count-only sanitizer ownership guard; functional commit assertions retained; root accepted TASK-186/188 boundary, normal/ASan allocation checks pass."
         },
         "task_stop_inside_handler": {
-          "log": "build/task194/tsan-on/test/task_stop_inside_handler.log",
-          "sha256": "33a36799120465e81e0d1848c12517bdf2a4205324e8a6021bde99f436700106",
-          "tests": 2,
-          "checks": 211,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/task_stop_inside_handler.log",
+          "sha256": "112e6fcc62d9dfb729e875fd95a6c92ad2d2e83cb6350a4c0b5f0184d2f40631",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/task_stop_inside_handler",
             "sha256": "46092076bd59affd5c8724a43e4f16ea37721f027851ee62bd1fa00582ca0860"
-          }
+          },
+          "tests": 2,
+          "checks": 211,
+          "failures": 0,
+          "skipped": 0
         },
         "v3_header_hygiene": {
-          "log": "build/task194/tsan-on/test/v3_header_hygiene.log",
-          "sha256": "1ef9d9178b6f7bb423caad05e46a5c75d0949bfd16b46c855db4a7f8523a16b3",
-          "tests": 2,
-          "checks": 2,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/v3_header_hygiene.log",
+          "sha256": "31c3999fee8ecd00c3c91f4788584a7aa056aeccdc9fe81b0c07298c4775ecfa",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/v3_header_hygiene",
             "sha256": "9d1a228e46ce4e2dff2219ffc39d8a5a7faf3249f6c3ba8f2c9711466fec2c7e"
-          }
+          },
+          "tests": 2,
+          "checks": 2,
+          "failures": 0,
+          "skipped": 0
         },
         "public_tls_profiles": {
-          "log": "build/task194/tsan-on/test/public_tls_profiles.log",
-          "sha256": "83b2dbc9f390cbca02e6eb7eb1c304740a929ede35ada8864016d31a9f966088",
-          "tests": 5,
-          "checks": 68,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/public_tls_profiles.log",
+          "sha256": "bede35916f82607084aaefc17031b7e32d6b00d823d9def1df6677935cff8ced",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/public_tls_profiles",
-            "sha256": "063e441e2f632bce0b1e533be3f3c58b440571a16adf77cb4f7c16e6f22ffcbd"
-          }
+            "sha256": "d671d942179876ea41d1f5d881ac6f4da125cec6dcfccce3f545b33daeacb440"
+          },
+          "tests": 6,
+          "checks": 78,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_credentials": {
-          "log": "build/task194/tsan-on/test/tls_credentials.log",
-          "sha256": "6336616657d0a360c44ead719a448b2db2bfb66c9b7fa628a89f6cefcb46f5ce",
+          "log": "build/task194/owners-tsan-on-repair1/tls_credentials.log",
+          "sha256": "6b3490f00c0d0bb22a3518a2fa2c6ba8c8675960befcd1c2dae5d886017b49e4",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_credentials",
+            "sha256": "b8a75fd929d00cf8ccc309ccee6c0319368cc670ab2ad4e53f18cd49c9a61da3"
+          },
           "tests": 6,
           "checks": 216,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_credentials",
-            "sha256": "f300fa57f4773784a70919d3f0254cb1e201d56d23d6e912e751bea0f1fffbd0"
-          }
+          "skipped": 0
         },
         "tls_credentials_rotation": {
-          "log": "build/task194/tsan-on/test/tls_credentials_rotation.log",
-          "sha256": "c284324812cfa00d8003b34a646e409262a7700ce54e6a330f445632de105bbe",
+          "log": "build/task194/owners-tsan-on-repair1/tls_credentials_rotation.log",
+          "sha256": "6b7b99ba42e02aad758903ec76f2b8d4557d156c7317b947f75784a2f0f4c598",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_credentials_rotation",
+            "sha256": "72450d3c4a7402f78834cd56ed63f177794bdee02da3ed9f11b50a68dd79b48a"
+          },
           "tests": 2,
           "checks": 31,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_credentials_rotation",
-            "sha256": "f28cd2e1b881775762e27c1ef9ed993d226b10482e0a6f7f19b704af795f3539"
-          }
+          "skipped": 0
         },
         "tls_selection": {
-          "log": "build/task194/tsan-on/test/tls_selection.log",
-          "sha256": "eddd45b0b16e3bbd9917f4f11404a2795019c23d83a74b86de1400d80dfdf7af",
+          "log": "build/task194/owners-tsan-on-repair1/tls_selection.log",
+          "sha256": "ddeaedade4bc6ba8c21b44a6bc98aee9bfb88fd2a8d21769cfcbfee031afcd52",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_selection",
+            "sha256": "6a951ff382fc51094cfd7758e751bd2f41a627193fcd39a1bf1b2a9e376c971d"
+          },
           "tests": 6,
           "checks": 260,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_selection",
-            "sha256": "d3c0543e09ac79603a637cd7dd743adbedde97bf63b3d8b5c377c75eef871ff4"
-          }
+          "skipped": 0
         },
         "tls_mtls": {
-          "log": "build/task194/tsan-on/test/tls_mtls.log",
-          "sha256": "6deaf5152b1cfa42aad22fa60f285ae1088a46b8b91dd6fce9a95309d9c76488",
+          "log": "build/task194/owners-tsan-on-repair1/tls_mtls.log",
+          "sha256": "9aeaa83822c3fae4c6f98d4e59c547776469d927865a8e0bfe3b9c97e9c6a659",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_mtls",
+            "sha256": "65ca9355445b815a6164a484046e953004dd35e993e1ca69d31fab767c8fab75"
+          },
           "tests": 6,
           "checks": 390,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_mtls",
-            "sha256": "007de0aac1e6999eeb432d4ed4bbba043416b5e3a2adb6c334bda6f1f88175fb"
-          }
+          "skipped": 0
         },
         "tls_psk_contract": {
-          "log": "build/task194/tsan-on/test/tls_psk_contract.log",
-          "sha256": "152b8c8e8ca3a4412b83f01bd83a6929ea09affce5f2d5ca22b3b5c4e1f5059b",
-          "tests": 3,
-          "checks": 36,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/tls_psk_contract.log",
+          "sha256": "777ff11ce12de5809a0207e4bb0e981eae157f75cb260eca79475d387714e661",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_psk_contract",
             "sha256": "3b73b2334421d318bd7c35b83803c03b9b0d58b9c1ee4b1e9c03cdcf84a5f6e1"
-          }
+          },
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_psk": {
-          "log": "build/task194/tsan-on/test/tls_psk.log",
-          "sha256": "1ab46630969e376289cb40142d5e9d74745222dd2ea1905b7e34b251de06ea81",
+          "log": "build/task194/owners-tsan-on-repair1/tls_psk.log",
+          "sha256": "ad7d53779e32ca92a113d47d21d260a3319db942f6ba3b250aeaddddc90a7a23",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_psk",
+            "sha256": "129d78be31bb6c649b2c4d826975d87dfba6431f8410a9d8ca31b109b961f2c5"
+          },
           "tests": 14,
           "checks": 313,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_psk",
-            "sha256": "9665ad04854c1434ba6974d7f62bb0763652bb8ceec9c6a6aa5b541f7a59c74e"
-          }
+          "skipped": 0
         },
         "tls_psk_runtime": {
-          "log": "build/task194/tsan-on/test/tls_psk_runtime.log",
-          "sha256": "e606b70bddee246696b5416f4f6f01c8bf8903fd2a53298d6d12ea7dd7b8ca82",
-          "tests": 9,
-          "checks": 63,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/tls_psk_runtime.log",
+          "sha256": "4b69b1d1c1e0820b1cc28f880a38712a5a75bca0a4682a31d54f71672ba89b00",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_psk_runtime",
             "sha256": "8e89cddad5c87d4b0cffa67082941e9ef872a564f5ae5dd17ba486c105cdaad3"
-          }
+          },
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_acme_credentials": {
-          "log": "build/task194/tsan-on/test/tls_acme_credentials.log",
-          "sha256": "3a9339672aa7469a6e1c8b57e85a010aecf27cff51378ef43ccb638eac915a61",
+          "log": "build/task194/owners-tsan-on-repair1/tls_acme_credentials.log",
+          "sha256": "95faa9d543e531f7708d0f6b07515f9db946203fe76dc81452dc15af5ba0b53b",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_credentials",
+            "sha256": "acefa9a7bf749726e63d1da7249f658a16d4202907ad55a39b97608a4409bccf"
+          },
           "tests": 2,
           "checks": 174,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_credentials",
-            "sha256": "8898ed8322f4788a30e446a8541324b0f0d6c5e32520f9757249095d99207864"
-          }
+          "skipped": 0
         },
         "tls_acme_selection": {
-          "log": "build/task194/tsan-on/test/tls_acme_selection.log",
-          "sha256": "e0d1303e85ed0272c76dc89afacdf1f39dcf676297b6b606fa427f92ff4b8559",
+          "log": "build/task194/owners-tsan-on-repair1/tls_acme_selection.log",
+          "sha256": "805df5c5497e94d5b96dcf8511fc48fa466f0ed040faaf67f61f14f43d5a565b",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_selection",
+            "sha256": "73c72bf7dfb8fe825dc5f8ee8a3dde4f65884d9decb9a397e512b22c805b5a4e"
+          },
           "tests": 6,
           "checks": 277,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_selection",
-            "sha256": "c39a1a603a975c0e97e29997e2a1fcdab09d356748a92f3150c11297176135eb"
-          }
+          "skipped": 0
         },
         "tls_acme_lifetime": {
-          "log": "build/task194/tsan-on/test/tls_acme_lifetime.log",
-          "sha256": "9a79ca16daca2eaa42941824a48e22c5a1c0e3ed6478fecc23f38729a4873551",
+          "log": "build/task194/owners-tsan-on-repair1/tls_acme_lifetime.log",
+          "sha256": "dade7b13cb7dedb285f176527ecbe438e614560e2f535497cdc2770ac1c766a5",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_lifetime",
+            "sha256": "ad76b0a94b9893f0d1c9e23e4855069ffd78e53f43e468979d90a00bd6af8d8b"
+          },
           "tests": 6,
           "checks": 93,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_acme_lifetime",
-            "sha256": "b52c525d415476550f46139d752f50b5bd76728291d1e78795ea6ecef4d0739e"
-          }
+          "skipped": 0
         },
         "tls_io": {
-          "log": "build/task194/tsan-on/test/tls_io.log",
-          "sha256": "0975accda6840a4319bb28b92d9b2ae41a32564605ad663878a8cc54f241e8c3",
+          "log": "build/task194/owners-tsan-on-repair1/tls_io.log",
+          "sha256": "adfa9ee211f392911e1998c2447f467e2159fd59fb6b7d8cf5c10bb1d5104326",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io",
+            "sha256": "7715408f88a802d731bd342046ded3e37e78d4e529fe873fad740d5d4e44a9fc"
+          },
           "tests": 11,
           "checks": 161,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io",
-            "sha256": "e2f9c9657cc258391f5a5404a034d6336fee2ed019dac7f9e40fcde8ff0afc45"
-          }
+          "skipped": 0
         },
         "tls_io_race": {
-          "log": "build/task194/tsan-on/test/tls_io_race.log",
-          "sha256": "f6a8cce92460162ad50da326fd341e7dedbadf360201f9e54e44c6221cf2cb5b",
+          "log": "build/task194/owners-tsan-on-repair1/tls_io_race.log",
+          "sha256": "14753bc77d25618b728d56717495357eaa3cba20bb65be61763859ba10f74c32",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io_race",
+            "sha256": "33c1686c484361a46eff951349f7156ac16d00b7b911bf2cd8840d4e9be0c4d9"
+          },
           "tests": 10,
           "checks": 253,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io_race",
-            "sha256": "aba150773f8d71ed6b0bd932beded5a4f6e0b4431a51cef3e91cc7a5b8106c10"
-          }
+          "skipped": 0
         },
         "tls_io_loopback": {
-          "log": "build/task194/tsan-on/test/tls_io_loopback.log",
-          "sha256": "2cfa5a8f1ff42931503d2d54c04bd5ab9c246fdaa4254071afb40c99cc803fcf",
+          "log": "build/task194/owners-tsan-on-repair1/tls_io_loopback.log",
+          "sha256": "d8ed4a4a6df6801ee0bcc768d131e7d33ef4e53aefa353d0b5f9819a1e10b06b",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io_loopback",
+            "sha256": "fe852b217e3f73138b876472cfece32d06d7d8cadfcf63d85f0bd2e2e73dff90"
+          },
           "tests": 3,
           "checks": 48,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_io_loopback",
-            "sha256": "00e080413ee34214b342deee3a60f15d5ebbd01ea702c8981493912cfd86213e"
-          }
+          "skipped": 0
         },
         "io_tls_control": {
-          "log": "build/task194/tsan-on/test/io_tls_control.log",
-          "sha256": "c66dce963a210ccfc022154463563a98bcdaac4f74aee6de445dd5802ca7eafd",
-          "tests": 1,
-          "checks": 6,
-          "failures": 0,
-          "skipped": 0,
+          "log": "build/task194/owners-tsan-on-repair1/io_tls_control.log",
+          "sha256": "8d8145a8eca24c1cd34e96c095438b552380da65594aa5c41ab2f6c7ce51a62b",
           "artifact": {
             "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/io_tls_control",
             "sha256": "20480532e38c756123bad6be8259948c48540128bcd58b09a26a0743ab8cb238"
-          }
+          },
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "skipped": 0
         },
         "tls_policy_concurrency": {
-          "log": "build/task194/tsan-on/test/tls_policy_concurrency.log",
-          "sha256": "7a0c0b3c25544c1e72f6c6c8610b947b61fd095cf2707fa7f13e533410b15b72",
+          "log": "build/task194/owners-tsan-on-repair1/tls_policy_concurrency.log",
+          "sha256": "c8cebf9fb47acef64ccf6ebae07f156b23a0253b8f3f48bc70729f5aae026e5c",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_policy_concurrency",
+            "sha256": "b261ba025b5c2bf0e3f3c125855a125ca24ae614677ae9b71f3faf1adcd50372"
+          },
           "tests": 6,
           "checks": 97,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_policy_concurrency",
-            "sha256": "1ad207613b5e2c7cb5470795259fcc283b06fa407e44d771acd10382c44942ad"
-          }
+          "skipped": 0
         },
         "tls_policy_hostile_profiles": {
-          "log": "build/task194/tsan-on/test/tls_policy_hostile_profiles.log",
-          "sha256": "f6a018c0a61c557c68afdf7fb7451082d329023119b619ea3bc40f1cbb685d82",
+          "log": "build/task194/owners-tsan-on-repair1/tls_policy_hostile_profiles.log",
+          "sha256": "afa948771e4997fba9c5a5919a5fc24bdd4a1dd07f48db99997d1c6cdafb90d2",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_policy_hostile_profiles",
+            "sha256": "a07852503a538f8aeab5a340d69701b091a444e892fd12957254da1f3be26e83"
+          },
           "tests": 6,
           "checks": 474,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/tls_policy_hostile_profiles",
-            "sha256": "153aa24f41fbcbbe30df6c7f73eb7379a589261b1493ff099f9bbc510d01c057"
-          }
+          "skipped": 0
         },
         "http2_tls_boundary": {
-          "log": "build/task194/tsan-on/test/http2_tls_boundary.log",
-          "sha256": "daffadef435e3e1dc67a52042c61d8fade87d044d64b5d772ea79cb3593d8a7e",
+          "log": "build/task194/owners-tsan-on-repair1/http2_tls_boundary.log",
+          "sha256": "aff16c95c1563e5926b04e124dbcdaad55958b587d6c7ed412583000d45f0782",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/http2_tls_boundary",
+            "sha256": "f7d1c73dec771072d4846396b5349afdce8b27eaaae4e51ea79f3afc3ec733b4"
+          },
           "tests": 5,
           "checks": 218,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/http2_tls_boundary",
-            "sha256": "1ea6df4c796dc9315b582ce6db381f02dd84d1730ec821b764821f623ad14e47"
-          }
+          "skipped": 0
         },
         "native_http1_tls_parity": {
-          "log": "build/task194/tsan-on/test/native_http1_tls_parity.log",
-          "sha256": "abefaacdb7fd69daa787b895a8216b8b02d32c357d8aa773976211bc996e8f83",
+          "log": "build/task194/owners-tsan-on-repair1/native_http1_tls_parity.log",
+          "sha256": "301f48e9f61072849c2d9745659a5db009afd4e12f3ac06b8c6deb8956e82071",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_tls_parity",
+            "sha256": "58c3a1444b6332a49758e93b2b9a58cc2d94fd83d075c1da1d68ca11f10be5eb"
+          },
           "tests": 21,
           "checks": 61,
           "failures": 0,
-          "skipped": 0,
-          "artifact": {
-            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/native_http1_tls_parity",
-            "sha256": "5193759b03e67ea086921cc24e33d0678de1db5ae2443f7c3e0eb9e757f74e11"
-          }
+          "skipped": 0
         }
       },
       "standalone": [
         {
           "name": "consumer_v3_tls_credentials",
-          "log": "build/task194/tsan-on/test/consumer_v3_tls_credentials.log",
-          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c"
+          "log": "build/task194/owners-tsan-on-repair1/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/.libs/consumer_v3_tls_credentials",
+            "sha256": "7599a2e5cec619c7f5b067cbf35ecee0094751d005337d97356a76f24f3b2ef4"
+          }
         },
         {
           "name": "consumer_v3_native_server",
-          "log": "build/task194/tsan-on/test/consumer_v3_native_server.log",
-          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc"
+          "log": "build/task194/owners-tsan-on-repair1/consumer_v3_native_server.log",
+          "sha256": "feb8064a07ad3f4700d4c0c403ad3be220a288ea0d625b7f25b72844d20d00cc",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/consumer_v3_native_server",
+            "sha256": "12f4bf95529deaa64fcf8a8a0deecd5e9d4957440cfd7189565a33a8e83de8fc"
+          }
         },
         {
           "name": "consumer_v3_server",
-          "log": "build/task194/tsan-on/test/consumer_v3_server.log",
-          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9"
+          "log": "build/task194/owners-tsan-on-repair1/consumer_v3_server.log",
+          "sha256": "be3d2310fbe7097bb93bbe85960d340e15b05624bb1497350315a1793b5253b9",
+          "artifact": {
+            "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on/test/consumer_v3_server",
+            "sha256": "2d7f2e8831104827241f29360d08dcad1c844c08680f015a0e0b3ca10d23487a"
+          }
         }
       ],
-      "tests": 417,
-      "checks": 6402,
+      "tests": 418,
+      "checks": 6412,
       "environment": {
         "TSAN_OPTIONS": "halt_on_error=1"
       }
@@ -1975,61 +2011,70 @@
   },
   "public": {
     "normal-on": {
-      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-normal-on-final5/receipt.json",
-      "sha256": "f961a3e7d7303bc1a83869910c536e9be4742007629193b2f55c64e5a62b2d2c",
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-normal-on-repair1/receipt.json",
+      "sha256": "e01310f1702ffa6d0cad13dd85d41ce3f286afc35d9786005c8fda8eb66e569c",
       "cells": 4,
       "scenarios_per_cell": 82,
-      "consumer_directory": "/tmp/task193-public-tls-client-k_wxvc5_",
+      "consumer_directory": "/tmp/task193-public-tls-client-rw2xaji6",
       "prefix": "/tmp/task194-normal-on-zCpNpuxh",
-      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a",
-      "verified_mtls_hook_counter_samples": 104
+      "source_identity": "0656f8818c550af469b2c1fe614a4f57ec3ca560f28a88de0022de56a59179b0",
+      "same_host_rotation_verified_versions": [
+        "TLS1.2",
+        "TLS1.3"
+      ]
     },
     "asan-on": {
-      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-asan-on-final2/receipt.json",
-      "sha256": "b580652babf8f244c0c27799d9bcc153695923b77f452215771544a6f5ab977f",
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-asan-on-repair1/receipt.json",
+      "sha256": "dea49593852b504eacc6476e5848084c4fbeaed8cd95ad7261c1571e6465fb16",
       "cells": 4,
       "scenarios_per_cell": 82,
-      "consumer_directory": "/tmp/task193-public-tls-client-rwlsiq91",
+      "consumer_directory": "/tmp/task193-public-tls-client-m5vj963d",
       "prefix": "/tmp/task194-asan-on-h4llbhmo",
-      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a",
-      "verified_mtls_hook_counter_samples": 104
+      "source_identity": "0656f8818c550af469b2c1fe614a4f57ec3ca560f28a88de0022de56a59179b0",
+      "same_host_rotation_verified_versions": [
+        "TLS1.2",
+        "TLS1.3"
+      ]
     },
     "tsan-on": {
-      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-tsan-on-final5/receipt.json",
-      "sha256": "8de87486560aed193106480df00042ea1c3294be261eb67ba30ad00b793ed18c",
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-tsan-on-repair1/receipt.json",
+      "sha256": "80e8441be873fbdb9b80e5974f3341862d6722c2a77c0298dba3c6641ed62ff1",
       "cells": 4,
       "scenarios_per_cell": 82,
-      "consumer_directory": "/tmp/task193-public-tls-client-w3xrr9pf",
+      "consumer_directory": "/tmp/task193-public-tls-client-5xlszl_v",
       "prefix": "/tmp/task194-tsan-on-zr1lfeze",
-      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a",
-      "verified_mtls_hook_counter_samples": 104
+      "source_identity": "0656f8818c550af469b2c1fe614a4f57ec3ca560f28a88de0022de56a59179b0",
+      "same_host_rotation_verified_versions": [
+        "TLS1.2",
+        "TLS1.3"
+      ]
     },
     "normal-off": {
-      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-normal-off-final3/receipt.json",
-      "sha256": "d65016e11877d434708f1ee772fcbac905ab6acaae89a7a1a7ac867327fe9a62",
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-normal-off-repair1/receipt.json",
+      "sha256": "f9d90b02ee6b1494fdb371d97c9c6451b404a667be6b84a5b3733b5c58e8ea38",
       "cells": 4,
       "scenarios_per_cell": 1,
-      "consumer_directory": "/tmp/task193-public-tls-client-fd9bhixt",
+      "consumer_directory": "/tmp/task193-public-tls-client-a3aaxhie",
       "prefix": "/tmp/task194-normal-off-IJ2IgEv4",
-      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a"
+      "source_identity": "0656f8818c550af469b2c1fe614a4f57ec3ca560f28a88de0022de56a59179b0"
     },
     "asan-off": {
-      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-asan-off-final3/receipt.json",
-      "sha256": "32e93ae52c225cf5a495c369f6d595a361b7a6c45b278c7e0a9c1a0c9fca2cbf",
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-asan-off-repair2/receipt.json",
+      "sha256": "a08e9714094c2101a2623f5dddc4276cf7119c92dc45cfb5b57622351f0a58a9",
       "cells": 4,
       "scenarios_per_cell": 1,
-      "consumer_directory": "/tmp/task193-public-tls-client-54qxm21p",
+      "consumer_directory": "/tmp/task193-public-tls-client-3tj21esp",
       "prefix": "/tmp/task194-asan-off-ledcowap",
-      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a"
+      "source_identity": "0656f8818c550af469b2c1fe614a4f57ec3ca560f28a88de0022de56a59179b0"
     },
     "tsan-off": {
-      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-tsan-off-final3/receipt.json",
-      "sha256": "d17b31b49f79bbedc8a1d3ac63323b98af7aafd2d55e3e0e4765dc851442cdb2",
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/public-tsan-off-repair1/receipt.json",
+      "sha256": "9be0a6dd23963dd7edc2d04708b55fc5a7825048be74443f3a9eaa2d6b6fba82",
       "cells": 4,
       "scenarios_per_cell": 1,
-      "consumer_directory": "/tmp/task193-public-tls-client-1mzrghxr",
+      "consumer_directory": "/tmp/task193-public-tls-client-eqwqj346",
       "prefix": "/tmp/task194-tsan-off-ffpjxrdw",
-      "source_identity": "19beacd1aa4b15b5732c914d189d923994146dcc73c2ea27e53e5785d903ea8a"
+      "source_identity": "0656f8818c550af469b2c1fe614a4f57ec3ca560f28a88de0022de56a59179b0"
     }
   },
   "red": [
@@ -2064,6 +2109,14 @@
     {
       "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/false-cell-red2.log",
       "sha256": "c3aaaa2145680d923b07d1f6cd97ce963671f96e5301b1fcb468bea6e59b8e9d"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/rejected-retirement-red.log",
+      "sha256": "90ae4a4a292ba91f7ff2f807c85fb427e6714a50186c57d44f4f08c1d6a49608"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/same-host-rotation-red.log",
+      "sha256": "5ef97c1c3c7415341ac4ec1ca501777c7ac2147852ed3c8d334d5d1d925cb7dd"
     }
   ],
   "green": [
@@ -2090,6 +2143,14 @@
     {
       "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-on-adapter-shared.log",
       "sha256": "52dc823d1f016532668093d0719a39ebd1ea23a383e9061906c4334e537c4a16"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/rejected-retirement-green.log",
+      "sha256": "b34584a75a0814db69ff588bfd3edb2db5862c37610e813ba7dcea162e0fa963"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/same-host-focus-green.log",
+      "sha256": "eba1f2eda64439fdc100469997d04834d1b6dcfd1ee9ed5cd44b1e100abff5c2"
     }
   ],
   "provider_runtime_identities": {
@@ -2105,8 +2166,8 @@
     },
     "audits": {
       "no": {
-        "path": "/tmp/task194-package-final-lvij4ht5/matrix/tls-no/audit.json",
-        "sha256": "b1bef88204239976f23ede74a131ccd03ae05251d031bd7ae6cd1a8a207ba5b7",
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-strict-audit-no.json",
+        "sha256": "98262288f0e664af021b941a15971d7268b8d528666b285d7fc6f2b946ba16dd",
         "headers": {
           "files": [
             "httpserver.hpp",
@@ -2197,8 +2258,8 @@
         }
       },
       "yes": {
-        "path": "/tmp/task194-package-final-lvij4ht5/matrix/resume-clock-rollback/audit-yes.json",
-        "sha256": "f93097d5780d3721546560e863b97017290e4e1bc1a2b566b7fe4e4a513f9f9e",
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-strict-audit-yes.json",
+        "sha256": "87fcb97de51d9d257675eff4f7f570d5a4e6e002c1d732866d19a7de1055675c",
         "headers": {
           "files": [
             "httpserver.hpp",
@@ -2289,7 +2350,8 @@
         }
       }
     },
-    "local_headers": 41
+    "local_headers": 41,
+    "summary_scope": "Retained original full package workflow chronology; repaired production/package artifacts are covered by refreshed public installed cells and strict current normal TLS-on/off audits. Packaging setup/policy and public declarations unchanged."
   },
   "checks": {
     "check-local-on.log": {
@@ -2327,6 +2389,26 @@
     "tsan-adapter-runtime-graph.log": {
       "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/tsan-adapter-runtime-graph.log",
       "sha256": "3a99fa6d047105c5bba700f1dfe912f65eb44f077b4851fbde323ba29ea70aab"
+    },
+    "repair_cpplint": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-cpplint.log",
+      "sha256": "63bdb489230015519aff185ec2151662bdba78a1637f3e0d88729de1d5814f8d"
+    },
+    "repair_python_contracts": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-python-contracts.log",
+      "sha256": "5ed808e721728a471fb078632d0fa469258a01ce4d9b6aa3428a04f98a04bcab"
+    },
+    "repair_check_local_on": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-check-local-on.log",
+      "sha256": "288c9527e689cda96f6ce477bf66a8e0a57a02f7bc222169c5e23f62dbc958ca"
+    },
+    "repair_tls_off_equivalence": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-off-audit/receipt.json",
+      "sha256": "728925e2225358c29d953fa11e8cb3b0bc5c58c38162f1fbb5b7da775f095814"
+    },
+    "repair_tsan_adapter_runtime": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-tsan-adapter-runtime.log",
+      "sha256": "bd2cb6bd13196ba155c6059c7fb3b036d73ff2fe3b9727294d4670d86ea4f251"
     }
   },
   "actions": {
@@ -2390,7 +2472,7 @@
       "tls_on_scenarios_per_cell": 82,
       "tls_off_cells": 12
     },
-    "generation_cancellation_retirement": "All six impacted owner lanes and installed matrix pass; see named cases/doubts and allocator-only TSan clarification.",
+    "generation_cancellation_retirement": "Normal/ASan/TSan TLS-on owners and fresh installed on/off matrices pass. TLS-off owners reused after compiler dependency closure and unchanged current-source object/library audit.",
     "tls_off_and_caller_followup": "Identical 41 public headers/effective declarations; typed unavailable operations; caller owns validation/completion/merge/cleanup."
   },
   "design_doubts": {
@@ -2499,5 +2581,30 @@
     "FEATURE-bauth-conditional-compile",
     "TASK-195..199",
     "TASK-200"
-  ]
+  ],
+  "validation_repair": {
+    "iteration": 1,
+    "original_receipt": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-original/TASK-194-implementation-receipt.json",
+      "sha256": "301e5dd60237e5452ef101c2215c9613855c0bad1a01e213ec6bf51bb8cbefda"
+    },
+    "original_evidence": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-original/TASK-194-implementation-evidence.md",
+      "sha256": "74ed6c4d0827cc0ea05240685abde09eb6cfbeb69f25fb81d82c2009fea3a7db"
+    },
+    "owner_on": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/owners-repair1.json",
+      "sha256": "f1575024a3ecfb528479f1524431eeb87a04926b0e6cddfbdec39dfbbc490746"
+    },
+    "owner_off_reuse": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-194/build/task194/repair-off-audit/receipt.json",
+      "sha256": "728925e2225358c29d953fa11e8cb3b0bc5c58c38162f1fbb5b7da775f095814"
+    },
+    "coordinator_identity_audit": {
+      "path": "/home/etr/progs/libhttpserver/.git/groundwork/validation/cdb4ee2aea69cc6a/59257aa5a7fdac38/groundwork-validation-9266bb3110aae515c45df072a90ad268/gate-identity-audit.json",
+      "sha256": "6b196d5189d72fea747610f04160087321d0d040d5f997ce8c359a06ae1405ac"
+    },
+    "runtime_diagnostic_replay": "ASan owner repair1 and off installed repair1 hit LeakSanitizer ptrace fatal; exact owner artifacts replayed outside sandbox as repair2 with leak checks unchanged. Failures retained.",
+    "scope": "Rejected candidate ownership across all locked publication exits; independent same-host TLS1.2/1.3 replacement witnesses; caller owns validation/task status/finalization."
+  }
 }

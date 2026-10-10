@@ -269,15 +269,30 @@ def scenarios(executable, client, loop, mode, directory, env, fixtures):
             args = [str(client), str(port), version, 'certificate', 'a.example', 'http/1.1', 'identity', 'interactive', str(fixtures)]
             with Consumer(args, directory, env, directory / ('rotation-session-' + version + '.json')) as session:
                 old = json.loads(session.line())
-                command(child, 'rotate', 'ROTATED')
-                session.process.stdin.write(b'next b.example\n'); session.process.stdin.flush()
-                fresh = json.loads(session.line())
-                check(fresh['connected'] and fresh['reused'] == 0 and fresh['certificate_messages'] == 1
-                      and fresh['certificate_sha256'] != old['certificate_sha256'], 'old session bypassed replacement')
+                session.process.stdin.write(b'next a.example\n'); session.process.stdin.flush()
+                resumed = json.loads(session.line())
+                check(resumed['connected'] and resumed['reused'] == 1 and resumed['certificate_messages'] == 0
+                      and resumed['certificate_sha256'] == old['certificate_sha256'], 'same-host session did not resume before rotation')
+                with connect(port, context(fixtures, version)) as established:
+                    for turn in range(2):
+                        established.sendall(b'GET /installed HTTP/1.1\r\nHost: a.example\r\nConnection: keep-alive\r\n\r\n')
+                        body, pending, head = response(established)
+                        check(head.startswith('HTTP/1.1 200 ') and body == b'profile-ok\n\n' and not pending,
+                              'replacement disrupted established connection')
+                        if turn == 0:
+                            command(child, 'rotate-same-host', 'ROTATED')
+                    session.process.stdin.write(b'next a.example\n'); session.process.stdin.flush()
+                    fresh = json.loads(session.line())
+                    check(fresh['connected'] and fresh['reused'] == 0 and fresh['certificate_messages'] == 1
+                          and fresh['certificate_sha256'] != old['certificate_sha256'], 'old same-host session bypassed replacement')
+                    expected = hashlib.sha256(ssl.PEM_cert_to_DER_cert((fixtures / 'a-replacement.pem').read_text())).hexdigest()
+                    check(fresh['certificate_sha256'] == expected and fresh['alpn'] == old['alpn'] == 'http/1.1',
+                          'same-host replacement material or ALPN differs')
                 session.process.stdin.write(b'quit\n'); session.process.stdin.flush()
                 session.process.wait(timeout=3)
             child.stop()
-            rows.append(dict(case='certificate_rotation_rejects_old_session_' + version, old=old, fresh=fresh))
+            rows.append(dict(case='certificate_rotation_rejects_old_session_' + version, old=old, resumed=resumed, fresh=fresh,
+                             endpoint=['127.0.0.1', port], sni='a.example', established_requests=2))
     with launch('certificate') as child:
         port = child.port()
         args = [str(client), str(port), '13', 'certificate', 'a.example', 'http/1.1', 'identity', 'hold-acme', str(fixtures)]

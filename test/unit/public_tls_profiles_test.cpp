@@ -3,6 +3,10 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 #include <barrier>
+#include <condition_variable>
+#include <cstdlib>
+#include <cstdio>
+#include <mutex>
 #include <atomic>
 #include <fstream>
 #include <memory>
@@ -33,6 +37,25 @@ srv::server_options options(std::shared_ptr<srv::tls_credentials> store) {
     result.add_listener({"127.0.0.1", 0, true, std::move(store)});
     return result;
 }
+struct reentrant_lookup {
+    std::weak_ptr<srv::tls_credentials> store;
+    std::shared_ptr<std::atomic<bool>> armed;
+    std::shared_ptr<std::atomic<unsigned>> retired;
+    bool copied = false;
+    reentrant_lookup(std::weak_ptr<srv::tls_credentials> owner,
+        std::shared_ptr<std::atomic<bool>> enabled, std::shared_ptr<std::atomic<unsigned>> completed)
+        : store(std::move(owner)), armed(std::move(enabled)), retired(std::move(completed)) {}
+    reentrant_lookup(const reentrant_lookup& other)
+        : store(other.store), armed(other.armed), retired(other.retired), copied(true) {}
+    ~reentrant_lookup() {
+        if (copied && armed->load()) {
+            if (auto owner = store.lock(); owner && owner->remove_acme("a.example").ok()) {
+                ++*retired;
+            }
+        }
+    }
+    srv::tls_psk_result operator()(std::span<const std::byte>, const srv::tls_psk_context&) const { return {}; }
+};
 }  // namespace
 LT_BEGIN_SUITE(public_profiles)
 void set_up() {}
@@ -106,6 +129,50 @@ LT_BEGIN_AUTO_TEST(public_profiles, retired_callback_state_destroys_outside_publ
     runtime->request_stop();
     LT_CHECK(runtime->wait_retired(std::chrono::steady_clock::now() + std::chrono::seconds(1)).ok());
 LT_END_AUTO_TEST(retired_callback_state_destroys_outside_publication_lock)
+LT_BEGIN_AUTO_TEST(public_profiles, rejected_callback_state_destroys_outside_publication_lock)
+    auto store = std::make_shared<srv::tls_credentials>();
+    LT_ASSERT(store->replace(credentials()).ok());
+    srv::native_server server(options(store));
+    LT_ASSERT(server.listen().ok());
+    const auto original_port = server.get_bound_port(0);
+    std::shared_ptr<srv::tls_psk_runtime> runtime;
+    LT_ASSERT(srv::tls_psk_runtime::create({1, 0}, runtime).ok());
+    auto armed = std::make_shared<std::atomic<bool>>(false);
+    auto retired = std::make_shared<std::atomic<unsigned>>(0);
+    srv::tls_host_credentials host;
+    host.host = "a.example";
+    host.profile = srv::tls_profile::external_psk;
+    host.psk = srv::tls_psk_config{reentrant_lookup{store, armed, retired}, runtime};
+    const srv::tls_credentials_config incompatible{{host}, 0};
+    std::mutex mutex;
+    std::condition_variable completed;
+    bool finished = false;
+    std::jthread watchdog([&] {
+        std::unique_lock lock(mutex);
+        if (!completed.wait_for(lock, std::chrono::seconds(5), [&] { return finished; })) {
+            std::fputs("rejected candidate callable destruction blocked publication\n", stderr);
+            std::abort();
+        }
+    });
+    *armed = true;
+    const auto rejected = store->replace(incompatible);
+    *armed = false;
+    {
+        std::lock_guard lock(mutex);
+        finished = true;
+    }
+    completed.notify_one();
+    watchdog.join();
+    LT_CHECK(rejected.code() == http::outcome_code::invalid_argument);
+    LT_CHECK(retired->load() > 0);
+    LT_CHECK(server.get_bound_port(0) == original_port);
+    srv::native_server preserved(options(store));
+    LT_CHECK(preserved.listen().ok());
+    LT_CHECK(store->replace(credentials(srv::tls_client_certificate_mode::request)).code() == http::outcome_code::invalid_argument);
+    LT_CHECK(store->replace(credentials()).ok());
+    runtime->request_stop();
+    LT_CHECK(runtime->wait_retired(std::chrono::steady_clock::now() + std::chrono::seconds(1)).ok());
+LT_END_AUTO_TEST(rejected_callback_state_destroys_outside_publication_lock)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
