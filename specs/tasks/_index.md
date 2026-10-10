@@ -337,7 +337,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-187 | [Repair response-source and multipart coroutine lifetimes](M14-v3-release-repairs/TASK-187.md) | M14 | Complete | TASK-186 |
 | TASK-188 | [Eliminate peer-policy mutation starvation](M14-v3-release-repairs/TASK-188.md) | M14 | Complete | TASK-187 |
 | TASK-189 | [Repair native HTTP/1 WebSocket handshake and flood progress](M14-v3-release-repairs/TASK-189.md) | M14 | Complete | TASK-188 |
-| TASK-190 | [Repair HTTP/2 conformance route-effect ordering](M14-v3-release-repairs/TASK-190.md) | M14 | In Progress | TASK-189 |
+| TASK-190 | [Repair HTTP/2 conformance route-effect ordering](M14-v3-release-repairs/TASK-190.md) | M14 | Complete | TASK-189 |
 | TASK-191 | [Repair independent HTTP/3 semantic drain completion](M14-v3-release-repairs/TASK-191.md) | M14 | Not Started | TASK-190 |
 | TASK-192 | [Supply current-v3 cookie parity witnesses](M14-v3-release-repairs/TASK-192.md) | M14 | Not Started | TASK-191 |
 | TASK-193 | [Install public credentials and serve native TCP TLS](M14-v3-release-repairs/TASK-193.md) | M14 | Not Started | TASK-192 |
