@@ -705,3 +705,5 @@ EXTRA_DIST += scripts/run-v3-behavior-parity.py
 EXTRA_DIST += scripts/lib/resource_limits_probe.py scripts/lib/resource_limits_probe_test.py
 
 EXTRA_DIST += docs/task-180-resource-limits.md
+
+EXTRA_DIST += docs/task-181-diagnostics.md

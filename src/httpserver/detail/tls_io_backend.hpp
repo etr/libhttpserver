@@ -17,6 +17,7 @@
 #include <httpserver/detail/io_operation.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/tls_peer_metadata.hpp>
+#include <httpserver/server/diagnostics.hpp>
 namespace httpserver::detail {
 // Contexts are immutable after construction. No provider types escape this seam.
 enum class tls_negotiated_protocol { unknown, none, http1, h2, h3, other };
@@ -25,6 +26,7 @@ enum class tls_transport { unknown, tcp, quic };
 struct tls_handshake_context {
     tls_transport transport = tls_transport::unknown;
     std::uint16_t local_port = 0;
+    server::diagnostics diagnostics;
 };
 struct tls_credentials_selection;
 struct tls_psk_config;

@@ -134,6 +134,7 @@ bool http2_request_engine::state::frame_data(stream& value) {
     if (end && !body.sent_trailers().empty()) return encode_trailers(value);
     const auto window = std::max<std::int64_t>(0, std::min(send_window.available, body.send_window.available));
     const auto n = std::min<std::size_t>({body.queued(), data_quantum, connection.peer_settings().max_frame_size, static_cast<std::size_t>(window)});
+    flow_stall(value, body.queued() && window == 0);
     if (!n && !end) return false;
     if (!reserve(server::resource::response_queue_bytes, 2 * n + 9 + 128, active_charge)) {
         fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded)); return false;

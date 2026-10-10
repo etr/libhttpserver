@@ -39,6 +39,7 @@
 #include <httpserver/exchange.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/options.hpp>
+#include <httpserver/server/diagnostics.hpp>
 #include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/routes.hpp>
 
@@ -62,6 +63,7 @@ struct request_dispatch_context {
     const server::hook_bus* hooks = nullptr;
     error_page_factories pages;
     const server::peer_policy* peers = nullptr;
+    server::diagnostics diagnostics;
 };
 
 // Also called when an adapter retires a queued or parked handler frame.

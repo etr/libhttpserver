@@ -25,6 +25,7 @@
 #include <httpserver/detail/drain_scope.hpp>
 
 #include <utility>
+#include <httpserver/detail/diagnostics_access.hpp>
 
 namespace httpserver {
 
@@ -49,6 +50,7 @@ void drain_scope::leave() noexcept {
         std::lock_guard<std::mutex> lock(mu_);
         cancel = claim_expiry_locked(std::chrono::steady_clock::now());
         if (active_ > 0) --active_;
+        complete_locked();
     }
     cv_.notify_all();
     cancel_safely(std::move(cancel));
@@ -67,7 +69,15 @@ void drain_scope::arm(
     deadline_ = deadline;
     on_counted_thread_ = std::move(on_counted_thread);
     cancel_remaining_ = std::move(cancel_remaining);
+    if (!armed_) diagnostics_access::record(diagnostics_, {server::diagnostic_kind::drain_started});
     armed_ = true;
+    complete_locked();
+}
+
+void drain_scope::complete_locked() noexcept {
+    if (!armed_ || active_ || cancelled_ || diagnostic_terminal_) return;
+    diagnostic_terminal_ = true;
+    diagnostics_access::record(diagnostics_, {server::diagnostic_kind::drain_completed});
 }
 
 bool drain_scope::armed() const noexcept {
@@ -80,6 +90,12 @@ concurrency::unique_function<void()> drain_scope::claim_expiry_locked(
     if (!armed_ || cancelled_ || active_ == 0 || now < deadline_) return {};
     cancelled_ = true;
     expired_remaining_ = active_;
+    if (!diagnostic_terminal_) {
+        diagnostic_terminal_ = true;
+        server::diagnostic_event event{server::diagnostic_kind::drain_expired, server::diagnostic_reason::deadline, http::outcome_code::timeout};
+        event.quantity = active_;
+        diagnostics_access::record(diagnostics_, event);
+    }
     return std::move(cancel_remaining_);
 }
 

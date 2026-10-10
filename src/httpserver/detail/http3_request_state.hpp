@@ -13,6 +13,7 @@
 #include <vector>
 #include <utility>
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/detail/lifecycle_sink.hpp>
 #include <httpserver/detail/http3_request_engine.hpp>
 #include <httpserver/detail/http3_request_head.hpp>
@@ -69,6 +70,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         http3_role local_role = http3_role::pending;
         bool local = false, cancelled = false, abandoned = false, receive_done = false, fin_retained = false, reset_settled = false;
         bool event_recorded = false, accepted = false, receiving = false, websocket_input_blocked = false;
+        bool diagnostic_terminal = false, flow_blocked = false, retention_blocked = false;
         std::optional<drain_scope::unit> drain_unit;
         std::optional<quic_stream_terminal> terminal;
         http3_request_action action;
@@ -86,6 +88,21 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         bool output_fin = false, output_trailers = false;
         std::uint64_t output_token = 0;
     };
+    void observe(server::diagnostic_kind kind, std::uint64_t stream_id = 0, http::outcome_code code = http::outcome_code::ok,
+                 server::diagnostic_reason reason = server::diagnostic_reason::none, server::resource resource_kind = server::resource::streams) {
+        server::diagnostic_event event{kind, reason, code};
+        event.protocol = http::protocol::http_3;
+        event.connection_id = connection_id;
+        event.stream_id = stream_id;
+        event.resource_kind = resource_kind;
+        diagnostics_access::record(dispatch_context.diagnostics, event);
+    }
+    void terminal(record& r, bool complete, http::outcome_code code) {
+        if (!r.accepted || r.diagnostic_terminal) return;
+        r.diagnostic_terminal = true;
+        observe(complete ? server::diagnostic_kind::stream_completed : server::diagnostic_kind::stream_cancelled, r.transport->id(), code,
+                complete ? server::diagnostic_reason::none : server::diagnostic_reason::local_stop);
+    }
     quic_storage_lease data, critical;
     quic_flow_control& flow;
     quic_recovery& recovery;
@@ -110,7 +127,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     executor& owner;
     enum class drain_phase { running, draining, finished };
     struct drain_control { std::atomic<bool> cancel_requested{false}; };
-    std::shared_ptr<drain_scope> scope = std::make_shared<drain_scope>();
+    std::shared_ptr<drain_scope> scope;
     std::shared_ptr<drain_control> drain = std::make_shared<drain_control>();
     drain_phase phase = drain_phase::running;
     std::optional<time_point> deadline;
@@ -123,8 +140,8 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     void finish_drain();
     void retire_drain_request(record& r);
     void drain_requests();
-    state(quic_storage_lease d, quic_storage_lease c, quic_flow_control& f, quic_recovery& q, const server::route_registry& r, executor& e, http3_request_limits l,
-          std::uint64_t id, net::peer_address p, request_dispatch_context context)
+    state(quic_storage_lease d, quic_storage_lease c, quic_flow_control& f, quic_recovery& q, const server::route_registry& r, executor& e, http3_request_limits l, std::uint64_t id,
+          net::peer_address p, request_dispatch_context context)
         : data(std::move(d)),
           critical(std::move(c)),
           flow(f),
@@ -136,7 +153,10 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
           handlers(std::make_shared<http3_request_helpers::route_executor>(e)),
           connection_id(id),
           peer(p),
-          owner(e) { scope->enter(); }
+          owner(e),
+          scope(std::make_shared<drain_scope>(dispatch_context.diagnostics)) {
+        scope->enter();
+    }
     ~state();
     struct pump_guard {
         state& owner;
@@ -188,6 +208,8 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     bool local_output(record& r);
     void retire_output(record& r, std::size_t start);
     bool reserve_trailers(stream& s, const http::fields& fields);
+    bool retention_room(record& r, std::size_t count, std::size_t cap);
+    void flow_stall(record& r, bool blocked);
     bool submit(record& r, std::span<const std::byte> bytes, bool fin);
     bool output(record& r);
     void ordinary_output();

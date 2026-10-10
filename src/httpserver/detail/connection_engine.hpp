@@ -130,6 +130,7 @@ class wake_body_sink;
 // plus the response Date clock seam (tests inject fixed values; an
 // empty clock omits the Date engine field entirely).
 struct connection_engine_config {
+    server::diagnostics diagnostics;
     http1_head_budget head;
     http1_body_budget body;
     http1_outbox_budget outbox;
@@ -413,6 +414,12 @@ class connection_engine final
     void fail_websocket(http::outcome reason);
     void feed_websocket_tail();
     void loop_finished();
+    void observe(server::diagnostic_kind kind, std::uint64_t stream = 0, http::outcome_code code = http::outcome_code::ok,
+                 server::diagnostic_reason reason = server::diagnostic_reason::none,
+                 std::optional<http::protocol> protocol = std::nullopt) const noexcept;
+    void observe_failure(http::outcome_code code, server::resource kind = server::resource::body_buffer_bytes) noexcept;
+    void observe_stream_end(const exchange&, std::uint64_t sequence) const noexcept;
+    std::atomic<bool> diagnostic_failure_recorded_{false};
     void finalize();
 
     io_socket_backend& backend_;

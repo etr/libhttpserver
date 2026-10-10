@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/detail/lifecycle_sink.hpp>
 #include <httpserver/detail/http2_request_engine.hpp>
 #include <httpserver/detail/http2_request_head.hpp>
@@ -77,6 +78,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         std::optional<drain_scope::unit> drain_unit;
         http2_body_stream body;
         bool response_refused = false;
+        bool diagnostic_admitted = false, diagnostic_terminal = false, flow_blocked = false;
         lifecycle_sink lifecycle;
         exchange request;
         route_task handler;
@@ -108,6 +110,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         void park(body_write_wait& wait) override { body.park(wait); }
         void unpark(body_write_wait& wait) override { body.unpark(wait); }
         ~stream() override {
+            owner.terminal(*this, !reset_pending && send_ended && body.receive_ended(), server::diagnostic_reason::local_stop);
             request.disconnect(http::outcome_code::connection_closed, "HTTP/2 stream ended");
             body.fail(http::outcome_code::connection_closed); handler.clear();
             complete_request(owner.bus(), request, lifecycle);
@@ -144,6 +147,26 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         }
         fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded));
     }
+    void observe(server::diagnostic_kind kind, std::uint64_t stream_id = 0, http::outcome_code code = http::outcome_code::ok,
+                 server::diagnostic_reason reason = server::diagnostic_reason::none, server::resource resource_kind = server::resource::streams) {
+        server::diagnostic_event event{kind, reason, code};
+        event.protocol = http::protocol::http_2;
+        event.connection_id = connection_id;
+        event.stream_id = stream_id;
+        event.resource_kind = resource_kind;
+        diagnostics_access::record(dispatch_context.diagnostics, event);
+    }
+    void terminal(stream& value, bool complete, server::diagnostic_reason reason) {
+        if (!value.diagnostic_admitted || value.diagnostic_terminal) return;
+        value.diagnostic_terminal = true;
+        observe(complete ? server::diagnostic_kind::stream_completed : server::diagnostic_kind::stream_cancelled, value.id, complete ? http::outcome_code::ok : http::outcome_code::cancelled,
+                complete ? server::diagnostic_reason::none : reason);
+    }
+    void flow_stall(stream& value, bool blocked) {
+        if (blocked && !value.flow_blocked) observe(server::diagnostic_kind::flow_stalled, value.id, http::outcome_code::ok, server::diagnostic_reason::flow_control);
+        value.flow_blocked = blocked;
+    }
+    bool diagnostic_failure = false;
     server::resource_budget budget;
     const server::route_registry& routes;
     request_dispatch_context dispatch_context;
@@ -157,7 +180,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     http2_connection connection;
     enum class drain_phase { running, announcing, draining, finished, cancelled };
     struct drain_control { std::atomic<bool> cancel_requested{false}; };
-    std::shared_ptr<drain_scope> scope = std::make_shared<drain_scope>();
+    std::shared_ptr<drain_scope> scope;
     std::shared_ptr<drain_control> drain = std::make_shared<drain_control>();
     drain_phase phase = drain_phase::running;
     bool connection_counted = true;
@@ -177,8 +200,18 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     bool connect_eligible = false, end_stream = false, control_exposed = false, closed_headers = false;
     std::optional<http2_error_code> rejected;
     state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l, request_dispatch_context d, std::uint64_t id, net::peer_address p)
-        : budget(b), routes(r), dispatch_context(std::move(d)), connection_id(id), peer(p), owner(e),
-          handlers(std::make_shared<route_executor>(e)), limits(l), connection(b, l.connection, receive_settings(l.max_streams), true) { scope->enter(); }
+        : budget(b),
+          routes(r),
+          dispatch_context(std::move(d)),
+          connection_id(id),
+          peer(p),
+          owner(e),
+          handlers(std::make_shared<route_executor>(e)),
+          limits(l),
+          connection(b, l.connection, receive_settings(l.max_streams), true),
+          scope(std::make_shared<drain_scope>(dispatch_context.diagnostics)) {
+        scope->enter();
+    }
     ~state() {
         handlers->disable();
         for (auto& [id, value] : streams) cancel_websocket(*value, {http::outcome_code::connection_closed, "HTTP/2 engine destroyed"});
@@ -205,6 +238,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         return settings;
     }
     void discard(stream& value) {
+        terminal(value, false, closed_reason(value.id) == closed_kind::peer_reset ? server::diagnostic_reason::peer_reset : server::diagnostic_reason::local_stop);
         value.reset_pending = true;
         cancel_websocket(value, {http::outcome_code::cancelled, "HTTP/2 stream reset"});
         connection.discard_stream_credit(value.id);
@@ -285,6 +319,10 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         block_charge.release(); assembling = 0;
     }
     void fail(http2_error error) {
+        if (!diagnostic_failure) {
+            diagnostic_failure = true;
+            observe(server::diagnostic_kind::protocol_failure, 0, error.outcome, server::diagnostic_reason::malformed_input);
+        }
         handlers->disable();
         connection.terminate(error);
         ++websocket_pumps;
@@ -410,7 +448,12 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     std::optional<http2_error> admit(std::uint32_t id, http::request_head head, const std::vector<hpack_field>& fields, bool ended, http2_connect_metadata connect) {
         reap();
         server::reservation count_charge;
-        if (streams.size() >= limits.max_streams || !reserve(server::resource::streams, 1, count_charge)) {
+        if (streams.size() >= limits.max_streams) {
+            observe(server::diagnostic_kind::resource_refused, id, http::outcome_code::limit_exceeded, server::diagnostic_reason::capacity);
+            reset(id, http2_error_code::refused_stream);
+            return {};
+        }
+        if (!reserve(server::resource::streams, 1, count_charge)) {
             reset(id, http2_error_code::refused_stream); return {};
         }
         std::size_t retained = 0;
@@ -436,6 +479,8 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         }
         auto* accepted = value.get();
         streams.emplace(id, std::move(value));
+        accepted->diagnostic_admitted = true;
+        observe(server::diagnostic_kind::stream_admitted, id);
         accepted_stream = std::max(accepted_stream, id);
         accepted->drain_unit.emplace(*scope);
         connection.processed_stream(id);

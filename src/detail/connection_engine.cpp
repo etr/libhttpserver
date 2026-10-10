@@ -33,6 +33,7 @@
 #include <utility>
 
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/http/outcome.hpp>
 
 namespace httpserver {
@@ -71,6 +72,29 @@ connection_engine::connection_engine(io_socket_backend& backend, worker_pool& po
     }
 }
 
+void connection_engine::observe(server::diagnostic_kind kind, std::uint64_t stream, http::outcome_code code, server::diagnostic_reason reason, std::optional<http::protocol> protocol) const noexcept {
+    server::diagnostic_event event{kind, reason, code};
+    event.protocol = protocol;
+    event.connection_id = id_;
+    event.stream_id = stream;
+    diagnostics_access::record(config_.diagnostics, event);
+}
+void connection_engine::observe_stream_end(const exchange& routed, std::uint64_t sequence) const noexcept {
+    if (routed.disconnected()) {
+        observe(server::diagnostic_kind::stream_cancelled, sequence, routed.disconnect_reason().code(), server::diagnostic_reason::local_stop, routed.head().request_protocol);
+    } else {
+        observe(server::diagnostic_kind::stream_completed, sequence, http::outcome_code::ok, server::diagnostic_reason::none, routed.head().request_protocol);
+    }
+}
+void connection_engine::observe_failure(http::outcome_code code, server::resource kind) noexcept {
+    if (diagnostic_failure_recorded_.exchange(true)) return;
+    server::diagnostic_event event{
+        code == http::outcome_code::limit_exceeded ? server::diagnostic_kind::resource_refused : server::diagnostic_kind::protocol_failure,
+        code == http::outcome_code::limit_exceeded ? server::diagnostic_reason::capacity : server::diagnostic_reason::malformed_input, code};
+    event.connection_id = id_;
+    event.resource_kind = kind;
+    diagnostics_access::record(config_.diagnostics, event);
+}
 void connection_engine::start() {
     {
         std::lock_guard<std::mutex> lock(mu_);
@@ -79,6 +103,7 @@ void connection_engine::start() {
         live_loops_ = 4;
     }
     if (!budget_.reserve(server::resource::connections, 1, seat_).ok()) {
+        observe(server::diagnostic_kind::connection_rejected, 0, http::outcome_code::limit_exceeded, server::diagnostic_reason::capacity);
         // Budget exhaustion: no response (the accept path closes the
         // transport); report the stop so the record is erased.
         backend_.release_connection(id_);
@@ -94,6 +119,7 @@ void connection_engine::start() {
     // The engine's counted unit spans its whole live window; the drain
     // completion condition rides on it (finalize drops it only after
     // every loop finished and the writer flushed).
+    observe(server::diagnostic_kind::connection_accepted);
     scope_.enter();
     std::shared_ptr<connection_engine> self = shared_from_this();
     spawn(pool_, reader_loop(self),
@@ -222,6 +248,7 @@ void connection_engine::absorb(std::string_view data) {
         rearm_watchdog();
     }
     if (body_failed) {
+        observe_failure(http::outcome_code::protocol_error);
         // A framing failure poisons the byte stream: unwind the live
         // exchange and close per the decoder's posture.
         disconnect_current(http::outcome_code::protocol_error,
@@ -709,6 +736,7 @@ void connection_engine::finalize() {
         websocket_input_charge_.release(); websocket_output_charge_.release(); websocket_message_charge_.release();
         seat_.release(); outbox_.retire();
     }
+    observe(server::diagnostic_kind::connection_closed);
     scope_.leave();
     backend_.release_connection(id_);
     stopped_callback done;

@@ -41,6 +41,7 @@
 #include <utility>
 
 #include <httpserver/exchange.hpp>
+#include <httpserver/detail/io_poll_sys.hpp>
 #include <httpserver/http/method.hpp>
 #include <httpserver/http/request_head.hpp>
 #include <httpserver/http/status.hpp>
@@ -419,6 +420,40 @@ LT_BEGIN_AUTO_TEST(native_server_suite, unsupported_transports_rejected_before_a
     }
 LT_END_AUTO_TEST(unsupported_transports_rejected_before_any_bind)
 
+
+LT_BEGIN_AUTO_TEST(native_server_suite, diagnostic_channel_survives_server_and_records_peer_refusal_and_idle_drain)
+    using kind = srv::diagnostic_kind;
+    unsigned callbacks = 0;
+    srv::diagnostics channel([&](const auto&) { ++callbacks; });
+    srv::drain_ticket ticket;
+    {
+        auto options = loopback_options();
+        options.diagnostic_channel() = channel;
+        options.peer_policy().enabled = true;
+        options.peer_policy().mode = srv::peer_policy_mode::reject_all;
+        srv::native_server server(options);
+        LT_ASSERT(server.listen().ok());
+        namespace sys = httpserver::detail::pollsys;
+        auto socket = sys::open_stream();
+        LT_ASSERT(socket != sys::k_invalid_socket);
+        const bool connected = sys::connect_loopback(socket, server.get_bound_port(0));
+        LT_CHECK(connected);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (channel.counters().events[static_cast<std::size_t>(kind::connection_rejected)] == 0 && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        sys::close_socket(socket);
+        LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::connection_rejected)], 1u);
+        LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::connection_accepted)], 0u);
+        LT_ASSERT(server.begin_drain(std::chrono::seconds(2), ticket).ok());
+        server.stop();
+    }
+    srv::drain_result result;
+    LT_ASSERT(ticket.wait(result).ok());
+    LT_CHECK_EQ(callbacks, 0u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::drain_started)], 1u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::drain_completed)], 1u);
+    channel.dispatch(); LT_CHECK_EQ(callbacks, 3u);
+LT_END_AUTO_TEST(diagnostic_channel_survives_server_and_records_peer_refusal_and_idle_drain)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

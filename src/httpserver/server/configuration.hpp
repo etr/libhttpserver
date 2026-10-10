@@ -31,6 +31,7 @@
 // (PRD-V3N-REQ-014, DR-V3-001, DR-V3-002).
 
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/server/diagnostics.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/server/routes.hpp>
 

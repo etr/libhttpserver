@@ -36,6 +36,7 @@
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/http/protocol.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/server/diagnostics.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/peer_policy.hpp>
 
@@ -631,6 +632,8 @@ inline http::outcome check_tls_protocol_combination(
 class server_options {
  public:
     server_options() = default;
+    diagnostics& diagnostic_channel() noexcept { return diagnostics_; }
+    const diagnostics& diagnostic_channel() const noexcept { return diagnostics_; }
 
     // Appends a listener. No validation happens here; add_listener
     // defers every judgment to validate().
@@ -767,6 +770,7 @@ class server_options {
     protocol_set protocols_;
     budget_limits budgets_;
     peer_policy_options peers_;
+    diagnostics diagnostics_;
     std::shared_ptr<const response_factory> not_found_response_;
     std::shared_ptr<const response_factory> method_not_allowed_response_;
 };

@@ -148,6 +148,46 @@ LT_BEGIN_AUTO_TEST(quic_tls_handshake_suite, protected_tls_handshake_progresses_
     connection.reset();
     LT_CHECK(root.in_use(resource) == 0);
 LT_END_AUTO_TEST(protected_tls_handshake_progresses_while_data_budget_is_full)
+
+LT_BEGIN_AUTO_TEST(quic_tls_handshake_suite, handshake_diagnostics_are_once_for_success_and_preexisting_failure)
+    hd::tls_credentials_registry registry;
+    LT_ASSERT(registry.replace(quic_test::credentials()).ok());
+    unsigned callbacks = 0;
+    httpserver::server::diagnostics channel([&](const auto&) { ++callbacks; });
+    quic_test::connection good(registry.acquire()->select_default(), quic_test::client_context(), "a.example", {"h3"}, nullptr, false, channel);
+    LT_ASSERT(good.connect());
+    good.server.handshake();
+    using kind = httpserver::server::diagnostic_kind;
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_completed)], 1u);
+    quic_test::connection bad(registry.acquire()->select_default(), quic_test::client_context(), "a.example", {"h2"}, nullptr, false, channel);
+    LT_CHECK(!bad.connect());
+    bad.server.handshake();
+    bad.server.handshake();
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_failed)], 1u);
+    LT_CHECK_EQ(callbacks, 0u);
+    channel.dispatch();
+    LT_CHECK_EQ(callbacks, 2u);
+    hd::quic_tls_config config = quic_test::configuration();
+    config.diagnostics = channel;
+    config.input_limits.max_offset_span = 4;
+    hd::quic_key_state keys;
+    auto budget = httpserver::server::resource_budget::root({});
+    hd::quic_tls_session prefailed(registry.acquire()->select_default(), config, budget, keys);
+    std::array<std::byte, 2> bytes{};
+    LT_CHECK(!prefailed.receive(hd::quic_crypto_level::initial, 10, bytes));
+    // Reassembly refusal is recoverable; it must not become a TLS failure.
+    LT_CHECK(prefailed.failure().code == hd::quic_tls_code::ok);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_failed)], 1u);
+    std::array<std::byte, 4> malformed{std::byte{0xff}, std::byte{0}, std::byte{0}, std::byte{0}};
+    LT_ASSERT(prefailed.receive(hd::quic_crypto_level::initial, 0, malformed));
+    const auto failed = prefailed.handshake();
+    LT_CHECK(failed.state == hd::tls_session::progress::failed);
+    LT_CHECK_EQ(failed.bytes, 0u);
+    LT_CHECK(failed.failure == httpserver::http::outcome_code::protocol_error);
+    prefailed.handshake();
+    prefailed.handshake();
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::tls_failed)], 2u);
+LT_END_AUTO_TEST(handshake_diagnostics_are_once_for_success_and_preexisting_failure)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

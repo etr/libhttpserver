@@ -74,6 +74,7 @@ const std::vector<const char*>& header_files() {
         // scan with the same rules (no config gates, no backend/OS
         // tokens; "listener" vocabulary only).
         "/server/budgets.hpp",
+        "/server/diagnostics.hpp",
         "/server/options.hpp",
         "/server/routes.hpp",
         "/server/configuration.hpp",

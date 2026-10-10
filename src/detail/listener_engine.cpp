@@ -30,6 +30,7 @@
 #include <vector>
 
 #include <httpserver/detail/io_poll_sys.hpp>
+#include <httpserver/detail/diagnostics_access.hpp>
 
 namespace httpserver {
 
@@ -139,7 +140,14 @@ task<void> listener_engine::accept_loop(
         accept_operation op(self->owner_, self->id_);
         op.submit(self->backend_);
         const io_result r = co_await std::move(op);
-        if (r.code != http::outcome_code::ok) co_return;
+        if (r.code != http::outcome_code::ok) {
+            if (r.code != http::outcome_code::cancelled && r.code != http::outcome_code::connection_closed) {
+                server::diagnostic_event event{server::diagnostic_kind::connection_rejected, server::diagnostic_reason::transport, r.code};
+                event.listener_id = self->id_;
+                diagnostics_access::record(self->config_.diagnostics, event);
+            }
+            co_return;
+        }
         self->adopt_accepted(r.accepted_id, r.peer);
     }
 }
@@ -155,6 +163,10 @@ void listener_engine::adopt_accepted(std::uint64_t connection,
                                      verdict.reason};
     (void)hooks_.fire<server::hook_phase::accept_decision>(seen);
     if (!verdict.accepted) {
+        server::diagnostic_event event{server::diagnostic_kind::connection_rejected, server::diagnostic_reason::peer_policy, http::outcome_code::peer_refused};
+        event.listener_id = id_;
+        event.connection_id = connection;
+        diagnostics_access::record(config_.diagnostics, event);
         // Zero application bytes: the transport is released unread
         // (the budget-refusal shape; the refusal wire behavior is a
         // pinned migration exception).

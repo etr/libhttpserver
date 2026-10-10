@@ -4,6 +4,7 @@
 #include <vector>
 #include <httpserver/detail/quic_server_admission.hpp>
 #include "./quic_crypto_test_support.hpp"
+#include <httpserver/server/diagnostics.hpp>
 static hd::quic_cid admission_cid(unsigned value) {
     hd::quic_cid result;
     result.size = 8;
@@ -347,6 +348,24 @@ LT_BEGIN_AUTO_TEST(admission_suite, stateless_retry_flood_keeps_no_pending_table
     LT_CHECK_EQ(admission.pending_count(), std::size_t{0});
     LT_CHECK_EQ(admission.retained_bytes(), std::size_t{0});
 LT_END_AUTO_TEST(stateless_retry_flood_keeps_no_pending_table)
+
+LT_BEGIN_AUTO_TEST(admission_suite, promotion_and_capacity_refusal_have_redacted_diagnostics)
+    auto limits = direct_limits();
+    httpserver::server::diagnostics channel([](const auto&) {});
+    limits.diagnostics = channel;
+    hd::quic_server_admission admission(limits);
+    auto first = admission.receive(admission_initial(1), 100);
+    admission.receive(admission_initial(2), 100);
+    LT_CHECK(admission.receive(admission_initial(3), 100).code == hd::quic_admission_code::capacity_exhausted);
+    httpserver::manual_executor executor;
+    hd::io_connection_owner owner(executor);
+    auto sink = std::make_shared<admission_sink>();
+    LT_ASSERT(admission.promote(first.pending, owner.datagrams(), sink, 100));
+    executor.run_pending();
+    using kind = httpserver::server::diagnostic_kind;
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::connection_accepted)], 1u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::resource_refused)], 1u);
+LT_END_AUTO_TEST(promotion_and_capacity_refusal_have_redacted_diagnostics)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

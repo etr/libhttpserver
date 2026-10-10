@@ -11,6 +11,7 @@
 #include <httpserver/concurrency/resume_signal.hpp>
 #include "./http2_request_fixture.hpp"
 #include "./littletest.hpp"
+#include <httpserver/server/diagnostics.hpp>
 namespace hd = httpserver::detail;
 namespace hs = httpserver::server;
 namespace http = httpserver::http;
@@ -420,6 +421,69 @@ LT_BEGIN_AUTO_TEST(http2_streaming_suite, data_after_receive_end_uses_stream_clo
     LT_ASSERT(h2test::feed(engine, h2test::frame(0, 0, 1, {'a'})));
     auto resets = h2test::resets(h2test::output(engine)); LT_ASSERT_EQ(resets.size(), 1u); LT_CHECK_EQ(resets[0].stream, 1u); LT_CHECK_EQ(resets[0].code, 5u); LT_CHECK(!engine.failure());
 LT_END_AUTO_TEST(data_after_receive_end_uses_stream_closed_and_preserves_sibling)
+
+LT_BEGIN_AUTO_TEST(http2_streaming_suite, diagnostics_count_admission_completion_reset_and_flow_transition)
+    auto budget = h2test::budget();
+    hs::route_registry routes;
+    LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    hs::diagnostics channel([](const auto&) {});
+    hd::request_dispatch_context context;
+    context.diagnostics = channel;
+    LT_ASSERT(routes
+                  .route(http::method::known(http::method_id::get), "/hello",
+                         [](exchange& x) -> task<void> {
+                             x.start_response(http::status::from_code(200), {});
+                             std::string body = "abcdef";
+                             co_await x.writer().write(std::as_bytes(std::span(body)));
+                             co_await x.writer().finish();
+                         })
+                  .ok());
+    httpserver::manual_executor executor;
+    hd::http2_request_engine engine(budget, routes, executor, {}, context);
+    hd::hpack_encoder encoder(budget);
+    auto wire = h2test::preface();
+    h2test::append(wire, h2test::frame(4, 0, 0, h2test::setting(4, 0)));
+    h2test::append(wire, h2test::frame(1, 5, 1, h2test::encode(encoder, h2test::get())));
+    LT_ASSERT(h2test::feed(engine, wire));
+    executor.run_pending();
+    h2test::output(engine);
+    h2test::output(engine);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(hs::diagnostic_kind::flow_stalled)], 1u);
+    LT_ASSERT(h2test::feed(engine, h2test::frame(8, 0, 1, h2test::increment(6))));
+    for (unsigned i = 0; i < 4; ++i) {
+        h2test::output(engine);
+        executor.run_pending();
+    }
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(hs::diagnostic_kind::stream_completed)], 1u);
+    wire = h2test::frame(1, 5, 3, h2test::encode(encoder, h2test::get()));
+    LT_ASSERT(h2test::feed(engine, wire));
+    executor.run_pending();
+    LT_ASSERT(h2test::feed(engine, h2test::frame(3, 0, 3, {0, 0, 0, 8})));
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(hs::diagnostic_kind::stream_admitted)], 2u);
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(hs::diagnostic_kind::stream_cancelled)], 1u);
+LT_END_AUTO_TEST(diagnostics_count_admission_completion_reset_and_flow_transition)
+
+
+LT_BEGIN_AUTO_TEST(http2_streaming_suite, local_limit_and_protocol_failure_have_typed_events)
+    auto budget = h2test::budget(); hs::route_registry routes;
+    LT_ASSERT(hs::route_registry::create(budget, routes).ok());
+    std::vector<hs::diagnostic_event> seen;
+    hs::diagnostics channel([&](const auto& event) { seen.push_back(event); });
+    hd::request_dispatch_context context; context.diagnostics = channel;
+    hd::http2_request_limits limits; limits.max_streams = 1;
+    httpserver::manual_executor executor;
+    hd::http2_request_engine engine(budget, routes, executor, limits, context);
+    hd::hpack_encoder encoder(budget); auto wire = h2test::preface();
+    for (auto id : {1u, 3u}) h2test::append(wire, h2test::frame(1, 4, id, h2test::encode(encoder, h2test::get())));
+    LT_ASSERT(h2test::feed(engine, wire));
+    channel.dispatch();
+    bool streams_refused = false;
+    for (const auto& event : seen) if (event.kind == hs::diagnostic_kind::resource_refused)
+        streams_refused = event.resource_kind == hs::resource::streams && event.outcome == http::outcome_code::limit_exceeded;
+    LT_CHECK(streams_refused);
+    LT_CHECK(!h2test::feed(engine, h2test::frame(4, 0, 0, {1})));
+    LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(hs::diagnostic_kind::protocol_failure)], 1u);
+LT_END_AUTO_TEST(local_limit_and_protocol_failure_have_typed_events)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

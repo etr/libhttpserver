@@ -183,12 +183,30 @@ bool http3_request_engine::state::prepare_output(record& r) {
     r.sections.pop_front();
     return true;
 }
+bool http3_request_engine::state::retention_room(record& r, std::size_t count, std::size_t cap) {
+    if (!retention_available(r.local, count, cap, !r.information.empty())) {
+        if (!r.retention_blocked) {
+            observe(server::diagnostic_kind::resource_refused, r.transport->id(), http::outcome_code::limit_exceeded,
+                    server::diagnostic_reason::capacity, server::resource::response_queue_bytes);
+        }
+        r.retention_blocked = true;
+        return false;
+    }
+    r.retention_blocked = false;
+    return true;
+}
+void http3_request_engine::state::flow_stall(record& r, bool blocked) {
+    if (blocked && !r.flow_blocked) observe(server::diagnostic_kind::flow_stalled, r.transport->id(), http::outcome_code::ok, server::diagnostic_reason::flow_control);
+    r.flow_blocked = blocked;
+}
 bool http3_request_engine::state::submit(record& r, std::span<const std::byte> bytes, bool fin) {
     auto& count = r.local ? retained_critical : retained;
     const auto cap = r.local ? critical_output_records : limits.max_pending_output_records;
-    if (!retention_available(r.local, count, cap, !r.information.empty())) return false;
+    if (!retention_room(r, count, cap)) return false;
     auto allowance = flow.send_allowance(r.transport->id(), r.retained_offset, bytes.size());
-    if (!allowance || (!allowance.bytes && !bytes.empty())) return false;
+    const bool blocked = !allowance || (!allowance.bytes && !bytes.empty());
+    flow_stall(r, blocked);
+    if (blocked) return false;
     auto candidate = bytes.first(allowance.bytes);
     fin = fin && candidate.size() == bytes.size();
     const auto retention = r.local ? quic_stream_retention::critical : quic_stream_retention::ordinary;

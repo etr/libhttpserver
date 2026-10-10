@@ -37,6 +37,7 @@
 
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/detail/io_managed_backend.hpp>
 #include <httpserver/detail/listener_engine.hpp>
 #include <httpserver/detail/worker_pool.hpp>
@@ -53,11 +54,12 @@ namespace engine = httpserver::detail;
 class native_server::impl {
  public:
     explicit impl(server_options options)
-        : scope_(std::make_shared<engine::drain_scope>()),
+        : scope_(std::make_shared<engine::drain_scope>(options.diagnostic_channel())),
           options_(std::move(options)),
           budget_(resource_budget::root(options_.budgets())),
           pool_(options_.concurrency().workers),
           backend_(engine::make_socket_backend(options_.loop())) {
+        engine::diagnostics_access::attach(budget_, options_.diagnostic_channel());
         registry_state_ = route_registry::create(budget_, registry_);
     }
 
@@ -159,6 +161,7 @@ class native_server::impl {
 
         engine::connection_engine_config config =
             engine::connection_engine_config::from_budget_limits(options_.budgets());
+        config.diagnostics = options_.diagnostic_channel();
         config.timeouts = options_.timeouts();
         auto pages = std::make_shared<engine::error_page_factories>();
         pages->not_found = options_.not_found_response();

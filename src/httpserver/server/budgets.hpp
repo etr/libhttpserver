@@ -38,6 +38,7 @@ namespace httpserver {
 namespace detail {
 class quic_storage_pool;
 class resource_charge;
+struct diagnostics_access;
 }
 
 namespace server {
@@ -163,9 +164,12 @@ namespace detail {
 // single handle. Counters are lock-free; admission never blocks.
 class budget_node {
  public:
-    budget_node(const budget_limits& limits,
-                std::shared_ptr<budget_node> parent) noexcept
-        : parent_(std::move(parent)), limits_(limits) { }
+    budget_node(const budget_limits& limits, std::shared_ptr<budget_node> parent) noexcept : parent_(std::move(parent)), limits_(limits) {
+        if (parent_) {
+            diagnostic_owner = parent_->diagnostic_owner;
+            diagnostic_account = parent_->diagnostic_account;
+        }
+    }
 
     std::size_t capacity(resource kind) const noexcept {
         return limits_.get(kind);
@@ -182,6 +186,9 @@ class budget_node {
     std::shared_ptr<budget_node> parent_;
     budget_limits limits_;
     std::array<std::atomic<std::size_t>, resource_count> counters_{};
+    std::shared_ptr<void> diagnostic_owner;
+    // action: 1 admits, 0 releases, -1 reports a rolled-back refusal.
+    void (*diagnostic_account)(void*, resource, std::size_t, int) noexcept = nullptr;
 };
 
 // Charges `units` for `kind` on the chain from `leaf` up to the root.
@@ -206,7 +213,10 @@ inline bool charge_chain(budget_node& leaf, resource kind,
         ++committed;
         if (node->prepaid_quic_storage && kind == resource::quic_reassembly_bytes) break;
     }
-    if (!refused) return true;
+    if (!refused) {
+        if (leaf.diagnostic_account) leaf.diagnostic_account(leaf.diagnostic_owner.get(), kind, units, 1);
+        return true;
+    }
     // The refused level holds a transient add; subtract it along with
     // the committed levels below it.
     budget_node* node = &leaf;
@@ -214,6 +224,7 @@ inline bool charge_chain(budget_node& leaf, resource kind,
          node = node->parent_.get()) {
         node->counters_[index].fetch_sub(units, std::memory_order_relaxed);
     }
+    if (leaf.diagnostic_account) leaf.diagnostic_account(leaf.diagnostic_owner.get(), kind, units, -1);
     return false;
 }
 
@@ -221,6 +232,7 @@ inline bool charge_chain(budget_node& leaf, resource kind,
 // Must be called exactly once per committed charge chain.
 inline void release_chain(budget_node& leaf, resource kind,
                           std::size_t units) noexcept {
+    if (leaf.diagnostic_account) leaf.diagnostic_account(leaf.diagnostic_owner.get(), kind, units, 0);
     const std::size_t index = static_cast<std::size_t>(kind);
     for (budget_node* node = &leaf; node != nullptr;
          node = node->parent_.get()) {
@@ -372,6 +384,7 @@ class resource_budget {
  private:
     friend class httpserver::detail::quic_storage_pool;
     friend class httpserver::detail::resource_charge;
+    friend struct httpserver::detail::diagnostics_access;
 
     explicit resource_budget(
         std::shared_ptr<detail::budget_node> node) noexcept
