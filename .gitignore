@@ -138,3 +138,5 @@ __pycache__/
 !scripts/check-v3-runtime-coexistence.py
 
 .debug/
+
+!test/integ/native_websocket_regression.py

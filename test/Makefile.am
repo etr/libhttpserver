@@ -753,6 +753,8 @@ websocket_progress_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 websocket_upgrade_decision_SOURCES = unit/websocket_upgrade_decision_test.cpp
 websocket_upgrade_decision_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 native_websocket_fixture_SOURCES = integ/native_websocket_fixture.cpp
+native_websocket_fixture_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/examples
+EXTRA_DIST += integ/native_websocket_regression.py
 native_websocket_fixture_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 EXTRA_DIST += integ/native_websocket_client.py
 
