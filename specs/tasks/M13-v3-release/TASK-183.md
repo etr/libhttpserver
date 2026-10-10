@@ -24,7 +24,7 @@ Provide v2-to-v3 migration guide and API examples for libhttpserver v3.0.
 **Related Requirements:** PRD-V3N-REQ-009, PRD-V3N-REQ-031, PRD-V3N-REQ-037, PRD-V3N-REQ-038
 **Related Decisions:** DR-V3-001
 
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [TASK-183 local checks and boundaries](../../../docs/task-183-migration-evidence.md).
 Local TLS-off/on C++20 builds, focused suites, public example smoke,
