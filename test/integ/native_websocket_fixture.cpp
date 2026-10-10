@@ -24,18 +24,22 @@
 #include <utility>
 #include <vector>
 #include <atomic>
+#include <cstdlib>
 #include <iostream>
 #include <mutex>
+#include <memory>
 #include <string>
 #include <thread>
 #include <httpserver/server/server.hpp>
 #include <httpserver/exchange.hpp>
 
 #include <httpserver/concurrency/resume_signal.hpp>
+#include "./v3_host_poll.hpp"
 namespace h = httpserver;
 namespace {
 std::mutex log_mu;
 std::atomic<int> accepted{0}, closed{0};
+std::atomic<bool> failed{false};
 h::resume_signal send_gate;
 h::server::native_server* fixture_server = nullptr;
 void event(const std::string& text) { std::lock_guard lock(log_mu); std::cout << text << std::endl; }
@@ -54,13 +58,19 @@ h::task<void> route(h::exchange& x) {
         result.rejection_fields.append("Content-Length", "0");
         result.rejection_fields.append("Connection", "close");
         x.respond(result.rejection_status, result.rejection_fields);
-        event("REFUSED " + std::to_string(result.rejection_status.code()));
+        event("REFUSED " + std::to_string(result.rejection_status.code()) + " " + result.status.message());
         co_return;
     }
     ++accepted; event("ACCEPT " + result.selected_subprotocol);
     auto session = std::move(*result.session);
     h::resume_signal close_gate;
-    session.on_close([close_gate](auto info) mutable { ++closed; close_gate.signal(); event("CLOSE " + std::to_string(info.clean) + " " + std::to_string(static_cast<int>(info.status.code()))); });
+    auto notified = std::make_shared<std::atomic<bool>>(false);
+    session.on_close([close_gate, notified](auto info) mutable {
+        if (notified->exchange(true)) failed = true;
+        ++closed;
+        close_gate.signal();
+        event("CLOSE " + std::to_string(info.clean) + " " + std::to_string(static_cast<int>(info.status.code())));
+    });
     if (x.head().route_path == "/drain-handler") {
         h::server::drain_ticket ticket;
         auto begun = fixture_server->begin_drain(std::chrono::milliseconds(500), ticket);
@@ -78,25 +88,39 @@ h::task<void> route(h::exchange& x) {
         session.try_send(h::websocket::message_kind::text,
             {reinterpret_cast<const std::byte*>(text.data()), text.size()});
     }
-    if (x.head().route_path == "/flood") {
-        std::vector<std::byte> payload(1048576);
+    if (x.head().route_path == "/flood" || x.head().route_path == "/reject-send") {
+        std::vector<std::byte> payload(x.head().route_path == "/reject-send" ? 1048577 : 1048576);
         for (unsigned i = 0; i < 64; ++i) {
             std::fill(payload.begin(), payload.end(), std::byte(i));
             for (;;) {
                 auto sent = session.try_send(h::websocket::message_kind::binary, payload);
                 if (sent.disposition == h::websocket::send_disposition::accepted) break;
                 if (sent.disposition == h::websocket::send_disposition::closed) {
-                    event("SEND CLOSED"); co_return;
+                    event("SEND CLOSED");
+                    co_await close_gate.wait_for(std::chrono::seconds(5));
+                    co_return;
+                }
+                if (sent.disposition == h::websocket::send_disposition::rejected) {
+                    event("SEND REJECTED " + sent.status.message());
+                    if (x.head().route_path != "/reject-send") {
+                        failed = true;
+                        co_return;
+                    }
+                    session.close(1000, "rejected");
+                    break;
                 }
                 event("BLOCKED " + std::to_string(i));
                 auto room = co_await session.writable();
                 if (!room.ok()) {
-                    event("WRITABLE CLOSED"); co_return;
+                    event("WRITABLE CLOSED");
+                    co_await close_gate.wait_for(std::chrono::seconds(5));
+                    co_return;
                 }
                 event("RESUMED " + std::to_string(i));
             }
+            if (x.head().route_path == "/reject-send") break;
         }
-        event("SENT 64");
+        event(x.head().route_path == "/reject-send" ? "REJECTION HANDLED" : "SENT 64");
     }
     for (;;) {
         auto message = co_await session.receive();
@@ -120,9 +144,23 @@ int main() {
     h::server::server_options options;
     h::server::listener_options listener; listener.address = "127.0.0.1";
     options.add_listener(listener); options.concurrency().workers = 2;
+    // Four live sessions cover the three-peer isolation case and one retiring
+    // predecessor. These are storage charges, not logical queue allowances.
+    constexpr std::size_t sessions = 4, message = 1048576, output = message + 10;
+    constexpr std::size_t input_storage = 5 * message + 16384 + 4096 + 256;
+    constexpr std::size_t output_storage = 4 * output + 4096 + (8192 + 256) * 4;
+    options.budgets().set(h::server::resource::body_buffer_bytes, sessions * input_storage);
+    options.budgets().set(h::server::resource::response_queue_bytes,
+                          sessions * (output_storage + 256) + 4096);
+    options.budgets().set(h::server::resource::ws_message_bytes, sessions * message);
+    if (std::getenv("LHS_WS_EXTERNAL")) options.loop() = h::server::loop_mode::external;
+    if (std::getenv("LHS_WS_LOW_BUDGET")) {
+        options.budgets().set(h::server::resource::body_buffer_bytes, 16384);
+    }
     options.timeouts().header = std::chrono::milliseconds(100);
     options.timeouts().ws_close = std::chrono::seconds(2);
     if (!options.validate().ok()) return 2;
+    const auto mode = options.loop();
     h::server::native_server server(std::move(options));
     h::http::method_set get; get.set(h::http::method_id::get);
     fixture_server = &server;
@@ -143,8 +181,30 @@ int main() {
         co_await x.writer().write({reinterpret_cast<const std::byte*>(last.data()), last.size()});
         co_await x.writer().finish();
     });
+    server.route(h::http::method::known(h::http::method_id::get), "/stop-handler", [](h::exchange&) -> h::task<void> {
+        fixture_server->request_stop();
+        event("STOP HANDLER returned");
+        co_return;
+    });
     server.route_prefix(get, "/", route);
     if (!server.listen().ok()) return 2;
+    std::thread host;
+    if (mode == h::server::loop_mode::external) {
+        host = std::thread([&] {
+            try {
+                auto* driver = server.readiness();
+                auto snapshot = driver->interests();
+                while (server.is_running()) {
+                    auto events = v3_host::wait(snapshot);
+                    if (!driver->dispatch(events, v3_host::clock_type::now()).ok()) {
+                        failed = true;
+                        break;
+                    }
+                    snapshot = driver->interests();
+                }
+            } catch (...) { failed = true; }
+        });
+    }
     event("READY " + std::to_string(server.get_bound_port(0)));
     h::server::drain_ticket ticket;
     std::string command;
@@ -152,7 +212,10 @@ int main() {
         if (command == "STOP") break;
         if (command == "DRAIN" || command == "DRAIN-DROP" || command == "DRAIN-LATE") {
             auto begun = server.begin_drain(std::chrono::milliseconds(250), ticket);
-            if (!begun.ok()) return 3;
+            if (!begun.ok()) {
+                failed = true;
+                break;
+            }
             event("DRAIN START");
             if (command == "DRAIN-DROP") {
                 ticket = h::server::drain_ticket{};
@@ -160,7 +223,10 @@ int main() {
             }
             if (command == "DRAIN-LATE") std::this_thread::sleep_for(std::chrono::milliseconds(400));
             h::server::drain_result result;
-            if (!ticket.wait(result).ok()) return 3;
+            if (!ticket.wait(result).ok()) {
+                failed = true;
+                break;
+            }
             event(std::string("DRAIN RESULT ") +
                   (result.status == h::server::drain_status::completed ? "completed" : "expired") +
                   " " + std::to_string(result.remaining));
@@ -168,5 +234,10 @@ int main() {
         if (command == "SEND") send_gate.signal();
         if (command == "STATS") event("STATS " + std::to_string(accepted.load()) + " " + std::to_string(closed.load()));
     }
-    server.request_stop(); server.stop(); event("STOPPED");
+    server.request_stop();
+    if (host.joinable()) host.join();
+    server.stop();
+    event("STATS " + std::to_string(accepted.load()) + " " + std::to_string(closed.load()));
+    event("STOPPED");
+    return failed || accepted != closed ? 1 : 0;
 }
