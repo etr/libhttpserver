@@ -80,8 +80,9 @@ struct request_fixture {
         return hs::resource_budget::root(l);
     }
     explicit request_fixture(hd::http3_request_limits limits = {}, std::uint64_t send = 65536, hd::quic_recovery_config config = {},
-                             std::uint64_t connection_send = 1048576, std::uint64_t incoming_requests = 64)
-        : root(large_budget()),
+                             std::uint64_t connection_send = 1048576, std::uint64_t incoming_requests = 64,
+                             hs::resource_budget enclosing = {})
+        : root(enclosing.valid() ? enclosing : large_budget()),
           pool(4194304, 1048576, root),
           flow(hd::quic_endpoint_role::server, parameters(65536, 1048576, incoming_requests), parameters(send, connection_send), 128, pool.data()),
           recovery(config, pool.data(), pool.critical()) {

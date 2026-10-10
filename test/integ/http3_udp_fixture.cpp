@@ -99,6 +99,7 @@ struct fixture {
     hd::quic_server_admission admission;
     hd::tls_credentials_registry credentials;
     h::server::resource_budget root = h::server::resource_budget::root({});
+    h::server::resource_budget probe_budget;
     h::server::route_registry routes;
     h::server::peer_policy policy;
     std::unique_ptr<parity::behavior_profile> behavior;
@@ -121,7 +122,15 @@ struct fixture {
     std::shared_ptr<h3net::connection> sending;
     std::shared_ptr<hd::quic_admission_reply> reply;
     std::optional<h3net::transmission> sent;
-    fixture(const char* certificate, const char* key, const char* pcap, const std::string& profile = {}) : packets(pcap) {
+    fixture(const char* certificate, const char* key, const char* pcap, const std::string& profile = {}, bool probe = false) : packets(pcap) {
+        if (probe) {
+            h::server::budget_limits limits;
+            limits.set(h::server::resource::quic_reassembly_bytes, 16777216);
+            limits.set(h::server::resource::header_fields, 4096);
+            limits.set(h::server::resource::connections, 1);
+            limits.set(h::server::resource::streams, 16);
+            probe_budget = h::server::resource_budget::root(limits);
+        }
         hd::tls_host_credentials host;
         host.host = "localhost";
         host.certificate_chain_pem = read_file(certificate);
@@ -162,6 +171,21 @@ struct fixture {
             co_await pause->wait();
             x.respond(h::http::status::from_code(200), {});
             event("released", x.connection_id(), stream);
+        });
+        routes.route(post, "/upload-hold", [this](h::exchange& x) -> h::task<void> {
+            const auto stream = connections.at(x.connection_id())->current_stream();
+            const auto key = std::pair{x.connection_id(), stream};
+            auto pause = std::make_shared<h::resume_signal>(); holds.emplace(key, pause);
+            lifetime guard{x.cancellation(), x.connection_id(), stream, [this, key] { holds.erase(key); }};
+            x.admit_body({1048576}); event("upload_held", x.connection_id(), stream);
+            co_await pause->wait();
+            std::array<std::byte, 4096> bytes{};
+            for (;;) {
+                auto read = co_await x.body().read_some(bytes);
+                if (!read.status.ok()) co_return;
+                if (read.end_of_body) break;
+            }
+            x.respond(h::http::status::from_code(204), {});
         });
         h3semantic::install(routes, [this](const char* kind, h::exchange& x, std::size_t count) {
             if (std::string_view(kind) == "entered") semantic_streams[&x] = connections.at(x.connection_id())->current_stream();
@@ -240,6 +264,13 @@ struct fixture {
             if (!holds.empty()) throw std::runtime_error("reset with active held request");
         } else if (name == "ws_snapshot") {
             ws_snapshot("ws_snapshot", id, stream);
+        } else if (name == "budgets") {
+            auto scope = connections.at(id)->storage_budget();
+            std::cout << "{\"event\":\"budgets\"";
+            for (auto kind : {h::server::resource::connections, h::server::resource::streams, h::server::resource::header_bytes,
+                              h::server::resource::body_buffer_bytes, h::server::resource::response_queue_bytes, h::server::resource::quic_reassembly_bytes})
+                std::cout << ",\"" << h::server::to_string(kind) << "\":" << scope.in_use(kind);
+            std::cout << '}' << std::endl;
         } else if (name == "snapshot") {
             snapshot("snapshot", id, stream);
         } else if (name == "drain") {
@@ -314,7 +345,7 @@ struct fixture {
                 const auto id = connections.size() + 1;
                 auto context = behavior ? behavior->context() : hd::request_dispatch_context{};
                 auto connection = std::make_shared<h3net::connection>(credentials.acquire()->select_default(), *facts, routes, executor, id, policy,
-                    std::string{}, nullptr, nullptr, std::move(context));
+                    std::string{}, nullptr, nullptr, std::move(context), probe_budget);
                 connections.emplace(id, connection);
                 auto promoted = admission.promote(outcome.pending, listener.datagrams(), connection, std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count());
                 if (!promoted) throw std::runtime_error("CID promotion refused");
@@ -375,9 +406,10 @@ struct fixture {
 }  // namespace
 int main(int argc, char** argv) {
     try {
-        if (argc != 4 && !(argc == 6 && std::string_view(argv[4]) == "--behavior-profile"))
+        const bool probe = argc == 5 && std::string_view(argv[4]) == "--resource-probe";
+        if (argc != 4 && !probe && !(argc == 6 && std::string_view(argv[4]) == "--behavior-profile"))
             throw std::runtime_error("usage: http3_udp_fixture certificate key packets.pcap [--behavior-profile profile]");
-        fixture f(argv[1], argv[2], argv[3], argc == 6 ? argv[5] : "");
+        fixture f(argv[1], argv[2], argv[3], argc == 6 ? argv[5] : "", probe);
         std::cout << "READY " << f.port << std::endl;
         const auto deadline = clock_type::now() + std::chrono::seconds(120);
         do {

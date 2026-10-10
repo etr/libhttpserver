@@ -30,6 +30,16 @@
 #include <httpserver/concurrency/executor.hpp>
 #include "./websocket_test_helpers.hpp"
 #include "./littletest.hpp"
+// Match the repository's sanitizer-owned allocator lane. Race cases remain
+// instrumented; allocation fault injection runs in normal and ASan/UBSan lanes.
+#if defined(LHS_SANITIZER_OWNS_OPERATOR_NEW) || defined(__SANITIZE_THREAD__)
+#define LHS_SKIP_NEW_OVERRIDE 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer) || __has_feature(memory_sanitizer) || __has_feature(leak_sanitizer)
+#define LHS_SKIP_NEW_OVERRIDE 1
+#endif
+#endif
+#ifndef LHS_SKIP_NEW_OVERRIDE
 namespace {
 thread_local bool fail_next_allocation = false;
 }
@@ -39,6 +49,7 @@ void* operator new(std::size_t size) {
     throw std::bad_alloc();
 }
 void operator delete(void* memory) noexcept { std::free(memory); }
+#endif
 LT_BEGIN_SUITE(drain_race_suite)
     void set_up() { }
     void tear_down() { }
@@ -59,6 +70,9 @@ LT_BEGIN_AUTO_TEST(drain_race_suite, concurrent_terminal_causes_wake_both_operat
     LT_CHECK(session.try_send(httpserver::websocket::message_kind::text, payload).disposition == httpserver::websocket::send_disposition::closed);
 LT_END_AUTO_TEST(concurrent_terminal_causes_wake_both_operations_once)
 LT_BEGIN_AUTO_TEST(drain_race_suite, close_allocation_failure_settles_once_and_wakes_parked_receive)
+#ifdef LHS_SKIP_NEW_OVERRIDE
+    LT_SKIP("sanitizer owns operator new; fault injection is covered in normal and ASan/UBSan lanes");
+#else
     int callbacks = 0, receives = 0;
     httpserver::detail::websocket_driver driver; auto session = driver.take_session();
     session.on_close([&](auto info) { ++callbacks; LT_CHECK(info.status.code() == httpserver::http::outcome_code::limit_exceeded); });
@@ -70,6 +84,7 @@ LT_BEGIN_AUTO_TEST(drain_race_suite, close_allocation_failure_settles_once_and_w
     LT_CHECK(result.code() == httpserver::http::outcome_code::limit_exceeded);
     LT_CHECK(driver.snapshot().terminal); LT_CHECK(!driver.snapshot().closing_since);
     executor.run_pending(); LT_CHECK_EQ(receives, 1); LT_CHECK_EQ(callbacks, 1);
+#endif
 LT_END_AUTO_TEST(close_allocation_failure_settles_once_and_wakes_parked_receive)
 LT_BEGIN_AUTO_TEST(drain_race_suite, app_peer_drain_and_terminal_race_preserves_one_outcome)
     std::atomic<int> callbacks{0}; httpserver::websocket::close_info observed;

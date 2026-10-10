@@ -46,7 +46,10 @@ void http3_request_engine::state::leave_connection() {
     }
 }
 void http3_request_engine::state::retire_drain_request(record& r) {
-    if (r.drain_unit && !r.semantic && r.fin_retained && r.information.empty()) r.drain_unit.reset();
+    if (!r.semantic && r.information.empty() && (r.cancelled || r.fin_retained)) {
+        if (!r.local) connection.retire_request(r.transport->id());
+        r.drain_unit.reset();
+    }
 }
 void http3_request_engine::state::interrupt_drain() {
     if (phase != drain_phase::draining) return;

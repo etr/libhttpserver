@@ -32,6 +32,9 @@ class http3_connection final {
  public:
     http3_connection(quic_storage_lease data, quic_storage_lease critical, http3_limits limits = {});
     std::optional<http3_error> attach_stream(std::uint64_t opened_peer_id);
+    // The exchange owner retires admission after application/retained output
+    // ends. Terminal facts keep their separately charged storage tombstone.
+    void retire_request(std::uint64_t id);
     std::optional<http3_error> attach_local_stream(http3_role role, std::uint64_t opened_local_id);
     http3_feed_result feed(std::uint64_t id, std::span<const std::byte> input, std::uint64_t offset);
     const http3_event* event(std::uint64_t id) const;
@@ -119,7 +122,7 @@ class http3_connection final {
     std::size_t outgoing_blocked() const;
     quic_storage_lease data_, critical_;
     http3_limits limits_;
-    server::reservation metadata_;
+    server::reservation seat_, metadata_;
     std::map<std::uint64_t, std::unique_ptr<stream>> streams_;
     std::array<bool, 3> critical_seen_{};
     http3_peer_settings peer_;

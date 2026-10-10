@@ -55,14 +55,15 @@ connection_engine::connection_engine(io_socket_backend& backend, worker_pool& po
       hooks_(hooks),
       owner_(pool),
       budget_(budget),
+      tail_charge_(budget, server::resource::body_buffer_bytes),
       scope_(scope),
       config_(std::move(config)),
       id_(id),
       on_stopped_(std::move(on_stopped)),
       peer_(peer),
       peers_(peers),
-      parser_(config_.head),
-      outbox_(config_.outbox) {
+      parser_(config_.head, budget),
+      outbox_(config_.outbox, budget) {
     if (config_.pages == nullptr) {
         // The v2 default pages serve when the options carried no
         // custom factories.
@@ -178,16 +179,21 @@ void connection_engine::request_close() noexcept {
 
 void connection_engine::absorb(std::string_view data) {
     bool body_failed = false;
+    bool quota_failed = false;
     bool drain_done = false;
     note_transport_activity();
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (shutdown_) return;
-        if (phase_ != stream_phase::http) {
+        const bool parking = !websocket_input_charge_.owns() && (phase_ != stream_phase::http || gate_ == body_gate::pending ||
+            gate_ == body_gate::admitted || head_routed_ || parser_.state() == http1_head_state::complete || !pending_tail_.empty());
+        quota_failed = parking && !tail_charge_.grow(3 * data.size());
+        if (quota_failed) {
+            close_after_drain_ = true;
+        } else if (phase_ != stream_phase::http) {
             pending_tail_.append(data);
-            return;
-        }
-        switch (gate_) {
+        } else {
+            switch (gate_) {
             case body_gate::none:
                 absorb_head_locked(data);
                 break;
@@ -200,7 +206,14 @@ void connection_engine::absorb(std::string_view data) {
             case body_gate::draining:
                 drain_done = absorb_drain_locked(data);
                 break;
+            }
         }
+        release_tail_charge_locked();
+    }
+    if (quota_failed) {
+        disconnect_current(http::outcome_code::limit_exceeded, "shared HTTP/1 receive storage exhausted");
+        fail_websocket({http::outcome_code::limit_exceeded, "shared WebSocket transport storage exhausted"});
+        wake_loops();
     }
     if (drain_done) {
         // The route loop's drain await re-checks, and the drain
@@ -247,20 +260,25 @@ std::uint16_t connection_engine::error_code_for(
     return 400;
 }
 
-void connection_engine::stage_body(const http1_body_mode& mode,
-                                   std::string seed) {
+bool connection_engine::stage_body(const http1_body_mode& mode) {
     {
         std::lock_guard<std::mutex> lock(mu_);
+        const auto needed = 3 * pending_tail_.size();
+        if (needed > tail_charge_.units() && !tail_charge_.grow(needed - tail_charge_.units())) return false;
         body_ = std::make_unique<http1_body_source>(mode, config_.body, [weak = weak_from_this()] {
             if (auto engine = weak.lock()) engine->wake_loops_ordered();
-        });
+        }, budget_);
         gate_ = body_gate::pending;
-        early_bytes_ = std::move(seed);
+        // Include every reader byte received since head preparation. The
+        // owner and gate change together, so later absorbs append in order.
+        early_bytes_ = std::move(pending_tail_);
+        std::string().swap(pending_tail_);
     }
     // The reader may already be gated on the early cap (or becomes so
     // now), and the watchdog's candidate set changed.
     wake_loops();
     rearm_watchdog();
+    return true;
 }
 
 bool connection_engine::admit_early_body() {
@@ -280,6 +298,7 @@ bool connection_engine::admit_early_body() {
             seed_failed = body_->failed();
         }
         gate_ = body_gate::admitted;
+        release_tail_charge_locked();
     }
     // The gated reader resumes, and body_idle may be nearer than
     // whatever is armed.
@@ -352,6 +371,15 @@ bool connection_engine::absorb_drain_locked(std::string_view data) {
     return true;
 }
 
+void connection_engine::release_tail_charge_locked() {
+    if (pending_tail_.empty()) std::string().swap(pending_tail_);
+    if (early_bytes_.empty()) std::string().swap(early_bytes_);
+    const auto retained = websocket_input_charge_.owns() ? 0 :
+        std::max(3 * (pending_tail_.size() + early_bytes_.size()),
+                 (pending_tail_.empty() ? 0 : pending_tail_.capacity()) + (early_bytes_.empty() ? 0 : early_bytes_.capacity()));
+    if (tail_charge_.units() > retained) tail_charge_.shrink(tail_charge_.units() - retained);
+}
+
 bool connection_engine::reader_may_read_locked() const {
     if (websocket_) {
         return websocket_->snapshot().input_ready;
@@ -393,8 +421,10 @@ void connection_engine::feed_body_tail() {
     bool failed = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        if (!shutdown_ && body_tail_ready_locked())
+        if (!shutdown_ && body_tail_ready_locked()) {
             failed = absorb_admitted_locked({});
+            release_tail_charge_locked();
+        }
     }
     if (failed) {
         disconnect_current(http::outcome_code::protocol_error, "request body framing failed");
@@ -671,6 +701,14 @@ void connection_engine::finalize() {
     // The engine's counted unit drops first: by the time the listener
     // erases its record, a drain waiting on the scope observes
     // completion with every loop finished and the writer flushed.
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        body_.reset(); parser_ = http1_head_parser(config_.head);
+        std::string().swap(pending_tail_); std::string().swap(early_bytes_);
+        tail_charge_.shrink(tail_charge_.units());
+        websocket_input_charge_.release(); websocket_output_charge_.release(); websocket_message_charge_.release();
+        seat_.release(); outbox_.retire();
+    }
     scope_.leave();
     backend_.release_connection(id_);
     stopped_callback done;

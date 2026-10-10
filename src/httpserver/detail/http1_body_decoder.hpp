@@ -65,6 +65,7 @@
 #include <httpserver/http/fields.hpp>
 #include <httpserver/http/outcome.hpp>
 #include <httpserver/server/budgets.hpp>
+#include <httpserver/detail/resource_charge.hpp>
 
 namespace httpserver {
 
@@ -108,8 +109,9 @@ struct http1_body_progress {
 // thread-safe: the engine feeds and pulls it on the connection thread.
 class http1_body_decoder {
  public:
-    http1_body_decoder(const http1_body_mode& mode, http1_body_budget budget)
-        : budget_(budget), kind_(mode.kind), failure_(mode.failure) {
+    http1_body_decoder(const http1_body_mode& mode, http1_body_budget budget, server::resource_budget scope = {})
+        : budget_(budget), storage_charge_(scope, server::resource::body_buffer_bytes), trailer_bytes_(scope, server::resource::header_bytes),
+          trailer_fields_(scope, server::resource::header_fields), kind_(mode.kind), failure_(mode.failure) {
         switch (kind_) {
             case http1_body_kind::none:
                 phase_ = phase::message_end;
@@ -165,6 +167,7 @@ class http1_body_decoder {
             std::copy_n(front.begin(), n, into.begin());
             staged_total_ -= n;
             if (n == front.size()) {
+                storage_charge_.shrink(front.capacity() + 128);
                 staging_.pop_front();
             } else {
                 front.erase(front.begin(),
@@ -257,7 +260,7 @@ class http1_body_decoder {
             {wire.size(), room,
              static_cast<std::size_t>(length_remaining_)});
         if (n > 0) {
-            stage(wire.substr(0, n));
+            if (!stage(wire.substr(0, n))) return {0, false};
             length_remaining_ -= n;
         }
         if (length_remaining_ == 0) {
@@ -350,7 +353,7 @@ class http1_body_decoder {
             {wire.size(), room,
              static_cast<std::size_t>(length_remaining_)});
         if (n > 0) {
-            stage(wire.substr(0, n));
+            if (!stage(wire.substr(0, n))) return {0, false};
             length_remaining_ -= n;
         }
         if (length_remaining_ == 0) phase_ = phase::chunk_data_end;
@@ -404,6 +407,9 @@ class http1_body_decoder {
                      "trailer bytes budget exhausted");
                 return {consumed, false};
             }
+            if (!trailer_bytes_.grow(3)) {
+                fail(http::outcome_code::limit_exceeded, "shared trailer bytes exhausted"); return {consumed, false};
+            }
             line_.push_back(c);
         }
         return {consumed, false};
@@ -453,6 +459,7 @@ class http1_body_decoder {
             return fail(http::outcome_code::protocol_error,
                         "forbidden trailer field");
         }
+        if (!trailer_fields_.grow(1)) return fail(http::outcome_code::limit_exceeded, "shared trailer fields exhausted");
         trailers_.append(name, value);
         return true;
     }
@@ -583,7 +590,9 @@ class http1_body_decoder {
 
     // Copies `chunk` into the staging queue; the caller has verified
     // it fits the budget.
-    void stage(std::string_view chunk) {
+    bool stage(std::string_view chunk) {
+        if (!storage_charge_.grow(chunk.size() + 128))
+            return fail(http::outcome_code::limit_exceeded, "shared body storage exhausted");
         std::vector<std::byte> segment;
         segment.reserve(chunk.size());
         const auto* first = reinterpret_cast<const std::byte*>(
@@ -591,6 +600,7 @@ class http1_body_decoder {
         segment.assign(first, first + chunk.size());
         staged_total_ += chunk.size();
         staging_.push_back(std::move(segment));
+        return true;
     }
 
     // Records a typed, sticky rejection. Returns false so callers can
@@ -621,6 +631,7 @@ class http1_body_decoder {
     static constexpr std::size_t kMaxChunkSizeLineBytes = 1024;
 
     http1_body_budget budget_;
+    resource_charge storage_charge_, trailer_bytes_, trailer_fields_;
     http1_body_kind kind_ = http1_body_kind::none;
     http::outcome failure_;
     http1_close_policy close_policy_ = http1_close_policy::none;

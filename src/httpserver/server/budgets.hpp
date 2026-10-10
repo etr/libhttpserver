@@ -35,6 +35,11 @@
 
 namespace httpserver {
 
+namespace detail {
+class quic_storage_pool;
+class resource_charge;
+}
+
 namespace server {
 
 // Accounting keys for the hierarchical limits (architecture §3.4):
@@ -171,6 +176,9 @@ class budget_node {
             std::memory_order_relaxed);
     }
 
+    // QUIC subdivisions propagate semantic quotas but their storage envelope
+    // was admitted once at the enclosing scope.
+    bool prepaid_quic_storage = false;
     std::shared_ptr<budget_node> parent_;
     budget_limits limits_;
     std::array<std::atomic<std::size_t>, resource_count> counters_{};
@@ -196,6 +204,7 @@ inline bool charge_chain(budget_node& leaf, resource kind,
             break;
         }
         ++committed;
+        if (node->prepaid_quic_storage && kind == resource::quic_reassembly_bytes) break;
     }
     if (!refused) return true;
     // The refused level holds a transient add; subtract it along with
@@ -216,6 +225,7 @@ inline void release_chain(budget_node& leaf, resource kind,
     for (budget_node* node = &leaf; node != nullptr;
          node = node->parent_.get()) {
         node->counters_[index].fetch_sub(units, std::memory_order_relaxed);
+        if (node->prepaid_quic_storage && kind == resource::quic_reassembly_bytes) break;
     }
 }
 
@@ -360,6 +370,9 @@ class resource_budget {
     }
 
  private:
+    friend class httpserver::detail::quic_storage_pool;
+    friend class httpserver::detail::resource_charge;
+
     explicit resource_budget(
         std::shared_ptr<detail::budget_node> node) noexcept
         : node_(std::move(node)) { }

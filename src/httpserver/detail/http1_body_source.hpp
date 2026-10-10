@@ -61,8 +61,8 @@ namespace detail {
 class http1_body_source final : public body_source {
  public:
     http1_body_source(const http1_body_mode& mode, http1_body_budget budget,
-                      std::function<void()> room_released = {})
-        : decoder_(mode, budget), room_released_(std::move(room_released)) { }
+                      std::function<void()> room_released = {}, server::resource_budget scope = {})
+        : decoder_(mode, budget, scope), room_released_(std::move(room_released)) { }
 
     http1_body_source(const http1_body_source&) = delete;
     http1_body_source& operator=(const http1_body_source&) = delete;

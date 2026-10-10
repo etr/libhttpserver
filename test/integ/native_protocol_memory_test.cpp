@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <fstream>
 #endif
+#include <ctime>
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -92,6 +93,19 @@ void plateau(rig& r, const char* name, const std::function<void(std::size_t)>& w
     // metadata/quarantine. No custom allocation operators are installed.
     constexpr std::size_t slack = 1024 * 1024;
     check(after <= memory + slack, "retained process memory grew past fixed slack");
+    // The peer and observer are idle in these windows; all measured process
+    // CPU comes from the running engine/workers plus the sleeping observer.
+    for (unsigned sample = 0; sample < 3; ++sample) {
+        timespec before{}, after{};
+        check(clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &before) == 0, "CPU measurement unavailable");
+        auto start = std::chrono::steady_clock::now();
+        std::this_thread::sleep_for(1s);
+        auto wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        check(clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &after) == 0, "CPU measurement unavailable");
+        const double cpu = after.tv_sec - before.tv_sec + (after.tv_nsec - before.tv_nsec) / 1e9;
+        check(cpu / wall <= .2, "stalled engine spun instead of parking");
+        std::cout << "CPU " << name << " sample=" << sample << " cpu_seconds=" << cpu << " wall_seconds=" << wall << '\n';
+    }
     std::cout << "PLATEAU " << name << " retained=" << first.total() << '/' << second.total()
               << " RSS=" << memory << '/' << after << " slack=" << slack << '\n';
 }

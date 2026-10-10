@@ -2515,3 +2515,10 @@ EXTRA_DIST += integ/http3_full_gate_runner_test.py conformance/http3/full-gates.
 EXTRA_DIST += integ/behavior_parity_h2.py
 EXTRA_DIST += integ/behavior_parity_h3.py
 EXTRA_DIST += integ/behavior_parity_client_test.py
+
+check_PROGRAMS += resource_limits
+resource_limits_SOURCES = unit/resource_limits_test.cpp
+resource_limits_LDADD = $(http3_headers_LDADD)
+resource_limits_LDFLAGS = $(http3_headers_LDFLAGS)
+
+TESTS += ../scripts/lib/resource_limits_probe_test.py

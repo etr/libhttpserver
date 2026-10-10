@@ -15,13 +15,17 @@ quic_storage_pool::quic_storage_pool(std::size_t data_bytes, std::size_t critica
     server::reservation envelope;
     if (!ancestors.reserve(server::resource::quic_reassembly_bytes, data_bytes + critical_bytes, envelope).ok()) throw std::bad_alloc();
     auto state = std::make_shared<quic_storage_state>();
-    server::budget_limits data_limits, critical_limits;
+    auto data_limits = ancestors.node_->limits_;
+    auto critical_limits = data_limits;
     data_limits.set(server::resource::quic_reassembly_bytes, data_bytes);
     critical_limits.set(server::resource::quic_reassembly_bytes, critical_bytes);
-    // Independent internal roots subdivide already charged storage, so actual
-    // ancestors see exactly one envelope charge and data cannot spend its reserve.
-    state->data = server::resource_budget::root(data_limits);
-    state->critical = server::resource_budget::root(critical_limits);
+    // Only storage stops at the prepaid subdivision. Every semantic resource
+    // still reaches the configured ancestors and competes with siblings.
+    auto data_node = std::make_shared<server::detail::budget_node>(data_limits, ancestors.node_);
+    auto critical_node = std::make_shared<server::detail::budget_node>(critical_limits, ancestors.node_);
+    data_node->prepaid_quic_storage = critical_node->prepaid_quic_storage = true;
+    state->data = server::resource_budget(std::move(data_node));
+    state->critical = server::resource_budget(std::move(critical_node));
     state->ancestors = ancestors;
     state->envelope = std::move(envelope);
     state_ = std::move(state);

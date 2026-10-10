@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <atomic>
@@ -56,6 +57,35 @@ struct connection_engine_test_access {
             result.ws_input = usage.incoming_bytes; result.ws_output = usage.output_bytes;
         }
         return result;
+    }
+    static std::size_t retained_tail_capacity(connection_engine& engine) {
+        std::lock_guard lock(engine.mu_);
+        const auto inline_bytes = std::string().capacity();
+        return (engine.pending_tail_.capacity() > inline_bytes ? engine.pending_tail_.capacity() : 0) +
+               (engine.early_bytes_.capacity() > inline_bytes ? engine.early_bytes_.capacity() : 0);
+    }
+    static void receive(connection_engine& engine, std::string_view data) { engine.absorb(data); }
+    static http::request_head prepare_head(connection_engine& engine) {
+        std::lock_guard lock(engine.mu_);
+        http::request_head head;
+        resource_charge bytes, fields;
+        if (!engine.prepare_head_locked(head, bytes, fields)) throw std::runtime_error("head receive admission refused");
+        return head;
+    }
+    static std::pair<std::string, std::string> receive_storage(connection_engine& engine) {
+        std::lock_guard lock(engine.mu_);
+        return {engine.pending_tail_, engine.early_bytes_};
+    }
+    static bool stage_body(connection_engine& engine, const http1_body_mode& mode) {
+        return engine.stage_body(mode);
+    }
+    static void settle(connection_engine& engine, const http1_body_mode& mode) {
+        bool keep = true;
+        engine.settle_exchange_state(keep, mode);
+    }
+    static bool receive_refused(connection_engine& engine) {
+        std::lock_guard lock(engine.mu_);
+        return engine.close_after_drain_;
     }
     static bool http_idle(connection_engine& engine) {
         std::lock_guard lock(engine.mu_);

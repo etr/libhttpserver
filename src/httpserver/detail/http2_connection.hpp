@@ -98,7 +98,7 @@ class http2_connection {
     hpack_connection compression_;
     http2_limits limits_;
     rate_window control_rate_, stream_rate_;
-    server::reservation control_charge_, graceful_charge_;
+    server::reservation seat_, control_charge_, graceful_charge_;
     std::array<slot, 3> graceful_{};
     std::size_t graceful_next_ = 0;
     std::uint32_t graceful_cutoff_ = 0;
