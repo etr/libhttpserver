@@ -46,6 +46,10 @@ decoded_frames decode_authenticated_frames(std::span<const std::byte> payload, q
 }  // namespace
 bool quic_network_connection::receive_packet(std::span<const std::byte> packet, const quic_path_identity& path, std::size_t credit, bool& accounted, clock_type::time_point now) {
     auto envelope = parse_quic_envelope(packet, server_cid_.size());
+    // Disabled 0-RTT and server-only packet types cannot select a receive space.
+    if (envelope.code != quic_codec_code::ok ||
+        (envelope.value.kind != quic_packet_kind::initial && envelope.value.kind != quic_packet_kind::handshake &&
+         envelope.value.kind != quic_packet_kind::one_rtt)) return false;
     auto space = packet_space(envelope.value.kind);
     auto index = static_cast<unsigned>(space);
     std::array<std::byte, 65536> plain{}, scratch{};

@@ -1,9 +1,11 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <array>
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 #include <httpserver/detail/fake_io_backend.hpp>
 #include <httpserver/detail/quic_network_connection.hpp>
@@ -26,7 +28,7 @@ struct fixture {
     std::shared_ptr<hd::io_datagram> packet;
     hd::quic_admission_facts facts;
     std::shared_ptr<hd::quic_network_connection> owner;
-    explicit fixture(bool adopt = false) {
+    explicit fixture(bool adopt = false, std::size_t data_bytes = 393216) {
         if (!credentials.replace(quic_test::credentials()).ok() || !hs::route_registry::create(root, routes).ok()) throw std::runtime_error("native fixture setup");
         if (SSL_set1_groups_list(peer.ssl.get(), "X25519") != 1) throw std::runtime_error("native test group");
         const std::array<std::byte, 1> source{std::byte{7}};
@@ -48,7 +50,7 @@ struct fixture {
         admission = std::make_unique<hd::quic_server_admission>(limits);
         const auto pending = admission->receive(packet, 0); const auto seen = admission->inspect(pending.pending);
         if (!seen) throw std::runtime_error("native Initial admission"); facts = *seen;
-        hd::quic_network_config config; config.data_bytes = config.critical_bytes = 393216;
+        hd::quic_network_config config; config.data_bytes = data_bytes; config.critical_bytes = 393216;
         owner = std::make_shared<hd::quic_network_connection>(credentials.acquire()->select_default(), facts, routes, executor, 1, policy, root, config, hd::request_dispatch_context{}, hd::http3_native_context{});
         if (adopt) {
             auto promotion = admission->promote(pending.pending, io.datagrams(), owner->route_sink(), 0);
@@ -105,6 +107,51 @@ struct fixture {
         auto sealed = client_keys.protect_packet(static_cast<hd::quic_key_level>(level), write, result->bytes, scratch);
         if (sealed.code != hd::quic_crypto_code::ok) throw std::runtime_error("native client protection");
         result->bytes.resize(sealed.consumed); return result;
+    }
+    std::shared_ptr<hd::io_datagram> unsupported_packet(hd::quic_packet_kind kind) {
+        const std::array<std::byte, 16> tag{};
+        const std::array<std::byte, 4> payload{}, versions{std::byte{0}, std::byte{0}, std::byte{0}, std::byte{1}};
+        const std::array<std::byte, 1> source{std::byte{7}}, token{std::byte{1}};
+        hd::quic_packet_write write; write.kind = kind;
+        write.destination = std::span(facts.destination.bytes).first(facts.destination.size); write.source = source;
+        if (kind == hd::quic_packet_kind::version_negotiation) {
+            write.versions = versions;
+        } else {
+            write.tag = tag;
+            if (kind == hd::quic_packet_kind::retry) write.token = token;
+            else write.payload = payload;
+        }
+        auto result = std::make_shared<hd::io_datagram>(*packet);
+        auto encoded = hd::encode_quic_packet(write, result->bytes);
+        if (encoded.code != hd::quic_codec_code::ok) throw std::runtime_error("native unsupported packet");
+        result->bytes.resize(encoded.consumed); result->peer.peer.port = 4999; return result;
+    }
+    bool ping_acknowledged() {
+        const auto number = next_number[2];
+        const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+        owner->on_datagram(protected_frames(ping));
+        const auto now = std::chrono::steady_clock::now() + std::chrono::milliseconds(25);
+        owner->tick(now);
+        const auto output = owner->prepare(now);
+        if (!output) return false;
+        owner->emitted(true, now);
+        auto remaining = std::span(output->bytes);
+        while (!remaining.empty()) {
+            const auto envelope = hd::parse_quic_envelope(remaining, 1);
+            if (envelope.code != hd::quic_codec_code::ok) throw std::runtime_error("native continuation envelope");
+            const unsigned level = envelope.value.kind == hd::quic_packet_kind::initial ? 0 : envelope.value.kind == hd::quic_packet_kind::handshake ? 1 : 2;
+            std::array<std::byte, 1600> plain{}, scratch{};
+            const auto opened = client_keys.open_packet(static_cast<hd::quic_key_level>(level), envelope.value.packet, 1, largest[level], true, plain, scratch);
+            if (opened.code != hd::quic_crypto_code::ok) throw std::runtime_error("native continuation authentication");
+            hd::quic_frame_cursor cursor;
+            while (cursor.offset < opened.payload_size) {
+                const auto frame = hd::next_quic_frame(std::span(plain).first(opened.payload_size), cursor, {envelope.value.kind, hd::quic_endpoint_role::server});
+                if (frame.code != hd::quic_codec_code::ok) throw std::runtime_error("native continuation frame");
+                if (const auto* ack = std::get_if<hd::quic_ack_frame>(&frame.value); level == 2 && ack && ack->largest == number) return true;
+            }
+            remaining = remaining.subspan(envelope.consumed);
+        }
+        return false;
     }
     void consume_server(const hd::quic_transmission& transmission) {
         auto remaining = std::span(transmission.bytes);
@@ -192,21 +239,56 @@ LT_BEGIN_AUTO_TEST(native_quic_suite, actual_operation_completion_settles_prepar
         LT_CHECK(!backend.complete(*ops[0], {})); backend.close(); f.executor.run_pending();
     }
 LT_END_AUTO_TEST(actual_operation_completion_settles_preparation_once_without_ambiguous_refund)
-LT_BEGIN_AUTO_TEST(native_quic_suite, received_datagrams_wait_for_pending_send_and_overflow_closes_bounded_owner)
+LT_BEGIN_AUTO_TEST(native_quic_suite, unsupported_packets_for_established_cid_are_discarded_without_closing)
+    for (const auto kind : {hd::quic_packet_kind::zero_rtt, hd::quic_packet_kind::retry, hd::quic_packet_kind::version_negotiation}) {
+        fixture f(true); f.connect();
+        const auto forged = f.unsupported_packet(kind);
+        const auto envelope = hd::parse_quic_envelope(forged->bytes);
+        LT_ASSERT(envelope.code == hd::quic_codec_code::ok); LT_CHECK(envelope.value.kind == kind);
+        const auto received = f.facts.budget->received(); const auto debit = f.facts.budget->debited();
+        LT_CHECK(f.admission->receive(forged, 0).code == hd::quic_admission_code::routed); f.executor.run_pending();
+        LT_CHECK(!f.owner->terminal()); LT_CHECK(f.owner->connected());
+        LT_CHECK_EQ(f.facts.budget->received(), received); LT_CHECK_EQ(f.facts.budget->debited(), debit);
+        LT_CHECK(f.ping_acknowledged());
+    }
+LT_END_AUTO_TEST(unsupported_packets_for_established_cid_are_discarded_without_closing)
+LT_BEGIN_AUTO_TEST(native_quic_suite, received_datagrams_wait_for_pending_send_before_accounting)
     fixture f; const auto now = std::chrono::steady_clock::now();
     auto output = f.owner->prepare(now); LT_ASSERT(output);
     const auto received = f.facts.budget->received();
     f.owner->on_datagram(std::make_shared<hd::io_datagram>(*f.packet)); LT_CHECK_EQ(f.facts.budget->received(), received);
     f.owner->emitted(hd::quic_identity_emission::sent, now); f.owner->tick(now);
     LT_CHECK_EQ(f.facts.budget->received(), received + f.packet->bytes.size());
-    output = f.owner->prepare(now); if (!output) output = f.owner->prepare(now + std::chrono::milliseconds(20));
-    LT_ASSERT(output);
-    for (unsigned n = 0; n < 17; ++n) f.owner->on_datagram(std::make_shared<hd::io_datagram>(*f.packet));
-    LT_CHECK(f.owner->terminal()); LT_CHECK(f.owner->pending());
-    LT_CHECK(f.root.in_use(hs::resource::quic_reassembly_bytes) <= f.root.capacity(hs::resource::quic_reassembly_bytes));
-    f.owner->emitted(hd::quic_identity_emission::ambiguous, now); f.owner->tick(now + std::chrono::minutes(1));
-    LT_CHECK(f.owner->retired()); f.owner.reset(); LT_CHECK_EQ(f.root.in_use(hs::resource::quic_reassembly_bytes), 0u);
-LT_END_AUTO_TEST(received_datagrams_wait_for_pending_send_and_overflow_closes_bounded_owner)
+LT_END_AUTO_TEST(received_datagrams_wait_for_pending_send_before_accounting)
+LT_BEGIN_AUTO_TEST(native_quic_suite, unauthenticated_queue_pressure_drops_excess_and_preserves_established_owner)
+    struct pressure_case { std::size_t data_bytes, packet_bytes, retained_packets; };
+    // Record limit, exact byte limit, and storage reservation exhaustion.
+    for (const auto test : {pressure_case{393216, 64, 16}, pressure_case{393216, 16384, 2}, pressure_case{32768, 32768, 0}}) {
+        fixture f(true, test.data_bytes); f.connect();
+        const auto now = std::chrono::steady_clock::now();
+        const auto output = f.owner->prepare(now); LT_ASSERT(output);
+        const auto received = f.facts.budget->received(); const auto debit = f.facts.budget->debited();
+        const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+        auto forged = f.protected_frames(ping); forged->bytes.back() ^= std::byte{1};
+        forged->bytes.resize(test.packet_bytes); forged->peer.peer.port = 4999;
+        std::vector<std::weak_ptr<hd::io_datagram>> retained;
+        for (std::size_t n = 0; n < test.retained_packets; ++n) {
+            auto packet = std::make_shared<hd::io_datagram>(*forged); retained.push_back(packet);
+            LT_CHECK(f.admission->receive(std::move(packet), 0).code == hd::quic_admission_code::routed); f.executor.run_pending();
+            LT_CHECK(!retained.back().expired());
+        }
+        auto excess = std::make_shared<hd::io_datagram>(*forged); const auto dropped = std::weak_ptr(excess);
+        LT_CHECK(f.admission->receive(std::move(excess), 0).code == hd::quic_admission_code::routed); f.executor.run_pending();
+        LT_CHECK(dropped.expired()); LT_CHECK(!f.owner->terminal()); LT_CHECK(f.owner->pending());
+        LT_CHECK_EQ(f.facts.budget->received(), received); LT_CHECK_EQ(f.facts.budget->debited(), debit);
+        LT_CHECK(f.root.in_use(hs::resource::quic_reassembly_bytes) <= f.root.capacity(hs::resource::quic_reassembly_bytes));
+        f.owner->emitted(hd::quic_identity_emission::ambiguous, now); f.owner->tick(now);
+        LT_CHECK(!f.owner->pending()); LT_CHECK(!f.owner->terminal());
+        for (const auto& packet : retained) LT_CHECK(packet.expired());
+        LT_CHECK(f.ping_acknowledged());
+        f.owner.reset(); LT_CHECK_EQ(f.root.in_use(hs::resource::quic_reassembly_bytes), 0u);
+    }
+LT_END_AUTO_TEST(unauthenticated_queue_pressure_drops_excess_and_preserves_established_owner)
 LT_BEGIN_AUTO_TEST(native_quic_suite, close_expiry_keeps_cid_routes_and_pending_storage_until_settlement)
     fixture f(true); const auto now = std::chrono::steady_clock::now();
     const auto packet = f.owner->prepare(now); LT_ASSERT(packet);
@@ -226,6 +308,15 @@ LT_BEGIN_AUTO_TEST(native_quic_suite, authenticated_frame_flood_refuses_before_u
     f.owner->tick(std::chrono::steady_clock::now() + std::chrono::minutes(1));
     LT_CHECK(f.owner->retired());
 LT_END_AUTO_TEST(authenticated_frame_flood_refuses_before_unbounded_frame_storage)
+LT_BEGIN_AUTO_TEST(native_quic_suite, authenticated_application_frame_flood_still_closes_established_owner)
+    fixture f(true); f.connect();
+    std::array<hd::quic_frame, 129> frames;
+    std::fill(frames.begin(), frames.end(), hd::quic_ping_frame{});
+    LT_CHECK(f.admission->receive(f.protected_frames(frames), 0).code == hd::quic_admission_code::routed); f.executor.run_pending();
+    LT_CHECK(f.owner->terminal());
+    f.owner->tick(std::chrono::steady_clock::now() + std::chrono::minutes(1));
+    LT_CHECK(f.owner->retired());
+LT_END_AUTO_TEST(authenticated_application_frame_flood_still_closes_established_owner)
 LT_BEGIN_AUTO_TEST(native_quic_suite, cid_registration_does_not_own_connection_or_form_a_retirement_cycle)
     fixture f(true); const auto weak = std::weak_ptr(f.owner);
     f.owner.reset(); LT_CHECK(weak.expired());

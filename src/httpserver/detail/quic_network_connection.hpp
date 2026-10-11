@@ -52,7 +52,7 @@ class quic_network_connection final : public datagram_sink, public std::enable_s
  private:
     bool credit_datagram(const io_datagram&, const quic_path_identity&);
     void signal_progress();
-    void queue_datagram(std::shared_ptr<const io_datagram>, clock_type::time_point);
+    void queue_datagram(std::shared_ptr<const io_datagram>);
     void receive_datagram(const io_datagram&, const quic_path_identity&, bool&, clock_type::time_point);
     void inspect_reset(const io_datagram&, clock_type::time_point);
     bool retire_application();

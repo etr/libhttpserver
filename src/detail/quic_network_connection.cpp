@@ -80,11 +80,12 @@ void quic_network_connection::adopt_routes(quic_datagram_dispatch& routes, io_co
     quic_datagram_dispatch::cid_registration initial) {
     require(static_cast<bool>(identity_->attach_routes(routes, owner, std::make_shared<weak_sink>(weak_from_this()), std::move(initial))), "CID registration failed");
 }
-void quic_network_connection::queue_datagram(std::shared_ptr<const io_datagram> packet, clock_type::time_point now) {
+void quic_network_connection::queue_datagram(std::shared_ptr<const io_datagram> packet) {
     server::reservation storage;
+    // Capacity pressure from unauthenticated ciphertext only discards input.
     if (received_.size() == 16 || received_bytes_ + packet->bytes.size() > 32768 ||
         !pool_.data().budget.reserve(server::resource::quic_reassembly_bytes, packet->bytes.size() + sizeof(queued_packet), storage).ok()) {
-        request_close({false, 0x01, 0, {}}, now); return;
+        return;
     }
     received_bytes_ += packet->bytes.size();
     received_.push_back({std::move(packet), std::move(storage)});
@@ -123,7 +124,7 @@ void quic_network_connection::on_datagram(std::shared_ptr<const io_datagram> pac
     const auto now = clock_type::now();
     try {
         if (pending()) {
-            queue_datagram(std::move(packet), now);
+            queue_datagram(std::move(packet));
             return;
         }
         if (receiving_ || lifecycle_.state() == quic_lifecycle_state::closed || lifecycle_.state() == quic_lifecycle_state::draining) return;
