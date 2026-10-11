@@ -193,12 +193,24 @@ def validate_network(stage, directory, identities):
     if stage == 'quic-interop':
         runner = load_runner('run-v3-quic-interop.py')
         matrix = runner.load_matrix('task173')
+        clock = manifest.get('simulator_clock_compatibility')
+        if clock:
+            need(runner.simulator_clock_configuration(clock['receipt_path']) == clock, 'simulator clock compatibility changed')
+            need(manifest.get('images', {}).get(clock['image_id']) == clock['image_id'], 'simulator clock image changed')
         need(manifest.get('passed') is True and manifest.get('returncode') == 0
              and manifest.get('cleanup_returncode') == 0 and not manifest.get('cleanup_failure'), 'QUIC run/cleanup failed')
         need(manifest.get('matrix') == matrix and manifest.get('runner_commit') == matrix['runner_commit'], 'wrong QUIC matrix/revision')
         need(runner.validate_results(read_json(directory / 'results.json'), matrix), 'incomplete QUIC matrix')
         need(runner.validate_artifacts(directory / 'runner-logs', matrix) == manifest.get('capture_records'), 'QUIC captures changed')
         need(runner.validate_closure_artifacts(directory / 'runner-logs', matrix) == manifest.get('closure_witnesses'), 'missing QUIC closure witness')
+        observation = manifest.get('runner_observation', {})
+        copied = directory / 'runner'
+        need(observation.get('module_sha256') == digest(ROOT / 'scripts/run-v3-quic-interop.py')
+             == digest(copied / 'task196_observation.py'), 'QUIC observation module changed')
+        original = copied / 'testcases_quic.original.py'
+        need(observation.get('original_testcases_sha256') == digest(original)
+             and observation.get('patched_testcases_sha256') == digest(copied / 'testcases_quic.py')
+             and runner.runner_observation_patch(original.read_text()) == (copied / 'testcases_quic.py').read_text(), 'QUIC observation amendment changed')
         for name, record in manifest.get('artifacts', {}).items():
             need(artifact(directory / name)['sha256'] == record['sha256'], 'QUIC artifact hash mismatch')
         need(manifest.get('images', {}).get(identities['server_image']) == identities['server_image_id'], 'endpoint image changed')
@@ -357,9 +369,10 @@ def build_configuration(build, tls, sanitized):
 
 def native_stage(build, suites, directory, fixtures=False):
     directory.mkdir(mode=0o700)
-    commands = [checked(['make', '-j4', '-C', build], ROOT, directory / 'build')]
+    commands = [checked(['make', '-j4', '-C', build / 'src'], ROOT, directory / 'build')]
     targets = suites + (['http3_udp_fixture', 'http3_semantic_parity_fixture', 'quic_interop_endpoint'] if fixtures else [])
-    commands.append(checked(['make', '-j4', '-C', build / 'test', *targets], ROOT, directory / 'test-build'))
+    selection = [name + '=' + ' '.join(targets) for name in ('TESTS', 'check_PROGRAMS', 'noinst_PROGRAMS')]
+    commands.append(checked(['make', '-j4', '-C', build / 'test', *selection, *targets], ROOT, directory / 'test-build'))
     results = run_native_suites(build, suites, directory / 'tests')
     results['commands'] = commands
     tls = '#define NATIVE_V3_TLS' in (build / 'config.h').read_text()
@@ -376,6 +389,8 @@ def network_stage(stage, args, directory, identities):
                    '--runner-dir', args.runner_dir, '--server-image', args.server_image, '--output', evidence]
         if args.docker_direct_routing_compat:
             command.append('--docker-direct-routing-compat')
+        if getattr(args, 'simulator_clock_receipt', None):
+            command += ['--simulator-clock-receipt', args.simulator_clock_receipt]
     else:
         filename = 'run-v3-http3-gates.py' if stage == 'http3-interop' else 'run-v3-http3-websocket-gates.py'
         command = [sys.executable, ROOT / 'scripts' / filename, '--build-dir', args.tls_on_build,
@@ -479,6 +494,7 @@ def main(argv=None):
                  'compiler', 'python', 'go', 'go-client', 'tshark', 'runner-python', 'runner-dir', 'provider-prefix', 'server-image'):
         parser.add_argument('--' + name)
     parser.add_argument('--docker-direct-routing-compat', action='store_true')
+    parser.add_argument('--simulator-clock-receipt')
     args = parser.parse_args(argv)
     args.output = args.output.resolve()
     manifest = {'schema_version': 1, 'task': 'TASK-178', 'status': 'failed', 'stages': [],

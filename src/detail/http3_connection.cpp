@@ -27,12 +27,12 @@ http3_progress progress_for(bool error, bool ready, std::size_t frames_left) {
     return http3_progress::input;
 }
 }  // namespace
-http3_connection::http3_connection(quic_storage_lease data, quic_storage_lease critical, http3_limits limits)
+http3_connection::http3_connection(quic_storage_lease data, quic_storage_lease critical, http3_limits limits, bool preadmitted)
     : data_(std::move(data)), critical_(std::move(critical)), limits_(limits), frames_left_(limits.frames_per_turn) {
     if (!valid_limits(limits_)) {
         fail(0x107, "Decoded HEADERS storage bounds invalid", 0); return;
     }
-    if (!critical_.budget.reserve(server::resource::connections, 1, seat_).ok() ||
+    if ((!preadmitted && !critical_.budget.reserve(server::resource::connections, 1, seat_).ok()) ||
         !critical_.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(http3_peer_settings) + 512, metadata_).ok())
         fail(0x107, "Critical connection storage exhausted", 0);
     begin_turn();

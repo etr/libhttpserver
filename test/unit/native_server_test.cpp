@@ -398,6 +398,11 @@ LT_BEGIN_AUTO_TEST(native_server_suite, provider_selection_allows_plaintext_http
     server.stop();
 LT_END_AUTO_TEST(provider_selection_allows_plaintext_http1)
 
+LT_BEGIN_AUTO_TEST(native_server_suite, production_http3_feature_matches_native_tls_provider)
+    const auto features = httpserver::query_features();
+    LT_CHECK(features.http3 == features.tls_provider);
+LT_END_AUTO_TEST(production_http3_feature_matches_native_tls_provider)
+
 // Semantic configuration remains valid even before transports are implemented.
 LT_BEGIN_AUTO_TEST(native_server_suite, unsupported_transports_rejected_before_any_bind)
     for (const auto version : {http::protocol::http_1_1,
@@ -409,10 +414,10 @@ LT_BEGIN_AUTO_TEST(native_server_suite, unsupported_transports_rejected_before_a
         options.tls().provider = srv::tls_provider::system_default;
         options.tls().profile = srv::tls_profile::certificates;
         options.protocols().enable(version);
-        LT_CHECK(options.validate().ok());
+        LT_CHECK(version == http::protocol::http_3 ? !options.validate().ok() : options.validate().ok());
         srv::native_server server(options);
         const auto result = server.listen();
-        LT_CHECK(result.code() == ((version == http::protocol::http_1_1 || version == http::protocol::http_2) && httpserver::query_features().tcp_tls
+        LT_CHECK(result.code() == (version == http::protocol::http_3 || httpserver::query_features().tcp_tls
             ? http::outcome_code::invalid_argument : http::outcome_code::not_supported));
         LT_CHECK(!result.message().empty());
         LT_CHECK(!server.is_running());

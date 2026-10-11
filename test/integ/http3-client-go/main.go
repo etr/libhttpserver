@@ -119,6 +119,12 @@ func run() error {
 	wrongCA := flag.String("wrong-ca", "", "untrusted CA")
 	logs := flag.String("log-dir", "", "diagnostic directory")
 	flag.Parse()
+	if *matrix == "public-stop" {
+		return runPublicStop(*port, *ca)
+	}
+	if *matrix == "public" {
+		return runPublic(*port, *ca)
+	}
 	trust, err := roots(*ca)
 	if err != nil {
 		return err

@@ -192,7 +192,7 @@ bool connection::receive_packet(std::span<const std::byte> packet, const hd::qui
     }
     // A valid close wins before any CRYPTO, identity or application effects.
     for (const auto& frame : frames) if (const auto* close = std::get_if<hd::quic_close_frame>(&frame)) {
-        if (path != identity_->application_path()) return true;
+        // Authenticated terminal closure is independent of path activation.
         lifecycle_.peer_close(*close, now, recovery_.current_pto());
         terminal_changed(now);
         return true;

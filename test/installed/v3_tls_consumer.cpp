@@ -70,7 +70,7 @@ void configuration(const std::string& directory, srv::loop_mode loop, bool enabl
         if (case_id == 3) invalid.hosts[0].private_key_pem = invalid.hosts[1].private_key_pem;
         if (case_id == 4) invalid.hosts[0].certificate_chain_pem = "invalid certificate";
         if (case_id == 5) invalid.hosts[1].host = "A.EXAMPLE.";
-        if (case_id == 6) invalid.hosts[0].alpn = {"h3"};
+        if (case_id == 6) invalid.hosts[0].alpn = {"h9"};
         require(store->replace(invalid).code() == absent, "invalid publication outcome");
     }
     if (enabled) {
@@ -85,7 +85,7 @@ void configuration(const std::string& directory, srv::loop_mode loop, bool enabl
             srv::native_server supported(unsupported);
             require(supported.listen().ok(), "H2 opt-in with valid H1 fallback credentials");
         } else {
-            unbound(unsupported, http::outcome_code::not_supported);
+            unbound(unsupported, protocol == http::protocol::http_3 ? http::outcome_code::invalid_argument : http::outcome_code::not_supported);
         }
     }
     auto profile = options(loop, store);

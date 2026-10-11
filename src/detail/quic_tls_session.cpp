@@ -33,7 +33,7 @@ struct quic_tls_session::impl {
 quic_tls_session::quic_tls_session(tls_credentials_selection selection, const quic_tls_config& config,
                                  server::resource_budget budget, quic_key_state& keys)
     : impl_(std::make_unique<impl>(config, std::move(budget), keys)) {
-    impl_->tls.reset(new tls_session(std::move(selection), true, {tls_transport::quic, 0}, &impl_->callbacks));
+    impl_->tls.reset(new tls_session(std::move(selection), true, {tls_transport::quic, config.listener_port}, &impl_->callbacks));
 }
 quic_tls_session::quic_tls_session(tls_credentials_selection selection, const quic_tls_config& config, quic_storage_lease storage, quic_key_state& keys)
     : quic_tls_session(std::move(selection), config, storage.budget, keys) { storage_owner_ = std::move(storage); }

@@ -78,6 +78,38 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("com.docker.network.bridge.gateway_mode_ipv4: 'nat-unprotected'", compatible)
         self.assertIn("com.docker.network.bridge.gateway_mode_ipv6: 'nat-unprotected'", compatible)
 
+    def test_client_starts_only_after_actual_simulator_control_listener(self):
+        source = "services:\n  sim:\n    hostname: sim\n  server:\n    depends_on:\n      - sim\n  client:\n    depends_on:\n      - sim\n"
+        configured = interop.compose_config(source)
+        self.assertIn("condition: service_healthy", configured.split("  client:")[1])
+        self.assertIn("/proc/net/tcp", configured.split("  server:")[0])
+        self.assertIn("interval: 100ms", configured)
+        self.assertIn("retries: 100", configured)
+        self.assertEqual(configured.split("  server:")[1].split("  client:")[0], source.split("  server:")[1].split("  client:")[0])
+
+    def test_clock_compatibility_uses_explicit_immutable_image_only_for_simulator(self):
+        source = "services:\n  sim:\n    image: martenseemann/quic-network-simulator\n  client:\n    image: original-client\n"
+        patched = "sha256:" + "1" * 64
+        actual = interop.compose_config(source, simulator_image=patched)
+        self.assertIn("image: " + patched, actual.split("  client:")[0])
+        self.assertEqual(actual.split("  client:")[1], source.split("  client:")[1])
+        self.assertIn(interop.SIMULATOR, interop.compose_config(source))
+
+    def test_clock_receipt_rejects_wrong_pin_and_changed_artifact(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "receipt.json"
+            receipt = {"status": "passed", "upstream_image": "unmatched", "clock": "steady_clock", "artifacts": []}
+            path.write_text(json.dumps(receipt))
+            with self.assertRaises(ValueError):
+                interop.simulator_clock_configuration(path)
+            receipt["upstream_image"] = interop.SIMULATOR
+            artifact = Path(temp) / "patched-core.so"
+            artifact.write_bytes(b"changed")
+            receipt["artifacts"] = [{"path": str(artifact), "sha256": "0" * 64}]
+            path.write_text(json.dumps(receipt))
+            with self.assertRaises(ValueError):
+                interop.simulator_clock_configuration(path)
+
     def test_simulator_selects_realtime_before_scenario_initialization(self):
         compose = ("services:\n  sim:\n    environment:\n"
                    "      - SCENARIO=$SCENARIO\n  client:\n    environment:\n"
@@ -118,6 +150,7 @@ class RunnerTests(unittest.TestCase):
             runner.mkdir()
             (runner / "run.py").write_text("import json,sys\nfrom pathlib import Path\nPath(sys.argv[sys.argv.index('-j')+1]).write_text(json.dumps({'results':[[]]}))\n")
             (runner / "implementations_quic.json").write_text("{}")
+            (runner / "testcases_quic.py").write_text("        unresponded = [c for c in challenges if c not in responses]\n")
             (runner / "docker-compose.yml").write_text("image: martenseemann/quic-network-simulator\n")
             output = Path(temp) / "evidence"
             def identity(command, **kwargs):
@@ -241,6 +274,21 @@ class Task173MatrixTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 interop.validate_closure_rows(rows)
 
+    def test_terminal_challenge_requires_authenticated_matching_close_before_arrival(self):
+        self.assertTrue(callable(getattr(interop, "validate_terminal_challenge_rows", None)), "terminal path lifetime oracle missing")
+        close = "23000\t1\t7644\t193.167.0.100\t0x1d\t\t\t\t0\n"
+        challenge = "23001\t1\t25170\t193.167.100.100\t0x1a\tb58f27168672de8a\t\t\t\n"
+        result = interop.validate_terminal_challenge_rows(close + challenge, ["b5:8f:27:16:86:72:de:8a"])
+        self.assertEqual(result["b58f27168672de8a"], {"connection": 1, "close_frame": 23000, "close_packet_number": 7644, "challenge_frame": 23001})
+        live = challenge.replace("23001", "22999") + close
+        for rows in (challenge, live, close.replace("\t1\t7644", "\t2\t7644") + challenge,
+                     close.replace("\t7644\t", "\t\t") + challenge,
+                     close.replace("\t0\n", "\t42\n") + challenge,
+                     close.replace("193.167.0.100", "193.167.100.100") + challenge,
+                     close + challenge.replace("b58f27168672de8a", "1122334455667788")):
+            with self.assertRaises(ValueError):
+                interop.validate_terminal_challenge_rows(rows, ["b58f27168672de8a"])
+
     def test_peer_normal_application_close_code_is_explicit(self):
         import inspect
         self.assertIn("application_error", inspect.signature(interop.validate_closure_rows).parameters)
@@ -256,6 +304,7 @@ class Task173MatrixTests(unittest.TestCase):
         for name, data in (("run.py", ""), ("implementations_quic.json", "{}"),
                            ("docker-compose.yml", "image: martenseemann/quic-network-simulator\n")):
             (runner / name).write_text(data)
+        (runner / "testcases_quic.py").write_text("        unresponded = [c for c in challenges if c not in responses]\n")
         output = Path(temp) / "evidence"
         def identity(command, **kwargs):
             return '[{"Id":"sha256:fixture"}]' if command[:3] == ["docker", "image", "inspect"] else "fixture-version"

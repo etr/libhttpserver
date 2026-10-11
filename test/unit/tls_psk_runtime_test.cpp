@@ -13,6 +13,9 @@
 #include <thread>
 #include <type_traits>
 #include <utility>
+#if defined(__unix__) || defined(__APPLE__)
+#include <pthread.h>
+#endif
 #include <httpserver/detail/tls_psk_runtime.hpp>
 #include <httpserver/server/options.hpp>
 #include <httpserver/detail/tls_psk_attempt.hpp>
@@ -278,6 +281,179 @@ LT_BEGIN_AUTO_TEST(psk_runtime_suite, certificate_runtime_accepts_native_handsha
     } catch (const std::invalid_argument&) {}
     LT_CHECK(accepted);
 LT_END_AUTO_TEST(certificate_runtime_accepts_native_handshake_timeout_ceiling)
+namespace {
+struct held_thread_exit {
+    std::promise<void> entered;
+    std::shared_future<void> release;
+};
+struct thread_exit_guard {
+    std::shared_ptr<held_thread_exit> state;
+    ~thread_exit_guard() {
+        state->entered.set_value();
+        state->release.wait();
+    }
+};
+}
+LT_BEGIN_AUTO_TEST(psk_runtime_suite, drain_waits_for_provider_thread_local_retirement_without_blocking_stop)
+    hd::tls_psk_runtime_options options;
+    options.handshake_workers = 1;
+    hd::tls_psk_runtime runtime(options);
+    std::promise<void> release, worked;
+    auto state = std::make_shared<held_thread_exit>();
+    state->release = release.get_future().share();
+    const auto accepted = runtime.submit_handshake([state, &worked] {
+        thread_local std::unique_ptr<thread_exit_guard> guard;
+        guard = std::make_unique<thread_exit_guard>(state);
+        worked.set_value();
+    });
+    const bool ran = worked.get_future().wait_for(1s) == std::future_status::ready;
+    const auto before = std::chrono::steady_clock::now();
+    runtime.stop();
+    const auto stop_time = std::chrono::steady_clock::now() - before;
+    const bool exiting = state->entered.get_future().wait_for(1s) == std::future_status::ready;
+    const bool early = runtime.drain(std::chrono::steady_clock::now() + 5ms);
+    release.set_value();
+    const bool retired = runtime.drain(std::chrono::steady_clock::now() + 1s);
+    LT_CHECK(accepted == httpserver::http::outcome_code::ok);
+    LT_CHECK(ran);
+    LT_CHECK(stop_time < 100ms);
+    LT_CHECK(exiting);
+    LT_CHECK(!early);
+    LT_CHECK(retired);
+LT_END_AUTO_TEST(drain_waits_for_provider_thread_local_retirement_without_blocking_stop)
+#if defined(__unix__) || defined(__APPLE__)
+LT_BEGIN_AUTO_TEST(psk_runtime_suite, provider_drain_retires_native_tls_after_future_thread_exit_notification)
+    // Warm the standard-library native TLS key before the provider's key.
+    std::promise<void> warm;
+    auto warmed = warm.get_future();
+    std::thread([&] { warm.set_value_at_thread_exit(); }).join();
+    warmed.wait();
+    pthread_key_t native_key;
+    const auto key_ready = pthread_key_create(&native_key, [](void* data) {
+        auto& state = *static_cast<held_thread_exit*>(data);
+        state.entered.set_value();
+        state.release.wait();
+    });
+    hd::tls_psk_runtime_options options;
+    options.handshake_workers = 1;
+    hd::tls_psk_runtime runtime(options);
+    std::promise<void> release, worked;
+    auto state = std::make_shared<held_thread_exit>();
+    state->release = release.get_future().share();
+    const auto accepted = runtime.submit_handshake([&, state] {
+        pthread_setspecific(native_key, state.get());
+        worked.set_value();
+    });
+    const bool ran = worked.get_future().wait_for(1s) == std::future_status::ready;
+    runtime.stop();
+    const bool exiting = state->entered.get_future().wait_for(1s) == std::future_status::ready;
+    const auto before = std::chrono::steady_clock::now();
+    const bool early = runtime.drain(before + 5ms);
+    const auto elapsed = std::chrono::steady_clock::now() - before;
+    release.set_value();
+    const bool retired = runtime.drain(std::chrono::steady_clock::now() + 1s);
+    pthread_key_delete(native_key);
+    LT_CHECK(elapsed < 100ms);
+    LT_CHECK_EQ(key_ready, 0);
+    LT_CHECK(accepted == httpserver::http::outcome_code::ok);
+    LT_CHECK(ran);
+    LT_CHECK(exiting);
+    LT_CHECK(!early);
+    LT_CHECK(retired);
+LT_END_AUTO_TEST(provider_drain_retires_native_tls_after_future_thread_exit_notification)
+#endif
+LT_BEGIN_AUTO_TEST(psk_runtime_suite, observer_start_and_partial_worker_creation_unwind_without_joining_caller)
+    for (unsigned fail = 0; fail < 5; ++fail) {
+        std::atomic<unsigned> launches{0}, active{0};
+        std::promise<void> release;
+        auto released = release.get_future().share();
+        const auto start = [&](httpserver::executor::handler work) {
+            if (launches.fetch_add(1) == fail) throw std::runtime_error("thread start refused");
+            ++active;
+            return std::thread([&, work = std::move(work), released] {
+                work();
+                released.wait();
+                --active;
+            });
+        };
+        const auto before = std::chrono::steady_clock::now();
+        bool rejected = false;
+        try { hd::tls_psk_runtime runtime({}, start); }
+        catch (const std::runtime_error&) { rejected = true; }
+        const auto elapsed = std::chrono::steady_clock::now() - before;
+        release.set_value();
+        const auto deadline = std::chrono::steady_clock::now() + 1s;
+        while (active.load() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+        LT_CHECK(rejected);
+        LT_CHECK(elapsed < 100ms);
+        LT_CHECK_EQ(active.load(), 0u);
+    }
+LT_END_AUTO_TEST(observer_start_and_partial_worker_creation_unwind_without_joining_caller)
+LT_BEGIN_AUTO_TEST(psk_runtime_suite, last_runtime_owner_can_retire_from_provider_completion_without_self_join)
+    for (unsigned turn = 0; turn < 24; ++turn) {
+        auto runtime = std::make_shared<hd::tls_psk_runtime>();
+        std::weak_ptr weak = runtime;
+        std::promise<void> released, allow_completion;
+        auto allowed = allow_completion.get_future().share();
+        const auto accepted = runtime->submit_handshake([allowed] { allowed.wait(); }, [owned = runtime, &released]() mutable {
+            owned.reset();
+            released.set_value();
+        });
+        runtime.reset();
+        allow_completion.set_value();
+        const bool completed = released.get_future().wait_for(1s) == std::future_status::ready;
+        LT_CHECK(accepted == httpserver::http::outcome_code::ok);
+        LT_CHECK(completed);
+        LT_CHECK(weak.expired());
+    }
+LT_END_AUTO_TEST(last_runtime_owner_can_retire_from_provider_completion_without_self_join)
+LT_BEGIN_AUTO_TEST(psk_runtime_suite, held_application_lookup_does_not_hold_provider_native_retirement)
+    std::promise<void> provider_retired, lookup_entered, release_lookup;
+    auto released = release_lookup.get_future().share();
+    unsigned launched = 0;
+    const auto start = [&](httpserver::executor::handler work) {
+        const bool observer = launched++ == 0;
+        return std::thread([work = std::move(work), observer, &provider_retired] {
+            work();
+            if (observer) provider_retired.set_value();
+        });
+    };
+    hd::tls_psk_runtime runtime({}, start);
+    hd::psk_handshake_context context;
+    context.deadline = std::chrono::steady_clock::now() + 1s;
+    auto lookup = std::async(std::launch::async, [&] {
+        return runtime.lookup([&](auto, const auto&) {
+            lookup_entered.set_value();
+            released.wait();
+            return hd::psk_lookup_result{};
+        }, key, context);
+    });
+    const bool entered = lookup_entered.get_future().wait_for(1s) == std::future_status::ready;
+    runtime.stop();
+    const bool provider_done = provider_retired.get_future().wait_for(1s) == std::future_status::ready;
+    const auto before = std::chrono::steady_clock::now();
+    const bool early = runtime.drain(before + 5ms);
+    const auto elapsed = std::chrono::steady_clock::now() - before;
+    release_lookup.set_value();
+    lookup.get();
+    const bool retired = runtime.drain(std::chrono::steady_clock::now() + 1s);
+    LT_CHECK(entered);
+    LT_CHECK(provider_done);
+    LT_CHECK(!early);
+    LT_CHECK(elapsed < 100ms);
+    LT_CHECK(retired);
+LT_END_AUTO_TEST(held_application_lookup_does_not_hold_provider_native_retirement)
+LT_BEGIN_AUTO_TEST(psk_runtime_suite, observer_join_failure_never_claims_native_retirement_or_terminates)
+    unsigned launched = 0;
+    const auto start = [&](httpserver::executor::handler work) {
+        if (launched++ == 1) return std::thread{};  // Fault: missing provider handle.
+        return std::thread(std::move(work));
+    };
+    hd::tls_psk_runtime runtime({}, start);
+    runtime.stop();
+    LT_CHECK(!runtime.drain(std::chrono::steady_clock::now() + 20ms));
+    LT_CHECK(!runtime.accepting());
+LT_END_AUTO_TEST(observer_join_failure_never_claims_native_retirement_or_terminates)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

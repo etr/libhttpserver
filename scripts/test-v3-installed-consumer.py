@@ -108,13 +108,13 @@ class MatrixTest(unittest.TestCase):
             output = '\n'.join('PACKAGE_CASE ' + case + ' ' +
                 ('ok bound' if case == 'plaintext' else
                  'invalid_argument unbound' if case in ('tls_listener', 'http2') and tls == 'yes' else
-                 'not_supported unbound' if case in ('tls_listener', 'http2', 'http3', 'mixed_rejection') else
+                 'not_supported unbound' if case in ('tls_listener', 'http2') else
                  'invalid_argument unbound') for case in self.inventory['cases'])
             for loop in ('managed', 'external'):
                 self.assertEqual(len(self.inventory['cases']),
                                  len(matrix.configuration_results(output, self.inventory, loop, tls=tls)))
                 for broken in (output.replace('PACKAGE_CASE http3', 'MISSING http3'),
-                               output.replace('not_supported unbound', 'ok bound')):
+                               output.replace('invalid_argument unbound', 'ok bound')):
                     with self.assertRaises(ValueError):
                         matrix.configuration_results(broken, self.inventory, loop, tls=tls)
 

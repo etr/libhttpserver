@@ -317,6 +317,20 @@ int main(int argc, char** argv) {
                     if (!driver->dispatch(events, std::chrono::steady_clock::now()).ok()) break;
                 }
         };
+        // Unwind a failed witness through the same owned stop/join sequence.
+        // Otherwise a joinable host loop hides the actual assertion with terminate.
+        struct host_loop_cleanup {
+            std::atomic<bool>& stopping;
+            std::thread& thread;
+            srv::native_server& server;
+            ~host_loop_cleanup() {
+                if (thread.joinable()) {
+                    stopping = true;
+                    server.request_stop();
+                    thread.join();
+                }
+            }
+        } cleanup{stopping, host_loop, server};
         if (driver) host_loop = std::thread(drive);
         std::cout << server.get_bound_port(0) << std::endl;
         std::string command;
@@ -329,6 +343,7 @@ int main(int argc, char** argv) {
             } else if (command == "ports") {
                 std::cout << server.get_bound_port(0) << ' ' << server.get_bound_port(1) << ' ' << server.get_bound_port(2) << std::endl;
             } else if (command == "snapshot") {
+                saved_events.clear();
                 if (auto* driver = server.readiness()) {
                     for (const auto& interest : driver->interests().sockets) saved_events.push_back({interest.key, interest.generation, true, true, true, true});
                 }

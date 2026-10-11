@@ -1,0 +1,1379 @@
+{
+  "version": 1,
+  "task_id": "TASK-196",
+  "status": "implemented-local-gates-passed-caller-validation-pending",
+  "base_commit": "e83857afe708e6c9fdb713df2868bf91f962062d",
+  "base_branch": "v3",
+  "branch": "task/TASK-196",
+  "implementation_revision": "commit containing this receipt; exact commit in archived build/task196/handoff.json",
+  "source_inputs": {
+    "Makefile.am": "1103cee5d293688ca7cd6e180712ded670316ac9d36ceceb3a51faec61c503a5",
+    "scripts/check-v3-public-http3.py": "ff650851c3fad4a8d468d185c64f51088ddc642fbe140a839d94d8845d550b6a",
+    "scripts/lib/v3_package_matrix.py": "461b71b913e2673dfd153df9b52d0f7d04325c030307033ff3afd37cf94c7bc1",
+    "scripts/lib/v3_public_http3_inventory.py": "1f40f15230a790b4dbabf93427aa0acf54c38d57ac98840331a4f3b26b0ef931",
+    "scripts/run-v3-http3-full-gates.py": "ec759d11edfca073294d19f5abdda944c00f49fc552048efa7f8bec61e9a094b",
+    "scripts/run-v3-quic-interop.py": "5d93b9c2f4e207df789c077677b84709c88936b6d80d3dd4211b51d92435bc60",
+    "scripts/test-v3-http3-full-gates.py": "ae69190df4fb2886800cfa4bb06ce5d1a80d7e2f7767b28753c3d9f94756e0cb",
+    "scripts/test-v3-installed-consumer.py": "bae8e496214d014b60ebdb4ea4bcdc4311eb7d27783f34281f519828a8d87c19",
+    "scripts/test-v3-public-http3.py": "21b1b9eb9dc59f44fc4a3b694d10d9abe6efa8c4ffa61f79b9b6e65c4f9c8e3b",
+    "src/Makefile.am": "4d981d5c57f1054bf31a3069f8928f7d5e37243be898079f72f20827a415d38f",
+    "src/detail/http2_connection.cpp": "d7a9fe406d7187bc80c86cdfba1be7828392052f6689960c89d7635cfe367ce2",
+    "src/detail/http3_connection.cpp": "6f6eaa9343dca29f86b78cbc49142e9cc42459d5aa9e675dd9c9b77611b2ae01",
+    "src/detail/http3_drain.cpp": "051ed644ce51f8764b9e4cfc39cb3a72d147ab5a905f652f35e1e035fc00ee38",
+    "src/detail/http3_native_stream.cpp": "3a34872a4a93da44acbaacb4e7608398b62f02991159e8bdfb192bbe696f7ae6",
+    "src/detail/http3_request_engine.cpp": "f6a6492dc56468a24db99dcb49bba1b0044bf2943e2af57553caebbdc7b22717",
+    "src/detail/http3_response_stream.cpp": "0e031f765b38f551665c6de9bba81adfd0aedbc6ba09865e9ef57318b95d32f6",
+    "src/detail/http3_semantic_stream.cpp": "9cbdc10ee66c0ff1cfd992dee41f226c61f435cef91706cdb3bd16a03a244000",
+    "src/detail/http3_websocket_handshake_stream.cpp": "8b44bee527e97154dc38543d0198d638675d6ffd57f0b2fd452255d17e7eb789",
+    "src/detail/io_external_adapter.cpp": "2f0c5f31620255ae821697435701f81e2f1ad4caf9aa9acf67092d5380885167",
+    "src/detail/quic_network_connection.cpp": "dfa96c0772135848049b9cd74687f5cac302755d8f1e4a821cb0d77f8a11c206",
+    "src/detail/quic_network_emission.cpp": "832a551c243912a807a65d3bd9515b88b0fcec1236d4c45e00bc70dd77994e15",
+    "src/detail/quic_network_packets.cpp": "3d07dabb886e0a0552909bf4cbf5727d9f96f53e26551fe91788d567318b9831",
+    "src/detail/quic_server_admission.cpp": "673bb4160c0b616d8fec2b0420e0efe7cfa1c1294f1ff7dc680817fc5113d274",
+    "src/detail/quic_tls_session.cpp": "76cfcb9d12b40d0d7549ce6fc7abd3f93918514cbdc239743afd524df3c2af83",
+    "src/detail/quic_udp_listener.cpp": "547ce3ba2a00e615b913e5e9aff5664fafafabe4b07f693b7753c4c13e4ce545",
+    "src/detail/server.cpp": "c975da6a3f03bd529b1522b433c4074a0494beae03735cb1e97967b345ee6d9b",
+    "src/detail/server_tls_credentials.cpp": "40b08b6aa471cc0898309b58f9d8ead5580fcbb9839a56bae580af6961cfa99c",
+    "src/detail/tls_credentials.cpp": "94763d9e4e6179678df45f6227eb322b7625dd7521c57ed81ec697c9bd8a1734",
+    "src/detail/tls_provider.cpp": "13741af26696f7741a6ef997b60434966e48849815549b18c01b03cad06855f3",
+    "src/detail/tls_psk_runtime.cpp": "0005fbe1be6be402a11e5c7a868e71971dd3006550302cc644bd498eaf3d14ea",
+    "src/httpserver/detail/http2_connection.hpp": "7f0e3557aecb87e79cf131e800f78525538dd4c7be7cbfb4933dd1481001548a",
+    "src/httpserver/detail/http3_body_stream.hpp": "448a387167e834eb01258acac592e7ac8bc14ec181070357ced32ba58d9939d7",
+    "src/httpserver/detail/http3_connection.hpp": "966bc5d41273ec6c5ea8668b704063ec4f017ff46e24e265df12a000ee899ab7",
+    "src/httpserver/detail/http3_request_engine.hpp": "670705e34c8d51828b6d3c46a018a7582a6cf29a500d5d212f8f75ee43e840d8",
+    "src/httpserver/detail/http3_request_state.hpp": "f6c254262834a24f57460623d6fcf46817af50f9e1a77b3e720e05edb10f1ca3",
+    "src/httpserver/detail/io_poll_backend.hpp": "6f66c62c37627283f0671caeb874be0cb6cae1961d2043f9377824381cc3c439",
+    "src/httpserver/detail/io_socket_backend.hpp": "0f7f7757dcc98d550916be1e1817808df7d7837c27f8a66bd0ae8bb170bd182c",
+    "src/httpserver/detail/quic_network_connection.hpp": "f25b6570f2ed1dc8f1f7cf87a643ebfab2d5297d184d79f6362bb1f7dcbff407",
+    "src/httpserver/detail/quic_server_admission.hpp": "d6fb372a621f78e9a69eb5ed5d05e2238aafd66e4dc80ab54214d983f44ad3ee",
+    "src/httpserver/detail/quic_tls_session.hpp": "6918962d2cbd1f178bedb09ebfd0b04921424422b19675459f8deb8f10e8b48b",
+    "src/httpserver/detail/quic_udp_listener.hpp": "b1a65a47621182963019064f03420abd35286082aded548a8623f2bbcc7fc8d8",
+    "src/httpserver/detail/tls_credentials_access.hpp": "9d25db67b57ace07789e6ccd06d2fb304952ec4dc0af24257c705648227b6972",
+    "src/httpserver/detail/tls_psk_runtime.hpp": "6b4a559904ea0bd25ddf7c2269e65d22e73556d00e1a205e69990e50a8ba7e49",
+    "src/httpserver/server/options.hpp": "4a44a6a9d98d6975a328768d96d47d3f300882ccba52ed44677f899e9c36fd22",
+    "test/Makefile.am": "fa6ac0cfb6e255d0cef6667f74b11e864bcbcb5d4e11e82b10e7d9bc700d23da",
+    "test/installed/v3_http2_consumer.cpp": "be33738dfb831facfc74417f9c7df3e4351bef6aac64963447a04e1cd6760800",
+    "test/installed/v3_http2_node.mjs": "2d222f78c485e5f6f2c82eda2f2953875864895b5240a72320e5690da48e56d8",
+    "test/installed/v3_http3_aioquic.py": "fecfd19786c9b5ca118eb43834c83136143378c2f7ac14c6643909b8bdf3e93c",
+    "test/installed/v3_http3_consumer.cpp": "0a90ee4e885128fd90d457abaaf7573b627b9fc431a4be4c6132c93aae92f2af",
+    "test/installed/v3_package_consumer.cpp": "d8acf03ffb08e44c334280b1f50f053abc1475570e0165c94d05d326c5e1852c",
+    "test/installed/v3_tls_consumer.cpp": "6b95af19ecaa72f72754616929ed8c9d24a3e4e36e1b7c4812f6f1b635d4c2dc",
+    "test/integ/http3-client-go/main.go": "d508b12b2e54d77a5cb7a61d4673fe607e79f580a1268e4ce127b087e9107ac3",
+    "test/integ/http3-client-go/public.go": "e7afbd7d223e1af1b092a4442374b5bb32e54f437b38b78cc341814cf2aec631",
+    "test/integ/http3-client-go/semantic.go": "226388c2cfdca1bb834f8e6ce07aa358e140f865fc44d3b723580508121cac93",
+    "test/integ/http3-client-go/semantic_test.go": "734b46fe911e54f0cb921b77244bda20d584fa52ecfe7e9fd112bf5b43baa138",
+    "test/integ/http3_full_gate_runner_test.py": "60d48ae62369c66259ad2976d02eaa073b36483742ee10dbc253546b1410a2f8",
+    "test/integ/quic_interop_runner_test.py": "d58acc7dd8ea85701508bfad3ff18f8997e2c18ed31ac1af3b0e792b944bfa71",
+    "test/support/http3_network_owner.cpp": "996db3c4dd32599a8fe58f9cc65e6e4efd8b33350aea6113788f03c6a3c73560",
+    "test/unit/external_readiness_adapter_test.cpp": "08235cacd82b5e3c8a2c0bf7187f9f2877717c1cb99abdb10f29e0cb5e388dac",
+    "test/unit/http2_drain_test.cpp": "6057e26f470f0a73383eb45c8878457d160bbc6482b3b4d3ba56f5e311990f26",
+    "test/unit/http3_native_stream_test.cpp": "640e33e2f5c94370090086ec2d7365bbd63fcad0fdd6af2bb2d77c9ba89ce71c",
+    "test/unit/http3_network_owner_test.cpp": "e3d2eb6c02afe8e1fc6fd353a9e6bf05bbb70b3ecdb9831d146ce2b05503f58d",
+    "test/unit/io_udp_backend_test.cpp": "4f5384ede6a7c376cb4a8fe002be9551a7183e164530886cb74f80aeeacaffd8",
+    "test/unit/native_server_test.cpp": "9e47b27c30acca3c630dd54eda6feb2814d3ff5ce585a9cd12cffc1389b59470",
+    "test/unit/quic_native_owner_test.cpp": "1bf53e4f8925ab80e9a252db7588ff17f0def928d1cc57e9aef2e9d7e30e4248",
+    "test/unit/quic_server_admission_test.cpp": "9417b63c16bbb6f23aaa9d162c45f6a53bc8f50c4ebc42df35de8449650e8683",
+    "test/unit/server_options_validate_test.cpp": "2bb8a5e0e43397c033324da5fd42c3d0ea73ebe30d0236e68c4783a75bd677c7",
+    "test/unit/tls_psk_runtime_test.cpp": "2d26844734b9b5a0a55e451bded56c830116b0fc37261ec1635666ea2c5f42c1"
+  },
+  "covered_inputs": {
+    "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/final-covered-inputs.json",
+    "sha256": "a4e3013c17d132d00f793ef496792dff385b773a1b2e37c19220cd3aa4e86d87",
+    "bytes": 140335
+  },
+  "full_gate_snapshot": "05c5b44e7a72b66fbd8f2b6b81ad2fe79cdaff7cf3f05a506f7a4302e8e9c127",
+  "proofs": [
+    {
+      "id": "full12",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full12/manifest.json",
+        "sha256": "34da9099e6876f95e2c7f52445bfb31b46c4b764d80d302ff007993b4aa73cb8",
+        "bytes": 1510833
+      },
+      "command": [
+        "/tmp/task185-clients/bin/python",
+        "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full-final2.py"
+      ]
+    },
+    {
+      "id": "public-h3-normal-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h3-normal-candidate1/receipt.json",
+        "sha256": "b6f3d093a4605cbde218157dc0d730ab18d59598ddae138810859eb4e1663da5",
+        "bytes": 120916
+      },
+      "command": [
+        "scripts/check-v3-public-http3.py",
+        "--prefix",
+        "/tmp/task196-normal-on",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/normal-on",
+        "--tls",
+        "yes",
+        "--output",
+        "build/task196/public-h3-normal-candidate1",
+        "--quic-go",
+        "/tmp/task196-go-client"
+      ],
+      "cells": 4
+    },
+    {
+      "id": "public-h3-normal-off-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h3-normal-off-candidate1/receipt.json",
+        "sha256": "0c8ac72885f05336cdf3d778256a70a0be4e4de29a007178db81243b0ae0c596",
+        "bytes": 97024
+      },
+      "command": [
+        "scripts/check-v3-public-http3.py",
+        "--prefix",
+        "/tmp/task196-normal-off",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/normal-off",
+        "--tls",
+        "no",
+        "--output",
+        "build/task196/public-h3-normal-off-candidate1",
+        "--quic-go",
+        "/tmp/task196-go-client"
+      ],
+      "cells": 4
+    },
+    {
+      "id": "public-tls-candidate1-normal-on",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-candidate1-normal-on/receipt.json",
+        "sha256": "f442c0c55639350e0efe943a9cb0b93a627ba321169ca0d57d9a1025d528c104",
+        "bytes": 346770
+      },
+      "cells": 4
+    },
+    {
+      "id": "public-tls-candidate1-normal-off",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-candidate1-normal-off/receipt.json",
+        "sha256": "7127893aec14f43b3b17665d2be538fff7bae966f22ca6012e5ca0bb65820c47",
+        "bytes": 164795
+      },
+      "cells": 4
+    },
+    {
+      "id": "package-normal4",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/package-normal4/receipt.json",
+        "sha256": "66890a24a12ade67caa4fd23482617323066a1106d89a61e2dde2bf48d3ef2b8",
+        "bytes": 30134077
+      },
+      "cells": 8
+    },
+    {
+      "id": "h2-immediate-exit-normal3",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/h2-immediate-exit-normal3/receipt.json",
+        "sha256": "933e6028a1efc839c8cfff1cf308d50de4f12aca28abc8b1aba8ddca0633434e",
+        "bytes": 14433
+      }
+    },
+    {
+      "id": "public-h3-asan-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h3-asan-candidate1/receipt.json",
+        "sha256": "496b1a30273aad84e2b1fb28b0d73a950525a30ba9596d0495250977812e101c",
+        "bytes": 122358
+      },
+      "command": [
+        "scripts/check-v3-public-http3.py",
+        "--prefix",
+        "/tmp/task196-asan-on",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/asan-on",
+        "--tls",
+        "yes",
+        "--output",
+        "build/task196/public-h3-asan-candidate1",
+        "--quic-go",
+        "/tmp/task196-go-client",
+        "--sanitize=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -fno-omit-frame-pointer"
+      ],
+      "cells": 4
+    },
+    {
+      "id": "public-h3-asan-off-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h3-asan-off-candidate1/receipt.json",
+        "sha256": "6cf2d9202908ecd95d1eeda1b3bf264bb1250acb461423ebf9bba0c8bda951bd",
+        "bytes": 98482
+      },
+      "command": [
+        "scripts/check-v3-public-http3.py",
+        "--prefix",
+        "/tmp/task196-asan-off",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/asan-off",
+        "--tls",
+        "no",
+        "--output",
+        "build/task196/public-h3-asan-off-candidate1",
+        "--quic-go",
+        "/tmp/task196-go-client",
+        "--sanitize=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -fno-omit-frame-pointer"
+      ],
+      "cells": 4
+    },
+    {
+      "id": "public-tls-candidate1-asan-on",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-candidate1-asan-on/receipt.json",
+        "sha256": "d3bd4f9cb4dbf8c024dba3d46e4def21d25beb85ba57c0b4ffea1fe667f146db",
+        "bytes": 350808
+      },
+      "cells": 4
+    },
+    {
+      "id": "public-tls-candidate1-asan-off",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-candidate1-asan-off/receipt.json",
+        "sha256": "23f4a6abe99867adb81f5103e3033d615958ebaf0af28d6229196f18cf37e8fb",
+        "bytes": 167463
+      },
+      "cells": 4
+    },
+    {
+      "id": "package-asan4",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/package-asan4/receipt.json",
+        "sha256": "93bd018a9d075041db0124a071001cd126de8dc7a1c160af907c3f7487a1d372",
+        "bytes": 43784968
+      },
+      "cells": 8
+    },
+    {
+      "id": "h2-immediate-exit-asan3",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/h2-immediate-exit-asan3/receipt.json",
+        "sha256": "ffea0e0bd33bef890adfef33e746113a5d9c3a1ce4b268e6c02f503358e4862c",
+        "bytes": 14419
+      }
+    },
+    {
+      "id": "public-h3-tsan-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h3-tsan-candidate1/receipt.json",
+        "sha256": "55e48713b8c18d7a796c7840ed7f074cdcbe5ff367b9ea5df64cb2048b9cdf87",
+        "bytes": 122254
+      },
+      "command": [
+        "scripts/check-v3-public-http3.py",
+        "--prefix",
+        "/tmp/task196-tsan-on",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/tsan-on",
+        "--tls",
+        "yes",
+        "--output",
+        "build/task196/public-h3-tsan-candidate1",
+        "--quic-go",
+        "/tmp/task196-go-client",
+        "--sanitize=-fsanitize=thread -fno-omit-frame-pointer"
+      ],
+      "cells": 4
+    },
+    {
+      "id": "public-h3-tsan-off-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h3-tsan-off-candidate1/receipt.json",
+        "sha256": "05634a29e7cc2a217d90d7ca41d20d5cf45cfb60f4a10204c31468486435093d",
+        "bytes": 98378
+      },
+      "command": [
+        "scripts/check-v3-public-http3.py",
+        "--prefix",
+        "/tmp/task196-tsan-off",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/tsan-off",
+        "--tls",
+        "no",
+        "--output",
+        "build/task196/public-h3-tsan-off-candidate1",
+        "--quic-go",
+        "/tmp/task196-go-client",
+        "--sanitize=-fsanitize=thread -fno-omit-frame-pointer"
+      ],
+      "cells": 4
+    },
+    {
+      "id": "public-tls-candidate1-tsan-on",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-candidate1-tsan-on/receipt.json",
+        "sha256": "699c11769335332b17b3f94a7ea5383d4cba7a4f813d5dd7e8355f939fc2591c",
+        "bytes": 350804
+      },
+      "cells": 4
+    },
+    {
+      "id": "public-tls-candidate1-tsan-off",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-candidate1-tsan-off/receipt.json",
+        "sha256": "00cd9f686037035d6a70ff6b6a36ebfccbf1b0d22a8af777a9a98942617eef80",
+        "bytes": 167463
+      },
+      "cells": 4
+    },
+    {
+      "id": "package-tsan4",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/package-tsan4/receipt.json",
+        "sha256": "952dba269a4ac2d8013ecefd0de0466e6d2122e81848fa6691bc623856094db1",
+        "bytes": 31819355
+      },
+      "cells": 8
+    },
+    {
+      "id": "h2-immediate-exit-tsan3",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/h2-immediate-exit-tsan3/receipt.json",
+        "sha256": "1be9ec4ab9337cb0f3d4fff1e9f03c7986b22beefec0604d9bbc6a0cb831cb22",
+        "bytes": 14419
+      }
+    },
+    {
+      "id": "semantic-candidate-normal1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/semantic-candidate-normal1/manifest.json",
+        "sha256": "d4084a5352845c42fa1137479de04dc6b58d3fd87caa9fe426ad3237c089743f",
+        "bytes": 18403
+      },
+      "command": [
+        "scripts/run-v3-http3-gates.py",
+        "--build-dir",
+        "build/task196/normal-on",
+        "--log-dir",
+        "build/task196/semantic-candidate-normal1",
+        "--python",
+        "/tmp/task185-clients/bin/python",
+        "--matrix",
+        "task174",
+        "--go-client",
+        "/tmp/task196-go-client",
+        "--tshark",
+        "/tmp/task185-tools/bin/tshark"
+      ]
+    },
+    {
+      "id": "semantic-candidate-asan1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/semantic-candidate-asan1/manifest.json",
+        "sha256": "b082b45f6da696aa8e19621a597147e1c95568ff0ebe13613bffd42fa6f0646c",
+        "bytes": 18397
+      },
+      "command": [
+        "scripts/run-v3-http3-gates.py",
+        "--build-dir",
+        "build/task196/asan-on",
+        "--log-dir",
+        "build/task196/semantic-candidate-asan1",
+        "--python",
+        "/tmp/task185-clients/bin/python",
+        "--matrix",
+        "task174",
+        "--go-client",
+        "/tmp/task196-go-client",
+        "--tshark",
+        "/tmp/task185-tools/bin/tshark"
+      ]
+    },
+    {
+      "id": "semantic-candidate-tsan1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/semantic-candidate-tsan1/manifest.json",
+        "sha256": "362962178f92a9c8f4d4a971ca62ce4ade7d48fac022bb95b3c3f99336bcf19d",
+        "bytes": 18397
+      },
+      "command": [
+        "scripts/run-v3-http3-gates.py",
+        "--build-dir",
+        "build/task196/tsan-on",
+        "--log-dir",
+        "build/task196/semantic-candidate-tsan1",
+        "--python",
+        "/tmp/task185-clients/bin/python",
+        "--matrix",
+        "task174",
+        "--go-client",
+        "/tmp/task196-go-client",
+        "--tshark",
+        "/tmp/task185-tools/bin/tshark"
+      ]
+    },
+    {
+      "id": "public-h2-normal-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h2-normal-candidate1/receipt.json",
+        "sha256": "483b475e57a3b8235ac00b385591539ce7257af5bcba574dbbb48881056d16e2",
+        "bytes": 294681
+      },
+      "command": [
+        "scripts/check-v3-public-http2.py",
+        "--prefix",
+        "/tmp/task196-normal-on",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/normal-on",
+        "--tls",
+        "yes",
+        "--output",
+        "build/task196/public-h2-normal-candidate1",
+        "--node",
+        "/tmp/task185-tools/node-v24.15.0-linux-x64/bin/node"
+      ],
+      "cells": 4
+    },
+    {
+      "id": "public-h2-asan-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h2-asan-candidate1/receipt.json",
+        "sha256": "ebf2d172eb71de0fce5f76168b8a5c98a64d075ba1521dedea21836cb67249ba",
+        "bytes": 296862
+      },
+      "command": [
+        "scripts/check-v3-public-http2.py",
+        "--prefix",
+        "/tmp/task196-asan-on",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/asan-on",
+        "--tls",
+        "yes",
+        "--output",
+        "build/task196/public-h2-asan-candidate1",
+        "--node",
+        "/tmp/task185-tools/node-v24.15.0-linux-x64/bin/node",
+        "--sanitize=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -fno-omit-frame-pointer"
+      ],
+      "cells": 4
+    },
+    {
+      "id": "public-h2-tsan-candidate1",
+      "status": "passed",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h2-tsan-candidate1/receipt.json",
+        "sha256": "3d826c7b7c82b3ace43082efb2095d1baa72a737af8c6f361533eb8761333d5e",
+        "bytes": 296839
+      },
+      "command": [
+        "scripts/check-v3-public-http2.py",
+        "--prefix",
+        "/tmp/task196-tsan-on",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--build",
+        "build/task196/tsan-on",
+        "--tls",
+        "yes",
+        "--output",
+        "build/task196/public-h2-tsan-candidate1",
+        "--node",
+        "/tmp/task185-tools/node-v24.15.0-linux-x64/bin/node",
+        "--sanitize=-fsanitize=thread -fno-omit-frame-pointer"
+      ],
+      "cells": 4
+    }
+  ],
+  "suites": [
+    {
+      "id": "normal-on-h2-final",
+      "passed_suites": 81,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/normal-on-h2-final-suites.log",
+        "sha256": "95fa7db63630ab7bbd84145e533f08d962094c379cb2b1f3d117f567bf0cf050",
+        "bytes": 81889
+      }
+    },
+    {
+      "id": "normal-on-candidate-green",
+      "passed_suites": 8,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/normal-on-candidate-green-suites.log",
+        "sha256": "3959432e5c3770bb81d09dc64c46146f3e50556bce3e14f89f72a7754ffee651",
+        "bytes": 5968
+      }
+    },
+    {
+      "id": "normal-off-h2-final",
+      "passed_suites": 21,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/normal-off-h2-final-suites.log",
+        "sha256": "527dea1263da0fd8a70a038ee58fe3a5add2436c127f7758751e59a4887c0137",
+        "bytes": 17757
+      }
+    },
+    {
+      "id": "normal-off-candidate-green",
+      "passed_suites": 6,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/normal-off-candidate-green-suites.log",
+        "sha256": "103ca14f20b30ffd461d6cc8155ed1609ff69f537cad29510d6d435cf46f9182",
+        "bytes": 1772
+      }
+    },
+    {
+      "id": "stream-tail-normal-green-test",
+      "tests": 8,
+      "checks": 39,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/stream-tail-normal-green-test.log",
+        "sha256": "42a40eaa87e8f2311b84d2d835e5db38e9f96e97955f6d4774bd88d03e81b005",
+        "bytes": 1624
+      }
+    },
+    {
+      "id": "asan-on-h2-final",
+      "passed_suites": 81,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/asan-on-h2-final-suites.log",
+        "sha256": "4ef8d8ff6016177cdfbf2ad611efe69f987e9389a864742767b051cc7acc3a30",
+        "bytes": 129927
+      }
+    },
+    {
+      "id": "asan-on-candidate-green",
+      "passed_suites": 8,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/asan-on-candidate-green-suites.log",
+        "sha256": "ba119808baa6e130170020b6a70a072b5fd44b3c1da2137c60e08849244204b3",
+        "bytes": 15546
+      }
+    },
+    {
+      "id": "asan-off-h2-final",
+      "passed_suites": 21,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/asan-off-h2-final-suites.log",
+        "sha256": "f1473e6715b298e12ec12bc12fc2468d4bacda7acdcc93c32ab68ed43fd9ec45",
+        "bytes": 28783
+      }
+    },
+    {
+      "id": "asan-off-candidate-green",
+      "passed_suites": 6,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/asan-off-candidate-green-suites.log",
+        "sha256": "dce1ce0604f43ec1f0a222348009d3a113c24c1e1389e64b14d286f4d22257a0",
+        "bytes": 1756
+      }
+    },
+    {
+      "id": "stream-tail-asan-green-test",
+      "tests": 8,
+      "checks": 39,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/stream-tail-asan-green-test.log",
+        "sha256": "75aa9ad0c1207c4986e05ec7b668477487fb866da0e8cb15024930c7ed22d509",
+        "bytes": 1632
+      }
+    },
+    {
+      "id": "tsan-on-h2-final",
+      "passed_suites": 81,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/tsan-on-h2-final-suites.log",
+        "sha256": "e4acfdb9c82e4ab281f49a91265580d7e8553857f3c883651e5149b6d6701a5e",
+        "bytes": 105851
+      }
+    },
+    {
+      "id": "tsan-on-candidate-green",
+      "passed_suites": 8,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/tsan-on-candidate-green-suites.log",
+        "sha256": "c267d7bc6dbb189f1b88e875fb28c10e51fc332849886b8730657f57f1c618d9",
+        "bytes": 13260
+      }
+    },
+    {
+      "id": "tsan-off-h2-final",
+      "passed_suites": 21,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/tsan-off-h2-final-suites.log",
+        "sha256": "a6f0799f93c76ddafc12609395bf4154a4d38f05ba5dceb32585fadb371ddfb9",
+        "bytes": 22801
+      }
+    },
+    {
+      "id": "tsan-off-candidate-green",
+      "passed_suites": 6,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/tsan-off-candidate-green-suites.log",
+        "sha256": "97ff27a9e511c10fc3361b306507d7112f7cbb7c416657dd06daf50819da66fd",
+        "bytes": 1756
+      }
+    },
+    {
+      "id": "stream-tail-tsan-green-test",
+      "tests": 8,
+      "checks": 39,
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/stream-tail-tsan-green-test.log",
+        "sha256": "145e75db7731f729d06b516bfa70969dd867912afac8cbc241c2bd53a005d7e6",
+        "bytes": 1611
+      }
+    },
+    {
+      "id": "provider-observer-normal-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/provider-observer-normal-final.log",
+        "sha256": "bf2581130b57178a48d878fd460e0b6946e87aad962a3439112d61ea2abde1bc",
+        "bytes": 3006
+      }
+    },
+    {
+      "id": "provider-observer-asan-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/provider-observer-asan-final.log",
+        "sha256": "3cb1cb6793fb83c4db51e533ff45fda62e35ab53a548e322010bd5c0a02bb3c4",
+        "bytes": 3863
+      }
+    },
+    {
+      "id": "provider-observer-tsan-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/provider-observer-tsan-final.log",
+        "sha256": "1f21111d5901c812dc4bd40ca9e0c238e30063dd40a4e7aa194999b2c69fe688",
+        "bytes": 3477
+      }
+    },
+    {
+      "id": "h2-barrier-order-green-test",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/h2-barrier-order-green-test.log",
+        "sha256": "bca505cee25f1c513e242bf651c767d17c33ae960df7d5563cf4465a640d1f10",
+        "bytes": 5201
+      }
+    },
+    {
+      "id": "public-contracts-tail-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-contracts-tail-final.log",
+        "sha256": "e73c3805f810fdcf3d0167ced7085c48306c9482a952ffb710551d230cdb3e51",
+        "bytes": 102
+      }
+    },
+    {
+      "id": "full-contracts-tail-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full-contracts-tail-final.log",
+        "sha256": "2299339565fdc7c4fedeb54e99b181ba53b821f77194926422cc7df3301ba0ee",
+        "bytes": 98
+      }
+    },
+    {
+      "id": "installed-contracts-tail-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/installed-contracts-tail-final.log",
+        "sha256": "84e6646475cd4e521dbc1e8a08a3be7a442ea643eec4162f608aa62109a6f3b8",
+        "bytes": 126
+      }
+    },
+    {
+      "id": "h2-contracts-tail-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/h2-contracts-tail-final.log",
+        "sha256": "d1a3bdcaa925bbf92cc120237c5ab1078f911832e5f3bbdd16fd82aab85d59fa",
+        "bytes": 104
+      }
+    },
+    {
+      "id": "header-hygiene-source",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/header-hygiene-source.log",
+        "sha256": "10dd2c3006220a658a3c00b25de64a333ce56d875c034f84054ced9f8c1cd97b",
+        "bytes": 1101
+      }
+    },
+    {
+      "id": "install-layout-hygiene",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/install-layout-hygiene.log",
+        "sha256": "3365209c0c66a814f5b552221032f646e6491856d10fd2fc7a20e56bc455758a",
+        "bytes": 494
+      }
+    },
+    {
+      "id": "native-linkage-off",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/native-linkage-off.log",
+        "sha256": "42b97580704106ac0dac961582accaad185a3f9200152bc410890300e0f004ab",
+        "bytes": 486
+      }
+    },
+    {
+      "id": "doxygen-on-candidate-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/doxygen-on-candidate-final.log",
+        "sha256": "16b0b6d87101538f28d17fdc59d6706617d6489ae87443ac29bb633f3b405cee",
+        "bytes": 191
+      }
+    },
+    {
+      "id": "doxygen-off-candidate-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/doxygen-off-candidate-final.log",
+        "sha256": "9eabb4eb5a81ea0a4b2a34bb3c9aee5fda89be906f1efe3308cba9017ed285df",
+        "bytes": 192
+      }
+    },
+    {
+      "id": "cpplint-candidate-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/cpplint-candidate-final.log",
+        "sha256": "1608fd82a948593cc9849dfdce2e52c032e87c3449e2aa71c72f02660d6167ca",
+        "bytes": 1846
+      }
+    },
+    {
+      "id": "complexity-candidate-final-changes",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/complexity-candidate-final-changes.log",
+        "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "bytes": 3
+      }
+    },
+    {
+      "id": "duplication-candidate-comparison",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/duplication-candidate-comparison.json",
+        "sha256": "66888e0ef4936a56bcb8b6fafb73e4de1393ce98c6746422d6d700e9e0e8f890",
+        "bytes": 175
+      }
+    },
+    {
+      "id": "file-size-candidate-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/file-size-candidate-final.log",
+        "sha256": "29a066ab136200d6e5dfe0a13bce5ed9a6bcc452be1c65d1dd47d8544b233d76",
+        "bytes": 523
+      }
+    },
+    {
+      "id": "go-vet-candidate",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/go-vet-candidate.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    {
+      "id": "go-format-candidate",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/go-format-candidate.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    {
+      "id": "go-race-build-candidate",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/go-race-build-candidate.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    {
+      "id": "semantic-consumption-green2",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/semantic-consumption-green2.log",
+        "sha256": "cb7eeb34b48240042fc411e87e7a1b77717d00741cf82b6a0704773aa5d4a859",
+        "bytes": 43
+      }
+    },
+    {
+      "id": "simulator-clock-contract-green",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/simulator-clock-contract-green.log",
+        "sha256": "3ddc3e32759c59f03bcfccda86f11898cf6b5e6610fd704bcac1883798c873f5",
+        "bytes": 145
+      }
+    },
+    {
+      "id": "full-contracts-clock-final",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full-contracts-clock-final.log",
+        "sha256": "7955c36c549f96e959415c420848632b2628d1e4d281d64c56460fc8d6da69f6",
+        "bytes": 255
+      }
+    },
+    {
+      "id": "simulator-clock-receipt",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/simulator-clock-receipt.json",
+        "sha256": "3a62dd4fa5542fdcd241e0ad395a8f42684bf0ccf7bfa8ed6087154e618d17fb",
+        "bytes": 5706
+      }
+    },
+    {
+      "id": "full-final2",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full-final2.py",
+        "sha256": "3ac1aeb6103628d6af69603ebe81e4cb19a92c729c1aec671f8dbee5a73e9fc2",
+        "bytes": 6094
+      }
+    },
+    {
+      "id": "simulator-clock-provision",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/simulator-clock-provision.log",
+        "sha256": "b911b6de59ba778bb812058c892ffcf5e22cc7c6246bd557ec6b9adc8158b32d",
+        "bytes": 284
+      }
+    },
+    {
+      "id": "distribution-candidate",
+      "artifact": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/distribution-candidate.json",
+        "sha256": "a494bfbd5944475a5d4ad49f4f8c8cb2b5a8f2ea1af8a0619113fd07c34a28ef",
+        "bytes": 12879
+      }
+    }
+  ],
+  "causal_closures": [
+    {
+      "id": "native-provider-retirement",
+      "red": [
+        "provider-thread-exit-red-test.log",
+        "provider-native-exit-red-test.log",
+        "pthread-exit-future-probe-warmed.log"
+      ],
+      "green": [
+        "provider-observer-normal-final.log",
+        "provider-observer-asan-final.log",
+        "provider-observer-tsan-final.log"
+      ],
+      "installed": [
+        "h2-immediate-exit-normal3",
+        "h2-immediate-exit-asan3",
+        "h2-immediate-exit-tsan3"
+      ]
+    },
+    {
+      "id": "h2-ack-before-write-completion",
+      "red": [
+        "h2-barrier-order-red-test.log"
+      ],
+      "green": [
+        "h2-barrier-order-green-test.log"
+      ],
+      "installed": [
+        "public-h2-normal-candidate1",
+        "public-h2-asan-candidate1",
+        "public-h2-tsan-candidate1"
+      ]
+    },
+    {
+      "id": "h3-affinity-tail-retirement",
+      "red": [
+        "stream-tail-red-test.log",
+        "public-h3-tsan-final/static-external/destruction-process.json"
+      ],
+      "green": [
+        "stream-tail-normal-green-test.log",
+        "stream-tail-asan-green-test.log",
+        "stream-tail-tsan-green-test.log"
+      ],
+      "installed": [
+        "public-h3-normal-candidate1",
+        "public-h3-asan-candidate1",
+        "public-h3-tsan-candidate1"
+      ]
+    },
+    {
+      "id": "authenticated-candidate-terminal-close",
+      "red": [
+        "normal-on/candidate-close-native-red.log",
+        "normal-on/candidate-close-fixture-red.log",
+        "full9/quic-interop/evidence/runner-logs/libhttpserver_quic-go/rebind-port/output.txt"
+      ],
+      "green": [
+        "normal-on/candidate-close-native-green.log",
+        "normal-on/candidate-close-fixture-green.log"
+      ],
+      "installed": [
+        "public-h3-normal-candidate1",
+        "public-h3-asan-candidate1",
+        "public-h3-tsan-candidate1"
+      ],
+      "capture": "quic-clock-candidate1/manifest.json"
+    },
+    {
+      "id": "client-consumption-before-real-fin-ack-submission",
+      "red": [
+        "remaining1/http3-interop/evidence/manifest.json",
+        "semantic-consumption-red.log"
+      ],
+      "green": [
+        "semantic-consumption-green2.log",
+        "semantic-candidate-normal1/manifest.json",
+        "semantic-candidate-asan1/manifest.json",
+        "semantic-candidate-tsan1/manifest.json"
+      ]
+    },
+    {
+      "id": "simulator-clock-compatibility",
+      "red": [
+        "host-clock-candidate.json",
+        "simulator-clock-red2.log",
+        "full10/manifest.json"
+      ],
+      "green": [
+        "simulator-clock-image-green.log",
+        "simulator-clock-receipt.json",
+        "quic-clock-candidate1/manifest.json"
+      ],
+      "scope": "Only exact pinned simulator core elapsed pacing clock changes; other image files unchanged"
+    }
+  ],
+  "doubt_closures": {
+    "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/doubt-closures.json",
+    "sha256": "9759bea55d1347ea0f7762a7686cd3f892c51349eb57a44b6506cb5fbfe3249a",
+    "bytes": 10018
+  },
+  "failed_or_superseded_receipts": [
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h3-tsan-final/receipt.json",
+      "sha256": "e9cf307633ba4f98b235ebd5f4bf19b0c9e940de3b512f4edee1a499c10cb756",
+      "bytes": 117398
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/package-normal1/receipt.json",
+      "sha256": "1ac1b63b2b3ba53248746664bed9485f812504a0ef6eecdaf4ef7cffaa1c8070",
+      "bytes": 24242
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/package-asan1/receipt.json",
+      "sha256": "851cd2d34459557528a9f04964d0dc99f5c3bec500eb9df9e636e0a596de8bc8",
+      "bytes": 23890
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-normal2/receipt.json",
+      "sha256": "b5bf3bd3ca906048ce14ceb011c55bb0bf91c26747250950ea7bd97ff12d903c",
+      "bytes": 46461
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-normal1/receipt.json",
+      "sha256": "e00071e6db9a56ac2668a1d247a77b78f2280b449dca568d8b8b89ae2d799aef",
+      "bytes": 46461
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h2-tsan1/receipt.json",
+      "sha256": "ee373f93895eb672ebd28d28b71c92e03d1b4d8118b112821e2b4588433b3eaa",
+      "bytes": 82389
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/package-tsan1/receipt.json",
+      "sha256": "499e6227494a565ad11bcb21abd7c9c7de9101f791838239209b2a2965a09bb8",
+      "bytes": 23890
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h2-tsan-observer2/receipt.json",
+      "sha256": "d4338962b4a35998187e8cebc248979a3b646c144b6af0cc6cdaffe82423da7d",
+      "bytes": 134747
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h2-asan1/receipt.json",
+      "sha256": "5584d59ff53873c62b4e4c0a9ede57eea827e1fb19c6e96bf03318d1d0e80523",
+      "bytes": 82607
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/package-asan2/receipt.json",
+      "sha256": "fbef98abf24fad57505610fbaddf10ad551c136fc8a6ac6aed2390c6db8f34a8",
+      "bytes": 11848146
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-h2-tsan-observer1/receipt.json",
+      "sha256": "cf09595aab55f17e00618cfb98743bf965783c61a9402bd4415985763d4f7c8f",
+      "bytes": 135214
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/package-tsan2/receipt.json",
+      "sha256": "c532fc044830768712c9008ec229edf05a7cc214477a2b4e58dafb2df21b4c0f",
+      "bytes": 8574366
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tls-normal3/receipt.json",
+      "sha256": "8b8274e36b413b1ce2a023ebcdd6023ae64d73cb5e1ddf5d11f621cf1120b8ff",
+      "bytes": 46476
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-normal4/receipt.json",
+      "sha256": "663a8b06d606886cac0e4c34d424ea09c21e28a0c710ae11d3c541699bfc538d",
+      "bytes": 77633
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tsan3/receipt.json",
+      "sha256": "54191742429ff3c4ba3d62c14de775dddb29b5554e3bfcf8826104caf84f5530",
+      "bytes": 43433
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-tsan2/receipt.json",
+      "sha256": "4b8d8492b0bd69757e77d3bfc969d853f8acf290d86517ec00c6a5218a555273",
+      "bytes": 43739
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/public-normal2/receipt.json",
+      "sha256": "c95f9fcd26cd2127a51b77624407f62eea93404dfd273e910fd779910c6b6ab9",
+      "bytes": 57920
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full3/manifest.json",
+      "sha256": "82f8b5e432cd2019b70a7346364c6cc6d5f96332115ff0ecf04b714d29fb20e2",
+      "bytes": 340342
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full6/manifest.json",
+      "sha256": "22d457241f4e57ada4d17731695df9d1d8b3b570fb33ed000ba2c82f8b789952",
+      "bytes": 343042
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full7/manifest.json",
+      "sha256": "9061da3064246019114a49fb9d48dcc223575d0a00245c18bf39d713c3165c9b",
+      "bytes": 11763
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full10/manifest.json",
+      "sha256": "3139b42f2516bf12fb94746241b1777ea1c1623df3c8905cdecf112d02277a97",
+      "bytes": 685500
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full5/manifest.json",
+      "sha256": "3c6faa13259b97a5aec45b7961d0702b576c8508dd5071096296f2e799823f14",
+      "bytes": 682177
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full9/manifest.json",
+      "sha256": "cdc832fcd35dfe6fab86395149663337dc38915e528a4b9e445f46c98d5e287e",
+      "bytes": 684990
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full1/manifest.json",
+      "sha256": "60bab9e24fcf99879dfb46130dca50554c29d860b270137ccca4cceca5eb90a2",
+      "bytes": 11721
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full11/manifest.json",
+      "sha256": "29971ed9a5b9d9ed0ed668c19948e26022d264dd5e737e65c068f0d8b172654e",
+      "bytes": 1051607
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full2/manifest.json",
+      "sha256": "8354cb774bc5804b539eed6e0b304a7d88293a8bf671c90af87bd5124e4c9d6e",
+      "bytes": 11763
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full8/manifest.json",
+      "sha256": "88d52ffb1d62596abdd0ca40110717f24c8677dd7be1f993a91d5948bbf1f845",
+      "bytes": 685002
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196/full4/manifest.json",
+      "sha256": "a94b9184c694a395b15299e78cb34c294773b5abccd6ffca4798aa57dc29c20e",
+      "bytes": 564143
+    }
+  ],
+  "static_baseline": {
+    "duplication": {
+      "baseline_groups": 7,
+      "current_groups": 7,
+      "new_groups": [],
+      "status": "passed",
+      "logs": [
+        "duplication-base.log",
+        "duplication-candidate-final.log"
+      ]
+    },
+    "complexity_new_or_increased": [],
+    "unchanged_file_size_offenders": 3,
+    "raw_gates_retain_baseline_failures": true
+  },
+  "tools": {
+    "compiler": {
+      "command": [
+        "/usr/bin/clang++-18",
+        "--version"
+      ],
+      "stdout": "Ubuntu clang version 18.1.3 (1ubuntu1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin\n",
+      "stderr": ""
+    },
+    "provider_version": {
+      "command": [
+        "/home/etr/progs/libhttpserver/build/tooling/provider/bin/openssl",
+        "version"
+      ],
+      "stdout": "OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)\n",
+      "stderr": ""
+    },
+    "provider": [
+      {
+        "path": "/home/etr/progs/libhttpserver/build/tooling/provider/lib/libssl.a",
+        "bytes": 2094002,
+        "sha256": "27b98208ab4edcb48c04af7a1ca764b28e3b71ca9627f8f3ce7e58b257dbccfa"
+      },
+      {
+        "path": "/home/etr/progs/libhttpserver/build/tooling/provider/lib/libcrypto.a",
+        "bytes": 11492144,
+        "sha256": "ec9a9ab436a8b7d3c6282c17cc368ad819f43f11e9a1ef0a4f0d50b71d53ed10"
+      },
+      {
+        "path": "/home/etr/progs/libhttpserver/build/tooling/provider/include/openssl/opensslv.h",
+        "bytes": 3449,
+        "sha256": "9647fc99758cf83e3bcf11ae310894fd4911ad62bff22d8213a614df89cfedda"
+      }
+    ],
+    "quic_go": {
+      "command": [
+        "/tmp/task196-go-client",
+        "--identity"
+      ],
+      "stdout": "{\"client\":\"quic-go\",\"go\":\"go1.25.1\",\"version\":\"v0.55.0\"}\n",
+      "stderr": ""
+    },
+    "aioquic": {
+      "command": [
+        "/tmp/task185-clients/bin/python",
+        "-c",
+        "import aioquic,json,sys;print(json.dumps({\"version\":aioquic.__version__,\"executable\":sys.executable,\"python\":sys.version}))"
+      ],
+      "stdout": "{\"version\": \"1.3.0\", \"executable\": \"/tmp/task185-clients/bin/python\", \"python\": \"3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]\"}\n",
+      "stderr": ""
+    },
+    "capture_tools": {
+      "tshark": {
+        "command": [
+          "/tmp/task185-tools/bin/tshark",
+          "--version"
+        ],
+        "stdout": "TShark (Wireshark) 4.6.4.\n\nCopyright 1998-2026 Gerald Combs <gerald@wireshark.org> and contributors.\nLicensed under the terms of the GNU General Public License (version 2 or later).\nThis is free software; see the file named COPYING in the distribution. There is\nNO WARRANTY; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\nCompile-time info:\n Bit width: 64-bit\n  Compiler: GCC 15.2.0\n      GLib: 2.87.3\n With:\n  +brotli                      +MaxMind\n  +Gcrypt 1.12.0               +nghttp2 1.68.0\n  +GnuTLS 3.8.12 and PKCS#11   +nghttp3 1.12.0\n  +Kerberos (MIT)              +PCRE2 10.46 2025-08-27\n  +libnl 3                     +POSIX capabilities (Linux)\n  +libpcap                     +Snappy 1.2.2\n  +libsmi 0.4.8                +xxhash 0.8.3\n  +libxml2 2.15.1              +zlib 1.3.1\n  +Lua 5.4.8                   +Zstandard 1.5.7\n  +LZ4 1.10.0\n Without:\n  -zlib-ng\n\nRuntime info:\n      OS: Linux 6.6.87.2-microsoft-standard-WSL2\n     CPU: Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz (with SSE4.2)\n  Memory: 15951 MB of physical memory\n    GLib: 2.88.0\n  Locale: LC_TYPE=C.UTF-8\n Plugins: supported, 0 loaded\n With:\n  +brotli 1.2.0\n  +c-ares 1.34.6\n  +Gcrypt 1.12.0\n  +GnuTLS 3.8.12\n  +libpcap 1.10.6 (64-bit time_t, with TPACKET_V3)\n  +libsmi 0.4.8\n  +LZ4 1.10.0\n  +nghttp2 1.68.0\n  +nghttp3 1.12.0\n  +PCRE2 10.46 2025-08-27\n  +xxhash 803\n  +zlib 1.3.1\n  +Zstandard 1.5.7\n",
+        "stderr": ""
+      },
+      "editcap": {
+        "command": [
+          "/tmp/task185-tools/bin/editcap",
+          "--version"
+        ],
+        "stdout": "Editcap (Wireshark) 4.6.4.\n\nCopyright 1998-2026 Gerald Combs <gerald@wireshark.org> and contributors.\nLicensed under the terms of the GNU General Public License (version 2 or later).\nThis is free software; see the file named COPYING in the distribution. There is\nNO WARRANTY; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\nCompile-time info:\n Bit width: 64-bit\n  Compiler: GCC 15.2.0\n      GLib: 2.87.3\n With:\n\nRuntime info:\n      OS: Linux 6.6.87.2-microsoft-standard-WSL2\n     CPU: Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz (with SSE4.2)\n  Memory: 15951 MB of physical memory\n    GLib: 2.88.0\n  Locale: LC_TYPE=C\n Plugins: supported, 0 loaded\n With:\n",
+        "stderr": ""
+      },
+      "helper_binary": {
+        "path": "/tmp/task185-tools/bin/editcap",
+        "bytes": 206,
+        "sha256": "64c202148791722d2ae93ceff8e98affd534be5e68c6201b5823b63a70f13ab4"
+      }
+    },
+    "pmd_provisioning": {
+      "path": "/home/etr/progs/libhttpserver/build/tooling/pmd-runtime/provisioning-receipt.json",
+      "sha256": "2b148196a9957290103506b43e3aeb57973bb235bad38c7176671dc91d9a327e",
+      "bytes": 4026
+    }
+  },
+  "environment": {
+    "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+    "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+    "TSAN_OPTIONS": "halt_on_error=1",
+    "compiler": "Clang18",
+    "standard": "C++20",
+    "provider_instrumented": false,
+    "independent_clients_instrumented": false,
+    "suppressions_added": false
+  },
+  "unresolved_local_requirements": [],
+  "nonlocal_checks": [
+    {
+      "platform": "BSD",
+      "status": "deferred",
+      "owner": "CI / v3 PR"
+    },
+    {
+      "platform": "Windows",
+      "status": "deferred",
+      "owner": "CI / v3 PR"
+    },
+    {
+      "platform": "macOS",
+      "status": "deferred",
+      "owner": "CI / v3 PR"
+    },
+    {
+      "platform": "other nonlocal platforms",
+      "status": "deferred",
+      "owner": "CI / v3 PR"
+    }
+  ],
+  "archive_directories": {
+    "local": [
+      "/home/etr/progs/libhttpserver/.worktrees/TASK-196/build/task196",
+      "/home/etr/progs/libhttpserver/.worktrees/TASK-196/.debug/task196"
+    ],
+    "external": [
+      "/tmp/task193-public-tls-client-1ddpltk2",
+      "/tmp/task193-public-tls-client-3_ydba_e",
+      "/tmp/task193-public-tls-client-4ph5xpbu",
+      "/tmp/task193-public-tls-client-7_ptvagq",
+      "/tmp/task193-public-tls-client-7dfios3v",
+      "/tmp/task193-public-tls-client-_1b3z32w",
+      "/tmp/task193-public-tls-client-_a6x8n8p",
+      "/tmp/task193-public-tls-client-bqe5jdzd",
+      "/tmp/task193-public-tls-client-efmsaxf9",
+      "/tmp/task193-public-tls-client-ezjn1c3c",
+      "/tmp/task193-public-tls-client-f9x6pozl",
+      "/tmp/task193-public-tls-client-fj4vhean",
+      "/tmp/task193-public-tls-client-fjo9vnmk",
+      "/tmp/task193-public-tls-client-fxenjrhc",
+      "/tmp/task193-public-tls-client-g599cgnz",
+      "/tmp/task193-public-tls-client-i39wb6x6",
+      "/tmp/task193-public-tls-client-ix6odm3b",
+      "/tmp/task193-public-tls-client-k821gk34",
+      "/tmp/task193-public-tls-client-lk1pjihs",
+      "/tmp/task193-public-tls-client-n_hz3i7z",
+      "/tmp/task193-public-tls-client-n_zjvd1w",
+      "/tmp/task193-public-tls-client-nwjj8_lk",
+      "/tmp/task193-public-tls-client-rt1i6wcz",
+      "/tmp/task193-public-tls-client-sd7mcb8u",
+      "/tmp/task193-public-tls-client-tbliv2il",
+      "/tmp/task193-public-tls-client-tvaq8psk",
+      "/tmp/task193-public-tls-client-wrj6rhs7",
+      "/tmp/task193-public-tls-client-xb2andx5",
+      "/tmp/task193-public-tls-client-xiovi204",
+      "/tmp/task193-public-tls-client-zcewchp8",
+      "/tmp/task195-installed-68ir84_c",
+      "/tmp/task195-installed-82gfkll_",
+      "/tmp/task195-installed-83xm9kdh",
+      "/tmp/task195-installed-c6jr82zp",
+      "/tmp/task195-installed-cxipeu_8",
+      "/tmp/task195-installed-jshj4d04",
+      "/tmp/task195-installed-khfyhtwm",
+      "/tmp/task195-installed-leof6c3z",
+      "/tmp/task195-installed-lve39pq5",
+      "/tmp/task195-installed-otygdh7z",
+      "/tmp/task195-installed-psz7x301",
+      "/tmp/task195-installed-ptwejtq2",
+      "/tmp/task195-installed-q84cs5u6",
+      "/tmp/task195-installed-tyg7f2ck",
+      "/tmp/task196-asan-off",
+      "/tmp/task196-asan-on",
+      "/tmp/task196-dist-envelope",
+      "/tmp/task196-dist-final",
+      "/tmp/task196-installed-29635nyd",
+      "/tmp/task196-installed-29kblt2a",
+      "/tmp/task196-installed-4vm2ci12",
+      "/tmp/task196-installed-6juc8wwl",
+      "/tmp/task196-installed-_nl_opbc",
+      "/tmp/task196-installed-a2g9dp5g",
+      "/tmp/task196-installed-a3pb1_98",
+      "/tmp/task196-installed-b9xqb6gk",
+      "/tmp/task196-installed-byl_fqvo",
+      "/tmp/task196-installed-d78nvkyz",
+      "/tmp/task196-installed-h1cuwwhn",
+      "/tmp/task196-installed-i18l8_dr",
+      "/tmp/task196-installed-i9d_id5v",
+      "/tmp/task196-installed-ifizdndv",
+      "/tmp/task196-installed-ikyn0sbv",
+      "/tmp/task196-installed-jpcuvu7d",
+      "/tmp/task196-installed-ldvhsn01",
+      "/tmp/task196-installed-lo8_7qec",
+      "/tmp/task196-installed-lxuli_nl",
+      "/tmp/task196-installed-na7m57r1",
+      "/tmp/task196-installed-nej9bwx4",
+      "/tmp/task196-installed-o9pc2i9v",
+      "/tmp/task196-installed-opz6qysy",
+      "/tmp/task196-installed-q_5erpts",
+      "/tmp/task196-installed-rwjkjdxc",
+      "/tmp/task196-installed-s0e2x0hx",
+      "/tmp/task196-installed-sgw0f8lu",
+      "/tmp/task196-installed-szg660dr",
+      "/tmp/task196-installed-szy7_6nx",
+      "/tmp/task196-installed-tb00w2ad",
+      "/tmp/task196-installed-tg57rvma",
+      "/tmp/task196-installed-vpi3grz7",
+      "/tmp/task196-installed-wbvnd3lg",
+      "/tmp/task196-installed-wz1nb69v",
+      "/tmp/task196-installed-xa6enlpf",
+      "/tmp/task196-installed-y70kcz8m",
+      "/tmp/task196-installed-yduovnf3",
+      "/tmp/task196-installed-yi9rprj3",
+      "/tmp/task196-layout-off",
+      "/tmp/task196-lint-base",
+      "/tmp/task196-normal-off",
+      "/tmp/task196-normal-on",
+      "/tmp/task196-package-asan-off-oq1l5oro",
+      "/tmp/task196-package-asan-off-tnilvwwb",
+      "/tmp/task196-package-asan-on-6sboo_e6",
+      "/tmp/task196-package-asan-on-7bvijdxv",
+      "/tmp/task196-package-asan-on-g0lo_d16",
+      "/tmp/task196-package-asan-on-v76faafb",
+      "/tmp/task196-package-normal-off-2i_3d9ha",
+      "/tmp/task196-package-normal-off-7_hq4hxn",
+      "/tmp/task196-package-normal-off-o4vzfkm6",
+      "/tmp/task196-package-normal-on-4ud31j03",
+      "/tmp/task196-package-normal-on-fjceepyz",
+      "/tmp/task196-package-normal-on-gzf_x4rb",
+      "/tmp/task196-package-normal-on-qytapwye",
+      "/tmp/task196-package-tsan-off-8k8t82db",
+      "/tmp/task196-package-tsan-off-llh97x_x",
+      "/tmp/task196-package-tsan-on-j84qc7vc",
+      "/tmp/task196-package-tsan-on-lkj3rzli",
+      "/tmp/task196-package-tsan-on-n6ma3b3w",
+      "/tmp/task196-package-tsan-on-xb6cz6nx",
+      "/tmp/task196-public-red",
+      "/tmp/task196-tsan-off",
+      "/tmp/task196-tsan-on"
+    ]
+  },
+  "deferred_scope": {
+    "TASK_197": "Full H3 parity/RFC9220, comprehensive credential rotation/staged drain/saturation/migration, including original facts budget versus validated application budget receive accounting",
+    "TASK_198_199": "Benchmark and final release adapter integration",
+    "TASK_200": "Separately retained timer/manual-executor teardown race"
+  },
+  "honesty_notes": [
+    "Broad81on/21off suites remain scoped supporting evidence. Final selected8on/6off suites and current-prefix public/semantic matrices refresh tail and authenticated candidate-close repairs. Final nine-stage aggregation uses actual full10 native stages and exact source/header/configuration verification for fuzz reuse; source changes after those checks are gate-only Python clock provenance/contracts, never changed compiled inputs.",
+    "One fixed provider-only observer proves provider workers native exit, with a plain C++ publication tail;384 fresh immediate-exit processes pass without sleep after success.",
+    "Unchanged baseline CPD/size/complexity findings remain raw failing reports and are not represented as clean repository-wide scans.",
+    "Pinned simulator compatibility changes only the ns3.46.1 elapsed pacing clock/period to steady_clock; source/archive/patch/compiler/image/binary identity and actual-backstep timing RED/GREEN are retained. Original conformance limits, loss/rebind profiles and live challenge/close assertions are preserved.",
+    "Implementation task remains In Progress until caller Groundwork validation/finalization. No validation, merge, cleanup, push or deploy performed."
+  ]
+}

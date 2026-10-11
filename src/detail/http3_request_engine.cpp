@@ -32,8 +32,8 @@ std::optional<std::size_t> expanded_size(std::span<const qpack_field> fields, st
 }  // namespace
 http3_request_engine::http3_request_engine(quic_storage_lease data, quic_storage_lease critical, quic_flow_control& flow, quic_recovery& recovery,
                                            const server::route_registry& routes, executor& owner, http3_request_limits limits,
-                                           std::uint64_t id, net::peer_address peer, request_dispatch_context dispatch)
-    : state_(std::make_shared<state>(std::move(data), std::move(critical), flow, recovery, routes, owner, limits, id, peer, std::move(dispatch))) {
+                                           std::uint64_t id, net::peer_address peer, request_dispatch_context dispatch, http3_native_context native)
+    : state_(std::make_shared<state>(std::move(data), std::move(critical), flow, recovery, routes, owner, limits, id, peer, std::move(dispatch), std::move(native))) {
     state_->handlers->after_resume([weak = std::weak_ptr<state>(state_)] {
         if (auto s = weak.lock()) {
             state::pump_guard guard(*s);
@@ -61,52 +61,6 @@ http3_request_engine::state::~state() {
     records.clear();
     leave_connection();
 }
-http3_request_engine::state::stream::stream(state& s, record& r, http::request_head head)
-    : owner(s), transport(r), body(s.data.budget), request(head, &lifecycle, s.connection_id, &body, this, s.peer),
-      lifecycle(*this, s.bus(), request.head(), &response_refused) {
-    body.on_consumed([this](std::size_t n) { owner.consumed(transport, n); });
-}
-http3_request_engine::state::stream::~stream() {
-    handler.invalidate();
-    request.disconnect(http::outcome_code::connection_closed, "HTTP/3 exchange ended");
-    body.fail(http::outcome_code::connection_closed);
-    handler.clear();
-    complete_request(owner.bus(), request, lifecycle);
-}
-void http3_request_engine::state::stream::on_admit(const body_policy& policy) {
-    const auto cap = policy.max_buffer_bytes ? std::min<std::uint64_t>(policy.max_buffer_bytes, owner.limits.body_buffer_bytes) : owner.limits.body_buffer_bytes;
-    if (!body.admit(cap)) {
-        owner.reset(transport, 0x107);
-        return;
-    }
-    if (request.head().head_fields.first("expect").value_or("") == "100-continue") {
-        if (!owner.section(transport, 100, {}, false)) owner.reset(transport, 0x102);
-    }
-}
-void http3_request_engine::state::stream::on_respond(const http::status& status, const http::fields& fields) {
-    owner.respond(transport, status.code(), fields, false);
-}
-void http3_request_engine::state::stream::on_start_response(const http::status& status, const http::fields& fields) {
-    owner.respond(transport, status.code(), fields, true);
-}
-void http3_request_engine::state::stream::on_abort() {
-    owner.reset(transport, 0x102);
-}
-body_push_result http3_request_engine::state::stream::push(std::span<const std::byte> bytes) {
-    auto result = body.push(bytes);
-    if (result.kind == body_push::failed) owner.reset(transport, 0x102);
-    return result;
-}
-body_push_result http3_request_engine::state::stream::push_end(const http::fields& trailers) {
-    if (!owner.reserve_trailers(*this, trailers)) {
-        body.fail(http::outcome_code::limit_exceeded);
-        owner.reset(transport, 0x107);
-        return {body_push::failed, 0};
-    }
-    auto result = body.push_end(trailers);
-    if (result.kind == body_push::failed) owner.reset(transport, 0x102);
-    return result;
-}
 void http3_request_engine::state::fail(http3_error failure) {
     if (error) return;
     observe(server::diagnostic_kind::protocol_failure, 0, failure.outcome, server::diagnostic_reason::malformed_input);
@@ -117,6 +71,24 @@ void http3_request_engine::state::fail(http3_error failure) {
     for (auto& [id, r] : records)
         cancel(*r, failure.outcome);
     connection.shutdown();
+}
+void http3_request_engine::state::cancel_semantic(record& r, http::outcome_code reason) {
+    if (r.semantic && native.workers) {
+        r.semantic->native_cancel(reason);
+    } else if (r.semantic) {
+        auto driver = std::move(r.semantic->websocket);
+        if (driver) {
+            driver->observe_progress({});
+            driver->transport_failed({reason, "HTTP/3 request cancelled"});
+        }
+        r.semantic->websocket_input_charge.release();
+        r.semantic->websocket_output_charge.release();
+        r.semantic->websocket_message_charge.release();
+        r.semantic->handler.invalidate();
+        r.semantic->request.disconnect(reason, "HTTP/3 request cancelled");
+        r.semantic->body.discard();
+        r.semantic->body.fail(reason);
+    }
 }
 void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
     if (r.cancelled) return;
@@ -136,21 +108,9 @@ void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
     std::vector<std::byte>().swap(r.output);
     r.output_charge.release();
     r.scratch_position = r.scratch_size = r.receipt_count = 0;
-    if (r.semantic) {
-        auto driver = std::move(r.semantic->websocket);
-        if (driver) {
-            driver->observe_progress({});
-            driver->transport_failed({reason, "HTTP/3 request cancelled"});
-        }
-        r.semantic->websocket_input_charge.release();
-        r.semantic->websocket_output_charge.release();
-        r.semantic->websocket_message_charge.release();
-        r.semantic->handler.invalidate();
-        r.semantic->request.disconnect(reason, "HTTP/3 request cancelled");
-        r.semantic->body.discard();
-        r.semantic->body.fail(reason);
-    }
+    cancel_semantic(r, reason);
 }
+
 void http3_request_engine::state::reset(record& r, std::uint64_t code, http::outcome_code reason) {
     if (r.cancelled) return;
     if (!r.receive_done) r.action.stop_sending = quic_stop_sending_frame{r.transport->id(), code};
@@ -169,7 +129,17 @@ void http3_request_engine::state::abandon(record& r) {
     r.semantic->body.discard();
 }
 bool http3_request_engine::state::retired(const record& r) const {
-    return r.semantic->handler.done() && r.fin_retained && (r.receive_done || r.abandoned);
+    return r.semantic->done() && r.fin_retained && (r.receive_done || r.abandoned);
+}
+bool http3_request_engine::state::stream_refused(const stream& s) const {
+    if (native.workers) return s.native_refused.load();
+    return s.request.disconnected() && s.request.disconnect_reason().code() == http::outcome_code::peer_refused;
+}
+bool http3_request_engine::state::retire_semantic(record& r) {
+    auto& s = *r.semantic;
+    if (!native.workers) return true;
+    s.native_cancel(r.cancelled ? http::outcome_code::connection_closed : http::outcome_code::ok);
+    return s.native_retired.load();
 }
 void http3_request_engine::state::reap(record& r) {
     if (!r.semantic) {
@@ -177,12 +147,12 @@ void http3_request_engine::state::reap(record& r) {
         return;
     }
     auto& s = *r.semantic;
-    if (!r.cancelled && s.handler.done() && s.request.disconnected()
-            && s.request.disconnect_reason().code() == http::outcome_code::peer_refused) {
+    if (!r.cancelled && s.done() && stream_refused(s)) {
         reset(r, 0x10b, http::outcome_code::peer_refused);
     }
-    if (!r.cancelled && s.handler.done() && s.streaming && !s.body.finished()) reset(r, 0x102);
+    if (!r.cancelled && s.done() && s.streaming && !s.body.finished()) reset(r, 0x102);
     if (r.cancelled || retired(r)) {
+        if (!retire_semantic(r)) return;
         terminal(r, true, http::outcome_code::ok);
         r.semantic.reset();
         --active;
@@ -228,8 +198,13 @@ bool http3_request_engine::state::attach(quic_stream_state& transport, std::opti
     r->information.reserve(output_records);
     auto* added = r.get();
     register_record(std::move(r));
-    if (!role && !(id & 2) && phase != drain_phase::running) reset(*added, 0x10b);
+    configure_record(*added);
     return true;
+}
+void http3_request_engine::state::configure_record(record& r) {
+    if (r.local || (r.transport->id() & 2)) return;
+    if (native.workers) r.header_deadline = std::chrono::steady_clock::now() + limits.timeouts.header;
+    if (phase != drain_phase::running) reset(r, 0x10b);
 }
 void http3_request_engine::state::register_record(std::unique_ptr<record> r) {
     const auto id = r->transport->id();
@@ -324,7 +299,10 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
     }
     std::optional<std::uint64_t> length;
     http3_content_length(head.head_fields, length);
-    auto value = std::make_unique<stream>(*this, r, std::move(head));
+    auto value = std::make_shared<stream>(*this, r, std::move(head));
+    if (!value->budget.reserve(server::resource::streams, 1, value->seat).ok()) {
+        reset(r, 0x107); return false;
+    }
     value->connect = std::move(connect);
     value->head_charge = std::move(bytes);
     value->fields_charge = std::move(descriptors);
@@ -337,11 +315,16 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
     ++active;
     r.accepted = true;
     observe(server::diagnostic_kind::stream_admitted, r.transport->id());
+    start_request(r);
+    return true;
+}
+void http3_request_engine::state::start_request(record& r) {
     r.drain_unit.emplace(*scope);
+    if (native.drain) r.native_drain_unit.emplace(*native.drain);
     const auto id = r.transport->id();
     highest_accepted = highest_accepted ? std::max(*highest_accepted, id) : id;
-    r.semantic->handler.start(*handlers, dispatch_request(routes, bus(), dispatch_context.pages, r.semantic->lifecycle, r.semantic->request, dispatch_context.peers));
-    return true;
+    if (native.workers) r.semantic->native_start();
+    else r.semantic->handler.start(*handlers, dispatch_request(routes, bus(), dispatch_context.pages, r.semantic->lifecycle, r.semantic->request, dispatch_context.peers));
 }
 bool http3_request_engine::state::stage_trailers(record& r, std::span<const qpack_field> fields) {
     server::reservation charge;
@@ -388,6 +371,7 @@ bool http3_request_engine::state::deliver_body(record& r, const http3_event& eve
     }
     // Inline wakeups may cancel the exchange or abandon its receive half.
     if (r.cancelled || r.abandoned) return false;
+    if (n && native.workers) r.body_anchor = std::chrono::steady_clock::now();
     r.event_position += n;
     return r.event_position == event.payload.size();
 }

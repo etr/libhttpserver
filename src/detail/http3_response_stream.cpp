@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -69,11 +70,34 @@ bool append_fields(std::vector<qpack_field>& values, const http::fields& fields,
     return true;
 }
 }  // namespace
+void http3_request_engine::state::stream::native_respond(std::uint16_t status, const http::fields& fields, bool streaming) {
+    response_refused = true;
+    if (native_closed.load()) return;
+    std::optional<std::uint64_t> length;
+    bool forbidden = false;
+    const auto size = field_size(fields, owner.limits.framing.headers, peer_section_limit, false);
+    auto prepared = std::make_shared<command>();
+    if (!size || !response_policy(status, fields, method, streaming, length, forbidden) ||
+        !budget.reserve(server::resource::response_queue_bytes, 6 * (*size + 32) + fields.size() * 128, prepared->charge).ok() ||
+        (streaming && !body.prepare_send(owner.limits.response_buffer_bytes, length, forbidden))) {
+        native_abort = true; notify(); return;
+    }
+    prepared->status = status;
+    for (auto field : fields.entries()) prepared->fields.append(field.name, field.value);
+    prepared->streaming = streaming;
+    {
+        std::lock_guard lock(command_mutex);
+        if (native_closed.load() || response) return;
+        response = std::move(prepared);
+    }
+    response_refused = false;
+    notify();
+}
 bool http3_request_engine::state::reserve_trailers(stream& s, const http::fields& fields) {
-    const auto size = field_size(fields, limits.framing.headers, connection.peer_settings().max_field_section, true);
+    const auto size = field_size(fields, limits.framing.headers, s.peer_section_limit, true);
     if (!size) return false;
     const auto bytes = 4 * *size + fields.size() * 128 + 256;
-    return data.budget.reserve(server::resource::quic_reassembly_bytes, bytes, s.sender_trailer_charge).ok();
+    return s.budget.reserve(server::resource::quic_reassembly_bytes, bytes, s.sender_trailer_charge).ok();
 }
 bool http3_request_engine::state::section(record& r, std::uint16_t status, const http::fields& fields, bool fin, bool trailers) {
     auto cap = limits.framing.headers;
@@ -106,10 +130,14 @@ bool http3_request_engine::state::section(record& r, std::uint16_t status, const
     }
     return true;
 }
+bool http3_request_engine::state::prepare_response_body(stream& s, std::optional<std::uint64_t> length, bool forbidden) {
+    if (!s.streaming || native.workers) return true;
+    return s.body.prepare_send(limits.response_buffer_bytes, length, forbidden);
+}
 void http3_request_engine::state::respond(record& r, std::uint16_t status, const http::fields& fields, bool streaming) {
     if (r.cancelled || disconnected || !r.semantic) return;
     auto& s = *r.semantic;
-    s.response_refused = true;
+    if (!native.workers) s.response_refused = true;
     std::optional<std::uint64_t> length;
     bool forbidden = false;
     if (!response_policy(status, fields, s.request.head().request_method.id(), streaming, length, forbidden)) {
@@ -121,12 +149,12 @@ void http3_request_engine::state::respond(record& r, std::uint16_t status, const
         return;
     }
     s.streaming = streaming;
-    if (streaming && !s.body.prepare_send(limits.response_buffer_bytes, length, forbidden)) {
+    if (!prepare_response_body(s, length, forbidden)) {
         reset(r, 0x107);
         return;
     }
     abandon(r);
-    s.response_refused = false;
+    if (!native.workers) s.response_refused = false;
 }
 bool http3_request_engine::state::stream_output(record& r) {
     if (!r.semantic || !r.semantic->streaming) return false;
@@ -293,6 +321,7 @@ http3_progress http3_request_engine::pump_output() {
     if (s->error) return http3_progress::failed;
     if (s->disconnected) return http3_progress::input;
     try {
+        s->apply_native();
         s->receive_pending();
         s->reserve_critical_output();
         s->critical_output();

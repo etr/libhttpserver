@@ -119,7 +119,12 @@ try {
  } else if(mode==='disconnect') {
   const before=(await command('stats')).split(' ').map(Number);request('/suspend');request('/body',{method:'POST',open:true});
   const end=performance.now()+3000;while(Number((await command('stats')).split(' ')[0])<before[0]+2){assert.ok(performance.now()<end);await delay(1)}
-  await command('snapshot');await ping();c.destroy();let after;do{after=(await command('stats')).split(' ').map(Number);assert.ok(performance.now()<end);await delay(1)}while(after[4]||after[5]||after[1]!==after[2]);
+  // A connection can briefly have no projected I/O between completion and
+  // rearm. Capture its actual registration before disconnecting; the listener
+  // alone cannot prove a retired connection generation is inert.
+  let captured;
+  do{await ping();captured=Number((await command('snapshot')).split(' ')[1]);assert.ok(performance.now()<end,'connection readiness capture deadline')}while(loop==='external'&&captured<2);
+  c.destroy();let after;do{after=(await command('stats')).split(' ').map(Number);assert.ok(performance.now()<end);await delay(1)}while(after[4]||after[5]||after[1]!==after[2]);
   assert.equal(after[1]-before[1],2);assert.equal(after[2]-before[2],2);assert.equal(await command('stale'),'STALE_GENERATIONS_INERT');pass('disconnect_cancels_connection_streams',{cancelled:2});
  } else if(mode.endsWith('-limit')) {
   await get('/installed');

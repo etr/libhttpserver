@@ -85,3 +85,19 @@ contract](https://github.com/etr/libhttpserver/blob/v3/docs/native-tls-build.md)
 TLS-off retains the same declarations and typed unavailable operations.
 The [TASK-179 audit](https://github.com/etr/libhttpserver/blob/v3/docs/task-179-behavior-parity.md) distinguishes semantic,
 frame, provider and private TCP/TLS/QUIC observations.
+
+## Explicit UDP HTTP/3 listeners
+
+A listener entry owns one transport. Append `server::listener_transport::udp` to the existing aggregate to bind QUIC; TCP remains the default:
+
+```cpp
+options.protocols().enable(http::protocol::http_3);
+options.tls().provider = server::tls_provider::system_default;
+options.tls().profile = server::tls_profile::certificates;
+options.add_listener({"127.0.0.1", 0, true, credentials,
+                      server::listener_transport::udp});
+```
+
+Publish a certificate host with `h3` ALPN through the ordinary public credential store and register the ordinary public routes. `get_bound_port(index)` reports that UDP entry's actual port. To serve TCP and UDP on the same fixed port, configure two entries with different transports. All endpoints bind before any becomes active; partial failure rolls back every port. H3 without explicit UDP and UDP without H3/TLS fail before bind. TLS-off builds retain these declarations and return typed `not_supported`. External PSK remains HTTP/1-only.
+
+The native path supports authenticated QUICv1/TLS1.3 routes, incremental bodies, ordered trailers and independent concurrent request streams. Native RFC9220 and comprehensive HTTP/3 parity/rotation/staged drain are subsequent v3 tasks. `request_stop()` is immediate; `stop()` and destruction retain callback services until pending completions and protocol close expiry, including when an external host loop has stopped dispatching.

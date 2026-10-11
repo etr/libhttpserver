@@ -17,6 +17,69 @@
 namespace httpserver::detail {
 namespace {
 using clock = std::chrono::steady_clock;
+std::thread start_thread(const tls_psk_runtime::thread_start& start, executor::handler work) {
+    return start ? start(std::move(work)) : std::thread(std::move(work));
+}
+// This observer owns no provider, application or lane references. Its fixed
+// handles are all released before publishing provider-native retirement.
+struct provider_retirement : std::enable_shared_from_this<provider_retirement> {
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::vector<std::unique_ptr<std::thread>> workers;
+    bool registration_closed = false;
+    bool retired = false;
+    bool failed = false;
+    explicit provider_retirement(std::size_t count) { workers.reserve(count); }
+    static std::shared_ptr<provider_retirement> create(std::size_t count, const tls_psk_runtime::thread_start& start) {
+        auto state = std::make_shared<provider_retirement>(count);
+        start_thread(start, [state] { state->observe(); }).detach();
+        return state;
+    }
+    void add(std::unique_ptr<std::thread> worker) {
+        std::lock_guard lock(mutex);
+        workers.push_back(std::move(worker));  // Capacity was reserved before startup.
+    }
+    void seal() {
+        std::lock_guard lock(mutex);
+        registration_closed = true;
+        changed.notify_all();
+    }
+    static bool join_worker(std::unique_ptr<std::thread>& worker) noexcept {
+        try {
+            worker->join();
+            return true;
+        } catch (...) {
+            // A distinct observer owns valid handles exactly once. If the OS
+            // nevertheless refuses join, fail retirement without terminating.
+            try {
+                if (worker->joinable()) worker->detach();
+            } catch (...) {
+                // Preserve the bounded handle if the OS also refuses detach;
+                // destroying a joinable thread would terminate the process.
+                static_cast<void>(worker.release());
+            }
+            return false;
+        }
+    }
+    void observe() {
+        {
+            std::unique_lock lock(mutex);
+            changed.wait(lock, [&] { return registration_closed; });
+        }
+        bool success = true;
+        for (auto& worker : workers) success = join_worker(worker) && success;
+        workers.clear();
+        std::lock_guard lock(mutex);
+        retired = success;
+        failed = !success;
+        changed.notify_all();
+    }
+    bool drain(clock::time_point deadline) {
+        std::unique_lock lock(mutex);
+        changed.wait_until(lock, deadline, [&] { return retired || failed; });
+        return retired;
+    }
+};
 struct lane : std::enable_shared_from_this<lane> {
     struct job {
         executor::handler work;
@@ -28,19 +91,32 @@ struct lane : std::enable_shared_from_this<lane> {
     std::size_t admitted = 0;
     std::size_t live = 0;
     std::size_t capacity = 0;
+    std::shared_ptr<provider_retirement> retirement;
     std::stop_source cancellation;
-    void start(std::size_t workers, std::size_t queued) {
-        capacity = workers + queued;
-        for (std::size_t i = 0; i < workers; ++i) {
-            ++live;
-            try {
-                std::thread([self = shared_from_this()] { self->run(); }).detach();
-            } catch (...) {
-                --live;
-                stop();
-                throw;
-            }
+    void start_worker(const tls_psk_runtime::thread_start& start) {
+        auto handle = std::make_unique<std::thread>();
+        { std::lock_guard lock(mutex); ++live; }
+        try {
+            *handle = start_thread(start, [self = shared_from_this()] { self->run(); });
+        } catch (...) {
+            std::lock_guard lock(mutex);
+            --live;
+            throw;
         }
+        if (retirement) retirement->add(std::move(handle));
+        else handle->detach();
+    }
+    void start(std::size_t workers, std::size_t queued, const tls_psk_runtime::thread_start& start, bool provider) {
+        capacity = workers + queued;
+        if (provider) retirement = provider_retirement::create(workers, start);
+        try {
+            for (std::size_t i = 0; i < workers; ++i) start_worker(start);
+        } catch (...) {
+            stop();
+            if (retirement) retirement->seal();
+            throw;
+        }
+        if (retirement) retirement->seal();
     }
     void run() {
         for (;;) {
@@ -91,6 +167,7 @@ struct lane : std::enable_shared_from_this<lane> {
         changed.notify_all();
     }
     bool drain(clock::time_point deadline) {
+        if (retirement) return retirement->drain(deadline);
         std::unique_lock lock(mutex);
         return changed.wait_until(lock, deadline, [&] { return admitted == 0 && live == 0; });
     }
@@ -163,18 +240,18 @@ struct tls_psk_runtime::impl {
     tls_psk_runtime_options options;
     std::shared_ptr<lane> handshake = std::make_shared<lane>();
     std::shared_ptr<lane> lookup = std::make_shared<lane>();
-    explicit impl(tls_psk_runtime_options value) : options(value) {
+    explicit impl(tls_psk_runtime_options value, const tls_psk_runtime::thread_start& start) : options(value) {
         validate(options);
-        handshake->start(options.handshake_workers, options.handshake_queue);
+        handshake->start(options.handshake_workers, options.handshake_queue, start, true);
         try {
-            lookup->start(options.lookup_workers, options.lookup_queue);
+            lookup->start(options.lookup_workers, options.lookup_queue, start, false);
         } catch (...) {
             handshake->stop();
             throw;
         }
     }
 };
-tls_psk_runtime::tls_psk_runtime(tls_psk_runtime_options options) : impl_(std::make_shared<impl>(options)) {}
+tls_psk_runtime::tls_psk_runtime(tls_psk_runtime_options options, thread_start start) : impl_(std::make_shared<impl>(options, start)) {}
 tls_psk_runtime::~tls_psk_runtime() { stop(); }
 bool tls_psk_runtime::accepting() const { return !impl_->handshake->cancellation.stop_requested() && !impl_->lookup->cancellation.stop_requested(); }
 std::chrono::milliseconds tls_psk_runtime::handshake_timeout() const { return impl_->options.handshake_timeout; }

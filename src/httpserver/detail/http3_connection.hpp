@@ -30,7 +30,7 @@ struct http3_encoded_section {
 // delivers ordered bytes plus terminal notifications. No packet pump here.
 class http3_connection final {
  public:
-    http3_connection(quic_storage_lease data, quic_storage_lease critical, http3_limits limits = {});
+    http3_connection(quic_storage_lease data, quic_storage_lease critical, http3_limits limits = {}, bool preadmitted = false);
     std::optional<http3_error> attach_stream(std::uint64_t opened_peer_id);
     // The exchange owner retires admission after application/retained output
     // ends. Terminal facts keep their separately charged storage tombstone.

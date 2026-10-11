@@ -436,6 +436,23 @@ LT_BEGIN_AUTO_TEST(external_adapter_suite, detached_accept_cannot_rearm_into_reo
     detached_reopen(__lt_tr__, __lt_name__, true);
 LT_END_AUTO_TEST(detached_accept_cannot_rearm_into_reopened_id)
 
+LT_BEGIN_AUTO_TEST(external_adapter_suite, exclusive_retirement_expires_real_timer_without_host_dispatch)
+    fixture fx; io_contract::probe observed;
+    const auto due = clock_type::now() + 10ms;
+    fx.submit(hd::timer_operation(fx.rig.owner, 0, due), observed);
+    fx.backend.begin_retirement();
+    LT_CHECK(fx.backend.dispatch({}, clock_type::now()).code() == hh::outcome_code::invalid_state);
+    LT_CHECK(!fx.backend.interests().next_deadline);
+    for (unsigned n = 0; n < 4 && !observed.delivered.load(); ++n) {
+        fx.backend.retirement_progress(20ms); fx.rig.ex.run_pending();
+    }
+    LT_CHECK(clock_type::now() >= due);
+    LT_CHECK_EQ(observed.delivered.load(), 1);
+    LT_CHECK_EQ(fx.backend.pending_count(), 0u);
+    fx.backend.retirement_progress(0ms); fx.rig.ex.run_pending();
+    LT_CHECK_EQ(observed.delivered.load(), 1);
+LT_END_AUTO_TEST(exclusive_retirement_expires_real_timer_without_host_dispatch)
+
 LT_BEGIN_AUTO_TEST(external_adapter_suite, timers_use_host_clock_order_and_reject_decreasing_samples)
     fixture fx;
     const auto now = clock_type::now();

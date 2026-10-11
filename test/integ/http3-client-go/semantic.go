@@ -29,6 +29,24 @@ type drainACKWitness struct {
 	finPackets   map[logging.PacketNumber]bool
 	finACK       chan struct{}
 	acknowledged bool
+	consumption  context.Context
+	responseRead chan struct{}
+	consumed     bool
+}
+
+func (w *drainACKWitness) expectResponseBeforeACK(ctx context.Context) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.consumption = ctx
+	w.responseRead = make(chan struct{})
+}
+func (w *drainACKWitness) responseConsumed() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.responseRead != nil && !w.consumed {
+		w.consumed = true
+		close(w.responseRead)
+	}
 }
 
 // The native H3 stack closes after the last response EOF during GOAWAY.
@@ -49,17 +67,34 @@ func (w *drainACKWitness) receivedPacket(number logging.PacketNumber, frames []l
 }
 func (w *drainACKWitness) sentACK(ack *logging.AckFrame) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	if ack == nil || w.acknowledged {
+	covered := false
+	if ack != nil && !w.acknowledged {
+		for number := range w.finPackets {
+			covered = covered || ack.AcksPacket(number)
+		}
+	}
+	ctx, consumed := w.consumption, w.responseRead
+	w.mu.Unlock()
+	if !covered {
 		return
 	}
-	for number := range w.finPackets {
-		if ack.AcksPacket(number) {
-			w.acknowledged = true
-			if w.finACK != nil {
-				close(w.finACK)
-			}
+	// Pinned quic-go invokes this tracer before packet submission. Hold only
+	// the ACK containing the accepted FIN until the application has consumed
+	// its buffered response; otherwise remote close can discard unread data.
+	// The original drain context bounds this client-only scheduling amendment.
+	if consumed != nil {
+		select {
+		case <-consumed:
+		case <-ctx.Done():
 			return
+		}
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.acknowledged {
+		w.acknowledged = true
+		if w.finACK != nil {
+			close(w.finACK)
 		}
 	}
 }
@@ -281,6 +316,7 @@ func semanticDrain(conn *quic.Conn, client *http3.ClientConn, ctx context.Contex
 	defer localHold.CancelWrite(268)
 	drainCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	witness.expectResponseBeforeACK(drainCtx)
 	if _, err = control("drain", fields{"connection": observed["connection"], "stream": int64(held.StreamID())}); err != nil {
 		return err
 	}
@@ -308,6 +344,7 @@ func semanticDrain(conn *quic.Conn, client *http3.ClientConn, ctx context.Contex
 	if err != nil {
 		return err
 	}
+	witness.responseConsumed()
 	if err = witness.waitFINACK(drainCtx); err != nil {
 		return err
 	}

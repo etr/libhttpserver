@@ -201,7 +201,7 @@ def configuration_results(output, inventory, loop="managed", *, tls):
     results = {}
     for name, outcome, binding in rows:
         expected = ('ok', 'bound') if name == 'plaintext' else ('not_supported', 'unbound') if name in (
-            'http3', 'mixed_rejection') or (name in ('tls_listener', 'http2') and tls == 'no') else ('invalid_argument', 'unbound')
+            'tls_listener', 'http2') and tls == 'no' else ('invalid_argument', 'unbound')
         if name in results or (outcome, binding) != expected:
             raise ValueError('configuration outcome diverged: ' + name)
         results[name] = {'outcome': outcome, 'binding': binding}

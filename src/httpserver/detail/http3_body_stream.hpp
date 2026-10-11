@@ -21,6 +21,9 @@ class http3_body_stream final : public body_source, public body_sink {
     std::size_t room() const { return rings_.admitted() ? rings_.receive_capacity() - rings_.unread() : 0; }
     bool receive(std::span<const std::byte> bytes);
     bool end_receive(http::fields trailers) { return rings_.end_receive(std::move(trailers)); }
+    void observe_progress(executor::handler callback) { rings_.observe_progress(std::move(callback)); }
+    bool admitted() const { return rings_.admitted(); }
+    std::size_t take_consumed() { return rings_.consumed.exchange(0); }
     bool receive_ended() const { return rings_.receive_ended(); }
     void discard() { rings_.discard_received(); }
     void fail(http::outcome_code code) { rings_.fail(code); }

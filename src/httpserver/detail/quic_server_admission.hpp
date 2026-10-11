@@ -65,6 +65,8 @@ class quic_server_admission final {
     // That Initial's receive bytes are already credited in the shared budget.
     std::optional<promotion> promote(const pending_handle& handle, io_connection_owner::datagram_port owner,
         std::shared_ptr<datagram_sink> sink, std::uint64_t now);
+    // A retained/retransmitted Initial may start only one asynchronous native handoff.
+    bool claim(const pending_handle& handle);
     bool cancel(const pending_handle& handle);
     void expire(std::uint64_t now);
     std::size_t pending_count() const { return pending_.size(); }

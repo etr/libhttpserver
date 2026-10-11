@@ -495,6 +495,20 @@ LT_BEGIN_AUTO_TEST(network_owner_suite, peer_close_preempts_stream_work_retains_
     LT_CHECK_EQ(peer.server->close_notifications(), 1u);
     LT_CHECK(peer.server->failure().empty());
 LT_END_AUTO_TEST(peer_close_preempts_stream_work_retains_routes_and_expires_silently)
+LT_BEGIN_AUTO_TEST(network_owner_suite, authenticated_close_on_candidate_path_preempts_payload_and_keeps_application_path)
+    owner_test::peer peer; peer.connect();
+    auto candidate = peer.address; candidate.peer.port = 4999;
+    const std::array<hd::quic_frame, 2> frames{hd::quic_close_frame{true, 0, 0, {}}, hd::quic_stream_frame{0, 0, {}, true}};
+    auto packet = peer.packet(frames, candidate); auto forged = std::make_shared<hd::io_datagram>(*packet);
+    forged->bytes.back() ^= std::byte{1}; peer.server->on_datagram(forged);
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::active);
+    peer.server->on_datagram(packet);
+    LT_CHECK(peer.server->state() == hd::quic_lifecycle_state::draining);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u);
+    LT_CHECK(!peer.server->has_keys(hd::quic_key_level::application)); LT_CHECK(peer.server->failure().empty());
+    LT_CHECK(!peer.server->prepare(peer.now)); peer.server->on_datagram(packet);
+    LT_CHECK_EQ(peer.server->close_notifications(), 1u); LT_CHECK(!peer.server->prepare(peer.now));
+LT_END_AUTO_TEST(authenticated_close_on_candidate_path_preempts_payload_and_keeps_application_path)
 LT_BEGIN_AUTO_TEST(network_owner_suite, local_close_is_protected_bounded_and_survives_failed_send)
     owner_test::peer peer;
     peer.connect();

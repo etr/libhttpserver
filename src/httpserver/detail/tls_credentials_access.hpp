@@ -18,6 +18,8 @@ struct tls_credentials_binding {
     server::tls_client_certificate_mode mode;
     bool http11;
     bool http2 = false;
+    bool http3 = false;
+    bool udp = false;
 };
 class tls_credentials_access final {
  public:
