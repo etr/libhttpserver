@@ -33,7 +33,7 @@ struct http2_limits {
 class http2_connection {
  public:
     using time_point = std::chrono::steady_clock::time_point;
-    explicit http2_connection(server::resource_budget budget, http2_limits limits = {}, http2_settings initial = {}, bool reserve_frames = false);
+    explicit http2_connection(server::resource_budget budget, http2_limits limits = {}, http2_settings initial = {}, bool reserve_frames = false, bool precounted = false);
     http2_feed_result feed(std::span<const std::uint8_t> bytes, time_point now = {});
     http2_feed_result eof();
     void begin_turn() { processed_ = 0; }
@@ -69,6 +69,13 @@ class http2_connection {
     std::optional<http2_error> check_timeout(time_point now);
     const std::optional<http2_error>& failure() const { return failure_; }
     std::size_t pending_settings() const { return pending_count_; }
+    std::optional<time_point> settings_deadline() const {
+        return pending_count_ ? std::optional<time_point>(pending_[pending_head_].deadline) : std::nullopt;
+    }
+    bool header_pending() const {
+        return parser_.magic_used_ < 24 || parser_.initial_ || parser_.continuation_ ||
+            (parser_.started_ && (parser_.frame_.type == 1 || parser_.frame_.type == 9));
+    }
 
  private:
     struct slot {

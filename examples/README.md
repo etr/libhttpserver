@@ -207,3 +207,16 @@ empty.
 
 Thanks to https://devcenter.heroku.com/articles/ssl-certificate-self
 for these instructions.
+
+`v3_http2.cpp` serves `/hello` through one certificate listener and one route
+table for HTTP/1.1 and HTTP/2. Build against the installed package:
+
+```sh
+c++ -std=c++20 v3_http2.cpp $(pkg-config --cflags --libs libhttpserver) -pthread -o v3_http2
+./v3_http2 a-chain.pem a-key.pem
+```
+
+The example prints its loopback port and stops when stdin receives a line.
+The certificate chain must identify `a.example`; clients should verify its CA
+and SNI. HTTP/2 requires a TLS-on build. The installed H2 matrix compiles and
+runs this example with both shared and static linkage.

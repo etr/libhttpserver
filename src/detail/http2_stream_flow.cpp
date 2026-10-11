@@ -26,7 +26,7 @@ void http2_request_engine::state::sync_settings() {
 }
 void http2_request_engine::state::publish_stream_credit(stream& value) {
     auto& body = value.body;
-    consumed += body.consumed; body.consumed = 0;
+    consumed += body.consumed.exchange(0);
     if (local_initial || !body.admitted() || body.receive_ended() || value.reset_pending) return;
     const auto target = value.websocket_input_blocked ? body.receive_window.available + value.credit_queued + value.padding_credit :
         static_cast<std::int64_t>(body.receive_capacity() - body.unread());
@@ -92,15 +92,16 @@ std::optional<http2_error> http2_request_engine::state::data_frame() {
 }
 void http2_request_engine::state::receive_data(stream& value, std::span<const std::uint8_t> payload, bool ended) {
     auto& body = value.body;
-    const auto before = body.unread();
+    if (!payload.empty()) value.native_body_anchor = std::chrono::steady_clock::now();
+    const auto before = body.received_total();
     if (!body.receive(payload, ended)) {
-        consumed += payload.size() - (body.unread() - before);
+        consumed += payload.size() - (body.received_total() - before);
         reset(value.id, http2_error_code::protocol_error);
     }
     if (value.websocket && !value.reset_pending) pump_websocket_input(value);
 }
 
-bool http2_request_engine::state::trailers(std::uint32_t id, bool ended, const std::vector<hpack_field>& fields) {
+bool http2_request_engine::state::trailers(std::uint32_t id, bool ended, const std::vector<hpack_field>& fields, resource_charge bytes, resource_charge count) {
     auto& value = *streams.at(id);
     if (!value.http_trailers_allowed(ended)) {
         reset(id, value.body.receive_ended() ? http2_error_code::stream_closed : http2_error_code::protocol_error);
@@ -114,8 +115,9 @@ bool http2_request_engine::state::trailers(std::uint32_t id, bool ended, const s
         }
         size += field.name.size() + field.value.size() + 32;
     }
-    if (!reserve(server::resource::header_bytes, size * head_copy_allowance, value.trailer_charge) ||
-        !reserve(server::resource::header_fields, fields.size(), value.trailer_fields_charge)) { reset(id, http2_error_code::refused_stream); return false; }
+    bytes.shrink(bytes.units() - size * head_copy_allowance);
+    count.shrink(count.units() - fields.size());
+    value.trailer_charge = std::move(bytes); value.trailer_fields_charge = std::move(count);
     http::fields trailers;
     for (const auto& field : fields) trailers.append(field.name, field.value);
     if (!value.body.end_receive(std::move(trailers))) {

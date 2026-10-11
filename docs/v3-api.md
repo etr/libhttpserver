@@ -12,7 +12,9 @@ selection, budgets, timeouts, worker concurrency and loop ownership.
 \ref httpserver::server::native_server validates before binding and owns shutdown.
 Plaintext HTTP/1.0 and HTTP/1.1 listeners are available. TLS-on builds also serve
 public HTTP/1 certificate, initial mTLS and eligible external-PSK listeners.
-Public H2/H3 listeners still return not_supported before binding.
+Certificate and initial mTLS listeners also serve HTTP/2 when enabled and negotiated
+with TLS ALPN `h2`. HTTP/3 listeners still return not_supported before binding.
+HTTP/2 has no cleartext upgrade or prior-knowledge listener.
 Provider availability from \ref httpserver::query_features is a separate fact.
 
 \include v3_protocol_options.cpp

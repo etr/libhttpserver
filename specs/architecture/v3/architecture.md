@@ -380,3 +380,14 @@ peer metadata through session/child completion retirement; hooks and routes run
 outside listener/I/O locks. Both loop modes advance the same network and deadline
 operations. See [the design comparison](TASK-193-design.md) and implementation
 evidence for disproving tests and installed-package identities.
+
+### TASK-195 public TCP HTTP/2 integration
+
+Native certificate and initial mTLS listeners now select enabled `h2` through
+ALPN and compose the existing HTTP/2 protocol engine under the accepted TCP
+connection lifecycle. A serialized wire owner and independent stream affinities
+separate protocol state from application coroutine state. PSK stays HTTP/1-only;
+public H3 remains a later release repair. Ownership, bounded semantic handoff,
+resource hierarchy and native timer/drain details are in
+[TASK-195-design.md](TASK-195-design.md); local verification is recorded in
+[TASK-195-implementation-evidence.md](TASK-195-implementation-evidence.md).

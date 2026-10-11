@@ -142,3 +142,5 @@ __pycache__/
 !test/integ/native_websocket_regression.py
 
 !scripts/check-v3-public-tls.py
+!scripts/check-v3-public-http2.py
+!scripts/test-v3-public-http2.py

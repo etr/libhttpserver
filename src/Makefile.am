@@ -91,7 +91,9 @@ noinst_HEADERS += httpserver/detail/http2_frame.hpp httpserver/detail/http2_conn
 libhttpserver_v3core_la_SOURCES += detail/http2_frame.cpp detail/http2_connection.cpp
 
 noinst_HEADERS += httpserver/detail/http2_request_engine.hpp
-libhttpserver_v3core_la_SOURCES += detail/http2_request_engine.cpp
+libhttpserver_v3core_la_SOURCES += detail/http2_request_engine.cpp detail/http2_native_stream.cpp detail/http2_native_timers.cpp detail/http2_tcp_owner.cpp
+noinst_HEADERS += httpserver/detail/resource_scope.hpp \
+	httpserver/detail/http2_dispatch.hpp httpserver/detail/http2_tcp_owner.hpp
 noinst_HEADERS += httpserver/detail/http2_request_head.hpp
 libhttpserver_v3core_la_SOURCES += detail/http2_request_head.cpp
 

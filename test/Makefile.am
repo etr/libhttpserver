@@ -1119,6 +1119,11 @@ http2_headers_LDADD = $(http2_frame_LDADD)
 http2_exchange_LDADD = $(http2_frame_LDADD)
 noinst_HEADERS += unit/http2_request_fixture.hpp
 
+check_PROGRAMS += http2_dispatch http2_native_owner
+http2_dispatch_SOURCES = unit/http2_dispatch_test.cpp
+http2_dispatch_LDADD = $(http2_frame_LDADD)
+http2_native_owner_SOURCES = unit/http2_native_owner_test.cpp
+http2_native_owner_LDADD = $(http2_frame_LDADD)
 check_PROGRAMS += http2_streaming
 http2_streaming_SOURCES = unit/http2_streaming_test.cpp
 http2_streaming_LDADD = $(http2_frame_LDADD)
@@ -1779,6 +1784,7 @@ consumer_v3_tls_credentials_LDADD = $(top_builddir)/src/libhttpserver.la
 if NATIVE_V3_TLS
 check_PROGRAMS += public_tls_profiles
 public_tls_profiles_SOURCES = unit/public_tls_profiles_test.cpp
+TESTS += ../scripts/test-v3-public-http2.py
 public_tls_profiles_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -DTLS_TEST_DIR='"$(abs_top_srcdir)/test"'
 public_tls_profiles_LDADD = $(top_builddir)/src/libhttpserver.la
 public_tls_profiles_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

@@ -30,6 +30,7 @@ struct tls_handshake_context {
     server::diagnostics diagnostics;
     std::shared_ptr<tls_psk_runtime> runtime;
     bool allow_http11 = true;
+    bool allow_http2 = true;
     // Native admission/storage/drain ownership spans retiring provider steps.
     std::shared_ptr<void> lifetime;
 };

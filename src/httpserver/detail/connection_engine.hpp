@@ -122,6 +122,7 @@ namespace httpserver {
 namespace detail {
 
 class connection_engine;
+class http2_tcp_owner;
 class drain_scope;
 class http1_exchange_sink;
 class wake_body_sink;
@@ -444,7 +445,7 @@ class connection_engine final
     const server::route_registry& routes_;
     const server::hook_bus& hooks_;
     io_connection_owner owner_;
-    const server::resource_budget& budget_;
+    server::resource_budget budget_;
     resource_charge tail_charge_;
     void release_tail_charge_locked();
     drain_scope& scope_;
@@ -502,6 +503,7 @@ class connection_engine final
     bool close_after_drain_ = false;
     bool started_ = false;
     int live_loops_ = 0;
+    std::shared_ptr<http2_tcp_owner> http2_;
     server::reservation seat_, websocket_input_charge_, websocket_output_charge_, websocket_message_charge_;
 };
 

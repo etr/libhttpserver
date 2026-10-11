@@ -19,11 +19,14 @@
 #include <utility>
 #include <vector>
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/resource_scope.hpp>
+#include <httpserver/detail/resource_charge.hpp>
 #include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/detail/lifecycle_sink.hpp>
 #include <httpserver/detail/http2_request_engine.hpp>
 #include <httpserver/detail/http2_request_head.hpp>
 #include <httpserver/detail/http2_body_stream.hpp>
+#include <httpserver/detail/http2_dispatch.hpp>
 #include <httpserver/detail/exchange_runner.hpp>
 #include <httpserver/detail/request_handler_frames.hpp>
 #include <httpserver/detail/websocket_driver.hpp>
@@ -64,8 +67,27 @@ using request_handler_frames::route_task;
 }  // namespace http2_request_helpers
 using namespace http2_request_helpers;  // NOLINT(build/namespaces)
 struct http2_request_engine::state : std::enable_shared_from_this<state> {
-    struct stream final : exchange_sink, body_sink {
+    struct head_command;
+    struct stream final : exchange_sink, body_sink, std::enable_shared_from_this<stream> {
         state& owner;
+        server::resource_budget budget;
+        std::shared_ptr<state> native_lifetime;
+        std::shared_ptr<http2_dispatch> affinity;
+        std::shared_ptr<route_executor> native_handlers;
+        std::atomic<bool> native_closed{false}, native_done{false}, native_retired{false}, native_abort{false};
+        std::atomic<bool> native_suspended{false}, native_refused{false};
+        std::optional<http2_connection::time_point> native_suspension_anchor, native_write_anchor;
+        http2_connection::time_point native_body_anchor = std::chrono::steady_clock::now();
+        bool native_body_admitted = false;
+        std::mutex command_mutex;
+        std::shared_ptr<head_command> command;
+        void native_start();
+        void native_finish(http::outcome_code reason, bool completed);
+        void native_cancel(http::outcome_code reason, bool completed = false);
+        void native_respond(std::uint16_t status, const http::fields& fields, bool streaming);
+        websocket_upgrade_result native_upgrade(const ws_upgrade_options& options);
+        void notify() const;
+        bool done() const { return affinity ? native_done.load() : handler.done(); }
         std::uint32_t id;
         http::request_head head;
         http2_connect_metadata connect;
@@ -74,7 +96,8 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         bool websocket_input_blocked = false, websocket_pumping = false, receive_eof_delivered = false;
         std::optional<http2_connection::time_point> websocket_write_anchor;
         std::uint64_t padding_credit = 0;
-        server::reservation count_charge, bytes_charge, fields_charge, trailer_charge, trailer_fields_charge, metadata_charge;
+        server::reservation count_charge, metadata_charge;
+        resource_charge bytes_charge, fields_charge, trailer_charge, trailer_fields_charge;
         std::optional<drain_scope::unit> drain_unit;
         http2_body_stream body;
         bool response_refused = false;
@@ -84,32 +107,53 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         route_task handler;
         std::int64_t credit_queued = 0;
         bool response_started = false, send_ended = false, reset_pending = false, headers_sent = false;
-        stream(state& s, std::uint32_t n, http::request_head h)
-            : owner(s), id(n), head(std::move(h)), body(s.budget), lifecycle(*this, s.bus(), head, &response_refused),
-              request(head, &lifecycle, s.connection_id, &body, this, s.peer) {}
+        stream(state& s, std::uint32_t n, http::request_head h, server::resource_budget scope)
+            : owner(s), budget(std::move(scope)), id(n), head(std::move(h)), body(budget), lifecycle(*this, s.bus(), head, &response_refused, s.native.tls),
+              request(head, &lifecycle, s.connection_id, &body, this, s.peer, s.native.tls) {}
         void on_admit(const body_policy& policy) override {
             const auto n = policy.max_buffer_bytes ? std::min<std::uint64_t>(policy.max_buffer_bytes, owner.limits.body_buffer_bytes) : owner.limits.body_buffer_bytes;
-            if (!body.admit(n)) owner.reset(id, http2_error_code::refused_stream);
+            if (!body.admit(n)) {
+                if (affinity) {
+                native_abort = true;
+                notify();
+            } else {
+                    owner.reset(id, http2_error_code::refused_stream);
+                }
+            }
         }
-        void on_respond(const http::status& status, const http::fields& fields) override { owner.respond(id, status.code(), fields, false); }
-        void on_start_response(const http::status& status, const http::fields& fields) override { owner.respond(id, status.code(), fields, true); }
-        websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override { return owner.upgrade(*this, options); }
+        void on_respond(const http::status& status, const http::fields& fields) override {
+            if (affinity) native_respond(status.code(), fields, false);
+            else owner.respond(id, status.code(), fields, false);
+        }
+        void on_start_response(const http::status& status, const http::fields& fields) override {
+            if (affinity) native_respond(status.code(), fields, true);
+            else owner.respond(id, status.code(), fields, true);
+        }
+        websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override { return affinity ? native_upgrade(options) : owner.upgrade(*this, options); }
         bool http_trailers_allowed(bool ended) const { return !websocket && ended && !body.receive_ended() && !reset_pending; }
-        void on_abort() override { owner.reset(id, http2_error_code::internal_error); }
+        void on_abort() override {
+            if (affinity) {
+                native_abort = true;
+                notify();
+            } else {
+                owner.reset(id, http2_error_code::internal_error);
+            }
+        }
         body_push_result push(std::span<const std::byte> bytes) override {
             auto result = body.push(bytes);
-            if (result.kind == body_push::failed) owner.reset(id, http2_error_code::internal_error);
+            if (result.kind == body_push::failed) on_abort();
             return result;
         }
         body_push_result push_end(const http::fields& fields) override {
             auto result = body.push_end(fields);
-            if (result.kind == body_push::failed) owner.reset(id, http2_error_code::internal_error);
+            if (result.kind == body_push::failed) on_abort();
             return result;
         }
         const http::outcome& failure() const noexcept override { return body.failure(); }
         void park(body_write_wait& wait) override { body.park(wait); }
         void unpark(body_write_wait& wait) override { body.unpark(wait); }
         ~stream() override {
+            if (affinity) return;
             owner.terminal(*this, !reset_pending && send_ended && body.receive_ended(), server::diagnostic_reason::local_stop);
             request.disconnect(http::outcome_code::connection_closed, "HTTP/2 stream ended");
             body.fail(http::outcome_code::connection_closed); handler.clear();
@@ -124,6 +168,16 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         server::reservation charge;
         std::size_t wire_limit = 0, framed_limit = 13;
     };
+    struct head_command {
+        response head;
+        std::shared_ptr<websocket_driver> websocket;
+        bool streaming = false;
+    };
+    http2_native_context native;
+    void apply_native();
+    std::optional<http2_connection::time_point> native_header_anchor = std::chrono::steady_clock::now(), native_drain_deadline;
+    std::optional<http2_connection::time_point> native_deadline(http2_connection::time_point now);
+    void expire_native(http2_connection::time_point now);
     enum class closed_kind { local_reset, peer_reset, complete };
     struct closed_stream { std::uint32_t id = 0; closed_kind kind = closed_kind::complete; };
     // Fixed history distinguishes recent peer closure from our own reset, whose
@@ -185,7 +239,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     drain_phase phase = drain_phase::running;
     bool connection_counted = true;
     std::uint32_t accepted_stream = 0;
-    std::map<std::uint32_t, std::unique_ptr<stream>> streams;
+    std::map<std::uint32_t, std::shared_ptr<stream>> streams;
     std::deque<response> pending;
     std::vector<std::uint8_t> block, active;
     server::reservation block_charge, active_charge;
@@ -199,8 +253,9 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     bool active_end = false;
     bool connect_eligible = false, end_stream = false, control_exposed = false, closed_headers = false;
     std::optional<http2_error_code> rejected;
-    state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l, request_dispatch_context d, std::uint64_t id, net::peer_address p)
-        : budget(b),
+    state(server::resource_budget b, const server::route_registry& r, executor& e, http2_request_limits l,
+        request_dispatch_context d, std::uint64_t id, net::peer_address p, http2_native_context context)
+        : native(std::move(context)), budget(b),
           routes(r),
           dispatch_context(std::move(d)),
           connection_id(id),
@@ -208,9 +263,20 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
           owner(e),
           handlers(std::make_shared<route_executor>(e)),
           limits(l),
-          connection(b, l.connection, receive_settings(l.max_streams), true),
-          scope(std::make_shared<drain_scope>(dispatch_context.diagnostics)) {
-        scope->enter();
+          connection(b, l.connection, receive_settings(l.max_streams), true, native.workers != nullptr),
+          scope(native.drain ? native.drain : std::make_shared<drain_scope>(dispatch_context.diagnostics)) {
+        connection_counted = !native.drain;
+        if (connection_counted) scope->enter();
+        if (native.workers) {
+            if (!reserve(server::resource::body_buffer_bytes, limits.headers.max_compressed_bytes, block_charge)) {
+                fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded));
+            } else {
+                try {
+                    block.reserve(limits.headers.max_compressed_bytes);
+                }
+                catch (const std::bad_alloc&) { fail(connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded)); }
+            }
+        }
     }
     ~state() {
         handlers->disable();
@@ -229,7 +295,14 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     }
     void retire_cancelled() {
         if (phase == drain_phase::cancelled && !handlers->running() && !websocket_pumps) {
-            streams.clear(); leave_connection();
+            if (native.workers) {
+                for (auto& [id, value] : streams) value->native_cancel(http::outcome_code::timeout);
+                std::erase_if(streams, [](const auto& entry) { return entry.second->native_retired.load(); });
+                if (streams.empty()) leave_connection();
+            } else {
+                streams.clear();
+                leave_connection();
+            }
         }
     }
     static http2_settings receive_settings(std::size_t max_streams) {
@@ -243,17 +316,20 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         cancel_websocket(value, {http::outcome_code::cancelled, "HTTP/2 stream reset"});
         connection.discard_stream_credit(value.id);
         value.credit_queued = 0;
-        consumed += value.body.unread() + value.body.consumed; value.body.consumed = 0;
-        value.body.discard_received();
         value.body.fail(http::outcome_code::connection_closed);
-        value.request.disconnect(http::outcome_code::connection_closed, "HTTP/2 stream reset");
+        consumed += value.body.unread() + value.body.consumed.exchange(0);
+        value.body.discard_received();
+        if (native.workers) value.native_cancel(http::outcome_code::connection_closed);
+        else value.request.disconnect(http::outcome_code::connection_closed, "HTTP/2 stream reset");
         value.reset_pending = true;
     }
     bool incomplete(const stream& value) const {
-        return !value.websocket && value.handler.done() && value.response_started && !value.body.finished() && !value.send_ended && !value.reset_pending;
+        return !value.websocket && value.done() && value.response_started && !value.body.finished() && !value.send_ended && !value.reset_pending;
     }
-    bool retired(const stream& value) const {
-        return value.reset_pending || (value.handler.done() && value.send_ended && value.body.receive_ended());
+    bool retired(stream& value) {
+        if (!native.workers) return value.reset_pending || (value.done() && value.send_ended && value.body.receive_ended());
+        if (!value.reset_pending && value.done() && value.send_ended && value.body.receive_ended()) value.native_cancel(http::outcome_code::connection_closed, true);
+        return value.native_retired.load();
     }
     void reap() {
         if (handlers->running() || websocket_pumps) return;
@@ -261,22 +337,28 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
             retire_cancelled(); return;
         }
         if (connection.failure()) {
-            streams.clear();
+            if (native.workers) {
+                for (auto& [id, value] : streams) value->native_cancel(connection.failure()->outcome);
+                std::erase_if(streams, [](const auto& entry) { return entry.second->native_retired.load(); });
+            } else {
+                streams.clear();
+            }
             return;
         }
         for (auto it = streams.begin(); it != streams.end();) {
             auto& value = *it->second;
-            if (!value.reset_pending && value.handler.done() && value.request.disconnected()
-                    && value.request.disconnect_reason().code() == http::outcome_code::peer_refused) {
+            if (!value.reset_pending && value.done() && (native.workers ? value.native_refused.load() : (value.request.disconnected()
+                    && value.request.disconnect_reason().code() == http::outcome_code::peer_refused))) {
                 reset(value.id, http2_error_code::refused_stream);
             }
             if (incomplete(value)) {
                 reset(value.id, http2_error_code::internal_error);
             }
             if (retired(value)) {
-                consumed += value.body.unread() + value.body.consumed;
+                consumed += value.body.unread() + value.body.consumed.exchange(0);
                 if (!value.reset_pending) remember_closed(value.id, closed_kind::complete);
                 if (connection.failure()) return;
+                if (native.workers) terminal(value, !value.reset_pending && value.send_ended && value.body.receive_ended(), server::diagnostic_reason::local_stop);
                 it = streams.erase(it);
             } else {
                 ++it;
@@ -304,7 +386,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     bool data_ready(stream& value);
     void frame_headers(const response& value, std::span<const std::uint8_t> bytes);
     bool prepare_response(stream& value, std::uint16_t status, const http::fields& fields, bool streaming);
-    bool reserve_response(response& value, std::size_t expanded, std::size_t fields);
+    bool reserve_response(response& value, std::size_t expanded, std::size_t fields, const server::resource_budget* scope = nullptr);
     std::optional<http2_error> data_frame();
     std::optional<http2_error> update_window();
     bool encode_data();
@@ -313,10 +395,15 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     std::span<const std::uint8_t> control_output(http2_connection::time_point now);
     bool frame_data(stream& value);
     bool encode_trailers(stream& value);
-    bool trailers(std::uint32_t id, bool ended, const std::vector<hpack_field>& fields);
+    bool trailers(std::uint32_t id, bool ended, const std::vector<hpack_field>& fields, resource_charge bytes, resource_charge count);
     void clear_block() {
-        std::vector<std::uint8_t>().swap(block);
-        block_charge.release(); assembling = 0;
+        if (native.workers) {
+            block.clear();
+        } else {
+            std::vector<std::uint8_t>().swap(block);
+            block_charge.release();
+        }
+        assembling = 0;
     }
     void fail(http2_error error) {
         if (!diagnostic_failure) {
@@ -379,7 +466,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
             if (!(assembling & 1)) return connection_error(http2_error_code::protocol_error);
             closed_headers = assembling <= last_stream && !streams.contains(assembling);
             last_stream = std::max(last_stream, assembling);
-            if (!reserve(server::resource::body_buffer_bytes, limits.headers.max_compressed_bytes, block_charge)) {
+            if (!native.workers && !reserve(server::resource::body_buffer_bytes, limits.headers.max_compressed_bytes, block_charge)) {
                 return connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded);
             }
             block.reserve(limits.headers.max_compressed_bytes);
@@ -403,13 +490,15 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         closed_headers = false; rejected.reset(); return true;
     }
     std::optional<http2_error> dispatch() {
-        server::reservation temporary_bytes, temporary_fields;
+        auto section_budget = native.workers ? (streams.contains(assembling) ? streams.at(assembling)->budget : child_budget(budget)) : budget;
+        resource_charge temporary_bytes(section_budget, server::resource::header_bytes);
+        resource_charge temporary_fields(section_budget, server::resource::header_fields);
         auto decode_limits = limits.headers;
         const auto free_bytes = budget.capacity(server::resource::header_bytes) - budget.in_use(server::resource::header_bytes);
         decode_limits.max_expanded_bytes = std::min(decode_limits.max_expanded_bytes, free_bytes / head_copy_allowance);
         decode_limits.max_fields = std::min(decode_limits.max_fields, budget.capacity(server::resource::header_fields) - budget.in_use(server::resource::header_fields));
-        if (!reserve(server::resource::header_bytes, decode_limits.max_expanded_bytes * head_copy_allowance, temporary_bytes) ||
-            !reserve(server::resource::header_fields, decode_limits.max_fields, temporary_fields)) {
+        if (!temporary_bytes.grow(decode_limits.max_expanded_bytes * head_copy_allowance) ||
+            !temporary_fields.grow(decode_limits.max_fields)) {
             return connection_error(http2_error_code::enhance_your_calm, http::outcome_code::limit_exceeded);
         }
         auto decoded = connection.compression().decoder().decode(block, decode_limits);
@@ -419,8 +508,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         if (error) return error;
         if (discard_headers(id)) return {};
         if (streams.contains(id)) {
-            temporary_bytes.release(); temporary_fields.release();
-            trailers(id, ended, decoded.fields); return {};
+            trailers(id, ended, decoded.fields, std::move(temporary_bytes), std::move(temporary_fields)); return {};
         }
         http::request_head head;
         http2_connect_metadata connect;
@@ -433,8 +521,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
             reset(id, http2_error_code::protocol_error); return {};
         }
         if (!connect_allowed(id, head, connect)) return {};
-        temporary_bytes.release(); temporary_fields.release();
-        return admit(id, std::move(head), decoded.fields, ended, std::move(connect));
+        return admit(id, std::move(head), decoded.fields, ended, std::move(connect), std::move(section_budget), std::move(temporary_bytes), std::move(temporary_fields));
     }
     bool connect_allowed(std::uint32_t id, const http::request_head& head, const http2_connect_metadata& connect) {
         if (connect.protocol && !connect_eligible) {
@@ -445,7 +532,8 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         }
         return true;
     }
-    std::optional<http2_error> admit(std::uint32_t id, http::request_head head, const std::vector<hpack_field>& fields, bool ended, http2_connect_metadata connect) {
+    std::optional<http2_error> admit(std::uint32_t id, http::request_head head, const std::vector<hpack_field>& fields, bool ended,
+        http2_connect_metadata connect, server::resource_budget stream_budget, resource_charge bytes, resource_charge count) {
         reap();
         server::reservation count_charge;
         if (streams.size() >= limits.max_streams) {
@@ -453,23 +541,23 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
             reset(id, http2_error_code::refused_stream);
             return {};
         }
-        if (!reserve(server::resource::streams, 1, count_charge)) {
+        if (!stream_budget.reserve(server::resource::streams, 1, count_charge).ok()) {
             reset(id, http2_error_code::refused_stream); return {};
         }
         std::size_t retained = 0;
         for (const auto& field : fields) retained += field.name.size() + field.value.size() + 32;
         server::reservation metadata;
-        if (!reserve(server::resource::body_buffer_bytes, sizeof(stream) + 64, metadata)) {
+        if (!stream_budget.reserve(server::resource::body_buffer_bytes, sizeof(stream) + sizeof(http2_dispatch) + sizeof(route_executor) + 512, metadata).ok()) {
             reset(id, http2_error_code::refused_stream); return {};
         }
-        auto value = std::make_unique<stream>(*this, id, std::move(head));
+        auto value = std::make_shared<stream>(*this, id, std::move(head), std::move(stream_budget));
         value->connect = std::move(connect);
         value->metadata_charge = std::move(metadata);
         value->count_charge = std::move(count_charge);
-        if (!reserve(server::resource::header_bytes, retained * head_copy_allowance, value->bytes_charge) ||
-            !reserve(server::resource::header_fields, fields.size(), value->fields_charge)) {
-            reset(id, http2_error_code::refused_stream); return {};
-        }
+        bytes.shrink(bytes.units() - retained * head_copy_allowance);
+        count.shrink(count.units() - fields.size());
+        value->bytes_charge = std::move(bytes);
+        value->fields_charge = std::move(count);
         std::optional<std::uint64_t> length;
         http2_content_length(value->head.head_fields, length);
         value->body.send_window.available = peer_initial;
@@ -484,7 +572,8 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         accepted_stream = std::max(accepted_stream, id);
         accepted->drain_unit.emplace(*scope);
         connection.processed_stream(id);
-        accepted->handler.start(*handlers, dispatch_request(routes, bus(), dispatch_context.pages, accepted->lifecycle, accepted->request, dispatch_context.peers));
+        if (native.workers) accepted->native_start();
+        else accepted->handler.start(*handlers, dispatch_request(routes, bus(), dispatch_context.pages, accepted->lifecycle, accepted->request, dispatch_context.peers));
         return {};
     }
     std::optional<http2_error> admit_opening(http2_connection::time_point now) {

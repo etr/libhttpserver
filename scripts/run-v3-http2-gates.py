@@ -13,6 +13,8 @@ import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts/lib'))
+from v3_public_http2_inventory import validate_matrix
 SCENARIOS = {'multiplexing', 'reset', 'upload_flow', 'response_flow', 'websocket'}
 
 
@@ -99,7 +101,13 @@ def main():
     parser.add_argument('--python', default='python3')
     parser.add_argument('--node', default='node')
     parser.add_argument('--h2spec', default='h2spec')
+    parser.add_argument('--public-receipt', type=Path,
+                        help='explicit installed public matrix; private clients remain supplemental')
     args = parser.parse_args(); args.log_dir.mkdir(parents=True, exist_ok=True)
+    public = None
+    if args.public_receipt:
+        public = json.loads(args.public_receipt.read_text())
+        validate_matrix(public)
     fixture = args.build_dir.resolve() / 'test/http2_tls_fixture'
     if not fixture.is_file() or not os.access(fixture, os.X_OK):
         raise ValueError('missing fixture: ' + str(fixture))
@@ -168,6 +176,10 @@ def main():
         raise ValueError('incomplete h2spec inventory coverage')
     receipt = {'clients': results, 'h2spec': {'identity': identity.strip(), 'sha256': digest,
                                            'inventory': cases, 'executed': executed, 'excluded': excluded}}
+    receipt['predicate'] = 'public-http2-with-supplemental-protocol' if public else 'supplemental-private-http2'
+    if public:
+        receipt['public_matrix'] = {'receipt': str(args.public_receipt.resolve()),
+                                   'sha256': hashlib.sha256(args.public_receipt.read_bytes()).hexdigest(), 'cells': 4}
     (args.log_dir / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print(f'PASS HTTP/2: two clients; {len(executed)} h2spec cases; {len(excluded)} RFC 9113 exclusions')
 

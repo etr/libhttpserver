@@ -26,6 +26,7 @@
 
 #include "config.h"
 #include <httpserver/detail/connection_engine.hpp>
+#include <httpserver/detail/http2_tcp_owner.hpp>
 #ifdef NATIVE_V3_TLS
 #include <httpserver/detail/tls_socket_backend.hpp>
 #endif
@@ -165,8 +166,23 @@ task<void> connection_engine::handshake_loop(std::shared_ptr<connection_engine> 
     auto& transport = static_cast<tls_socket_backend&>(self->backend_);
     const auto protocol = transport.negotiated_protocol();
     if (result.code != http::outcome_code::ok
-            || (protocol != tls_negotiated_protocol::none && protocol != tls_negotiated_protocol::http1)) {
+            || (protocol != tls_negotiated_protocol::none && protocol != tls_negotiated_protocol::http1 && protocol != tls_negotiated_protocol::h2)) {
         self->shutdown(result.code == http::outcome_code::ok ? http::outcome_code::not_supported : result.code);
+        co_return;
+    }
+    if (protocol == tls_negotiated_protocol::h2) {
+        std::shared_ptr<http2_tcp_owner> h2;
+        {
+            std::lock_guard lock(self->mu_);
+            if (self->shutdown_ || self->quiescing_) co_return;
+            self->tls_peer_ = transport.peer_metadata();
+            self->handshaking_ = false;
+            ++self->live_loops_;
+            h2 = std::make_shared<http2_tcp_owner>(self->backend_, self->pool_, self->routes_, self->budget_, self->config_,
+                self->id_, self->peer_, self->peers_, self->hooks_, self->tls_peer_, [self] { self->loop_finished(); });
+            self->http2_ = h2;
+        }
+        h2->start();
         co_return;
     }
     {
@@ -184,10 +200,16 @@ task<void> connection_engine::handshake_loop(std::shared_ptr<connection_engine> 
 }
 
 void connection_engine::shutdown(http::outcome_code reason) noexcept {
+    std::shared_ptr<http2_tcp_owner> h2;
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (shutdown_) return;
         shutdown_ = true;
+        h2 = http2_;
+    }
+    if (h2) {
+        h2->stop(reason);
+        return;
     }
     fail_websocket({reason, reason == http::outcome_code::timeout
         ? "WebSocket drain deadline" : "WebSocket server stop"});
@@ -200,6 +222,7 @@ void connection_engine::shutdown(http::outcome_code reason) noexcept {
 
 void connection_engine::quiesce(std::chrono::steady_clock::time_point server_deadline) noexcept {
     std::shared_ptr<websocket_driver> driver;
+    std::shared_ptr<http2_tcp_owner> h2;
     bool cancel_handshake = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
@@ -208,7 +231,12 @@ void connection_engine::quiesce(std::chrono::steady_clock::time_point server_dea
         cancel_handshake = handshaking_;
         if (server_deadline != std::chrono::steady_clock::time_point::max()) server_drain_deadline_ = server_deadline;
         driver = websocket_;
-        if (!driver && current_ == nullptr) close_after_drain_ = true;
+        h2 = http2_;
+        if (!driver && !h2 && current_ == nullptr) close_after_drain_ = true;
+    }
+    if (h2) {
+        h2->drain(server_deadline);
+        return;
     }
     if (cancel_handshake) {
         shutdown();

@@ -220,7 +220,7 @@
   "exclusions": [
     {
       "suite": "http2_tls_fixture",
-      "reason": "POSIX network harness; public HTTP2 listener remains unavailable; portable http2_tls_boundary/conformance retained."
+      "reason": "POSIX private supplemental protocol harness; installed public H2 clients exercise native listeners separately."
     },
     {
       "suite": "http3 release pipeline",

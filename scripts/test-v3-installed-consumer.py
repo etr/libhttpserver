@@ -107,7 +107,7 @@ class MatrixTest(unittest.TestCase):
         for tls in ('yes', 'no'):
             output = '\n'.join('PACKAGE_CASE ' + case + ' ' +
                 ('ok bound' if case == 'plaintext' else
-                 'invalid_argument unbound' if case == 'tls_listener' and tls == 'yes' else
+                 'invalid_argument unbound' if case in ('tls_listener', 'http2') and tls == 'yes' else
                  'not_supported unbound' if case in ('tls_listener', 'http2', 'http3', 'mixed_rejection') else
                  'invalid_argument unbound') for case in self.inventory['cases'])
             for loop in ('managed', 'external'):

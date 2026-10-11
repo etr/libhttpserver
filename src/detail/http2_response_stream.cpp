@@ -41,14 +41,14 @@ bool http2_request_engine::state::prepare_response(stream& value, std::uint16_t 
     value.response_started = streaming; value.send_ended = !streaming;
     return !streaming || value.body.prepare_send(limits.response_buffer_bytes, length, forbidden);
 }
-bool http2_request_engine::state::reserve_response(response& value, std::size_t expanded, std::size_t fields) {
+bool http2_request_engine::state::reserve_response(response& value, std::size_t expanded, std::size_t fields, const server::resource_budget* scope) {
     // Bound semantic fields plus peak HPACK allocations and framed wire before
     // encoding; literals never insert into the encoder's dynamic table.
     value.wire_limit = expanded + 32;
     value.framed_limit = value.wire_limit + (value.wire_limit / 16384 + 1) * 9;
     const auto semantic = expanded + (fields + 1) * (sizeof(hpack_field) + 64);
-    return reserve(server::resource::response_queue_bytes,
-        semantic + 5 * value.wire_limit + value.framed_limit + sizeof(response) + 256, value.charge);
+    return (scope ? *scope : budget).reserve(server::resource::response_queue_bytes,
+        semantic + 5 * value.wire_limit + value.framed_limit + sizeof(response) + sizeof(head_command) + 256, value.charge).ok();
 }
 void http2_request_engine::state::respond(std::uint32_t id, std::uint16_t status, const http::fields& fields, bool streaming) {
     if (connection.failure()) return;

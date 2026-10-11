@@ -190,11 +190,13 @@ task<bool> connection_engine::serve_one(
     // A disconnected exchange cannot finish its response slot. Abandon
     // its unfinished slot so already-buffered bytes flush and the
     // writer can close, including malformed-body failures after admission.
-    if (routed.disconnected()) self->outbox_.abandon();
+    bool disconnected;
     {
         std::lock_guard<std::mutex> lock(self->mu_);
+        disconnected = routed.disconnected();
         self->current_ = nullptr;
     }
+    if (disconnected) self->outbox_.abandon();
     const bool keep = self->finish_exchange(forwarding, routed, engine_sink, mode);
     self->observe_stream_end(routed, sequence);
     if (!keep) {

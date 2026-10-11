@@ -63,11 +63,19 @@ bool http2_request_engine::state::reserve_websocket(stream& value, websocket::op
     options.max_message_bytes = std::min({options.max_message_bytes, cap.max_message_bytes,
         options.incoming_bytes, options.output_bytes - 10, free(server::resource::ws_message_bytes)});
     if (!options.max_message_bytes || !options.validate().ok()) return false;
-    return reserve(server::resource::body_buffer_bytes, 5 * options.incoming_bytes + input_fixed, value.websocket_input_charge) &&
-        reserve(server::resource::response_queue_bytes, 4 * options.output_bytes + output_fixed, value.websocket_output_charge) &&
-        reserve(server::resource::ws_message_bytes, options.max_message_bytes, value.websocket_message_charge);
+    const auto& scope = native.workers ? value.budget : budget;
+    return scope.reserve(server::resource::body_buffer_bytes, 5 * options.incoming_bytes + input_fixed, value.websocket_input_charge).ok() &&
+        scope.reserve(server::resource::response_queue_bytes, 4 * options.output_bytes + output_fixed, value.websocket_output_charge).ok() &&
+        scope.reserve(server::resource::ws_message_bytes, options.max_message_bytes, value.websocket_message_charge).ok();
 }
 void http2_request_engine::state::observe_websocket(stream& value) {
+    if (native.workers) {
+        value.websocket->observe_progress([weak = value.weak_from_this()] {
+            if (auto stream = weak.lock()) stream->notify();
+        });
+        value.notify();
+        return;
+    }
     const auto id = value.id;
     auto queued = std::make_shared<std::atomic<bool>>(false);
     value.websocket->observe_progress([weak = weak_from_this(), id, queued] {

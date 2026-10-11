@@ -27,8 +27,9 @@ cross builds must run the smoke on the target in CI.
 `<httpserver/features.hpp>` exposes the same compiled `query_features()` declaration
 in both builds, without backend headers or configuration macros. Availability of
 the provider is distinct from availability of TCP TLS, HTTP/2, and HTTP/3. TCP TLS is available in TLS-on builds for certificate, initial mTLS and eligible
-external-PSK HTTP/1.0 and HTTP/1.1 in both managed and external modes. HTTP/2 and HTTP/3 remain
-unavailable until their owning tasks implement public listeners. `listen()`
+external-PSK HTTP/1.0 and HTTP/1.1 in both managed and external modes. Certificate
+and initial mTLS profiles also serve enabled HTTP/2 through TLS ALPN `h2`.
+HTTP/3 public listeners remain unavailable. `listen()`
 rejects unsupported protocol/profile requests before binding;
 `server_options::validate()` remains semantic.
 
@@ -139,8 +140,10 @@ through retiring I/O completions. No global credential store exists.
 Host names use exact canonical DNS matching, with case folding and a final dot
 removed. Unknown or absent SNI selects `default_host` (zero by default). Each
 listener has its own explicit store; sharing is intentional only when the same
-store is assigned. ALPN may contain `http/1.1` or be empty for ordinary HTTP/1
-fallback. A listener with HTTP/1.1 disabled must initially use empty ALPN. Later
+store is assigned. Certificate and initial mTLS ALPN may contain `h2`,
+`http/1.1`, or both; empty ALPN selects ordinary HTTP/1 fallback. An advertised
+protocol must be enabled in every listener bound to the credential store. PSK
+profiles retain HTTP/1-only ALPN and reject `h2`. Later
 publication cannot negotiate a disabled ALPN; wire requests for a disabled H1
 version are rejected before routing. `exchange::tls()` and request hook contexts
 carry library-owned immutable authenticated peer metadata; plaintext uses null,
@@ -251,3 +254,25 @@ example takes `certificate-directory managed|external port`, opens a real public
 listener and accepts `replace`, `invalid` and `stop` on stdin. Its independent
 installed witness holds a usable connection across rotation and validates the
 new certificate plus rejected-publication preservation.
+
+Public HTTP/2 uses the same native server, route table, hooks, peer policy and
+exchange API as HTTP/1. See [the public example](../examples/v3_http2.cpp) and
+[TASK-195 design](../specs/architecture/v3/TASK-195-design.md). TLS-off
+configuration rejects HTTP/2 before binding. TLS 1.2 HTTP/2 rejects forbidden
+ciphers before publishing request hooks.
+
+Connection wire operations run serially; each stream has its own handler
+affinity on the configured workers. A running handler can occupy one worker,
+so applications should keep handlers cooperative and size the worker pool for
+their concurrent work. Receive credit follows body consumption. Configured
+server limits bound listener, connection and stream descendants, including
+header copies, body rings, output and WebSocket storage. Header, SETTINGS,
+body-idle, suspension, write-idle, WebSocket close and drain timers use native
+readiness deadlines without periodic polling.
+
+RFC8441 Extended CONNECT upgrades one stream and permits ordinary siblings.
+Native drain publishes staged GOAWAY, finishes accepted work, and cancels
+remaining requests and WebSockets at its absolute deadline. A retained ticket
+keeps the original deadline result; its remaining count describes unfinished
+work at expiry, even after actual retirement. A counted handler cannot wait
+on its own drain ticket.

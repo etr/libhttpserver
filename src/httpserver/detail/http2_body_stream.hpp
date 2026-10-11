@@ -8,6 +8,10 @@
 #endif
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP2_BODY_STREAM_HPP_
 #define SRC_HTTPSERVER_DETAIL_HTTP2_BODY_STREAM_HPP_
+#include <memory>
+#include <utility>
+#include <atomic>
+#include <mutex>
 #include <optional>
 #include <vector>
 #include <httpserver/body_reader.hpp>
@@ -30,7 +34,7 @@ class http2_body_stream final : public body_source, public body_sink {
         static const http::fields none;
         return eof_seen_ ? received_trailers_ : none;
     }
-    const http::outcome& failure() const noexcept override { return failure_; }
+    const http::outcome& failure() const noexcept override;
     void park(body_wait& wait) override;
     void unpark(body_wait& wait) override;
     body_push_result push(std::span<const std::byte> from) override;
@@ -39,19 +43,22 @@ class http2_body_stream final : public body_source, public body_sink {
     void unpark(body_write_wait& wait) override;
     std::vector<std::uint8_t> send_prefix(std::size_t n) const;
     void retire(std::size_t n);
-    std::size_t queued() const { return sent_.size; }
-    std::size_t unread() const { return received_.size; }
-    std::size_t receive_capacity() const { return admitted_ ? policy_capacity_ : received_.bytes.size(); }
-    bool admitted() const { return admitted_; }
-    bool receive_ended() const { return receive_ended_; }
-    bool finished() const { return finished_; }
+    std::size_t queued() const { std::lock_guard lock(mutex_); return sent_.size; }
+    std::uint64_t received_total() const { std::lock_guard lock(mutex_); return received_total_; }
+    std::size_t unread() const { std::lock_guard lock(mutex_); return received_.size; }
+    std::size_t receive_capacity() const { std::lock_guard lock(mutex_); return admitted_ ? policy_capacity_ : received_.bytes.size(); }
+    bool admitted() const { std::lock_guard lock(mutex_); return admitted_; }
+    bool receive_ended() const { std::lock_guard lock(mutex_); return receive_ended_; }
+    bool finished() const { std::lock_guard lock(mutex_); return finished_; }
     const http::fields& sent_trailers() const { return sent_trailers_; }
     std::span<const std::byte> receive_prefix() const;
     void consume_received(std::size_t n);
-    void discard_received() { if (received_.size) received_.consume(received_.size); }
-    bool failed() const { return !failure_.ok(); }
+    void discard_received();
+    bool failed() const { std::lock_guard lock(mutex_); return failure_code_.load() != http::outcome_code::ok; }
     http2_window send_window, receive_window;
-    std::uint64_t consumed = 0;
+    std::atomic<std::uint64_t> consumed{0};
+    // Installed before handler publication; notifications only schedule owner work.
+    void observe_progress(executor::handler callback) { progress_ = std::move(callback); }
 
  private:
     struct ring {
@@ -64,18 +71,31 @@ class http2_body_stream final : public body_source, public body_sink {
     };
     std::optional<std::size_t> trailer_size(const http::fields& trailers) const;
     bool admit_trailers(const http::fields& trailers);
-    void wake_reader();
-    void wake_writer();
+    class mutation {
+     public:
+        explicit mutation(http2_body_stream& body) : body_(body), lock_(body.mutex_) {}
+        ~mutation() { lock_.unlock(); body_.publish(); }
+     private:
+        http2_body_stream& body_;
+        std::unique_lock<std::mutex> lock_;
+    };
+    void publish();
+    bool end_receive_locked(http::fields trailers = {});
+    void fail_locked(http::outcome_code code = http::outcome_code::protocol_error);
+    bool failed_locked() const { return failure_code_.load() != http::outcome_code::ok; }
+    std::size_t receive_capacity_locked() const { return admitted_ ? policy_capacity_ : received_.bytes.size(); }
+    mutable std::mutex mutex_;
+    executor::handler progress_;
     server::resource_budget budget_;
     ring received_, sent_;
     server::reservation trailers_charge_;
     http::fields received_trailers_, sent_trailers_;
-    http::outcome failure_;
+    std::atomic<http::outcome_code> failure_code_{http::outcome_code::ok};
     std::optional<std::uint64_t> receive_length_, send_length_;
     std::uint64_t received_total_ = 0, sent_total_ = 0;
     std::size_t policy_capacity_ = 0;
-    body_wait* reader_ = nullptr;
-    body_write_wait* writer_ = nullptr;
+    std::shared_ptr<wait_node> reader_;
+    std::shared_ptr<write_wait_node> writer_;
     bool admitted_ = false, receive_ended_ = false, eof_seen_ = false, finished_ = false, forbidden_ = false;
 };
 }  // namespace httpserver::detail
