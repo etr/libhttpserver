@@ -37,7 +37,7 @@ build_features tls_build_probe() noexcept {
     SSL_free(session);
     SSL_CTX_free(context);
     if (!ready) return {};
-    return {true, true, false, false, OpenSSL_version(OPENSSL_VERSION)};
+    return {true, true, true, false, OpenSSL_version(OPENSSL_VERSION)};
 }
 
 }  // namespace httpserver::detail

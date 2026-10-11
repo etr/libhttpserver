@@ -23,6 +23,7 @@
 // listener. See listener_engine.hpp for the design contract.
 
 #include "config.h"
+#include <httpserver/detail/resource_scope.hpp>
 #include <httpserver/detail/listener_engine.hpp>
 #ifdef NATIVE_V3_TLS
 #include <httpserver/detail/tls_credentials.hpp>
@@ -72,7 +73,7 @@ listener_engine::listener_engine(io_socket_backend& backend, worker_pool& pool,
       hooks_(hooks),
       peers_(peers),
       owner_(pool),
-      budget_(budget),
+      budget_(child_budget(budget)),
       scope_(scope),
       config_(std::move(config)) {
 }
@@ -226,9 +227,10 @@ void listener_engine::adopt_accepted(std::uint64_t connection,
             backend_.release_connection(connection);
             return;
         }
+        auto connection_budget = child_budget(budget_);
         connection_admission admission;
         admission.seat = std::make_shared<server::reservation>();
-        if (!budget_.reserve(server::resource::connections, 1, *admission.seat).ok()) {
+        if (!connection_budget.reserve(server::resource::connections, 1, *admission.seat).ok()) {
             server::diagnostic_event event{server::diagnostic_kind::connection_rejected,
                 server::diagnostic_reason::capacity, http::outcome_code::limit_exceeded};
             event.listener_id = id_;
@@ -245,8 +247,8 @@ void listener_engine::adopt_accepted(std::uint64_t connection,
                 // Three fixed record buffers cover input, provider-step output
                 // and in-flight ciphertext. The lease also retains admission
                 // and the drain count until child/provider retirement.
-                if (!budget_.reserve(server::resource::timers, 1, timer).ok()
-                        || !budget_.reserve(server::resource::body_buffer_bytes, 3 * 16384, storage).ok()) {
+                if (!connection_budget.reserve(server::resource::timers, 1, timer).ok()
+                        || !connection_budget.reserve(server::resource::body_buffer_bytes, 3 * 16384, storage).ok()) {
                     backend_.release_connection(connection);
                     return;
                 }
@@ -257,6 +259,7 @@ void listener_engine::adopt_accepted(std::uint64_t connection,
                 handshake.runtime = handshake_runtime_;
                 handshake.lifetime = admission.retirement;
                 handshake.allow_http11 = config_.protocols.contains(http::protocol::http_1_1);
+                handshake.allow_http2 = config_.protocols.contains(http::protocol::http_2);
                 transport = std::make_shared<tls_socket_backend>(backend_, pool_, connection,
                     snapshot->select_default(), std::move(handshake));
             }
@@ -264,7 +267,7 @@ void listener_engine::adopt_accepted(std::uint64_t connection,
             // The reserved seat bounds TLS allocation and counts the handshake
             // in the same engine scope as established H1 work.
             engine = std::make_shared<connection_engine>(
-                backend_, pool_, routes_, hooks_, budget_, scope_, config_,
+                backend_, pool_, routes_, hooks_, connection_budget, scope_, config_,
                 connection, [self = shared_from_this(), connection] { self->erase(connection); }, peer,
                 &peers_, std::move(transport), std::move(admission));
             connections_.emplace(connection, engine);

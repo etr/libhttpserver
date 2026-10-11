@@ -247,6 +247,7 @@ class body_wait final {
     }
 
  private:
+    friend class http2_body_stream;
     body_source* source_;
     std::shared_ptr<wait_node> node_;
     task_frame_base* frame_ = nullptr;

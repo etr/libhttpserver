@@ -55,7 +55,7 @@ std::optional<http2_error> http2_connection::open_stream(time_point now) {
     if (!failure_ && !stream_rate_.take(now, limits_.stream_openings_per_interval, limits_.stream_interval)) fail(overload());
     return failure_;
 }
-http2_connection::http2_connection(server::resource_budget budget, http2_limits limits, http2_settings initial, bool reserve_frames)
+http2_connection::http2_connection(server::resource_budget budget, http2_limits limits, http2_settings initial, bool reserve_frames, bool precounted)
     : budget_(budget), parser_(budget), compression_(budget), limits_(limits) {
     if (!valid_limits(limits_) || !valid_settings(initial)) {
         auto e = protocol();
@@ -63,7 +63,7 @@ http2_connection::http2_connection(server::resource_budget budget, http2_limits 
         fail(e);
         return;
     }
-    if (!budget.reserve(server::resource::connections, 1, seat_).ok() ||
+    if ((!precounted && !budget.reserve(server::resource::connections, 1, seat_).ok()) ||
         !budget.reserve(server::resource::response_queue_bytes, limits_.control_bytes, control_charge_).ok()) {
         fail(overload());
         return;

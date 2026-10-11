@@ -354,11 +354,13 @@ class exchange {
                 "exchange: disconnect() requires a failure reason");
         }
         if (disconnected_) return http::outcome::okay();
-        disconnected_ = true;
         disconnect_reason_ = http::outcome(reason, std::move(detail));
         if (!terminal()) state_ = exchange_state::cancelled;
         body_.note_disconnect(disconnect_reason_);
         writer_.note_disconnect(disconnect_reason_);
+        // Publish the immutable reason only after its dependent state is ready.
+        // Completion may observe the flag while stop fan-out is still running.
+        disconnected_ = true;
         stop_.request_stop();
         for (resume_signal& sig : resume_signals_) {
             sig.cancel();
@@ -381,18 +383,18 @@ class exchange {
     }
 
  private:
-    // Watchdog reads race with handler decisions; copies retain value semantics
+    // Watchdog and completion reads cross threads; copies retain value semantics
     // so the exchange's public move operations can remain defaulted.
-    class suspension_flag {
+    class concurrent_flag {
      public:
-        suspension_flag() noexcept = default;
-        suspension_flag(const suspension_flag& other) noexcept
+        concurrent_flag() noexcept = default;
+        concurrent_flag(const concurrent_flag& other) noexcept
             : value_(other.value_.load()) { }
-        suspension_flag& operator=(const suspension_flag& other) noexcept {
+        concurrent_flag& operator=(const concurrent_flag& other) noexcept {
             value_.store(other.value_.load());
             return *this;
         }
-        suspension_flag& operator=(bool value) noexcept {
+        concurrent_flag& operator=(bool value) noexcept {
             value_.store(value);
             return *this;
         }
@@ -413,8 +415,8 @@ class exchange {
     detail::exchange_sink* sink_;
     std::uint64_t connection_id_ = 0;
     exchange_state state_ = exchange_state::head;
-    suspension_flag suspended_;
-    bool disconnected_ = false;
+    concurrent_flag suspended_;
+    concurrent_flag disconnected_;
     http::outcome disconnect_reason_;
     stop_source stop_;
     detail::body_source* body_source_ = nullptr;

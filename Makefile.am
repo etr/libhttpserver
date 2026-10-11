@@ -561,3 +561,8 @@ EXTRA_DIST += scripts/audit-v3-native-linkage.sh scripts/test-v3-cutover.py scri
 EXTRA_DIST += scripts/check-v3-public-tls.py test/installed/v3_tls_consumer.cpp
 
 EXTRA_DIST += scripts/lib/v3_public_tls_profiles.py test/installed/v3_tls_profiles.cpp test/installed/v3_tls_client.cpp
+EXTRA_DIST += scripts/check-v3-public-http2.py scripts/test-v3-public-http2.py \
+    scripts/lib/v3_public_http2_inventory.py scripts/lib/v3_public_http2_h2.py scripts/lib/v3_public_http2_policy.py \
+    test/installed/v3_http2_consumer.cpp test/installed/v3_http2_node.mjs test/installed/v3_http2_raw.mjs \
+    examples/v3_http2.cpp specs/architecture/v3/TASK-195-design.md \
+    specs/architecture/v3/TASK-195-implementation-evidence.md specs/architecture/v3/TASK-195-receipt.json

@@ -408,6 +408,7 @@ struct tls_session::impl {
             if (!self->selection.snapshot || self->metadata().alpn.empty()) return SSL_TLSEXT_ERR_NOACK;
             for (const auto& token : self->metadata().alpn) {
                 if (token == "http/1.1" && !self->handshake_context.allow_http11) continue;
+                if (token == "h2" && !self->handshake_context.allow_http2) continue;
                 if (self->quic ? !quic_protocol(token) : !http_protocol(token)) continue;
                 if (const auto* match = offered(token, input, size)) {
                     *out = match;
@@ -523,8 +524,20 @@ tls_session::result tls_session::handshake() {
     if (impl_->metadata_failed) return {progress::failed};
     if (result.state == progress::complete && !impl_->peer) {
         try {
-            impl_->peer = copy_peer(impl_->ssl, impl_->server_side);
             impl_->protocol = selected_protocol(impl_->ssl);
+            if (impl_->protocol == tls_negotiated_protocol::h2 && SSL_version(impl_->ssl) <= TLS1_2_VERSION) {
+                const auto* cipher = SSL_get_current_cipher(impl_->ssl);
+                const auto key_exchange = SSL_CIPHER_get_kx_nid(cipher);
+                // RFC9113 Appendix A excludes non-AEAD and static-key suites.
+                // Reject before publishing application capability; H1 retains
+                // its independent cipher negotiation and fallback policy.
+                if (!SSL_CIPHER_is_aead(cipher) || (key_exchange != NID_kx_ecdhe && key_exchange != NID_kx_dhe)) {
+                    impl_->metadata_failed = true;
+                    return {progress::failed};
+                }
+                SSL_set_options(impl_->ssl, SSL_OP_NO_COMPRESSION | SSL_OP_NO_RENEGOTIATION);
+            }
+            impl_->peer = copy_peer(impl_->ssl, impl_->server_side);
         } catch (...) {
             impl_->metadata_failed = true;
             ERR_clear_error();

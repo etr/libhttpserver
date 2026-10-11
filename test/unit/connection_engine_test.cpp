@@ -1393,6 +1393,35 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, diagnostic_failures_and_cancellation
         LT_CHECK_EQ(channel.counters().events[static_cast<std::size_t>(kind::stream_completed)], 0u);
     }
 LT_END_AUTO_TEST(diagnostic_failures_and_cancellation_preserve_engine_outcomes)
+// Response publication can precede the handler's last resume. Stop and that
+// resume may race; retirement must take its final disconnect snapshot under
+// the same lifetime lock used to publish engine-facing disconnects.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, terminal_handler_resume_and_shutdown_retire_once)
+    for (unsigned iteration = 0; iteration != 16; ++iteration) {
+        std::atomic<bool> entered{false};
+        std::atomic<unsigned> completed{0};
+        resume_signal resume;
+        scenario s;
+        (void)s.hooks.add<srv::hook_phase::request_completed>([&](srv::request_completed_ctx&) {
+            ++completed;
+            return srv::hook_action::pass();
+        }).detach();
+        LT_ASSERT(s.registry.route(http::method::known(http::method_id::get), "/retire", [&](exchange& x) -> task<void> {
+            static_cast<void>(x.respond(http::status::from_code(204), {}));
+            entered = true;
+            co_await resume.wait();
+        }).ok());
+        LT_ASSERT(s.start_engine());
+        const std::string request = "GET /retire HTTP/1.1\r\nHost: h\r\n\r\n";
+        io_loopback::write_all(s.pair.peer(), request.data(), request.size());
+        LT_ASSERT(wait_until([&] { return entered.load(); }));
+        resume.signal();
+        s.engine->shutdown();
+        LT_CHECK(wait_until([&] { return s.stopped.load(); }));
+        LT_CHECK_EQ(completed.load(), 1u);
+        force_stop(s);
+    }
+LT_END_AUTO_TEST(terminal_handler_resume_and_shutdown_retire_once)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

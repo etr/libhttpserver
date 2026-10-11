@@ -70,7 +70,7 @@ void configuration(const std::string& directory, srv::loop_mode loop, bool enabl
         if (case_id == 3) invalid.hosts[0].private_key_pem = invalid.hosts[1].private_key_pem;
         if (case_id == 4) invalid.hosts[0].certificate_chain_pem = "invalid certificate";
         if (case_id == 5) invalid.hosts[1].host = "A.EXAMPLE.";
-        if (case_id == 6) invalid.hosts[0].alpn = {"h2"};
+        if (case_id == 6) invalid.hosts[0].alpn = {"h3"};
         require(store->replace(invalid).code() == absent, "invalid publication outcome");
     }
     if (enabled) {
@@ -81,7 +81,12 @@ void configuration(const std::string& directory, srv::loop_mode loop, bool enabl
     for (auto protocol : {http::protocol::http_2, http::protocol::http_3}) {
         auto unsupported = options(loop, store);
         unsupported.protocols().enable(protocol);
-        unbound(unsupported, http::outcome_code::not_supported);
+        if (enabled && protocol == http::protocol::http_2) {
+            srv::native_server supported(unsupported);
+            require(supported.listen().ok(), "H2 opt-in with valid H1 fallback credentials");
+        } else {
+            unbound(unsupported, http::outcome_code::not_supported);
+        }
     }
     auto profile = options(loop, store);
     profile.tls().profile = srv::tls_profile::mutual_tls;

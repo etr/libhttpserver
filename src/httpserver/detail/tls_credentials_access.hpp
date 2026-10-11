@@ -17,6 +17,7 @@ struct tls_credentials_binding {
     server::tls_profile profile;
     server::tls_client_certificate_mode mode;
     bool http11;
+    bool http2 = false;
 };
 class tls_credentials_access final {
  public:

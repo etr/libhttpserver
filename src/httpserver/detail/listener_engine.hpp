@@ -139,7 +139,7 @@ class listener_engine final
     const server::hook_bus& hooks_;
     const server::peer_policy& peers_;
     io_connection_owner owner_;
-    const server::resource_budget& budget_;
+    server::resource_budget budget_;
     drain_scope& scope_;
     connection_engine_config config_;
     std::uint64_t id_ = 0;

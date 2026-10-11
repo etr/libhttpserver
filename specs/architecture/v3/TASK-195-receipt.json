@@ -1,0 +1,3198 @@
+{
+  "version": 1,
+  "task_id": "TASK-195",
+  "status": "implemented-local-checks-passed",
+  "worktree": "/home/etr/progs/libhttpserver/.worktrees/TASK-195",
+  "branch": "task/TASK-195",
+  "base_branch": "v3",
+  "base_revision": "eb4bf441a0aafc1a651959947f7a5f490d12dbdc",
+  "implementation_revision": "commit containing this receipt",
+  "caller_pending": [
+    "Groundwork validation",
+    "completion bookkeeping",
+    "archive",
+    "merge",
+    "cleanup"
+  ],
+  "source_hashes": {
+    ".gitignore": "9b8586ed410cb3ae4dc67d7abc5d358cd5c0824b9c9856f622d78c71cd2cd719",
+    "Makefile.am": "d856a7d2c190ff895a7f9b342c01783074c377a883ab3f10eb2fd875e55af9ff",
+    "docs/native-tls-build.md": "838ab9a852d9f8365b223d545304c24aa13680514ac52feb837edd2eb5edc1b2",
+    "docs/v3-api.md": "d36b1eeaaed8b77203437631246041fdb420a35b09aac4595a541c65e84ac2a5",
+    "examples/README.md": "a1511b55b3451db1a1e8ab886a4714db896f5cc573c64346933a182816689f17",
+    "examples/v3_http2.cpp": "c3d8f3d4b1f58cc046762e4a9145b4abe2dc60b509c032a64fe9fba1ba618aec",
+    "scripts/check-v3-installed-consumer.py": "19c825792fb8c83f25627f6080ae4e9349db598f2a7900b5c509b7a95e10277a",
+    "scripts/check-v3-public-http2.py": "5e404f52101b1b2a2169bafbfb3bb4a0fb188e713f247a4301f0f9512441af6f",
+    "scripts/lib/v3_package_matrix.py": "75b33ffa115b49910da9b61464e6c376dfa500c503618b8231264a8617de4af7",
+    "scripts/lib/v3_public_http2_h2.py": "dc360bb1d72298188dd4f3359fd6db6927e20fcbec9f16ea08ada0c6e43e3a84",
+    "scripts/lib/v3_public_http2_inventory.py": "f2c1286521c6a2b3eae350c42c4e75c5181d996cefa9440a9a612c206288d7a6",
+    "scripts/lib/v3_public_http2_policy.py": "21715190c5edaca088c91059b44af4493dacb91c820b4c040da924fedaf6e010",
+    "scripts/run-v3-http2-gates.py": "c33d429e8a1899afcfedccab57ee029654e9a29bcd1813eb473d885b9dd50e77",
+    "scripts/test-v3-installed-consumer.py": "a269adc59adcec09d8520d50e661784717823e4f229b73a14f1f7d994b7e767e",
+    "scripts/test-v3-public-http2.py": "51381ba4aca64b9014ade763c0cac96e471a1ac256a14aa4e1679c272f495359",
+    "specs/architecture/v3/TASK-195-design.md": "cadbf1fe28745effdac8bcc410048398f588a081dd7affe9359ad22fc7fe697d",
+    "specs/architecture/v3/TASK-195-implementation-evidence.md": "c910e00078d84c5b830afaeaf67a8a673d5267e44a58482b7a8ff357ee20aea0",
+    "specs/architecture/v3/architecture.md": "648a0e335264ba9e5bb065cfe10f18e35be376159dac9e52902d6e9d324ccfaf",
+    "specs/tasks/M14-v3-release-repairs/TASK-195.md": "c00785e76a490d9db3f6d78490e8621a1bb030a2c99ba9129144c90ff7bc3aac",
+    "specs/tasks/_index.md": "61fa0cad6561608f233111a6e1038a3ce561958ae48f3c9e6c25f11c0b7c8fbd",
+    "src/Makefile.am": "ac0e1b9c130e2152076545871eabdc103c95ec44ff58a8e1e9c268483abf2bf8",
+    "src/detail/connection_engine.cpp": "f5ad901272a12bebd98bfdf25f1fe5f000390cf6f8e395e444324b445e722bf7",
+    "src/detail/connection_engine_request.cpp": "985590f103596d07a00f2ad7267461883aa6dd319fdae5f059a6de53a27da4ec",
+    "src/detail/http2_body_stream.cpp": "5379dbc2fe38a0a23ad27ad37b13eee2d479db41b1758b5140d0f7e7a3504b27",
+    "src/detail/http2_connection.cpp": "7e0af7e17364e28cad3b0774ce072361be4a87f1487579ed56e0870c478c314d",
+    "src/detail/http2_native_stream.cpp": "d35b1094c07f50e6635c4cdbd5df42c15c75bde65c9060281048e7c86f58ef8f",
+    "src/detail/http2_native_timers.cpp": "747a05cb4c1c32609b381695a0e745615fe419317a14e6872f9e939c33d2339e",
+    "src/detail/http2_request_engine.cpp": "5469c1bc5139fdf6b1884ebfb31ce47efe5b1942a5304c5d9d7f27f6a35b1b3c",
+    "src/detail/http2_response_stream.cpp": "a37dd401aceaa3559349610151fa5b171f7ef1f4d743a2032c071c504eb48bea",
+    "src/detail/http2_stream_flow.cpp": "0341e60e02cef36983e80c31e8b6633a87ee239f6b6e96d9e386e2c26014f1e0",
+    "src/detail/http2_tcp_owner.cpp": "5e247f0a7d679be3a466406c7543125413a52d04050d6e517355593d10399e86",
+    "src/detail/http2_websocket_stream.cpp": "99ed872abdacb2359310503b3f36e1f79fbf0f8f5a914f9eee3747e15f1b7d4c",
+    "src/detail/listener_engine.cpp": "9bfd9a248b0657915806e20f092420ac122380b844bb5a13ca1787874ee242e9",
+    "src/detail/server.cpp": "b71bb0ddb7e0e0306efc9ae7f5144af672aa447dd0563abb7cde96e2e9a353dd",
+    "src/detail/server_tls_credentials.cpp": "7e31bf5aa271bc0630669e8f62ffa61cf90c17f53883c1d346e6c76caf2a992f",
+    "src/detail/tls_credentials.cpp": "464d44ad014f557c41fcada48259fbb9a5e61144bdce5014d53620cf18367888",
+    "src/detail/tls_provider.cpp": "7b4609216c01a0807c50e7b7ff71c36702fe07981cddde707e8be78502fef718",
+    "src/detail/tls_session.cpp": "f493b288f88a0bd85dab16712adcd8363997ee4e6de9f67a1eb4db350dc17499",
+    "src/httpserver/body_reader.hpp": "995bc62cf5bb8a1792d651c0d90a9a27b631e7aac184c60394903c481811e68d",
+    "src/httpserver/detail/connection_engine.hpp": "e3231bca59a738823e581a2029b60dfbf287c3972def38772e2b741043ff49da",
+    "src/httpserver/detail/http2_body_stream.hpp": "394223351218564a2009f3af9afcbf2f71d940aa46fe5941caf551382fdf7035",
+    "src/httpserver/detail/http2_connection.hpp": "5c65da3278db294a29ed437c5dc585cfc8f39c21fcc609bb342093c66ec60ac0",
+    "src/httpserver/detail/http2_dispatch.hpp": "67e51bec801aedbcdc0dbb6afa69ac2c67e865f860d3e045d74e367a3177e6a8",
+    "src/httpserver/detail/http2_request_engine.hpp": "1408705e9027f36680328b16934694e6b3a3e70ee3db562eff9f1dbb298ef963",
+    "src/httpserver/detail/http2_request_state.hpp": "e2810ce13250874dfcd60dc61e4384c0a47a4d79deaf0ee26cbf6e3393a7d749",
+    "src/httpserver/detail/http2_tcp_owner.hpp": "9d79d936fcce08c58f787d9ec89c11ee2b798f59ae893e62b0d37ba85c8f1167",
+    "src/httpserver/detail/listener_engine.hpp": "7d54e445a9b1c7cb4739c07103cec7ee3bb2bf9ec6d3de8eb1059f881c2a815c",
+    "src/httpserver/detail/request_handler_frames.hpp": "162fec2c5123a03cd6f6cc1425cc9f3e8281642546f01dbb280aadecd8c06207",
+    "src/httpserver/detail/resource_scope.hpp": "2f585e0543401a0a50bcc4b73ae2439ff3891406ff298f586528c4e222ff2552",
+    "src/httpserver/detail/tls_credentials_access.hpp": "e1caa407d3a13653311802d9d8e1ecf0b341d6ed23319213452c495a90e716c1",
+    "src/httpserver/detail/tls_io_backend.hpp": "cefc41a671bee7b2f1186ec406d774d95283e081778ca4d01e0a0abc13f5188a",
+    "src/httpserver/exchange.hpp": "82e8ac4bc7930be7c5710d9684cf31ead592387af0db0be7c3aea37f302b49d6",
+    "src/httpserver/response_writer.hpp": "564dbe35753616866c8610b85366218bd5e64b420a475148d2fd7e7b99221e3b",
+    "test/Makefile.am": "e4ea212e7f5c7f570c312fa0dea581aa898a3e70b00547fcc2b55b9c2beb4629",
+    "test/installed/v3-package-matrix.json": "28dfbef37cc54ac97c2b40aecb27305fb30f2330f7ae93d71286e35d5baa0768",
+    "test/installed/v3_http2_consumer.cpp": "05db6cdb724157f9c40452655e10124de0415a7425aab8233dfac7b1bb64c8e7",
+    "test/installed/v3_http2_node.mjs": "62d31c4c1e4501e5ec839142bfc6c10c3ae802030c7b2f9c05b85114f4dc06c4",
+    "test/installed/v3_http2_raw.mjs": "d257a4ec7ddd7d4c9542ddc86b7f0e6cd0a84d0196adaa059e7eaf38897afb7c",
+    "test/installed/v3_package_consumer.cpp": "fe14098c8c0eba50fcebd0b6b58b6747991acfbff7c995f2b64b5dd0865150cc",
+    "test/installed/v3_tls_consumer.cpp": "8e2339855a98bd0f74b5f5945b1de43564187268d28d6ee6be3969352679c308",
+    "test/unit/connection_engine_test.cpp": "7f0e98f1bedb59040ef68142bc59cae172164ffb2fad90a6e1f7e6a6571cc367",
+    "test/unit/http2_dispatch_test.cpp": "bd15fe75ea36a35b6b22840265e43363209ed4b1c9a3023a3359dd0cb70da3a8",
+    "test/unit/http2_native_owner_test.cpp": "192134b0291a9bda168b464aaf393d3cdf52266cd6235cbc3840cc84598c70f7",
+    "test/unit/native_server_test.cpp": "97e4db6a25660ab72d92dfb158493987141233ce1aa88090cfd197bb3dc33f62"
+  },
+  "source_identity": "8bcf4e01c618ae2b491b190003d231ecf63ac05545fc5b8d40d1889e48179a96",
+  "toolchain": {
+    "compiler": "/usr/bin/clang++-18",
+    "language": "C++20",
+    "provider": "/home/etr/progs/libhttpserver/build/tooling/provider",
+    "provider_version": "OpenSSL 3.5.9",
+    "python": "/tmp/task185-clients/bin/python",
+    "hyper_h2": "4.4.1",
+    "node": "/tmp/task185-tools/node-v24.15.0-linux-x64/bin/node",
+    "node_version": "24.15.0",
+    "nghttp2": "1.68.0",
+    "h2spec": "/tmp/task185-tools/h2spec",
+    "h2spec_version": "2.6.0",
+    "h2spec_commit": "70ac2294010887f48b18e2d64f5cccd48421fad1"
+  },
+  "sanitizers": {
+    "asan": {
+      "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+      "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+      "flags": "-fsanitize=address,undefined -fno-sanitize-recover=all -fsanitize-address-use-after-scope -fno-omit-frame-pointer"
+    },
+    "tsan": {
+      "TSAN_OPTIONS": "halt_on_error=1",
+      "flags": "-fsanitize=thread -fno-omit-frame-pointer"
+    },
+    "outside_ptrace": true,
+    "new_suppressions": [],
+    "established_tsan_allocation_only_exclusion": "request_lifecycle allocation count only; normal/ASan execute full assertions",
+    "allocator_override_runtime": "-shared-libsan -Wl,-rpath,/usr/lib/llvm-18/lib/clang/18/lib/linux",
+    "external_readiness_adapter": {
+      "tests": 27,
+      "checks": 491,
+      "skipped": 0
+    }
+  },
+  "suites": [
+    {
+      "lane": "normal",
+      "tls": "on",
+      "passed": 76,
+      "failed": 0,
+      "automake_skipped": 0,
+      "log": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on-closed-suites.log",
+        "sha256": "f047e0a1d595b1eca1569a3c1a303ae4d7fe8b496ef0bc318e83697730d5171d",
+        "bytes": 84739
+      },
+      "tests": [
+        {
+          "name": "server_options_validate",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/server_options_validate.log",
+          "sha256": "9bb8f12b97e44cb64478c9a23d0080845c4c2c3953ddffc3a2687e2583f2fa07",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_native_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_native_owner.log",
+          "sha256": "cfba9ecffe774dfb1780330370b9e23e55cf0794d23ca15aaf46ab4bfbd21f63",
+          "tests": 7,
+          "checks": 37,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_dispatch.log",
+          "sha256": "88faba8cd6cf6f8d30b21daf4f6fe85a4a843b22fcfd99ac7d13bea1e3544495",
+          "tests": 2,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_exchange.log",
+          "sha256": "ba7531bfed0adff63463af400c8f846892326397b2281a46c9dbefeccc576b23",
+          "tests": 21,
+          "checks": 492,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_reset",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_reset.log",
+          "sha256": "73fd8377338279bf6c674586a12878b77869bc40edda566482f2c7f8ef5586e5",
+          "tests": 5,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "tests": null,
+          "checks": null,
+          "failures": null,
+          "internal_skipped": null
+        },
+        {
+          "name": "http3_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http3_exchange.log",
+          "sha256": "ac08c572574fd513fde0e677c116014d50a1c83f495b6343c85fa414d20273dc",
+          "tests": 10,
+          "checks": 154,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http3_drain.log",
+          "sha256": "5e944d6817661fd31b1099650be6faa81f29ea23005e4714d590bae1718db18b",
+          "tests": 16,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_completion_storage",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/io_completion_storage.log",
+          "sha256": "60f15c42527eca04de28173f881776be3d96641681741074f6a64213fbf8e0be",
+          "tests": 4,
+          "checks": 14,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "readiness_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/readiness_contract.log",
+          "sha256": "56176d4e85d2dd6b32845e93f3eeb4ff9125c7c827f079c747f59fdedf93bf7d",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_connection_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/io_connection_owner.log",
+          "sha256": "a316eb303e8e632747493588a1f15945ca269e3deac7906375779fbebc558476",
+          "tests": 7,
+          "checks": 40,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_server",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/native_server.log",
+          "sha256": "1a6a6c6f76db1a069539ddbcf18b359729707f5381feb66216378d1ca137cca6",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "external_readiness_adapter",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/external_readiness_adapter.log",
+          "sha256": "67557081a5893771edcbe8c1dbc29625fc21859ff1bc6bd99086a86f20381381",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_tls_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/io_tls_control.log",
+          "sha256": "a130f5dae83a6e2eedafb2159539d26834248921b6a6f18e245b547c8169c8c7",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_operation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/io_operation.log",
+          "sha256": "e1c4594b1f7ffb3cb0005810eb9f2fbb843cf4e35efcee64d6166ee33007f4c5",
+          "tests": 9,
+          "checks": 55,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_frame",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/response_frame.log",
+          "sha256": "5cd310d6b7a595c996f614dc08c2235979679fcdebc9785fc93bd4d96953063b",
+          "tests": 14,
+          "checks": 217,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "exchange_decisions",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/exchange_decisions.log",
+          "sha256": "cf8730c28e334a1a3812d680ab17e247188f47209daf41c7cdf19695454d907c",
+          "tests": 26,
+          "checks": 146,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "exchange_routing",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/exchange_routing.log",
+          "sha256": "d29568c39eb6d318efdb0a2918ba112037975d832d3d6b4c1c0500f3d9c37745",
+          "tests": 15,
+          "checks": 117,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "body_reader",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/body_reader.log",
+          "sha256": "22b95285576aa0b383e351569b04adce0c4a1f542c40194ab33299b0d9e867fd",
+          "tests": 18,
+          "checks": 131,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_writer",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/response_writer.log",
+          "sha256": "736317dec4996b38f5ce187a1261ccba2d046c3fe9c83a19ccf56aeec88d87d6",
+          "tests": 16,
+          "checks": 162,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_epoll_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/io_epoll_backend.log",
+          "sha256": "6fd63557debb72af70ee013a3f02566fbd6213dcf3fb2713a74631310b5d9989",
+          "tests": 34,
+          "checks": 929,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "drain_scope",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/drain_scope.log",
+          "sha256": "6f6904f47e1cf113bb7d9a493f8855aca602d235d3bf808a0334036d49e584f1",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_backend_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/io_backend_contract.log",
+          "sha256": "9111b34f222aa67c71649525365c366e80b59d4197a0136b1239d4b40de0195d",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "route_sync",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/route_sync.log",
+          "sha256": "dea440df0f244a51410f3e2d5dcb058d09d30b3aff85c0ceb8f95cf6485d4fa0",
+          "tests": 11,
+          "checks": 137,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_definition",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/response_definition.log",
+          "sha256": "1bf404d3ad0027a08077c589551db595b98876366645f26366ac92bd9e8b79fd",
+          "tests": 32,
+          "checks": 311,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_sources",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/response_sources.log",
+          "sha256": "4fac5fbd4a29c3f51b200d903ee81d22671ea99d81d6ce8316752da1adfbcb96",
+          "tests": 30,
+          "checks": 304,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "request_lifecycle",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/request_lifecycle.log",
+          "sha256": "ab33ce6c6b477bb0feffa69af65c7337c06c37e84d1777e361db6d755ebb33cd",
+          "tests": 31,
+          "checks": 173,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "hooks_corpus",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/hooks_corpus.log",
+          "sha256": "2d7a738ccf59276ded961a4bf80bf2b184913709602d65b3f50c4033325f0e04",
+          "tests": 4,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "peer_policy",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/peer_policy.log",
+          "sha256": "3c14e0a227a86ec9f788d016842b427408e59d2c884964204acf7499da636296",
+          "tests": 11,
+          "checks": 2699,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/native_http1_parity.log",
+          "sha256": "861e3366d1f6a041b9ad8279e1ee38d5b35569d0437a43dea865fe79432b9bf3",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_codec",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/websocket_codec.log",
+          "sha256": "f6e8cae74d4553535968348fce2f6d0a1dccab13f7000e6edbc2d75709cf1123",
+          "tests": 5,
+          "checks": 263093,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_utf8",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/websocket_utf8.log",
+          "sha256": "3130aae3c7614ade7339e67481f0573cad12d5154bd89d35a94aff4119a98a24",
+          "tests": 2,
+          "checks": 282,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_session",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/websocket_session.log",
+          "sha256": "5fd536199e5eeec780a06039ab3cdc9b74bdf69872b451a761eaec24eacb937a",
+          "tests": 16,
+          "checks": 426,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_session_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/websocket_session_race.log",
+          "sha256": "c1011858c56d57ce35d544158ac2212aea5268779a463bf87570d95fed6cd612",
+          "tests": 9,
+          "checks": 2043,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_progress",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/websocket_progress.log",
+          "sha256": "d523543042c2cc0ac50b6b30dd0c38316a2d1ab7c561bc8832913ca12564d916",
+          "tests": 4,
+          "checks": 43,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_upgrade_decision",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/websocket_upgrade_decision.log",
+          "sha256": "4eec74e21f95b2b9a3d7b25f75fade5783dda74d790e495921fdeb8355fceabf",
+          "tests": 6,
+          "checks": 47,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/websocket_drain.log",
+          "sha256": "aa81c525def508a4217d2ac975340e09455ad14cca84a0f9dd9c9b8f3ef69673",
+          "tests": 3,
+          "checks": 29,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_drain_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/websocket_drain_race.log",
+          "sha256": "9b81a50af5c98dd4fa4004d961f61a970e3479a284b034b0c5c88c719aa8b7d3",
+          "tests": 3,
+          "checks": 22,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_e2e",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/native_http1_e2e.log",
+          "sha256": "f5d2b993dac7baa45bd7d1cace1f7e45a9313a12cf1ec18ddf5f451d9a95361a",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "fake_io_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/fake_io_backend.log",
+          "sha256": "49669f9e46686a7129e0ea5b0279c2a0e149cf2d107afd56110126053175825f",
+          "tests": 14,
+          "checks": 2523,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_policy_concurrency",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_policy_concurrency.log",
+          "sha256": "f57fd625c7ec68bbd5bd872d3f9d1392aef9299f11456c0176825c61f3740448",
+          "tests": 6,
+          "checks": 97,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_lifetime",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_acme_lifetime.log",
+          "sha256": "1ab84468eb53762141990f9a757ef4503657a12eb9aec79872a9bea7f08e36ce",
+          "tests": 6,
+          "checks": 93,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_policy_hostile_profiles",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_policy_hostile_profiles.log",
+          "sha256": "acce82b692fbc33423f34b28df827801e0702e3130cfa25c09ce7efe0d26ab40",
+          "tests": 6,
+          "checks": 474,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_selection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_acme_selection.log",
+          "sha256": "1a365f1d305ffd153deb0f1f97e68c7f71cb0d27abd3a17002a3d7c307359276",
+          "tests": 6,
+          "checks": 277,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_acme_credentials.log",
+          "sha256": "414e4ee010cef70b29cbf8f49b2505bc7cabfb81f9e1146f14fbfd914f6a0254",
+          "tests": 2,
+          "checks": 174,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_io.log",
+          "sha256": "fc5d9d760af639194acbee4f02a31991649551776aa7882fa24f80ceed936860",
+          "tests": 11,
+          "checks": 161,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io_loopback",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_io_loopback.log",
+          "sha256": "6fd02ef289a8c05aa0bb9f4e62b2f91d5e77c1316138e06a875664c16d0724c7",
+          "tests": 3,
+          "checks": 48,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_io_race.log",
+          "sha256": "e9f09bb7382b566be9c20de0420afbe57601b9993a0f927fd987e118c0e31002",
+          "tests": 10,
+          "checks": 253,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_credentials.log",
+          "sha256": "48cb2f529ff6e4707ec323f34825103a44051120050500a77905ab2f618237f9",
+          "tests": 6,
+          "checks": 216,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_tls_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/native_http1_tls_parity.log",
+          "sha256": "4e00b571485f98f013da0b467ab61a5ddfc8e5f15b9287b426484b218156aded",
+          "tests": 21,
+          "checks": 61,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_psk_contract.log",
+          "sha256": "941bc5b0eb25e868a63161e2654c5ca0ea7482bb0f78129d7ec1e83be35ae043",
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk_runtime",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_psk_runtime.log",
+          "sha256": "00c3d2e8dce1091d7415cb6aa510392189ebe113aaec9a8eb0b4f57275f57455",
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_mtls",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_mtls.log",
+          "sha256": "701b9995060126b9447324051c0470e2087bb803fdd35184570366ac0a10db53",
+          "tests": 6,
+          "checks": 390,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_credentials_rotation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_credentials_rotation.log",
+          "sha256": "f94959775f9b09306ea58f00a57d65c0b2ee3f2815f8d0784d69c053d025df58",
+          "tests": 2,
+          "checks": 31,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_frame",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_frame.log",
+          "sha256": "43c2f21a1a5b10322303e7771735fd01a935266b3a8621b961ca79f9a543bfca",
+          "tests": 4,
+          "checks": 16820,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_settings",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_settings.log",
+          "sha256": "fa9bd115b4d4246cb394ba3e9961363d85a6f89abee0a7fa4369a5ca9ce13a63",
+          "tests": 8,
+          "checks": 96,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_connection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_connection.log",
+          "sha256": "62d562d973eb6f2f12fa35b690a044ab6317f120d19385533e5c5d9974fd6286",
+          "tests": 9,
+          "checks": 235,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_selection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_selection.log",
+          "sha256": "f52dff786a46a6fee0527fdc45161f4aa6a36c9703af1053beab19820892ce28",
+          "tests": 6,
+          "checks": 260,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_tls_boundary",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_tls_boundary.log",
+          "sha256": "a137a0a51a5119a5100223d7b057823183d866826d260a4153c2882814bc7a17",
+          "tests": 5,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_conformance",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_conformance.log",
+          "sha256": "cfa748dad64b0dd84f89edd53838929769f2245b4519099ffbb481302e21955e",
+          "tests": 1,
+          "checks": 28,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_headers",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_headers.log",
+          "sha256": "83fb46c6fc6efece1d8a859ae9a4f44a34a98cbe2087a9a0daed0101a69f61b1",
+          "tests": 6,
+          "checks": 2150,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_streaming",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_streaming.log",
+          "sha256": "a338972f9acac237ddf2f59870808a21e847dcb26a52b7e0dac2e3115a9c0eca",
+          "tests": 20,
+          "checks": 306,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_fair_output",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_fair_output.log",
+          "sha256": "0f40199619eb8e0dca1592b4328f7b1e7d0349f7e7cac794ed20be628cf04d8b",
+          "tests": 4,
+          "checks": 3318,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_flow_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_flow_control.log",
+          "sha256": "edbcd2c74cdcdc91a95833355e74910e8840777321a9d5eab476819c5d62eeb0",
+          "tests": 8,
+          "checks": 170,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_rate_budget",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_rate_budget.log",
+          "sha256": "b7c45b527a0d9fa43719bb252b3062ebfcedb84d027003e8d55dac17f8b76ce2",
+          "tests": 9,
+          "checks": 351,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_handshake",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_websocket_handshake.log",
+          "sha256": "9f392e89e0ee8336a5d154f0ad9880260d6d53faa7bbb1a5f8e69e22b432227b",
+          "tests": 7,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_websocket.log",
+          "sha256": "1b07a44eef8824cafcae208ade6aeb0e9d3519559a122d0549b583643c28067a",
+          "tests": 3,
+          "checks": 26,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_flow",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_websocket_flow.log",
+          "sha256": "1f329b18475a0d5faa6a0a15749ea0ed98c16e235c6922ad398f2eb9e48e15ff",
+          "tests": 10,
+          "checks": 150,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_lifecycle",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_websocket_lifecycle.log",
+          "sha256": "696b0e6ac210b58f0de0f3e5f3f284b00cefaeeef493789c74a673209a205911",
+          "tests": 11,
+          "checks": 118,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_drain.log",
+          "sha256": "cb9cea6beb7c5fa860845f1b5fb1e0e88cb38d1262f7030ba3a192ac5352dc75",
+          "tests": 24,
+          "checks": 3431,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_fuzz_replay",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_fuzz_replay.log",
+          "sha256": "5e2586c936e4196e7cc14631a65d361fa400a6eb5e2ace095d63eb884ac992c0",
+          "tests": 1,
+          "checks": 1,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "diagnostic_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/diagnostic_dispatch.log",
+          "sha256": "9393e9e0099e6e1d762671c488560c828b5c5a24132d534b72d1079d373bbcee",
+          "tests": 3,
+          "checks": 12,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_engine_conformance",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/http2_engine_conformance.log",
+          "sha256": "36d539067ecd3ebea2724170f42e8c23d0031949ae0958829418dc6bc07741e4",
+          "tests": 6,
+          "checks": 943,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "public_tls_profiles",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/public_tls_profiles.log",
+          "sha256": "ddf2816222a9f9be0b14a385a4994efd8e6b1b36364cc6a2f871addac1a8c435",
+          "tests": 6,
+          "checks": 78,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/tls_psk.log",
+          "sha256": "a78e8c871e6fbfdbbc632c9179fd0b597702c722f9f65bcd96adb46c6615d56c",
+          "tests": 14,
+          "checks": 313,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "connection_engine",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-on/test/connection_engine.log",
+          "sha256": "7f27f05e207c435e17aa0e2d0e098b298417382067b09a0a49a89a146e227e26",
+          "tests": 40,
+          "checks": 319,
+          "failures": 0,
+          "internal_skipped": 0
+        }
+      ],
+      "driver": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/recheck-closed.sh",
+        "sha256": "721d04521825c8069458e2a9c16e8c5da5e40e6aacfa39f198cc72ceeb0eed50",
+        "bytes": 2280
+      }
+    },
+    {
+      "lane": "normal",
+      "tls": "off",
+      "passed": 20,
+      "failed": 0,
+      "automake_skipped": 0,
+      "log": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off-closed-suites.log",
+        "sha256": "db4e3a0bd77c9c7b7764e0281feeefb434e817c95ae1c24349c440a496283fc7",
+        "bytes": 21292
+      },
+      "tests": [
+        {
+          "name": "server_options_validate",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/server_options_validate.log",
+          "sha256": "6c962945e0e724ce8bb2dfd6dfec156d560365db84559620693de004da25c13a",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_native_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/http2_native_owner.log",
+          "sha256": "5837aa5ea570cd5f5c863296187ce33b87d0e181063decd9a9a865dc3e851424",
+          "tests": 7,
+          "checks": 37,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/http2_dispatch.log",
+          "sha256": "9c3d1f901571a9e062221fdb38086ad3b77e4d3a365852118d56a557627a165d",
+          "tests": 2,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "tests": null,
+          "checks": null,
+          "failures": null,
+          "internal_skipped": null
+        },
+        {
+          "name": "http2_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/http2_exchange.log",
+          "sha256": "d7f848e74c226b5b39c3d4e8358622fd21278d6a34244368340946ddb4a4062a",
+          "tests": 21,
+          "checks": 492,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_reset",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/http2_reset.log",
+          "sha256": "93ceb443fbfa36a11bebf7752cab07b8f1fc3ab8e8fd0bc268c8d2f8ca69553a",
+          "tests": 5,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/http3_exchange.log",
+          "sha256": "6b13b67a9182036dd545891ded8ddc095213230110bb3009218ed62310da988f",
+          "tests": 10,
+          "checks": 154,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_server",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/native_server.log",
+          "sha256": "fa5ba4b8b14c37565ace6d35a62e08dd7d7423d966b723b10a9454556bbaf2c3",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_completion_storage",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/io_completion_storage.log",
+          "sha256": "45966d2003f7cb4eb461a10c8406ebe11ea7a2013229e9d4070a7c0fe98544a7",
+          "tests": 4,
+          "checks": 14,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_connection_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/io_connection_owner.log",
+          "sha256": "4881d36461e96872370716034bed44beb51daf44bf79b0b3a9f894843d2c33e8",
+          "tests": 7,
+          "checks": 40,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/http3_drain.log",
+          "sha256": "c8915e811f21082c812ffbc74074a741cff4cc44443e1eb0916369f4803f947d",
+          "tests": 16,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "readiness_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/readiness_contract.log",
+          "sha256": "4b28a40505b3c60ba9bcb3d11ae7ddfc21a1c9948c9eca323fa9ac54b8b21392",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "external_readiness_adapter",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/external_readiness_adapter.log",
+          "sha256": "b500e05edffecbf21546cf904d5a37619bf7462b4bf24b9871a29854fc1651c9",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_tls_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/io_tls_control.log",
+          "sha256": "9f9532a095f533c22b3f274b3be53321c2180baa0114c7a5ef3bf590d3a582b7",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_operation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/io_operation.log",
+          "sha256": "2d767cb70fbd19ecb7e3f68930561f445c386d0754918cf00865e0dc3a139c99",
+          "tests": 9,
+          "checks": 55,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_epoll_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/io_epoll_backend.log",
+          "sha256": "6096e0f32d784edbe1eebc68d78a8b9a727e3180e141ce250e2e227a601223eb",
+          "tests": 34,
+          "checks": 942,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/native_http1_parity.log",
+          "sha256": "176e07d775da80ad2702bfaa7e48640571764ddb2c53872e56212a52c3beccbe",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_backend_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/io_backend_contract.log",
+          "sha256": "d021b0e69b775d4fb1cdba30920cff51a82b37ffea35ea50ad164c7ac902e1bf",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "fake_io_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/fake_io_backend.log",
+          "sha256": "68d9e4a6cdc2b1ff4ec605fe8c70dda7fee05355410bda114679accc96946609",
+          "tests": 14,
+          "checks": 2523,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "connection_engine",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/normal-off/test/connection_engine.log",
+          "sha256": "103ae872fedf909c2dfeefed046f875229326b26cb6c11a76de096527dcc0ba5",
+          "tests": 40,
+          "checks": 319,
+          "failures": 0,
+          "internal_skipped": 0
+        }
+      ],
+      "driver": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/recheck-closed.sh",
+        "sha256": "721d04521825c8069458e2a9c16e8c5da5e40e6aacfa39f198cc72ceeb0eed50",
+        "bytes": 2280
+      }
+    },
+    {
+      "lane": "asan",
+      "tls": "on",
+      "passed": 76,
+      "failed": 0,
+      "automake_skipped": 0,
+      "log": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on-green-suites.log",
+        "sha256": "b78544fdc1fd741dfcb55f2dcb9fd410613075fe8ffe2ddc69ae5eea3c6ec094",
+        "bytes": 7668
+      },
+      "tests": [
+        {
+          "name": "server_options_validate",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/server_options_validate.log",
+          "sha256": "80b11cb528020fbd2795f37bcccae4b672d19ca4e24f962f6430cf2e776efded",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_native_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_native_owner.log",
+          "sha256": "e0db7c1f42a7ecb7573cb4948262f027166070faefab88273ac849698ab82a46",
+          "tests": 7,
+          "checks": 37,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_dispatch.log",
+          "sha256": "3c6c03312ba21b73831d2e762ba31ad6a798e325b99081d9f3f472a9d0064ac7",
+          "tests": 2,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "tests": null,
+          "checks": null,
+          "failures": null,
+          "internal_skipped": null
+        },
+        {
+          "name": "http2_reset",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_reset.log",
+          "sha256": "63549add1dd00c8c1cb41151b7c46e1338142e7dd26f4141a47e7332e72ef588",
+          "tests": 5,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_exchange.log",
+          "sha256": "eb3b1c8d851ad5121f64197f8ff1554080d9432baf5532072ad57d8fa658b0e8",
+          "tests": 21,
+          "checks": 492,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http3_exchange.log",
+          "sha256": "cccbd534a09ff20ba7387aa4e73814bff13428bd53dde1b2b4a02cae046e4554",
+          "tests": 10,
+          "checks": 154,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_server",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/native_server.log",
+          "sha256": "fb1106d1132ab3f7088bce1a6c1f3e8fc445785af92de102af5b35d86c89edbe",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_connection_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/io_connection_owner.log",
+          "sha256": "4f303feae272d4045ffc3b3cccd58535f8671c7580ae404567411153a28be5c9",
+          "tests": 7,
+          "checks": 40,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http3_drain.log",
+          "sha256": "66cbe81a5b82db56519584927b05a774265404e63af1556461d17cfcb0b6b4cf",
+          "tests": 16,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_completion_storage",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/io_completion_storage.log",
+          "sha256": "84546f6429b0d5e1d2ffcec4322e3c694a04917b162c5eba555a57da6b00ccfc",
+          "tests": 4,
+          "checks": 14,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "readiness_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/readiness_contract.log",
+          "sha256": "9e4397408107d34540a5a5a9c390cb8799e58f84f9bd7cf6929e489bac73836b",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "external_readiness_adapter",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/external_readiness_adapter.log",
+          "sha256": "fd9d2161b30f80546faff898392fc7a5fe0b292ece7045465b05b02dc7642bd2",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_tls_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/io_tls_control.log",
+          "sha256": "67c11978b01b7e93574e90a4308caeb13db2b1cabd34bd0de7ceafbad0f85784",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_operation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/io_operation.log",
+          "sha256": "a8c6afbb57b449dc2589ed8e477fac54f8e2423b5968a1912f489b20fccf0047",
+          "tests": 9,
+          "checks": 55,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_frame",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/response_frame.log",
+          "sha256": "d2b6b2ec981a9cf8eb3a9e05f83daf01f720b600cb58e7685bf512bfb8dd5c3b",
+          "tests": 14,
+          "checks": 217,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "exchange_decisions",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/exchange_decisions.log",
+          "sha256": "1bc741d100f0c316fec26fafddeec8631532641f47c9f474040de849a7584641",
+          "tests": 26,
+          "checks": 146,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "exchange_routing",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/exchange_routing.log",
+          "sha256": "65647859314061851b2f88730d01a0c6c50a9a8dabc42acb76170e6827c9e691",
+          "tests": 15,
+          "checks": 117,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "body_reader",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/body_reader.log",
+          "sha256": "d0b579a89447decc8546da147c56b6880d27d29a08c23c6fc353998e408f6a0f",
+          "tests": 18,
+          "checks": 131,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_writer",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/response_writer.log",
+          "sha256": "05a30c4d21ddbf2397a8063c977dd72af7fdc3f4f8ba3c32a6614f8bb4336541",
+          "tests": 16,
+          "checks": 162,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_epoll_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/io_epoll_backend.log",
+          "sha256": "1e54d74136952e6ab5f24a73960d4fd484b0022b373ad9de618c033127246309",
+          "tests": 34,
+          "checks": 906,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "drain_scope",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/drain_scope.log",
+          "sha256": "50c1e2bcbaf71f7b0d1469709d0cb4a58111f1e48ad132036ea772307355fe15",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "fake_io_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/fake_io_backend.log",
+          "sha256": "7f1809bf2298eff75be07b5a35bf571310d11b54dc0d83c249b9646df754d30a",
+          "tests": 14,
+          "checks": 2523,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "route_sync",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/route_sync.log",
+          "sha256": "a0bf8f2b58f57bc54e716c981372c285820ee258feab206c0c9eb8509e137621",
+          "tests": 11,
+          "checks": 137,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_definition",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/response_definition.log",
+          "sha256": "c427e199d7b324ce347de1255b218b20ab8019433f8bdea7449ba9ec23b392d0",
+          "tests": 32,
+          "checks": 311,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_sources",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/response_sources.log",
+          "sha256": "db399558851f90ced4369404eede97db0136c84d39a7df98950f52af3706fc36",
+          "tests": 30,
+          "checks": 304,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "request_lifecycle",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/request_lifecycle.log",
+          "sha256": "55ef9d950b0bfbdfa6345485ae07c608df018ec981ae1c671f2198d31d345a68",
+          "tests": 31,
+          "checks": 173,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "hooks_corpus",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/hooks_corpus.log",
+          "sha256": "29342de42f10d0357b618e94bb805bb9a49f5e7eff8480e5f79d03c77463859e",
+          "tests": 4,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "peer_policy",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/peer_policy.log",
+          "sha256": "d8fd9c84104baf402a71bd54f3ca520f29f09836cafe4c028b8256a134d007a7",
+          "tests": 11,
+          "checks": 2699,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_backend_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/io_backend_contract.log",
+          "sha256": "f7b22c5c2ed533647b734831ddefbed20d11e7a7a4990ef0a720cc93831a3cf8",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_codec",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/websocket_codec.log",
+          "sha256": "d1a01b8f1401bd471538d528a48bc9a9b7e13a6ce79289f2062cee1561d12444",
+          "tests": 5,
+          "checks": 263093,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_utf8",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/websocket_utf8.log",
+          "sha256": "6dc400b9fc342ca38576e156bd5f3892b2748d22a285d451eab151658f75c340",
+          "tests": 2,
+          "checks": 282,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_session",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/websocket_session.log",
+          "sha256": "7558010633e686d7797d5bbc4764e42eb2216b400443fce54e5ae5120ad2ee96",
+          "tests": 16,
+          "checks": 426,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/native_http1_parity.log",
+          "sha256": "5b17e631fd9a482b81d7f2c039c9c3c9045f084062642d4c22986e225bdd29f2",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_progress",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/websocket_progress.log",
+          "sha256": "0f102bc1d33bbdd211270bc04f110aa9767becb25db171ee8f3d69fbecca450e",
+          "tests": 4,
+          "checks": 43,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_upgrade_decision",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/websocket_upgrade_decision.log",
+          "sha256": "49c6f6d5465c16ec73264ffe6570425b3cd6a73db030d9b60e87143ce5057512",
+          "tests": 6,
+          "checks": 47,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/websocket_drain.log",
+          "sha256": "0c76c8ae1c2e59c3717c6c4ad726fb7be489b4aa125b5848748b9f3d7545dc57",
+          "tests": 3,
+          "checks": 29,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_drain_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/websocket_drain_race.log",
+          "sha256": "4d64bb179cecbf6e9034d6ba279f6cac7c2bcf5612ba5b9d47a33628f7c333da",
+          "tests": 3,
+          "checks": 22,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_session_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/websocket_session_race.log",
+          "sha256": "85bc5aaf953e5f368343a7d24f64cb858873d8260d990bd4677cc8c923cfbc45",
+          "tests": 9,
+          "checks": 2058,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_policy_concurrency",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_policy_concurrency.log",
+          "sha256": "26f23f7ab4ac36db662939810a333c2ec8a05ae278a0334b62b6fd9e1c7d9ddb",
+          "tests": 6,
+          "checks": 97,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_policy_hostile_profiles",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_policy_hostile_profiles.log",
+          "sha256": "688bf4da92e3798ab52c5aa846594ebe4b68c7954ea7f261e9a7dda43e31832e",
+          "tests": 6,
+          "checks": 474,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_lifetime",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_acme_lifetime.log",
+          "sha256": "c40a9dfc1bed184a4adaaee0d0d705cb2ca5e5c84dade9026eeb5cf42c55b1bf",
+          "tests": 6,
+          "checks": 93,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_e2e",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/native_http1_e2e.log",
+          "sha256": "e64878bee2c44fc8a0957ad005cd99db415ec2f127061d51a368c19c64c2d9ae",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_selection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_acme_selection.log",
+          "sha256": "40f218eee1ed4b87fb7fa6af49fc1d5bc9027da82b5de6462aa42ee990385772",
+          "tests": 6,
+          "checks": 277,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_acme_credentials.log",
+          "sha256": "70befb93b19e9232626fbbb15458ff23418e9797926a7162d0e73885dc4efada",
+          "tests": 2,
+          "checks": 174,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_io.log",
+          "sha256": "3cd9edb04a1a245b5d90cb5d04c284f55204cf2724571e9df11edbc5852423f8",
+          "tests": 11,
+          "checks": 161,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_tls_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/native_http1_tls_parity.log",
+          "sha256": "0a7efdb3ca12577c1edf87ae715076f5a4d5434a4ece6e9094583b2103770282",
+          "tests": 21,
+          "checks": 61,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io_loopback",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_io_loopback.log",
+          "sha256": "8eb4fba46d71194b6c5ad62aea0aef225bc9e897a7b0fb78aaa1848de3423c6c",
+          "tests": 3,
+          "checks": 48,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_io_race.log",
+          "sha256": "ab9886ee070c35392a535c26d1263e98ccbdfe36c2da695212b5a34191ff677f",
+          "tests": 10,
+          "checks": 253,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_credentials.log",
+          "sha256": "c566fd8a9c0c24b4ad9b396145083e8e10f2fea11bb9c780ce7a13d291b5a230",
+          "tests": 6,
+          "checks": 216,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_psk_contract.log",
+          "sha256": "fb4e464f3160c1321111730c57140c33066c37b2b89fa7fe6fd7dfdfccec7752",
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk_runtime",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_psk_runtime.log",
+          "sha256": "0a34fbfd2ea6f7c20f7f93cb956f241d09fc703e09a67cc135d908bac2a14075",
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_mtls",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_mtls.log",
+          "sha256": "579c5051cb9f6a65958101bd8d3d38e0141550dc5e36996a0d6d91da67510b60",
+          "tests": 6,
+          "checks": 390,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_selection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_selection.log",
+          "sha256": "80285b6b5e5f8f5a77a68bb9e84c1c30a2cc9940094594244c13be9ae619a9ba",
+          "tests": 6,
+          "checks": 260,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_frame",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_frame.log",
+          "sha256": "ecb8c7027a3352f6ede65ffd2f389b8d857819afb71c5f00c8c60dbbc9deef73",
+          "tests": 4,
+          "checks": 16820,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_settings",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_settings.log",
+          "sha256": "dae5167f11a66502de65f521b9e011f0e7bd1a3dbb0dfa70b84068651a7679b0",
+          "tests": 8,
+          "checks": 96,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_credentials_rotation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_credentials_rotation.log",
+          "sha256": "04cb5fa4a3892720fedb74fd456e15a18a2f2b650edb968ee87276a01bfd9bcb",
+          "tests": 2,
+          "checks": 31,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_connection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_connection.log",
+          "sha256": "1091f13294458d0cd6c8bcf392c50b41e5161d5c20345c0223fb3d7ef64bdbe6",
+          "tests": 9,
+          "checks": 235,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_conformance",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_conformance.log",
+          "sha256": "c0178bc5589d8b104bc262b5edbefda2229273bdb0f27e861162a62ddd4bed1d",
+          "tests": 1,
+          "checks": 28,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_headers",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_headers.log",
+          "sha256": "5f84ee79ceaf82b07179ee83d4f05a13f6942e763cd77666cdc6f329f4c74589",
+          "tests": 6,
+          "checks": 2150,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_tls_boundary",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_tls_boundary.log",
+          "sha256": "6629ecf3a5bdacb32f320068aa6a042851d8ccb4b2a6eaaefe2231ec18580086",
+          "tests": 5,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_streaming",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_streaming.log",
+          "sha256": "dd1aa2dd21cbfbc8adf4ad26159ee0685222d83bc51989443adc696eb6747008",
+          "tests": 20,
+          "checks": 306,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_flow_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_flow_control.log",
+          "sha256": "a00dcf684d832871f01eeda52f202f8c250f7899dae06c363dfb6f821e3fbe29",
+          "tests": 8,
+          "checks": 170,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_fair_output",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_fair_output.log",
+          "sha256": "eb4eaeffd98944c88c5ce88d31da983e00c0e84996b8218a474618d08b623d1d",
+          "tests": 4,
+          "checks": 3318,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_rate_budget",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_rate_budget.log",
+          "sha256": "c1bc8d1ece5d4f63c0cd99d7dbd3fb914479421f3ee5877d1dfd8114128a83e0",
+          "tests": 9,
+          "checks": 351,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_handshake",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_websocket_handshake.log",
+          "sha256": "a68d47352aaacff96d90765b4ef70b262e2d0ef27185f07e6d2be9e6ac0532c7",
+          "tests": 7,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_websocket.log",
+          "sha256": "3880c0958dce0622085260447365df0201a8eaaaef852bcc1eab34d7e13653d8",
+          "tests": 3,
+          "checks": 26,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_flow",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_websocket_flow.log",
+          "sha256": "a5ec5e9536e03f3a0fa107fe9797143d0d396b6525d7197146a31295ea719dc2",
+          "tests": 10,
+          "checks": 150,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_lifecycle",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_websocket_lifecycle.log",
+          "sha256": "8dac8e0533087be5829ac039c2cc6472bc526d51cf85668ed20177e4e42199a3",
+          "tests": 11,
+          "checks": 118,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_drain.log",
+          "sha256": "ca0a1667ae60e990a01b12500cc8193f46e115008625b089b4ce7184816d0ffc",
+          "tests": 24,
+          "checks": 3431,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_fuzz_replay",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_fuzz_replay.log",
+          "sha256": "515a5bef21e7cf6f60e1534a51ec7309edd2eb455d1abc1646992368eddb64d4",
+          "tests": 1,
+          "checks": 1,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "diagnostic_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/diagnostic_dispatch.log",
+          "sha256": "4dd2092a37e2729b372232ab42dad592fd0daf5572f1b11c52fd5acb634417a3",
+          "tests": 3,
+          "checks": 12,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "public_tls_profiles",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/public_tls_profiles.log",
+          "sha256": "f2cf2ed9bf86de0a4316343d002ed016c103f37d407635ae76a96d63955136eb",
+          "tests": 6,
+          "checks": 78,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_engine_conformance",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/http2_engine_conformance.log",
+          "sha256": "9d1cc0a2af97bdde2f86e5aa2c224878ca90931aee24fdd8648732b8f603dcdf",
+          "tests": 6,
+          "checks": 943,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/tls_psk.log",
+          "sha256": "b747bbbbec826eda233c5ebcfa40f26869c555d1bc36bc886ae2a17e66ddc791",
+          "tests": 14,
+          "checks": 313,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "connection_engine",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-on/test/connection_engine.log",
+          "sha256": "dc8f348cfb227dc82bd92893974822b7df34914646529c71940e7f6447a784da",
+          "tests": 40,
+          "checks": 319,
+          "failures": 0,
+          "internal_skipped": 0
+        }
+      ],
+      "driver": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/recheck-green.sh",
+        "sha256": "0c23eff1b09eaa9790afd52753292de68ab6bb20b9389905a7f8b21d7b35c8f4",
+        "bytes": 2276
+      }
+    },
+    {
+      "lane": "asan",
+      "tls": "off",
+      "passed": 20,
+      "failed": 0,
+      "automake_skipped": 0,
+      "log": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off-closed-suites.log",
+        "sha256": "73b150a2b7de4042dd11de0c54a785efcf21d86993c35179edae56017c6f14d8",
+        "bytes": 31032
+      },
+      "tests": [
+        {
+          "name": "server_options_validate",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/server_options_validate.log",
+          "sha256": "ec9cc9d78b443288d8e21c4a7d94b8d5b278f1068f753c971ab12075d2a9e30e",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_native_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/http2_native_owner.log",
+          "sha256": "4359a113e73fcf5b5b4a586adae1cef5a411f2c755d87fed8a3423af128c2c64",
+          "tests": 7,
+          "checks": 37,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "tests": null,
+          "checks": null,
+          "failures": null,
+          "internal_skipped": null
+        },
+        {
+          "name": "http2_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/http2_dispatch.log",
+          "sha256": "f1cad4db80d1d28a1f359acaebf642d87038f5d291914daa5e78faf090a4d140",
+          "tests": 2,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_reset",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/http2_reset.log",
+          "sha256": "f32ca4b9376a607d986be8a3e7f0a38bfeac2ba450ae6ec0ee6307b3fc6e3997",
+          "tests": 5,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/http2_exchange.log",
+          "sha256": "2c89883dae92316267673daccc6e45da80e9a57b78023ce1633525f94457b47f",
+          "tests": 21,
+          "checks": 492,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/http3_exchange.log",
+          "sha256": "abbe13b75ace31b9b85182ab151d7699c1499d62c1f9085ebcc5a2b3fbd17111",
+          "tests": 10,
+          "checks": 154,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/http3_drain.log",
+          "sha256": "2fac8f0196966686e22b3f1a6041365251e58aea61424bef4cde20e529ba5141",
+          "tests": 16,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_server",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/native_server.log",
+          "sha256": "1f782c409d3157a3d4feea32b959c9cd53b5605071dfbfb0871551b8e93fccab",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_connection_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/io_connection_owner.log",
+          "sha256": "00b9f52ac28fe0c48abf279fe0b4ddf22956e37de95b733c9a5f7ff35c5fc6e9",
+          "tests": 7,
+          "checks": 40,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_completion_storage",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/io_completion_storage.log",
+          "sha256": "8e44bc11b6a7264821164049d946b5d62ffefd4436c2ef028078639ccd5d1804",
+          "tests": 4,
+          "checks": 14,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "readiness_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/readiness_contract.log",
+          "sha256": "c5766a93f99176f2ff1ae9774101f59bc07db10d3f7b8601b3a83beefdf883c0",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "external_readiness_adapter",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/external_readiness_adapter.log",
+          "sha256": "d6f1fc11c8f805e4fc542897129ffb616c38db6fc046123bfaff7d1388d3c71c",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_tls_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/io_tls_control.log",
+          "sha256": "12037256510a9f46084a660ed6a685c1f238e7cf55260cd85f99f7d2bb1e42bc",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_operation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/io_operation.log",
+          "sha256": "1a6a927dfef5089411f4c4ba504e4c7e839615bf78cbd7a79d2e2b1fe83b39d9",
+          "tests": 9,
+          "checks": 55,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_epoll_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/io_epoll_backend.log",
+          "sha256": "22f6a3fd0a4eed94a9acd3a1f0ec2e23ea203ac3392190c6da8601cea42ef031",
+          "tests": 34,
+          "checks": 934,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/native_http1_parity.log",
+          "sha256": "c34871dd4f558ff1ced06eb6ea1a724e4d36a79b5626efa18863b0c3e28491ae",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "fake_io_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/fake_io_backend.log",
+          "sha256": "9892f15b782b30ac2983326c2f7a89478d2f10c9d0fb5ed793c98bd0d72c1373",
+          "tests": 14,
+          "checks": 2523,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_backend_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/io_backend_contract.log",
+          "sha256": "2c98f96d95abb2ff3f494c14a09cb6e5df96320123ad517d847a8ab2fb5d18ca",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "connection_engine",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/asan-off/test/connection_engine.log",
+          "sha256": "b802f5ec2b4027351068b6df143a241ab778b6edc5be46a6a21d2afb26a267e0",
+          "tests": 40,
+          "checks": 319,
+          "failures": 0,
+          "internal_skipped": 0
+        }
+      ],
+      "driver": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/recheck-closed.sh",
+        "sha256": "721d04521825c8069458e2a9c16e8c5da5e40e6aacfa39f198cc72ceeb0eed50",
+        "bytes": 2280
+      }
+    },
+    {
+      "lane": "tsan",
+      "tls": "on",
+      "passed": 76,
+      "failed": 0,
+      "automake_skipped": 0,
+      "log": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on-closed-suites.log",
+        "sha256": "3094c664b91b6d0d6d21872807e3efb0f849c559d77f2990449e82f044911199",
+        "bytes": 104770
+      },
+      "tests": [
+        {
+          "name": "server_options_validate",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/server_options_validate.log",
+          "sha256": "78c68752ce7e7c60ab0d63b15f895079b159e622ca2adfaa93626f7908729369",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_native_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_native_owner.log",
+          "sha256": "d28d1c04d38d9728a498c692aaa3297f0bce57596747828eb9ee98eeed457f8e",
+          "tests": 7,
+          "checks": 37,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "tests": null,
+          "checks": null,
+          "failures": null,
+          "internal_skipped": null
+        },
+        {
+          "name": "http2_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_dispatch.log",
+          "sha256": "38a1d6b56cbe2c194790b56564123469461d0ba572f47929edaab0ddee39d822",
+          "tests": 2,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_reset",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_reset.log",
+          "sha256": "2c994d184d44b002ee17d2499442be0bdaae224e045d6a11395e7d0e83446d0a",
+          "tests": 5,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_exchange.log",
+          "sha256": "28a7f8f5c8cc8990c6ed3c1c676ec15396bce6042f0a2c5f7f732945cd7b2f5c",
+          "tests": 21,
+          "checks": 492,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http3_exchange.log",
+          "sha256": "8b8c76082279ecf18219955d90fb095ebba77e7c03c98d401a30f9a1983979c2",
+          "tests": 10,
+          "checks": 154,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http3_drain.log",
+          "sha256": "55d04d862bf8a34d0b29e8924e02f879ee25e66715dae70b0be1e32288fb7918",
+          "tests": 16,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_connection_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/io_connection_owner.log",
+          "sha256": "de65e644ac028d35430e40702b43231bf9f21609121b6574fedbbfd24e58cd21",
+          "tests": 7,
+          "checks": 40,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_completion_storage",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/io_completion_storage.log",
+          "sha256": "29f9257ae001136f07cdb699db7211b2fea71e1ab3d571733658abf416cc7e95",
+          "tests": 4,
+          "checks": 14,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "readiness_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/readiness_contract.log",
+          "sha256": "df77a8da93732aebf974be07d2da1c04f661dbf9333504c25607bb64fc28531f",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_server",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/native_server.log",
+          "sha256": "30619a1127ae5acfcef6c951023d7019e9bb14abcc8e3c68383f07a8dcea1497",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "external_readiness_adapter",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/external_readiness_adapter.log",
+          "sha256": "915ccf6b9de9662a6f86cfeaab6494b6575d47779bbf9846aeb250552eb56643",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_tls_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/io_tls_control.log",
+          "sha256": "aec20ccca93d21ab0a16bcaf2484d8d37d0b63566789c1f7e2b0db9ebed5e8a0",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_operation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/io_operation.log",
+          "sha256": "4df202a918a17f7987bd335360a4fa75648ad6e5d666ee1280be41c2b17e685a",
+          "tests": 9,
+          "checks": 55,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_frame",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/response_frame.log",
+          "sha256": "4dfef05ebe08fbc2e088a5f6e72a8082cec49ad88e6b992835cca0a211c1b40a",
+          "tests": 14,
+          "checks": 217,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "exchange_decisions",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/exchange_decisions.log",
+          "sha256": "dc3546d4b702caa63202c54614fadd6e6b102091278718a55da670987d6869f3",
+          "tests": 26,
+          "checks": 146,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "exchange_routing",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/exchange_routing.log",
+          "sha256": "a408b16c0dd54e200d7cd39edb3eb1e8ca3ef6cf1b74122ea1715cc5809c4b9d",
+          "tests": 15,
+          "checks": 117,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "body_reader",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/body_reader.log",
+          "sha256": "2d8cf120a91a06ef266299bf58485a4ef0e978954ca2ca51a7f69b792d110886",
+          "tests": 18,
+          "checks": 131,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_writer",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/response_writer.log",
+          "sha256": "bb684e226a1741ec8ac47c73660b625ed13473e1a9b91dad9ac6e74d177b3ba1",
+          "tests": 16,
+          "checks": 162,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_epoll_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/io_epoll_backend.log",
+          "sha256": "5cd803eddfd85a4b615e7d937ee0efdb2f32757aa61dd652eb05858a9fa8cd87",
+          "tests": 34,
+          "checks": 905,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "drain_scope",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/drain_scope.log",
+          "sha256": "42d8adf1f3115048ec90916f70e809be8adc61189a17f4def46e7c96a10512c8",
+          "tests": 11,
+          "checks": 54,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_backend_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/io_backend_contract.log",
+          "sha256": "e879c1d64590db3d2685ce25f680cff17f7ead1bc1627b9001b4de94048fe7b3",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "route_sync",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/route_sync.log",
+          "sha256": "803aed66c22300bb629433c5dfcb8a4c7f42674bf2815e99acb9ebf5bdbc4f11",
+          "tests": 11,
+          "checks": 137,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_definition",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/response_definition.log",
+          "sha256": "41af0225e76ea0f904799fa57098d95e202b236ff054d59a9411ed0170d23a49",
+          "tests": 32,
+          "checks": 311,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "response_sources",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/response_sources.log",
+          "sha256": "edd70bf40151edc7ed5deba2e11c35deda19ba87c177321ad0967a5336890c0b",
+          "tests": 30,
+          "checks": 304,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "request_lifecycle",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/request_lifecycle.log",
+          "sha256": "2ffabfd5b963c39c70ed80ca2838254da2ea2169d5e265752ad30b5a7cab768b",
+          "tests": 31,
+          "checks": 171,
+          "failures": 0,
+          "internal_skipped": 1
+        },
+        {
+          "name": "hooks_corpus",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/hooks_corpus.log",
+          "sha256": "3a566db49b6c072ae5e76f49a2b092f05d8895aab6ece091e3b5c552e968a43b",
+          "tests": 4,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "fake_io_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/fake_io_backend.log",
+          "sha256": "168d9ae67a5dc2771871153222ec13454faf48a3619a5b5ed95bea8f286c55b2",
+          "tests": 14,
+          "checks": 2523,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/native_http1_parity.log",
+          "sha256": "8bb6d3957024db9666ab897986ed2a3624c48924e47cafc4056fe87854fe8dc2",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_codec",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/websocket_codec.log",
+          "sha256": "ee00315de6c870c515eddb7e0bdb7ddf0ed70550872df39698a5c43d2d7ca184",
+          "tests": 5,
+          "checks": 263093,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_utf8",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/websocket_utf8.log",
+          "sha256": "f2a3fb6d5a3cb50d1ffe7e970a602133c614634f90eee30224cafbb6bebcfad4",
+          "tests": 2,
+          "checks": 282,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_session",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/websocket_session.log",
+          "sha256": "b683ace24713ae7ba38df44f0aad86ede4db7fad45c31b79f67cc0c18564e2ef",
+          "tests": 16,
+          "checks": 426,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "peer_policy",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/peer_policy.log",
+          "sha256": "ef3915759cdcc4373115fa5461f74368aa1c56ec2c7014786429d39f14b5c175",
+          "tests": 11,
+          "checks": 2699,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_progress",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/websocket_progress.log",
+          "sha256": "74cf2404511ed1049c1935e83e3086975f0aa05a609d7a1c7c61a32847365fa4",
+          "tests": 4,
+          "checks": 43,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_upgrade_decision",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/websocket_upgrade_decision.log",
+          "sha256": "b030f043f5dd4697dd7191cb2c86ccaf7e095e2257b82bf48597ff0fee4852dd",
+          "tests": 6,
+          "checks": 47,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_session_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/websocket_session_race.log",
+          "sha256": "8f57f0ac234b4b063576147a060dbbf2efef235bb942ded214ae0f7ce0cdc81c",
+          "tests": 9,
+          "checks": 2063,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "websocket_drain_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/websocket_drain_race.log",
+          "sha256": "5ef433f9b15bcc06ca784426e6b67211a898e01e5dbad3febc923aaeee615bb2",
+          "tests": 3,
+          "checks": 14,
+          "failures": 0,
+          "internal_skipped": 1
+        },
+        {
+          "name": "websocket_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/websocket_drain.log",
+          "sha256": "65c9334f509e50bb44d1f9b303831d55c3f346929e8b247ca7d4d1010221f113",
+          "tests": 3,
+          "checks": 29,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_policy_concurrency",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_policy_concurrency.log",
+          "sha256": "7236a1cbecf2f54f315e5bae8d31a0ce9aba97b65148cdbf0f64ee858a27d46a",
+          "tests": 6,
+          "checks": 97,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_e2e",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/native_http1_e2e.log",
+          "sha256": "ed76c0766618b9b36e3eaeb218fb1bc09985bf5787455d982939b0c138404288",
+          "tests": 60,
+          "checks": 708,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_lifetime",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_acme_lifetime.log",
+          "sha256": "597f839503b86ef87a75cae44979ed1b995590096a924604aeb39d86d034ad29",
+          "tests": 6,
+          "checks": 93,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_selection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_acme_selection.log",
+          "sha256": "d81ff643dbff3334aa0af77b747831e21a95ea966878a817fd9b014a6be1c0e0",
+          "tests": 6,
+          "checks": 277,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_policy_hostile_profiles",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_policy_hostile_profiles.log",
+          "sha256": "860b28ef242a9d4d8363bffbc09691b44be5393d1c59d7164dcf0af0bdcba085",
+          "tests": 6,
+          "checks": 474,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_acme_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_acme_credentials.log",
+          "sha256": "79d83e6f877f7e3089da1813a465adcbac20f785d39508090d5ad52c1e564dcb",
+          "tests": 2,
+          "checks": 174,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_io.log",
+          "sha256": "0eb8b5cdbdfec7586c65b0b26472fb250c7df76dffc40b678e8b453fab105730",
+          "tests": 11,
+          "checks": 161,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io_loopback",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_io_loopback.log",
+          "sha256": "80ada6c2164afcbe3c34c5b393c99a8b271134bc3f0889131df9e1108ef6e795",
+          "tests": 3,
+          "checks": 48,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_io_race",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_io_race.log",
+          "sha256": "b8dd5937c2d06e7ea13d4bfed8925c8679bfd3ee032728c8b45c20139e79e9e4",
+          "tests": 10,
+          "checks": 253,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_credentials.log",
+          "sha256": "175c766160b5cf914de0fa3a959240e543a0792e8b0b0f302dfcaec4897ff937",
+          "tests": 6,
+          "checks": 216,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk_runtime",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_psk_runtime.log",
+          "sha256": "5b16e68e372778689873f0a257e889033f5c4e00b55b01e2e9d1b71e968b4c6c",
+          "tests": 9,
+          "checks": 63,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_psk_contract.log",
+          "sha256": "b6e93747ed5ceceb479f09842ff75c58470b56045952e572681f0104cd3eefeb",
+          "tests": 3,
+          "checks": 36,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_tls_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/native_http1_tls_parity.log",
+          "sha256": "9c4c21fd022ad705225eb5cd4046c941598e952616713fa4947c180f8c317b55",
+          "tests": 21,
+          "checks": 61,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_mtls",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_mtls.log",
+          "sha256": "20d2e021dc9abbe5c9dea54a92d9a4d99268476ca62c1253365f03690e274a45",
+          "tests": 6,
+          "checks": 390,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_credentials_rotation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_credentials_rotation.log",
+          "sha256": "a692fdf45e3391838471d0ddb12bda7abb6666c3aacd5ba07a9186b3cf726fa5",
+          "tests": 2,
+          "checks": 31,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_frame",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_frame.log",
+          "sha256": "fc72eeac60d0ffde913bbc72a22b03ea204858cfeef8b8141b0ec7355a14f55b",
+          "tests": 4,
+          "checks": 16820,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_settings",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_settings.log",
+          "sha256": "fb854f24c3b7d055ab4d0025f9c7a17e543100b12429aacbcbf8e1aef5dff125",
+          "tests": 8,
+          "checks": 96,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_connection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_connection.log",
+          "sha256": "ecc3bc8980c187872ed9f56a6f3354fa009bfc4bd51f34b72c6fcb9fcd20917b",
+          "tests": 9,
+          "checks": 235,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_selection",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_selection.log",
+          "sha256": "c61fbd298dbc65d6416108f089aac5154feb6f51ff626928e8cc1dd42c3287b8",
+          "tests": 6,
+          "checks": 260,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_tls_boundary",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_tls_boundary.log",
+          "sha256": "96fd70f9be3cf3071aaf8e3d83c0b8fb3da78c15d3fea755aa279071a94d98c1",
+          "tests": 5,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_conformance",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_conformance.log",
+          "sha256": "605984f603cadb90b29fa87abe5e685db3da9b56b5c6c4134e1f26280d96f69e",
+          "tests": 1,
+          "checks": 28,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_streaming",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_streaming.log",
+          "sha256": "5b7735491c5e725c0442f36410caf5c8ad33bbb1a48aee4a94f84362de58f9f2",
+          "tests": 20,
+          "checks": 306,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_headers",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_headers.log",
+          "sha256": "7a1f3b88a726332e5ba00e0ea3f15d633f9a3d8c288b56c3390e2d0eabf276cc",
+          "tests": 6,
+          "checks": 2150,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_fair_output",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_fair_output.log",
+          "sha256": "d046b3be209e45d2b914a1c516cb230ba7b737cffec8df63924b8223816e13d4",
+          "tests": 4,
+          "checks": 3318,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_rate_budget",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_rate_budget.log",
+          "sha256": "a4c057a16877602cb334d00846655075b89d00920fb84942f1f3c54c8b0c8486",
+          "tests": 9,
+          "checks": 351,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_flow_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_flow_control.log",
+          "sha256": "bb3884913ac02761649353ace994798cfffae4a214e6786ca6325066490f3389",
+          "tests": 8,
+          "checks": 170,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_handshake",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_websocket_handshake.log",
+          "sha256": "0fdb96761133b169960ab2eb55d79b395fde38113a8eda58041c0f22ef395901",
+          "tests": 7,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_websocket.log",
+          "sha256": "e16dd467bde11520fd1c458eaede7678eefbb057a67eb1090b34549092c62773",
+          "tests": 3,
+          "checks": 26,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_flow",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_websocket_flow.log",
+          "sha256": "914402af31494cfc3669b24bd961ebe96271fd4a845953acff050f0e212d1c79",
+          "tests": 10,
+          "checks": 150,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_websocket_lifecycle",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_websocket_lifecycle.log",
+          "sha256": "066a5e2dc43756c580077e56bd130d88d4e79f96523628120425ffa06030ee10",
+          "tests": 11,
+          "checks": 118,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_drain.log",
+          "sha256": "54a22a5ad90b84dabdcd35b16b030c4985f410f00771862f929373cbeeef671e",
+          "tests": 24,
+          "checks": 3431,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_fuzz_replay",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_fuzz_replay.log",
+          "sha256": "12dc29d2d7600bb79486e2abcc03b899e3e45b281d5a69d89fb78afb0bc260e7",
+          "tests": 1,
+          "checks": 1,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "diagnostic_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/diagnostic_dispatch.log",
+          "sha256": "4f5e08a8f4d3c1b7a87a527b7e51dd903b106aef8e9d000782a15f30eb6fd83d",
+          "tests": 3,
+          "checks": 12,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "public_tls_profiles",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/public_tls_profiles.log",
+          "sha256": "2058f986a9d8b9c851b00b42558efddf90b375d5fc88f70fe884e60746c9f2dc",
+          "tests": 6,
+          "checks": 78,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "connection_engine",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/connection_engine.log",
+          "sha256": "532cc708b55bd3a0a7f573e04eedbde3bb3f162bc4d17693216fdf4c1cfb65e7",
+          "tests": 40,
+          "checks": 319,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "tls_psk",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/tls_psk.log",
+          "sha256": "7f7293ded09842a8f32ae3068df6dd8c9bf106627793bc3b7bde9963cccbe8ee",
+          "tests": 14,
+          "checks": 313,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_engine_conformance",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-on/test/http2_engine_conformance.log",
+          "sha256": "0c88b9ccbebac92eb1b0f24f60dab0c20b2b596b72e9ecc0cc5428a2cdbdfa58",
+          "tests": 6,
+          "checks": 943,
+          "failures": 0,
+          "internal_skipped": 0
+        }
+      ],
+      "driver": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/recheck-closed.sh",
+        "sha256": "721d04521825c8069458e2a9c16e8c5da5e40e6aacfa39f198cc72ceeb0eed50",
+        "bytes": 2280
+      }
+    },
+    {
+      "lane": "tsan",
+      "tls": "off",
+      "passed": 20,
+      "failed": 0,
+      "automake_skipped": 0,
+      "log": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off-closed-suites.log",
+        "sha256": "e54066f5f20e74c4b76ea1e630ba2c6be6fde63fcc9409357128eaf30cb79b3e",
+        "bytes": 26316
+      },
+      "tests": [
+        {
+          "name": "server_options_validate",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/server_options_validate.log",
+          "sha256": "0e020f422ef7ab8cb22e147644a2d6ef8d1c94a71ee4337d38b546ee6b282396",
+          "tests": 19,
+          "checks": 182,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_native_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/http2_native_owner.log",
+          "sha256": "c086760c41f43576cfadd8a24bcc1bc21c8b86ef769a950731baff3df6755930",
+          "tests": 7,
+          "checks": 37,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "consumer_v3_tls_credentials",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/consumer_v3_tls_credentials.log",
+          "sha256": "8d268bc0b1a928d7b5fd7fe2f2d7e78a016260e0e670c01e92c76cc6d04bff5c",
+          "tests": null,
+          "checks": null,
+          "failures": null,
+          "internal_skipped": null
+        },
+        {
+          "name": "http2_dispatch",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/http2_dispatch.log",
+          "sha256": "e98662c1cdce1b00666dfc2d46d7cf707b83e66250a318c98e740603c97641ed",
+          "tests": 2,
+          "checks": 4,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_reset",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/http2_reset.log",
+          "sha256": "099bd31a287a1c974d6ce8e84bfb05a614c3e207f816ac46297b53378f663ec3",
+          "tests": 5,
+          "checks": 106,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http2_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/http2_exchange.log",
+          "sha256": "eb894d5671e0b67f810175675923a97368330812af41637dea7e341119cdc24d",
+          "tests": 21,
+          "checks": 492,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_exchange",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/http3_exchange.log",
+          "sha256": "c7bd3a7fe761f8e645fd945f95d0f513b06d3814ce47c96ccfdea919b1916b52",
+          "tests": 10,
+          "checks": 154,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "http3_drain",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/http3_drain.log",
+          "sha256": "4e7f77b76194f1568eddb991e1170debd06f567e1b6eef4d419bfda87db8e68c",
+          "tests": 16,
+          "checks": 218,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_completion_storage",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/io_completion_storage.log",
+          "sha256": "c4cc3c6a2cdb6983dcb148740313f4699554d3ca89923a901e7059ff3b353f03",
+          "tests": 4,
+          "checks": 14,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_server",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/native_server.log",
+          "sha256": "b4af17542f1b17c860436af529c04e1d6a7a4fe0cb04371f9e944c367e1e06bc",
+          "tests": 20,
+          "checks": 108,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_connection_owner",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/io_connection_owner.log",
+          "sha256": "690dc6c9fb0df316e66ef49ac8040850cee80c02c6dda2d8167db1723703f83c",
+          "tests": 7,
+          "checks": 40,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "readiness_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/readiness_contract.log",
+          "sha256": "2b75e14fd19fbe4c755bcfacd4c19571d5b37ca23cb02148d3940091cf26c427",
+          "tests": 4,
+          "checks": 30,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "external_readiness_adapter",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/external_readiness_adapter.log",
+          "sha256": "edd975707959ae2c4055617b2697c0e137415174a11d121d3ce5c3612c53ddc5",
+          "tests": 27,
+          "checks": 491,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_tls_control",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/io_tls_control.log",
+          "sha256": "eaa97a8045bebc68f27e67a675a75dc636e73bbf13bb1cd27aacf95507d2e45e",
+          "tests": 1,
+          "checks": 6,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_operation",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/io_operation.log",
+          "sha256": "dfa96434c81a1e182b4cb37804958ab20743ab538b8625e94f82faf55a0bd0c6",
+          "tests": 9,
+          "checks": 55,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_epoll_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/io_epoll_backend.log",
+          "sha256": "877bad388705b762fc2fc1a294afe5e2c4f1aa169c81f180f104d46d04c43f66",
+          "tests": 34,
+          "checks": 905,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "native_http1_parity",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/native_http1_parity.log",
+          "sha256": "cc260145965ef56cbc2e916ffa3eaf2c002b80da4bd9275112aef92f9372183b",
+          "tests": 6,
+          "checks": 35,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "io_backend_contract",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/io_backend_contract.log",
+          "sha256": "353293a21284d6435cefcaa7e16eeca53fc861f2e70b228b6cc657bd63c51a03",
+          "tests": 42,
+          "checks": 743,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "fake_io_backend",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/fake_io_backend.log",
+          "sha256": "46ae8504d42eeec99e44ac6be9cfb18d681a69d37f42dd210c05b307f46e2cd5",
+          "tests": 14,
+          "checks": 2523,
+          "failures": 0,
+          "internal_skipped": 0
+        },
+        {
+          "name": "connection_engine",
+          "log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/tsan-off/test/connection_engine.log",
+          "sha256": "683f9fe75f21b1333b983ab286cc55aa0d349d06020ad42b3a79897b1a0be4d3",
+          "tests": 40,
+          "checks": 319,
+          "failures": 0,
+          "internal_skipped": 0
+        }
+      ],
+      "driver": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/recheck-closed.sh",
+        "sha256": "721d04521825c8069458e2a9c16e8c5da5e40e6aacfa39f198cc72ceeb0eed50",
+        "bytes": 2280
+      }
+    }
+  ],
+  "public_matrices": [
+    {
+      "lane": "normal",
+      "tls": "on",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-normal-green/receipt.json",
+        "sha256": "6f46d4ca43c4fcf63a4099eb3b15a2b4be1063827ba5ad912e83eca0a852dd94",
+        "bytes": 293045
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-normal-green",
+      "consumer_directory": "/tmp/task195-installed-gbmlnqs_",
+      "cells": 4,
+      "source_identity": "7c55abc92ab7f6f989681e04aa99a166777a7e2136e8aa856ff7efe3f4cea29d",
+      "scenarios_per_cell": 137,
+      "python_families": 24,
+      "python_scenarios": 68,
+      "node_families": 24,
+      "node_scenarios": 66,
+      "prebind_predicates": 3
+    },
+    {
+      "lane": "normal",
+      "tls": "off",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-normal-off-green/receipt.json",
+        "sha256": "1ba2a9d2f264d9c75321e1326c846b84932bc661cd04026619a2e3950a9d791c",
+        "bytes": 101807
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-normal-off-green",
+      "consumer_directory": "/tmp/task195-installed-josg3ens",
+      "cells": 4,
+      "source_identity": "7c55abc92ab7f6f989681e04aa99a166777a7e2136e8aa856ff7efe3f4cea29d"
+    },
+    {
+      "lane": "asan",
+      "tls": "on",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-asan-green/receipt.json",
+        "sha256": "a51df8970216654326b558c3b22cd87c34f4a1213c0ea35073e61a2da5b38ce0",
+        "bytes": 295456
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-asan-green",
+      "consumer_directory": "/tmp/task195-installed-6uevv04t",
+      "cells": 4,
+      "source_identity": "7c55abc92ab7f6f989681e04aa99a166777a7e2136e8aa856ff7efe3f4cea29d",
+      "scenarios_per_cell": 137,
+      "python_families": 24,
+      "python_scenarios": 68,
+      "node_families": 24,
+      "node_scenarios": 66,
+      "prebind_predicates": 3
+    },
+    {
+      "lane": "asan",
+      "tls": "off",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-asan-off-green/receipt.json",
+        "sha256": "09921a96a90729a07430d36d82a1ceedec56d08cb8bf1d3ae960670c3681ae7e",
+        "bytes": 103201
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-asan-off-green",
+      "consumer_directory": "/tmp/task195-installed-i8deb198",
+      "cells": 4,
+      "source_identity": "7c55abc92ab7f6f989681e04aa99a166777a7e2136e8aa856ff7efe3f4cea29d"
+    },
+    {
+      "lane": "tsan",
+      "tls": "on",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-tsan-green/receipt.json",
+        "sha256": "93f8300a18b8682f56bb0da5730bc84514f2b402441551c4b7b310e45e32c5fc",
+        "bytes": 295113
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-tsan-green",
+      "consumer_directory": "/tmp/task195-installed-3ocpxlvf",
+      "cells": 4,
+      "source_identity": "7c55abc92ab7f6f989681e04aa99a166777a7e2136e8aa856ff7efe3f4cea29d",
+      "scenarios_per_cell": 137,
+      "python_families": 24,
+      "python_scenarios": 68,
+      "node_families": 24,
+      "node_scenarios": 66,
+      "prebind_predicates": 3
+    },
+    {
+      "lane": "tsan",
+      "tls": "off",
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-tsan-off-green/receipt.json",
+        "sha256": "d46965ab4b904f5019de8b6e8845955cbc0b25227f649f149aa6b0039239dd1b",
+        "bytes": 103142
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-tsan-off-green",
+      "consumer_directory": "/tmp/task195-installed-8qk70lyv",
+      "cells": 4,
+      "source_identity": "7c55abc92ab7f6f989681e04aa99a166777a7e2136e8aa856ff7efe3f4cea29d"
+    }
+  ],
+  "package_matrices": [
+    {
+      "lane": "normal",
+      "tls": "on",
+      "cells": 4,
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-normal-on-closed2/receipt.json",
+        "sha256": "5f2e1e995607ef1beb6ca0eb1980bf6c42888a553141bce23b31ebe4987b6ef7",
+        "bytes": 66111
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-normal-on-closed2",
+      "consumer_directory": "/tmp/task195-package-n2jtt6ag"
+    },
+    {
+      "lane": "normal",
+      "tls": "off",
+      "cells": 4,
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-normal-off-closed2/receipt.json",
+        "sha256": "832c1668bb0b31ae75fa2f7b98778dc979030e7d2998af20f5751f336368c320",
+        "bytes": 66419
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-normal-off-closed2",
+      "consumer_directory": "/tmp/task195-package-nyh5h3c3"
+    },
+    {
+      "lane": "asan",
+      "tls": "on",
+      "cells": 4,
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-asan-on-closed2/receipt.json",
+        "sha256": "2f1a923d2652cd405aed18b198d5e4f5856cdf1b1cf925214cdc58ccb4f99b0a",
+        "bytes": 67421
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-asan-on-closed2",
+      "consumer_directory": "/tmp/task195-package-f9mlb1kn"
+    },
+    {
+      "lane": "asan",
+      "tls": "off",
+      "cells": 4,
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-asan-off-closed2/receipt.json",
+        "sha256": "f645a457a95b0b67b74726c9e4d51dfcf631fd23c5421e8ffccf2800a29120e4",
+        "bytes": 67729
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-asan-off-closed2",
+      "consumer_directory": "/tmp/task195-package-ahfd0xmk"
+    },
+    {
+      "lane": "tsan",
+      "tls": "on",
+      "cells": 4,
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-tsan-on-closed2/receipt.json",
+        "sha256": "11aef3fcc9d1836d965f66637a12192b8575413581991716685e508de9d55929",
+        "bytes": 67421
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-tsan-on-closed2",
+      "consumer_directory": "/tmp/task195-package-b8xhaunp"
+    },
+    {
+      "lane": "tsan",
+      "tls": "off",
+      "cells": 4,
+      "receipt": {
+        "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-tsan-off-closed2/receipt.json",
+        "sha256": "e622106088abd4b68cef2b5ed1cee9136a00e97d50d8c6babac48ca00d849261",
+        "bytes": 67729
+      },
+      "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-tsan-off-closed2",
+      "consumer_directory": "/tmp/task195-package-t00crz_f"
+    }
+  ],
+  "protocol": {
+    "receipt": {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/protocol-green/receipt.json",
+      "sha256": "819535de18cdf2efcc8d796b7778741c216c6d17b3b125123b034c8379918b6c",
+      "bytes": 17104
+    },
+    "directory": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/protocol-green",
+    "h2spec_executed": 145,
+    "unchanged_named_rfc9113_exclusions": 2,
+    "independent_clients": 2,
+    "private_scenarios_per_client": 5,
+    "public_matrix_selected": true
+  },
+  "contracts": [
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-contracts-complete2.log",
+      "sha256": "d1a3bdcaa925bbf92cc120237c5ab1078f911832e5f3bbdd16fd82aab85d59fa",
+      "bytes": 104
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-consumer-green.log",
+      "sha256": "521c5152a569e00e18a3663192bbeacdad0941eb639b997fd2e1dadb945ce416",
+      "bytes": 126
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-green.log",
+      "sha256": "1acf48e2f931e791d175e84bf09191fcedf5f3028deddead5add45e86a9f34f0",
+      "bytes": 134
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/package-workflow-green.log",
+      "sha256": "3b0dbb90387b342ccecc50446a0fb5e4385d86a3f467e5b97d63f8924fc08aff",
+      "bytes": 102
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/h2-gate-contracts-green.log",
+      "sha256": "cd1997bd9e2fca29b8576c1543e97b0cd1cbef61446c058d0b0faf61539a79c6",
+      "bytes": 104
+    }
+  ],
+  "local_checks": [
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/check-local-on-complete.log",
+      "sha256": "f74be76607cd3e211860e012bb0630bfdbf74bdc0f75ec707c1ed9e9913f8ac0",
+      "bytes": 3126
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/check-local-off-complete.log",
+      "sha256": "a3ea5e0ae6299876ee727bee1d7d41a9ca7a849293df0e4410f9829dfb2fa9bf",
+      "bytes": 3134
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/layout-on-complete.log",
+      "sha256": "47ebf8a70007f3cd5dfd5c072655ce4e6061cf91b3e1bda6e96ae9049450bffa",
+      "bytes": 699
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/layout-off-complete.log",
+      "sha256": "b0c7b37d756aa53b4bf265cf51316a7b1c19cc57b018ad53eecafb63a9c7436a",
+      "bytes": 703
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/cpplint-complete.log",
+      "sha256": "cfadb3168be1f0a857b01d506ed00f79770f5dacc25944b00b0675074b646b4c",
+      "bytes": 2099
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/whitespace-complete.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ],
+  "distribution": {
+    "status": "passed",
+    "command": "make -C build/task195/normal-on dist",
+    "build_log": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/dist-complete.log",
+    "membership_receipt": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/dist-membership.json",
+    "required": "all newly added task sources/tests/tooling/example/design/evidence/receipt"
+  },
+  "causal_artifacts": [
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/.debug/task195/journal.md",
+      "sha256": "caafd890fd647992954cff1af812019184ec28811d2a8d431dc66c15eede891a",
+      "bytes": 8884
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/.debug/task195/tsan-h1-parity-original.log",
+      "sha256": "5ed0630bb1feae57347e24fd36c89b97fff969d55afc1260cba7e65d3a49737e",
+      "bytes": 28158
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/.debug/task195/asan-h1-e2e-clock-original.log",
+      "sha256": "f300952d1a97df3651249b077a5b34f899a1bce11fa4db3fa8cd720a4ed6e442",
+      "bytes": 7478
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-behavior-red.log",
+      "sha256": "29849e348dd5fc6c9634c5b9ffd4984eb6faa6499c9207b332063df9d31394e6",
+      "bytes": 10
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/public-red.json",
+      "sha256": "4f83c1943e996a100b4d7e72cc65f705efa719e7656439b86526e70ebc15ff3d",
+      "bytes": 1133
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/native-owner-red.log",
+      "sha256": "e783d72f96abf4496f5976b5bb0e42b44bff2d804f6c80baa93526a01c8ee145",
+      "bytes": 530
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/header-release-red.log",
+      "sha256": "1c5ece2efe93517f6dd05e50d57557df9a58e5fa1db2ec6200bb9c13afd297d9",
+      "bytes": 2737
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/header-release-green.log",
+      "sha256": "179b63bb9047398fa894cb4cd83860573121a45f407deeee4cc98a1a55010f78",
+      "bytes": 1926
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/h1-baseline-tsan-replay.log",
+      "sha256": "8f8bd101278d74899bd52aaa75989b59a95935002b9d36d39ed871ae6b97df86",
+      "bytes": 1011
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/h1-retirement-red2.log",
+      "sha256": "97aa8b8f1935fa44fdbed8e5a772bc86f70be2be36ce91faf27d1c02874b0f3e",
+      "bytes": 30497
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/node-drain-finish-barrier-green.log",
+      "sha256": "83810060846f04d4facc8283a11381e0df60384ce39f9f4d580ff71cdcd67379",
+      "bytes": 538
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/node-settings-clock-discriminator.log",
+      "sha256": "1739fda2289d3bfeb3285f613524484186102f2c27127790537b24336da0ca70",
+      "bytes": 686
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/cipher-external-segfault-preserved.json",
+      "sha256": "8aa76523b11cf302c0b0bc05309bf5b381f297c18df5208ce14a961ac654e49a",
+      "bytes": 298
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195/cipher-asan-green.log",
+      "sha256": "f00fbd3dfebf1a5d36db6e2f5f436760e614040c9bcf35a3813c1d12a0761e36",
+      "bytes": 95
+    }
+  ],
+  "honesty_notes": [
+    "One original installed fixture ASan stack receipt was overwritten before resume; journal diagnosis is explicitly not a preserved full receipt. Original independent crash JSON and corrected ASan replay retained.",
+    "Negative wall-clock durations and clock discriminator caused fixture observation failures. Node uses monotonic elapsed bounds with unchanged durations/protocol assertions.",
+    "Historical failed gates remain archived and are not counted as passing final gates.",
+    "Nonlocal BSD/macOS/Windows checks are unexecuted here and CI/v3 PR owned.",
+    "Task status remains In Progress pending caller Groundwork validation/finalization."
+  ],
+  "unresolved_local_requirements": [],
+  "archive_directories": {
+    "local": [
+      "/home/etr/progs/libhttpserver/.worktrees/TASK-195/build/task195",
+      "/home/etr/progs/libhttpserver/.worktrees/TASK-195/.debug/task195"
+    ],
+    "external": [
+      "/tmp/task194-tsan-on-zr1lfeze",
+      "/tmp/task195-asan-off",
+      "/tmp/task195-asan-on",
+      "/tmp/task195-installed-09nrzuyy",
+      "/tmp/task195-installed-2c8n7hv5",
+      "/tmp/task195-installed-3ocpxlvf",
+      "/tmp/task195-installed-55e2ltv3",
+      "/tmp/task195-installed-6uevv04t",
+      "/tmp/task195-installed-8qk70lyv",
+      "/tmp/task195-installed-d6w_8d1b",
+      "/tmp/task195-installed-eup6qc6x",
+      "/tmp/task195-installed-gbmlnqs_",
+      "/tmp/task195-installed-i8deb198",
+      "/tmp/task195-installed-josg3ens",
+      "/tmp/task195-installed-sbp_vr1b",
+      "/tmp/task195-installed-ueeg04oj",
+      "/tmp/task195-installed-wqclkvfl",
+      "/tmp/task195-installed-y6q91ram",
+      "/tmp/task195-installed-y8mhngb7",
+      "/tmp/task195-installed-ygt7nzqk",
+      "/tmp/task195-installed-zmp652wq",
+      "/tmp/task195-normal-off",
+      "/tmp/task195-normal-on",
+      "/tmp/task195-package-ahfd0xmk",
+      "/tmp/task195-package-b8xhaunp",
+      "/tmp/task195-package-f9mlb1kn",
+      "/tmp/task195-package-mukoy1y0",
+      "/tmp/task195-package-n2jtt6ag",
+      "/tmp/task195-package-nyh5h3c3",
+      "/tmp/task195-package-t00crz_f",
+      "/tmp/task195-public-red",
+      "/tmp/task195-tsan-off",
+      "/tmp/task195-tsan-on"
+    ]
+  }
+}

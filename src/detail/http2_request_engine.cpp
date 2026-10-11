@@ -32,14 +32,16 @@ bool valid_request_limits(const http2_request_limits& limits) {
 }
 }  // namespace
 http2_request_engine::http2_request_engine(server::resource_budget budget, const server::route_registry& routes,
-                                          executor& owner, http2_request_limits limits, request_dispatch_context dispatch, std::uint64_t id, net::peer_address peer)
-    : state_(std::make_shared<state>(budget, routes, owner, limits, std::move(dispatch), id, peer)) {
+                                          executor& owner, http2_request_limits limits, request_dispatch_context dispatch, std::uint64_t id, net::peer_address peer, http2_native_context native)
+    : state_(std::make_shared<state>(budget, routes, owner, limits, std::move(dispatch), id, peer, std::move(native))) {
     state_->handlers->after_resume([weak = std::weak_ptr<state>(state_)] {
         if (auto state = weak.lock()) state->retire_cancelled();
     });
     if (!valid_request_limits(limits)) state_->fail(connection_error(http2_error_code::internal_error, http::outcome_code::invalid_argument));
 }
-http2_request_engine::~http2_request_engine() = default;
+http2_request_engine::~http2_request_engine() {
+    if (state_->native.workers) for (auto& [id, value] : state_->streams) value->native_cancel(http::outcome_code::connection_closed);
+}
 http::outcome http2_request_engine::begin_drain(http2_connection::time_point deadline, server::drain_ticket& out) {
     if (state_->phase != state::drain_phase::running || state_->connection.failure())
         return {http::outcome_code::invalid_state, "HTTP/2 drain already initiated or terminal"};
@@ -49,7 +51,8 @@ http::outcome http2_request_engine::begin_drain(http2_connection::time_point dea
     auto result = state_->connection.begin_graceful_goaway(state_->accepted_stream);
     if (result != http::outcome_code::ok) return {result, "HTTP/2 drain control reservation refused"};
     state_->phase = state::drain_phase::announcing;
-    state_->scope->arm(deadline, [owner = &state_->owner, handlers = state_->handlers.get()] { return owner->is_current() || current_executor() == handlers; },
+    state_->native_drain_deadline = deadline;
+    if (!state_->native.drain) state_->scope->arm(deadline, [owner = &state_->owner, handlers = state_->handlers.get()] { return owner->is_current() || current_executor() == handlers; },
         [control = state_->drain] { control->cancel_requested.store(true); });
     ++state_->websocket_pumps;
     for (auto& [id, value] : state_->streams) if (value->websocket) value->websocket->begin_close(1001, {});
@@ -61,8 +64,12 @@ void http2_request_engine::state::cancel_drain() {
         phase = drain_phase::cancelled;
         handlers->disable();
         for (auto& [id, value] : streams) {
-            value->handler.invalidate();
-            value->request.disconnect(http::outcome_code::timeout, "HTTP/2 drain deadline expired");
+            if (native.workers) {
+                value->native_cancel(http::outcome_code::timeout);
+            } else {
+                value->handler.invalidate();
+                value->request.disconnect(http::outcome_code::timeout, "HTTP/2 drain deadline expired");
+            }
             value->body.fail(http::outcome_code::timeout);
         }
         fail(connection_error(http2_error_code::no_error, http::outcome_code::timeout));
@@ -71,6 +78,7 @@ void http2_request_engine::state::cancel_drain() {
 }
 void http2_request_engine::state::check_drain(http2_connection::time_point now) {
     if (now == http2_connection::time_point{}) now = std::chrono::steady_clock::now();
+    expire_native(now);
     check_websocket_timeouts(now);
     if (phase == drain_phase::running || phase == drain_phase::finished) return;
     scope->expire_if_due(now);
@@ -86,11 +94,18 @@ void http2_request_engine::state::check_drain(http2_connection::time_point now) 
 void http2_request_engine::check_drain(http2_connection::time_point now) { state_->check_drain(now); }
 void http2_request_engine::begin_turn() {
     check_drain(std::chrono::steady_clock::now());
-    state_->reap(); state_->connection.begin_turn();
+    state_->apply_native(); state_->reap(); state_->connection.begin_turn();
 }
 http2_feed_result http2_request_engine::feed(std::span<const std::uint8_t> bytes, http2_connection::time_point now) {
+    if (state_->native.workers && now == http2_connection::time_point{}) now = std::chrono::steady_clock::now();
     check_drain(now);
     auto result = state_->connection.feed(bytes, now);
+    if (!state_->connection.header_pending()) {
+        state_->native_header_anchor.reset();
+    } else if (!state_->native_header_anchor) {
+        const auto unset = http2_connection::time_point{};
+        state_->native_header_anchor = now == unset ? std::chrono::steady_clock::now() : now;
+    }
     state_->sync_settings();
     if (state_->connection.failure()) {
         state_->fail(*state_->connection.failure());
@@ -108,6 +123,7 @@ http2_feed_result http2_request_engine::feed(std::span<const std::uint8_t> bytes
         }
         auto error = state_->process_frame();
         state_->connection.release_frame();
+        if (!state_->connection.header_pending()) state_->native_header_anchor.reset();
         if (error) {
             state_->fail(*error); state_->reap();
             return {http2_progress::failed, result.consumed, error};
@@ -137,7 +153,7 @@ std::optional<http2_error> http2_request_engine::state::peer_reset(std::uint32_t
     std::erase_if(pending, [id](const response& r) { return r.stream == id; });
     if (auto found = streams.find(id); found != streams.end()) {
         discard(*found->second);
-        if (!handlers->running() && !websocket_pumps) streams.erase(found);
+        if (!native.workers && !handlers->running() && !websocket_pumps) streams.erase(found);
     }
     return {};
 }
@@ -160,8 +176,9 @@ std::span<const std::uint8_t> http2_request_engine::state::control_output(http2_
     return control;
 }
 std::span<const std::uint8_t> http2_request_engine::output(http2_connection::time_point now) {
+    if (state_->native.workers && now == http2_connection::time_point{}) now = std::chrono::steady_clock::now();
     check_drain(now);
-    state_->reap();
+    state_->apply_native(); state_->reap();
     // During a reentrant close callback the final payload has retired, but
     // its frame storage still belongs to advance_output's outer invocation.
     if (state_->has_borrowed_output()) return state_->borrowed_output(now);
@@ -221,6 +238,7 @@ void http2_request_engine::state::retire_websocket_output(std::size_t previous) 
 void http2_request_engine::state::retire_active_output() {
     if (auto found = streams.find(active_stream); found != streams.end()) {
         if (!active_websocket) found->second->body.retire(active_body);
+        if (active_body) found->second->native_write_anchor = std::chrono::steady_clock::now();
         if (active_end) found->second->send_ended = true;
     }
     active_websocket.reset();
@@ -229,4 +247,14 @@ void http2_request_engine::state::retire_active_output() {
     active_used = 0; active_charge.release();
 }
 const std::optional<http2_error>& http2_request_engine::failure() const { return state_->connection.failure(); }
+}  // namespace httpserver::detail
+
+namespace httpserver::detail {
+std::optional<http2_connection::time_point> http2_request_engine::next_deadline(http2_connection::time_point now) { return state_->native_deadline(now); }
+std::size_t http2_request_engine::active_streams() const { return state_->streams.size(); }
+bool http2_request_engine::draining_finished() const { return state_->phase == state::drain_phase::finished; }
+void http2_request_engine::stop(http::outcome_code reason) {
+    state_->fail(connection_error(http2_error_code::no_error, reason));
+    state_->reap();
+}
 }  // namespace httpserver::detail

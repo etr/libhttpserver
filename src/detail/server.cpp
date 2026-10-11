@@ -48,6 +48,7 @@
 #include <httpserver/detail/io_managed_backend.hpp>
 #include <httpserver/detail/listener_engine.hpp>
 #include <httpserver/detail/worker_pool.hpp>
+#include <httpserver/detail/http2_dispatch.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/peer_policy.hpp>
 #include <httpserver/server/route_sync.hpp>
@@ -135,8 +136,11 @@ class native_server::impl {
         }
         // Build-time provider availability does not imply an implemented
         // transport. Refuse the whole configuration before binding any endpoint.
-        if (options_.protocols().contains(http::protocol::http_2)
-            || options_.protocols().contains(http::protocol::http_3)) {
+        if (options_.protocols().contains(http::protocol::http_3)
+#ifndef NATIVE_V3_TLS
+            || options_.protocols().contains(http::protocol::http_2)
+#endif
+            ) {
             return {http::outcome_code::not_supported,
                     "native_server: requested TLS/protocol transport is unavailable"};
         }
@@ -149,8 +153,12 @@ class native_server::impl {
                     return {http::outcome_code::invalid_argument, "native_server: TLS listener needs published credentials"};
                 }
                 for (const auto& host : snapshot->hosts()) {
-                    if (!options_.protocols().contains(http::protocol::http_1_1) && !host.alpn.empty()) {
-                        return {http::outcome_code::invalid_argument, "native_server: credential ALPN requires enabled HTTP/1.1"};
+                    const bool disallowed = std::any_of(host.alpn.begin(), host.alpn.end(), [&](const auto& token) {
+                        return (token == "http/1.1" && !options_.protocols().contains(http::protocol::http_1_1)) ||
+                            (token == "h2" && !options_.protocols().contains(http::protocol::http_2));
+                    });
+                    if (disallowed) {
+                        return {http::outcome_code::invalid_argument, "native_server: credential ALPN requires enabled protocol"};
                     }
                 }
 #else
@@ -186,7 +194,7 @@ class native_server::impl {
             if (!endpoint.tls) continue;
             engine::tls_credentials_binding policy{options_.tls().profile,
                 detail::resolved_client_certificate_mode(options_.tls().profile, options_.tls().client_auth),
-                options_.protocols().contains(http::protocol::http_1_1)};
+                options_.protocols().contains(http::protocol::http_1_1), options_.protocols().contains(http::protocol::http_2)};
             const auto bound = engine::tls_credentials_access::bind(*endpoint.credentials, policy, bindings[i]);
             if (!bound.ok()) return bound;
         }
@@ -315,7 +323,7 @@ class native_server::impl {
         for (const auto& listener : listeners_) listeners.push_back(listener);
         const auto deadline = std::chrono::steady_clock::now() + budget;
         scope_->arm(deadline,
-                    [identity = static_cast<const executor*>(&pool_)] { return current_executor() == identity; },
+                    [identity = static_cast<const executor*>(&pool_), scope = scope_.get()] { return current_executor() == identity || engine::counted_drain_slot() == scope; },
                     [listeners] {
                         for (const auto& weak : listeners) {
                             if (auto listener = weak.lock()) listener->request_stop(http::outcome_code::timeout);

@@ -412,7 +412,7 @@ LT_BEGIN_AUTO_TEST(native_server_suite, unsupported_transports_rejected_before_a
         LT_CHECK(options.validate().ok());
         srv::native_server server(options);
         const auto result = server.listen();
-        LT_CHECK(result.code() == (version == http::protocol::http_1_1 && httpserver::query_features().tcp_tls
+        LT_CHECK(result.code() == ((version == http::protocol::http_1_1 || version == http::protocol::http_2) && httpserver::query_features().tcp_tls
             ? http::outcome_code::invalid_argument : http::outcome_code::not_supported));
         LT_CHECK(!result.message().empty());
         LT_CHECK(!server.is_running());

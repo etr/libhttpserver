@@ -18,8 +18,9 @@ class route_executor final : public executor, public std::enable_shared_from_thi
         std::atomic<bool> enabled{true};
         std::shared_ptr<handler> after_resume;
     };
-    explicit route_executor(executor& owner) : owner_(owner) {}
+    explicit route_executor(executor& owner, std::shared_ptr<executor> lifetime = {}) : owner_(owner), owner_lifetime_(std::move(lifetime)) {}
     void post(handler work) override {
+        if (owner_lifetime_ && !resumes_->enabled.load()) return;
         owner_.post([affinity = shared_from_this(), resume = resumes_, work = std::move(work)]() mutable {
             if (!resume->enabled) return;
             struct guard {
@@ -49,6 +50,7 @@ class route_executor final : public executor, public std::enable_shared_from_thi
 
  private:
     executor& owner_;
+    std::shared_ptr<executor> owner_lifetime_;
     std::shared_ptr<resume_state> resumes_ = std::make_shared<resume_state>();
 };
 // A consumer keeps final_suspend alive, so the stream owns every nested

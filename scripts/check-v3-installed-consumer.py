@@ -102,6 +102,9 @@ def package_lane(args, source, output, mode, inventory):
     command([sys.executable, str(source / 'scripts/check-v3-public-tls.py'), '--prefix', str(prefix),
              '--provider-prefix', str(args.provider_prefix), '--build', str(build), '--tls', mode,
              '--compiler', args.compiler, '--output', str(lane / 'public-tls')], source, runtime_env)
+    command([args.client_python, str(source / 'scripts/check-v3-public-http2.py'), '--prefix', str(prefix),
+             '--provider-prefix', str(args.provider_prefix), '--build', str(build), '--tls', mode,
+             '--compiler', args.compiler, '--node', args.node, '--output', str(lane / 'public-http2')], source, runtime_env)
     receipt = audit.audit(prefix, build, consumer_dir / ('v3_package_consumer' + suffix), mode,
                           'strict', args.provider_prefix, args.compiler)
     receipt.update(consumer_metadata=metadata, public=public, integrations=integrations)
@@ -122,6 +125,8 @@ def main():
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--compiler', default='c++')
     parser.add_argument('--cc', default='cc')
+    parser.add_argument('--client-python', default=sys.executable)
+    parser.add_argument('--node', default='node')
     parser.add_argument('--make', default='make')
     args = parser.parse_args()
     source = Path(__file__).resolve().parent.parent

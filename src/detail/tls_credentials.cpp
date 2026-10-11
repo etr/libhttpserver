@@ -263,7 +263,10 @@ std::optional<tls_credentials_selection> tls_credentials_snapshot::select_acme(s
 namespace {
 bool compatible(const tls_credentials_binding& policy, const tls_credentials_snapshot& snapshot) {
     for (const auto& host : snapshot.hosts()) {
-        if (policy.profile != host.profile || policy.mode != host.client_certificate_mode || (!policy.http11 && !host.alpn.empty())) return false;
+        if (policy.profile != host.profile || policy.mode != host.client_certificate_mode) return false;
+        for (const auto& protocol : host.alpn) {
+            if ((protocol == "http/1.1" && !policy.http11) || (protocol == "h2" && !policy.http2)) return false;
+        }
     }
     return true;
 }

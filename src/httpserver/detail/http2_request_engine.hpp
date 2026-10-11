@@ -16,6 +16,13 @@
 #include <httpserver/server/server.hpp>
 #include <httpserver/websocket/options.hpp>
 namespace httpserver::detail {
+class drain_scope;
+struct http2_native_context {
+    executor* workers = nullptr;
+    std::shared_ptr<drain_scope> drain;
+    std::shared_ptr<const server::tls_peer_metadata> tls;
+    std::shared_ptr<executor::handler> progress;
+};
 struct http2_request_limits {
     hpack_section_limits headers{65536, 65536, 256};
     // Bounds live streams and pending output items, including reset-only items.
@@ -36,7 +43,7 @@ class http2_request_engine {
  public:
     http2_request_engine(server::resource_budget budget, const server::route_registry& routes,
                         executor& owner, http2_request_limits limits = {},
-                        request_dispatch_context dispatch = {}, std::uint64_t connection_id = 0, net::peer_address peer = {});
+                        request_dispatch_context dispatch = {}, std::uint64_t connection_id = 0, net::peer_address peer = {}, http2_native_context native = {});
     ~http2_request_engine();
     http2_request_engine(const http2_request_engine&) = delete;
     http2_request_engine& operator=(const http2_request_engine&) = delete;
@@ -47,12 +54,18 @@ class http2_request_engine {
     http::outcome begin_drain(http2_connection::time_point deadline, server::drain_ticket& out);
     void check_drain(http2_connection::time_point now);
     void begin_turn();
+    std::optional<http2_connection::time_point> next_deadline(http2_connection::time_point now);
+    std::size_t active_streams() const;
+    bool draining_finished() const;
+    void stop(http::outcome_code reason);
     http2_feed_result feed(std::span<const std::uint8_t> bytes, http2_connection::time_point now = {});
     http2_feed_result eof();
     std::span<const std::uint8_t> output(http2_connection::time_point now = {});
     bool advance_output(std::size_t count);
     const std::optional<http2_error>& failure() const;
+
  private:
+    friend struct http2_native_test_access;
     struct state;
     std::shared_ptr<state> state_;
 };

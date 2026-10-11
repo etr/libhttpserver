@@ -27,8 +27,8 @@ http::outcome tls_credentials::replace(const tls_credentials_config& config) {
     candidate.hosts.reserve(config.hosts.size());
     for (const auto& host : config.hosts) {
         for (const auto& protocol : host.alpn) {
-            if (protocol != "http/1.1") {
-                return {http::outcome_code::invalid_argument, "TLS certificate store supports HTTP/1 only"};
+            if (protocol != "http/1.1" && protocol != "h2") {
+                return {http::outcome_code::invalid_argument, "TLS certificate store supports HTTP/1.1 and HTTP/2 ALPN"};
             }
         }
         httpserver::detail::tls_host_credentials value;

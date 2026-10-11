@@ -252,6 +252,7 @@ class body_write_wait final {
     }
 
  private:
+    friend class http2_body_stream;
     body_sink* sink_;
     std::shared_ptr<write_wait_node> node_;
     task_frame_base* frame_ = nullptr;
