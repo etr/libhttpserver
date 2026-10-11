@@ -342,7 +342,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-192 | [Implement owned v3 cookie helpers and parity witnesses](M14-v3-release-repairs/TASK-192.md) | M14 | Complete | TASK-191 |
 | TASK-193 | [Install public credentials and serve native TCP TLS](M14-v3-release-repairs/TASK-193.md) | M14 | Complete | TASK-192 |
 | TASK-194 | [Complete public TLS profiles, live rotation and ACME selection](M14-v3-release-repairs/TASK-194.md) | M14 | Complete | TASK-193 |
-| TASK-195 | [Route negotiated public HTTP/2 streams through native listeners](M14-v3-release-repairs/TASK-195.md) | M14 | In Progress | TASK-190, TASK-194 |
+| TASK-195 | [Route negotiated public HTTP/2 streams through native listeners](M14-v3-release-repairs/TASK-195.md) | M14 | Complete | TASK-190, TASK-194 |
 | TASK-196 | [Add production UDP QUIC ownership and public HTTP/3 routing](M14-v3-release-repairs/TASK-196.md) | M14 | Not Started | TASK-191, TASK-193, TASK-195 |
 | TASK-197 | [Complete public HTTP/3 lifecycle, policy and WebSocket parity](M14-v3-release-repairs/TASK-197.md) | M14 | Not Started | TASK-194, TASK-196 |
 | TASK-198 | [Provide native public throughput and latency benchmarks](M14-v3-release-repairs/TASK-198.md) | M14 | Not Started | TASK-195, TASK-197 |
