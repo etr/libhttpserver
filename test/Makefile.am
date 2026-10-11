@@ -1468,7 +1468,11 @@ EXTRA_DIST += unit/http3_request_fixture.hpp
 EXTRA_DIST += unit/http3_route_parity_fixture.hpp
 
 if NATIVE_V3_TLS
-check_PROGRAMS += http3_network_owner
+check_PROGRAMS += http3_network_owner quic_native_owner
+quic_native_owner_SOURCES = unit/quic_native_owner_test.cpp
+quic_native_owner_CPPFLAGS = $(tls_io_loopback_CPPFLAGS) -I$(top_srcdir)
+quic_native_owner_LDADD = $(tls_io_LDADD)
+quic_native_owner_LDFLAGS = $(tls_io_LDFLAGS)
 http3_network_owner_SOURCES = unit/http3_network_owner_test.cpp support/http3_network_owner.cpp support/http3_network_lifecycle.cpp support/quic_interop_files.cpp
 http3_network_owner_CPPFLAGS = $(tls_io_loopback_CPPFLAGS) -I$(top_srcdir)
 http3_network_owner_LDADD = $(tls_io_LDADD)
@@ -1789,3 +1793,11 @@ public_tls_profiles_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -DTLS_TE
 public_tls_profiles_LDADD = $(top_builddir)/src/libhttpserver.la
 public_tls_profiles_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 endif
+
+TESTS += ../scripts/test-v3-public-http3.py
+
+check_PROGRAMS += http3_native_stream
+http3_native_stream_SOURCES = unit/http3_native_stream_test.cpp
+http3_native_stream_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -I$(top_srcdir) -DHTTPSERVER_COMPILATION
+http3_native_stream_LDADD = $(top_builddir)/src/libhttpserver_v3core.la $(V3_TLS_LIBS)
+http3_native_stream_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

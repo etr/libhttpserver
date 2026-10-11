@@ -133,6 +133,12 @@ def validate_artifacts(logs, matrix=None):
         captures = [root / "sim" / name for name in ("trace_node_left.pcap", "trace_node_right.pcap")]
         for path in captures + [root / "server/packets.pcap"]:
             inventory[str(path)] = capture_records(path)
+        terminal = root / "sim/terminal-challenge-lifetimes.json"
+        if terminal.exists():
+            proof = json.loads(terminal.read_text())
+            actual = validate_terminal_challenges(root / "sim/trace_node_left.pcap", key, proof["unanswered"], root / "sim/trace_node_right.pcap")
+            if actual != proof:
+                raise ValueError("terminal challenge proof changed")
         output = (root / "output.txt").read_text()
         if "interop endpoint failure:" in output or "READY 443" not in output:
             raise ValueError("endpoint failure or missing readiness")
@@ -179,6 +185,91 @@ def validate_closure_artifacts(logs, matrix):
     return witnesses
 
 
+def validate_terminal_challenge_rows(text, unanswered):
+    """Only authenticated client closure before challenge arrival retires it."""
+    pending = {value.replace(":", "").lower() for value in unanswered}
+    if not pending or any(len(value) != 16 for value in pending):
+        raise ValueError("invalid unanswered path challenge")
+    closes, before_close, retired = {}, set(), {}
+    previous = 0
+    for line in text.splitlines():
+        fields = line.split("\t")
+        if len(fields) != 9:
+            raise ValueError("malformed path lifetime witness")
+        frame, connection, packet, source, kinds, challenges, responses, transport, application = fields
+        number = int(frame)
+        if number <= previous or not connection.isdecimal() or not packet.isdecimal():
+            raise ValueError("unverifiable authenticated connection/packet ordering")
+        previous = number
+        connection = int(connection)
+        frames = {int(value, 0) for value in kinds.split(",") if value}
+        if source == "193.167.0.100" and frames & {0x1c, 0x1d}:
+            codes = [int(value, 0) for value in (transport + "," + application).split(",") if value]
+            if not codes or any(codes) or (0x1c in frames and not transport) or (0x1d in frames and not application):
+                raise ValueError("terminal path witness requires zero-error close")
+            closes.setdefault(connection, (number, int(packet)))
+        for value in challenges.split(",") if challenges else ():
+            value = value.replace(":", "").lower()
+            if value not in pending:
+                continue
+            if source != "193.167.100.100" or 0x1a not in frames:
+                raise ValueError("unverifiable challenge source/frame")
+            if connection not in closes:
+                before_close.add(value)
+            else:
+                retired[value] = {"connection": connection, "close_frame": closes[connection][0], "close_packet_number": closes[connection][1], "challenge_frame": number}
+        if any(value.replace(":", "").lower() in pending for value in responses.split(",") if value):
+            raise ValueError("upstream unanswered set contradicts capture response")
+    if before_close or set(retired) != pending:
+        raise ValueError("live, missing or unmatched unanswered path challenge")
+    return retired
+
+
+def path_lifetime_rows(capture, keylog):
+    fields = ["frame.number", "quic.connection.number", "quic.packet_number", "ip.src", "quic.frame_type",
+              "quic.path_challenge.data", "quic.path_response.data", "quic.cc.error_code", "quic.cc.error_code.app"]
+    command = ["tshark", "-r", str(capture), "-o", "tls.keylog_file:" + str(keylog),
+               "-d", "udp.port==443,quic", "--disable-protocol", "http3",
+               "-Y", "quic.header_form == 0 && quic.frame_type && !icmp && !icmpv6", "-T", "fields"]
+    for name in fields:
+        command += ["-e", name]
+    return subprocess.check_output(command, text=True, timeout=120)
+
+
+def validate_terminal_challenges(capture, keylog, unanswered, server_capture):
+    retired = validate_terminal_challenge_rows(path_lifetime_rows(capture, keylog), unanswered)
+    server_rows = path_lifetime_rows(server_capture, keylog)
+    closure_rows = "\n".join("\t".join([f[0], f[3], f[4], f[7], f[8]]) for f in (line.split("\t") for line in server_rows.splitlines()))
+    close = validate_closure_rows(closure_rows)
+    rows = [line.split("\t") for line in server_rows.splitlines()]
+    connections = {row[1] for row in rows}
+    server_closes = {int(row[2]) for row in rows if row[3] == "193.167.0.100" and
+                     {int(value, 0) for value in row[4].split(",") if value} & {0x1c, 0x1d}}
+    if len(connections) != 1 or server_closes != {proof["close_packet_number"] for proof in retired.values()}:
+        raise ValueError("terminal client/server close connection or packet mismatch")
+    return {"unanswered": unanswered, "retired": retired, "server_close": close}
+
+
+def runner_observation_patch(text):
+    original = "        unresponded = [c for c in challenges if c not in responses]\n"
+    if text.count(original) != 1:
+        raise ValueError("pinned rebinding oracle changed")
+    amendment = original + """        if unresponded:
+            from task196_observation import validate_terminal_challenges
+            import json
+            from pathlib import Path
+            try:
+                proof = validate_terminal_challenges(
+                    self._client_trace()._filename, self._keylog_file(), unresponded,
+                    self._server_trace()._filename)
+                Path(self._sim_log_dir.name, "terminal-challenge-lifetimes.json").write_text(json.dumps(proof, sort_keys=True))
+                unresponded = [c for c in unresponded if c.replace(":", "").lower() not in proof["retired"]]
+            except (ValueError, OSError, RuntimeError) as error:
+                logging.info("Unanswered live/unverifiable PATH_CHALLENGE: %s", error)
+"""
+    return text.replace(original, amendment)
+
+
 def run_bounded(command, cwd, stdout, stderr, timeout):
     with Path(stdout).open("wb") as out, Path(stderr).open("wb") as err:
         process = subprocess.Popen(command, cwd=cwd, stdout=out, stderr=err, start_new_session=True)
@@ -209,13 +300,36 @@ def preflight(runner, output):
         subprocess.run(command, check=True, capture_output=True, timeout=30)
 
 
-def compose_config(text, direct_routing_compat=False):
-    text = text.replace("image: martenseemann/quic-network-simulator\n", "image: " + SIMULATOR + "\n")
+def simulator_clock_configuration(path):
+    document = json.loads(Path(path).read_text())
+    if (document.get("status") != "passed" or document.get("upstream_image") != SIMULATOR
+            or document.get("clock") != "steady_clock" or not document.get("artifacts")):
+        raise ValueError("invalid pinned simulator clock compatibility receipt")
+    for record in document["artifacts"]:
+        if hashlib.sha256(Path(record["path"]).read_bytes()).hexdigest() != record["sha256"]:
+            raise ValueError("simulator clock compatibility artifact changed")
+    image = document["image_id"]
+    if not image.startswith("sha256:") or len(image) != 71:
+        raise ValueError("simulator compatibility image must be immutable")
+    core = subprocess.check_output(["docker", "run", "--rm", "--network", "none", "--entrypoint", "sha256sum",
+                                    image, "/ns3/out/lib/libns3.46.1-core.so"], text=True, timeout=30)
+    if core.split()[0] != document["core_binary_sha256"]:
+        raise ValueError("simulator clock compatibility binary changed")
+    return document
+
+
+def compose_config(text, direct_routing_compat=False, simulator_image=SIMULATOR):
+    text = text.replace("image: martenseemann/quic-network-simulator\n", "image: " + simulator_image + "\n")
     # Select real time during ns-3 global initialization, before a scenario can
     # instantiate the default discrete-event simulator and finish immediately.
     text = text.replace("      - SCENARIO=$SCENARIO\n", "      - SCENARIO=$SCENARIO\n      - NS_GLOBAL_VALUE=" + SIMULATOR_GLOBAL_VALUES + "\n")
     if direct_routing_compat:
         text = text.replace("com.docker.network.bridge.enable_ip_masquerade: 'false'", "com.docker.network.bridge.enable_ip_masquerade: 'false'\n      com.docker.network.bridge.gateway_mode_ipv4: 'nat-unprotected'\n      com.docker.network.bridge.gateway_mode_ipv6: 'nat-unprotected'")
+    if "    hostname: sim\n" in text:
+        text = text.replace("    hostname: sim\n", "    hostname: sim\n    healthcheck:\n      test: [CMD-SHELL, \"grep -Eq '00000000:E1E8 +00000000:0000 +0A' /proc/net/tcp\"]\n      interval: 100ms\n      timeout: 1s\n      retries: 100\n")
+        before, client = text.split("  client:\n", 1)
+        client = client.replace("    depends_on:\n      - sim\n", "    depends_on:\n      sim:\n        condition: service_healthy\n", 1)
+        text = before + "  client:\n" + client
     return text
 
 
@@ -232,13 +346,16 @@ def main(argv=None):
     parser.add_argument("--output", required=True)
     parser.add_argument("--server-image", required=True)
     parser.add_argument("--docker-direct-routing-compat", action="store_true", help="Docker 28+ compatibility on the two task-owned runner networks only")
+    parser.add_argument("--simulator-clock-receipt", help="Explicit pinned-simulator monotonic pacing compatibility evidence")
     parser.add_argument("--matrix", choices=("task163", "task173"), default="task163")
     parser.add_argument("--timeout", type=int, default=1200)
     args = parser.parse_args(argv)
     matrix = load_matrix(args.matrix)
     output = Path(args.output).resolve()
     preflight(args.runner_dir, output)
-    images = {image: json.loads(subprocess.check_output(["docker", "image", "inspect", image], text=True))[0]["Id"] for image in [args.server_image, SIMULATOR] + [peer["image"] for peer in matrix["peers"].values()]}
+    clock = simulator_clock_configuration(args.simulator_clock_receipt) if args.simulator_clock_receipt else None
+    simulator_image = clock["image_id"] if clock else SIMULATOR
+    images = {image: json.loads(subprocess.check_output(["docker", "image", "inspect", image], text=True))[0]["Id"] for image in [args.server_image, SIMULATOR] + ([simulator_image] if clock else []) + [peer["image"] for peer in matrix["peers"].values()]}
     inputs = provenance(images[args.server_image])
     output.mkdir(mode=0o700, parents=True)
     runner = output / "runner"
@@ -246,10 +363,18 @@ def main(argv=None):
     registry = {matrix["server"]: {"image": images[args.server_image], "url": "https://github.com/etr/libhttpserver", "role": "server"}}
     registry.update({name: {"image": peer["image"], "url": peer["url"], "role": "client"} for name, peer in matrix["peers"].items()})
     (runner / "implementations_quic.json").write_text(json.dumps(registry, indent=2))
+    if args.matrix == "task173":
+        observation = runner / "testcases_quic.py"
+        shutil.copyfile(observation, runner / "testcases_quic.original.py")
+        observation.write_text(runner_observation_patch(observation.read_text()))
+        shutil.copyfile(__file__, runner / "task196_observation.py")
     compose = runner / "docker-compose.yml"
-    compose.write_text(compose_config(compose.read_text(), args.docker_direct_routing_compat))
+    compose.write_text(compose_config(compose.read_text(), args.docker_direct_routing_compat, simulator_image))
     command = [sys.executable, "run.py", "-s", "libhttpserver", "-c", ",".join(matrix["peers"]), "-t", ",".join(matrix["cases"]), "-n", "libhttpserver", "-l", str(output / "runner-logs"), "-j", str(output / "results.json")]
-    manifest = {"matrix": matrix, "runner_commit": RUNNER_COMMIT, "images": images, "docker_direct_routing_compat": args.docker_direct_routing_compat, "simulator_global_values": SIMULATOR_GLOBAL_VALUES, "command": command, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(), "passed": False, "provenance": inputs}
+    manifest = {"matrix": matrix, "runner_commit": RUNNER_COMMIT, "images": images, "docker_direct_routing_compat": args.docker_direct_routing_compat, "simulator_global_values": SIMULATOR_GLOBAL_VALUES, "simulator_clock_compatibility": clock, "command": command, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(), "passed": False, "provenance": inputs,
+                "runner_observation": {"module_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                    "patched_testcases_sha256": hashlib.sha256((runner / "testcases_quic.py").read_bytes()).hexdigest(),
+                    "original_testcases_sha256": hashlib.sha256((runner / "testcases_quic.original.py").read_bytes()).hexdigest()} if args.matrix == "task173" else None}
     try:
         code = run_bounded(command, runner, output / "stdout.log", output / "stderr.log", args.timeout)
         manifest["returncode"] = code

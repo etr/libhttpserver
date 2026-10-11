@@ -127,6 +127,8 @@ class io_poll_backend final : public io_socket_backend {
     // External mode has no polling thread. Activation occurs after listen.
     http::outcome ready() const override;
     void activate_external() override;
+    void begin_retirement() override;
+    void retirement_progress(std::chrono::milliseconds maximum) override;
     server::interest_snapshot interests() const override;
     http::outcome dispatch(std::span<const server::readiness_event> events,
                            std::chrono::steady_clock::time_point now) override;

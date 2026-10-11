@@ -261,12 +261,22 @@ std::optional<tls_credentials_selection> tls_credentials_snapshot::select_acme(s
     return tls_credentials_selection{shared_from_this(), found->second.context};
 }
 namespace {
+bool protocol_enabled(const tls_credentials_binding& policy, std::string_view protocol) {
+    if (protocol == "http/1.1") return policy.http11;
+    if (protocol == "h2") return policy.http2;
+    if (protocol == "h3") return policy.http3;
+    return true;
+}
 bool compatible(const tls_credentials_binding& policy, const tls_credentials_snapshot& snapshot) {
     for (const auto& host : snapshot.hosts()) {
         if (policy.profile != host.profile || policy.mode != host.client_certificate_mode) return false;
         for (const auto& protocol : host.alpn) {
-            if ((protocol == "http/1.1" && !policy.http11) || (protocol == "h2" && !policy.http2)) return false;
+            if (!protocol_enabled(policy, protocol)) return false;
         }
+    }
+    if (policy.udp) {
+        const auto& alpn = snapshot.hosts()[snapshot.default_host()].alpn;
+        return std::find(alpn.begin(), alpn.end(), "h3") != alpn.end();
     }
     return true;
 }

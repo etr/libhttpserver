@@ -391,3 +391,7 @@ public H3 remains a later release repair. Ownership, bounded semantic handoff,
 resource hierarchy and native timer/drain details are in
 [TASK-195-design.md](TASK-195-design.md); local verification is recorded in
 [TASK-195-implementation-evidence.md](TASK-195-implementation-evidence.md).
+
+### TASK-196 native UDP / basic HTTP/3
+
+Explicit transport entries preserve TCP defaults and configuration-index actual ports. The native pimpl transactionally composes `quic_udp_listener`, per-connection `quic_network_connection` and independent native H3 stream affinities with owned bounded handoff. TLS compatibility now includes enabled H3 and transport applicability while PSK stays HTTP/1-only. Coordinated stop preserves backend/workers/services through real QUIC close expiry; an exclusive private external retirement drive replaces host dispatch only after quiescence. See [TASK-196-design.md](TASK-196-design.md) for alternatives, resource bounds and deferred TASK-197 scope.

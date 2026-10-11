@@ -8,12 +8,21 @@
 #include <memory>
 #include <httpserver/server/server.hpp>
 #include <httpserver/detail/http3_connection.hpp>
+#include <httpserver/detail/http2_dispatch.hpp>
+#include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/quic_flow_control.hpp>
 #include <httpserver/detail/quic_recovery.hpp>
 #include <httpserver/exchange.hpp>
 #include <httpserver/detail/request_lifecycle.hpp>
 namespace httpserver::detail {
+struct http3_native_context {
+    executor* workers = nullptr;
+    std::shared_ptr<const server::tls_peer_metadata> tls;
+    std::shared_ptr<drain_scope> drain;
+    std::shared_ptr<executor::handler> progress;
+};
 struct http3_request_limits {
+    server::timeout_options timeouts;
     http3_limits framing;
     websocket::options websocket{16384, 65536, 65536, 16, 16};
     std::size_t max_active_requests = 128, body_buffer_bytes = 16384, response_buffer_bytes = 16384;
@@ -31,7 +40,8 @@ struct http3_request_action {
 class http3_request_engine final {
  public:
     http3_request_engine(quic_storage_lease data, quic_storage_lease critical, quic_flow_control& flow, quic_recovery& recovery, const server::route_registry& routes,
-                         executor& owner, http3_request_limits limits = {}, std::uint64_t connection_id = 0, net::peer_address peer = {}, request_dispatch_context dispatch = {});
+                         executor& owner, http3_request_limits limits = {}, std::uint64_t connection_id = 0, net::peer_address peer = {},
+                         request_dispatch_context dispatch = {}, http3_native_context native = {});
     ~http3_request_engine();
     http3_request_engine(const http3_request_engine&) = delete;
     http3_request_engine& operator=(const http3_request_engine&) = delete;
@@ -52,6 +62,10 @@ class http3_request_engine final {
     std::optional<time_point> drain_deadline() const;
     std::optional<quic_close_frame> take_connection_close();
     void begin_turn();
+    std::optional<time_point> next_deadline();
+    void expire(time_point now);
+    void sent(std::uint64_t stream, std::uint64_t offset, std::size_t bytes, bool fin, time_point now);
+    bool native_retired();
     const std::optional<http3_error>& failure() const;
 
  private:

@@ -34,6 +34,7 @@ struct quic_server_admission::pending_entry {
     quic_admission_facts facts;
     quic_cid source;
     std::uint64_t created;
+    bool claimed = false;
 };
 quic_admission_reply::quic_admission_reply(std::shared_ptr<const io_datagram> packet,
                                          quic_path_identity path, std::size_t received)
@@ -170,6 +171,12 @@ std::optional<quic_admission_facts> quic_server_admission::inspect(const pending
     auto entry = handle.entry_.lock();
     if (!entry || std::find(pending_.begin(), pending_.end(), entry) == pending_.end()) return std::nullopt;
     return entry->facts;
+}
+bool quic_server_admission::claim(const pending_handle& handle) {
+    auto entry = handle.entry_.lock();
+    if (!entry || entry->claimed) return false;
+    entry->claimed = true;
+    return true;
 }
 bool quic_server_admission::cancel(const pending_handle& handle) {
     auto entry = handle.entry_.lock();

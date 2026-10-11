@@ -111,6 +111,7 @@ class http2_connection {
     std::uint32_t graceful_cutoff_ = 0;
     bool connect_at_frame_start_ = false;
     bool graceful_started_ = false, graceful_exposed_ = false, barrier_sent_ = false, barrier_acknowledged_ = false;
+    bool barrier_offer_pending_ = false, barrier_ack_pending_ = false;
     std::array<slot, 64> slots_{};
     std::array<pending, 16> pending_{};
     std::array<std::uint8_t, 17> terminal_{};

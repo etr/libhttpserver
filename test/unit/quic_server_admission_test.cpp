@@ -57,6 +57,21 @@ LT_BEGIN_SUITE(admission_suite)
     void set_up() { }
     void tear_down() { }
 LT_END_SUITE(admission_suite)
+LT_BEGIN_AUTO_TEST(admission_suite, repeated_pending_initial_claims_one_native_handoff)
+    hd::quic_server_admission admission(direct_limits());
+    auto packet = admission_initial();
+    auto first = admission.receive(packet, 1);
+    auto repeated = admission.receive(packet, 1);
+    LT_ASSERT(first.code == hd::quic_admission_code::pending);
+    LT_ASSERT(repeated.code == hd::quic_admission_code::pending);
+    LT_CHECK(admission.claim(first.pending));
+    LT_CHECK(!admission.claim(repeated.pending));
+    LT_CHECK_EQ(admission.pending_count(), 1u);
+    LT_CHECK_EQ(admission.inspect(first.pending)->budget->received(), 2 * packet->bytes.size());
+    LT_CHECK(admission.cancel(first.pending));
+    LT_CHECK(!admission.claim(repeated.pending));
+    LT_CHECK_EQ(admission.retained_bytes(), 0u);
+LT_END_AUTO_TEST(repeated_pending_initial_claims_one_native_handoff)
 LT_BEGIN_AUTO_TEST(admission_suite, retry_roundtrip_validates_only_bound_path_and_preserves_original)
     hd::quic_server_admission admission;
     auto first = admission_initial();

@@ -200,3 +200,9 @@ nobase_include_HEADERS += httpserver/http/cookie.hpp
 nobase_include_HEADERS += httpserver/server/tls_credentials.hpp
 
 noinst_HEADERS += httpserver/detail/tls_credentials_access.hpp
+
+libhttpserver_v3core_la_SOURCES += detail/http3_native_stream.cpp detail/http3_semantic_stream.cpp
+if NATIVE_V3_TLS
+libhttpserver_v3tls_la_SOURCES += detail/quic_network_connection.cpp detail/quic_network_packets.cpp detail/quic_network_emission.cpp detail/quic_udp_listener.cpp
+endif
+noinst_HEADERS += httpserver/detail/quic_network_connection.hpp httpserver/detail/quic_udp_listener.hpp

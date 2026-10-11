@@ -21,10 +21,12 @@
 
 #include <httpserver/detail/io_poll_backend.hpp>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <tuple>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -64,6 +66,26 @@ void io_poll_backend::activate_external() {
         active_ = mode_ == server::loop_mode::external && !closed_ && wake_.valid();
     }
     notify();
+}
+
+void io_poll_backend::begin_retirement() {
+    { std::lock_guard lock(mu_); active_ = false; }
+    notify();
+    while (dispatching_.load(std::memory_order_acquire)) std::this_thread::yield();
+}
+void io_poll_backend::retirement_progress(std::chrono::milliseconds maximum) {
+    if (mode_ != server::loop_mode::external) return;
+    if (dispatching_.exchange(true, std::memory_order_acq_rel)) return;
+    dispatch_guard guard(dispatching_);
+    std::vector<pollsys::poll_slot> sockets;
+    std::vector<std::uint64_t> ids;
+    auto due = build_projection(sockets, ids);
+    const auto now = std::chrono::steady_clock::now();
+    const auto timeout = std::min<int>(maximum.count(), poll_timeout_ms(now, due));
+    const auto result = pollsys::poll_call(sockets.data(), sockets.size(), timeout);
+    { std::lock_guard lock(mu_); acknowledge_wake(); }
+    if (result >= 0) dispatch_revents(sockets, ids);
+    expire_due_timers(std::chrono::steady_clock::now());
 }
 
 void io_poll_backend::notify() {

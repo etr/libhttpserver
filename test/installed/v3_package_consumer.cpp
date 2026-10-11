@@ -53,7 +53,7 @@ void configuration_cases(srv::loop_mode loop, bool tls_enabled) {
         srv::native_server boundary(configured);
         const auto result = boundary.listen();
         const auto expected = name == "plaintext" ? http::outcome_code::ok :
-            (name == "http3" || name == "mixed_rejection" || (transport && !tls_enabled)) ?
+            ((name == "tls_listener" || name == "http2") && !tls_enabled) ?
                 http::outcome_code::not_supported : http::outcome_code::invalid_argument;
         if (result.code() != expected) throw std::runtime_error("configuration outcome: " + std::string(name));
         bool bound = false;
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
     const std::string_view tls_mode(argv[1]), loop_name(argv[2]);
     if ((tls_mode != "yes" && tls_mode != "no") || (loop_name != "managed" && loop_name != "external")) return 1;
     const auto features = httpserver::query_features();
-    if (features.tls_provider != (tls_mode == "yes") || features.tcp_tls != (tls_mode == "yes") || features.http2 != (tls_mode == "yes") || features.http3) return 2;
+    if (features.tls_provider != (tls_mode == "yes") || features.tcp_tls != (tls_mode == "yes") || features.http2 != (tls_mode == "yes") || features.http3 != (tls_mode == "yes")) return 2;
     std::cerr << "PACKAGE_PROVIDER " << features.provider_version << '\n';
     const auto loop = loop_name == "external" ? srv::loop_mode::external : srv::loop_mode::managed;
     try {

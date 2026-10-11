@@ -49,6 +49,7 @@ void http3_request_engine::state::retire_drain_request(record& r) {
     if (!r.semantic && r.information.empty() && (r.cancelled || r.fin_retained)) {
         if (!r.local) connection.retire_request(r.transport->id());
         r.drain_unit.reset();
+        r.native_drain_unit.reset();
     }
 }
 void http3_request_engine::state::interrupt_drain() {

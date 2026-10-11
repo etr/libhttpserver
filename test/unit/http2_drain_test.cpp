@@ -70,6 +70,51 @@ LT_BEGIN_AUTO_TEST(http2_drain_suite, staged_goaway_waits_for_transmitted_matchi
     auto terminal = goaways(controls(connection)); LT_ASSERT_EQ(terminal.size(), 1u);
     LT_CHECK_EQ(h2test::read_u32(terminal[0].payload.data()), 3u);
 LT_END_AUTO_TEST(staged_goaway_waits_for_transmitted_matching_barrier)
+LT_BEGIN_AUTO_TEST(http2_drain_suite, matching_barrier_ack_before_write_completion_is_retained_until_actual_full_send)
+    for (const bool partial : {false, true}) {
+        hd::http2_connection connection(h2test::budget());
+        LT_ASSERT(connection.feed(h2test::preface()).progress == hd::http2_progress::control_ready);
+        controls(connection);
+        LT_ASSERT(connection.begin_graceful_goaway(3) == http::outcome_code::ok);
+        auto initial = connection.output(); LT_ASSERT(connection.advance_output(initial.size()));
+        auto ping = connection.output(); LT_ASSERT_EQ(ping[3], 6u);
+        std::vector<std::uint8_t> token(ping.begin() + 9, ping.end());
+        if (partial) {
+            LT_ASSERT(connection.advance_output(1));
+            ping = connection.output();
+        }
+        // The peer can receive the offered bytes and ACK before the writer's
+        // completion resumes on the connection affinity.
+        LT_ASSERT(connection.feed(h2test::frame(6, 1, 0, token)).progress == hd::http2_progress::control_ready);
+        LT_CHECK(!connection.graceful_complete());
+        LT_CHECK_EQ(connection.output().size(), ping.size());
+        LT_ASSERT(connection.advance_output(ping.size()));
+        auto final = connection.output();
+        LT_CHECK_EQ(final.size(), 17u);
+        if (final.size() == 17) {
+            LT_CHECK_EQ(final[3], 7u);
+            LT_CHECK_EQ(h2test::read_u32(final.data() + 9), 3u);
+            LT_ASSERT(connection.advance_output(final.size()));
+            LT_CHECK(connection.graceful_complete());
+        }
+    }
+LT_END_AUTO_TEST(matching_barrier_ack_before_write_completion_is_retained_until_actual_full_send)
+LT_BEGIN_AUTO_TEST(http2_drain_suite, failed_offered_barrier_never_publishes_early_acknowledgment)
+    hd::http2_connection connection(h2test::budget());
+    LT_ASSERT(connection.feed(h2test::preface()).progress == hd::http2_progress::control_ready);
+    controls(connection);
+    LT_ASSERT(connection.begin_graceful_goaway(3) == http::outcome_code::ok);
+    auto initial = connection.output(); LT_ASSERT(connection.advance_output(initial.size()));
+    auto ping = connection.output();
+    std::vector<std::uint8_t> token(ping.begin() + 9, ping.end());
+    LT_ASSERT(connection.feed(h2test::frame(6, 1, 0, token)).progress == hd::http2_progress::control_ready);
+    connection.terminate({hd::http2_error_scope::connection, hd::http2_error_code::internal_error});
+    LT_ASSERT(connection.advance_output(ping.size()));
+    LT_CHECK(!connection.graceful_complete());
+    auto terminal = connection.output();
+    LT_ASSERT_EQ(terminal.size(), 17u);
+    LT_CHECK_EQ(h2test::read_u32(terminal.data() + 13), 2u);
+LT_END_AUTO_TEST(failed_offered_barrier_never_publishes_early_acknowledgment)
 LT_BEGIN_AUTO_TEST(http2_drain_suite, drain_controls_are_bounded_under_full_queue_and_preserve_borrowed_frames)
     hd::http2_limits limits; limits.control_frames = 2; limits.control_bytes = 62;
     hd::http2_connection connection(h2test::budget(), limits);

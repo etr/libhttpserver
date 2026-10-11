@@ -36,6 +36,7 @@ struct quic_tls_config {
     quic_parameter_cid_context peer_cids;
     server::diagnostics diagnostics;
     std::uint64_t connection_id = 0;
+    std::uint16_t listener_port = 0;
 };
 // Owner-thread serialized. Configuration spans are copied at construction.
 // keys must outlive this session. copy_output never consumes retransmittable data;

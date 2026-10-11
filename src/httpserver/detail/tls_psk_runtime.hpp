@@ -10,6 +10,8 @@
 #define SRC_HTTPSERVER_DETAIL_TLS_PSK_RUNTIME_HPP_
 #include <chrono>
 #include <memory>
+#include <functional>
+#include <thread>
 #include <httpserver/concurrency/executor.hpp>
 #include <httpserver/detail/tls_psk.hpp>
 #include <httpserver/http/outcome.hpp>
@@ -21,11 +23,13 @@ struct tls_psk_runtime_options {
     std::size_t lookup_queue = 16;
     std::chrono::milliseconds handshake_timeout{5000};
 };
-// Fixed detached workers retain shared lane storage until retirement. stop() is
-// nonblocking; drain() explicitly reports unresponsive application callbacks.
+// A fixed provider-only observer owns native handshake worker retirement.
+// Application lookup workers stay detached. stop/destruction never join;
+// drain preserves its deadline, including native provider TLS teardown.
 class tls_psk_runtime final {
  public:
-    explicit tls_psk_runtime(tls_psk_runtime_options options = {});
+    using thread_start = std::function<std::thread(executor::handler)>;
+    explicit tls_psk_runtime(tls_psk_runtime_options options = {}, thread_start start = {});
     ~tls_psk_runtime();
     bool accepting() const;
     std::chrono::milliseconds handshake_timeout() const;

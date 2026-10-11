@@ -165,6 +165,7 @@ bool http2_connection::graceful_ready() const {
 std::span<const std::uint8_t> http2_connection::output(time_point now) {
     if (graceful_ready()) {
         auto& value = graceful_[graceful_next_]; graceful_exposed_ = value.exposed = true;
+        if (graceful_next_ == 1) barrier_offer_pending_ = true;
         return std::span(value.bytes).subspan(value.used, value.size - value.used);
     }
     if (count_) {
@@ -180,10 +181,16 @@ bool http2_connection::advance_graceful(std::size_t count) {
     if (count > value.size - value.used) return false;
     value.used += count;
     if (value.used == value.size) {
-        if (graceful_next_ == 1) barrier_sent_ = true;
+        if (graceful_next_ == 1) {
+            barrier_sent_ = true;
+            if (!failure_) barrier_acknowledged_ = barrier_ack_pending_;
+        }
         ++graceful_next_; graceful_exposed_ = false;
         if (graceful_complete() || failure_) graceful_charge_.release();
     }
+    // An early ACK belongs only to this offered send. Partial completion
+    // cannot prove the peer received the whole PING; the next offer starts fresh.
+    barrier_offer_pending_ = barrier_ack_pending_ = false;
     return true;
 }
 bool http2_connection::advance_output(std::size_t count) {
@@ -219,6 +226,7 @@ void http2_connection::preserve_borrowed_control() {
 void http2_connection::fail(http2_error e) {
     if (failure_ || e.scope == http2_error_scope::stream) return;
     failure_ = e;
+    barrier_offer_pending_ = barrier_ack_pending_ = false;
     if (!graceful_exposed_) graceful_charge_.release();
     parser_.clear();
     preserve_borrowed_control();
@@ -230,10 +238,10 @@ void http2_connection::fail(http2_error e) {
     terminal_used_ = control_charge_.owns() ? 0 : terminal_.size();
 }
 void http2_connection::acknowledge_barrier() {
-    if (barrier_sent_ && graceful_started_ &&
-        std::equal(parser_.control_payload().begin(), parser_.control_payload().end(), graceful_[1].bytes.begin() + 9)) {
-        barrier_acknowledged_ = true;
-    }
+    if (!graceful_started_ || failure_ ||
+        !std::equal(parser_.control_payload().begin(), parser_.control_payload().end(), graceful_[1].bytes.begin() + 9)) return;
+    if (barrier_sent_) barrier_acknowledged_ = true;
+    else if (barrier_offer_pending_) barrier_ack_pending_ = true;
 }
 std::optional<http2_error> http2_connection::control() {
     const auto h = parser_.header();

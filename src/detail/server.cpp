@@ -32,6 +32,7 @@
 #include <httpserver/detail/tls_credentials.hpp>
 #include <httpserver/detail/tls_credentials_access.hpp>
 #include <httpserver/detail/tls_psk_runtime.hpp>
+#include <httpserver/detail/quic_udp_listener.hpp>
 #endif
 
 #include <atomic>
@@ -130,20 +131,23 @@ class native_server::impl {
             method, pattern, make_sync_route(std::move(handler), body_cap));
     }
 
+    bool disabled_protocol(std::string_view token) const {
+        if (token == "http/1.1") return !options_.protocols().contains(http::protocol::http_1_1);
+        if (token == "h2") return !options_.protocols().contains(http::protocol::http_2);
+        if (token == "h3") return !options_.protocols().contains(http::protocol::http_3);
+        return false;
+    }
     http::outcome prelisten_ready() const {
         if (const auto valid = options_.validate(); !valid.ok()) {
             return valid;
         }
         // Build-time provider availability does not imply an implemented
         // transport. Refuse the whole configuration before binding any endpoint.
-        if (options_.protocols().contains(http::protocol::http_3)
 #ifndef NATIVE_V3_TLS
-            || options_.protocols().contains(http::protocol::http_2)
-#endif
-            ) {
-            return {http::outcome_code::not_supported,
-                    "native_server: requested TLS/protocol transport is unavailable"};
+        if (options_.protocols().contains(http::protocol::http_3) || options_.protocols().contains(http::protocol::http_2)) {
+            return {http::outcome_code::not_supported, "native_server: requested TLS/protocol transport is unavailable"};
         }
+#endif
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             if (options_.listener(i).tls) {
 #ifdef NATIVE_V3_TLS
@@ -154,8 +158,7 @@ class native_server::impl {
                 }
                 for (const auto& host : snapshot->hosts()) {
                     const bool disallowed = std::any_of(host.alpn.begin(), host.alpn.end(), [&](const auto& token) {
-                        return (token == "http/1.1" && !options_.protocols().contains(http::protocol::http_1_1)) ||
-                            (token == "h2" && !options_.protocols().contains(http::protocol::http_2));
+                        return disabled_protocol(token);
                     });
                     if (disallowed) {
                         return {http::outcome_code::invalid_argument, "native_server: credential ALPN requires enabled protocol"};
@@ -171,6 +174,49 @@ class native_server::impl {
         return backend_->ready();
     }
 
+    void activate_listeners() {
+        for (const auto& listener : listeners_) if (listener) listener->activate();
+#ifdef NATIVE_V3_TLS
+        for (const auto& listener : udp_listeners_) if (listener) listener->activate();
+#endif
+    }
+    http::outcome bind_listeners(const engine::connection_engine_config& config
+#ifdef NATIVE_V3_TLS
+        , std::vector<std::shared_ptr<const engine::tls_credentials_binding>>& bindings
+#endif
+    ) {
+        listeners_.resize(options_.listener_count());
+#ifdef NATIVE_V3_TLS
+        udp_listeners_.resize(options_.listener_count());
+#endif
+        for (std::size_t i = 0; i < options_.listener_count(); ++i) {
+            http::outcome bound;
+            bool bound_udp = false;
+#ifdef NATIVE_V3_TLS
+            if (options_.listener(i).transport == listener_transport::udp) {
+                auto listener = std::make_shared<engine::quic_udp_listener>(*backend_, pool_, registry_, hooks_, peers_, budget_, config);
+                udp_listeners_[i] = listener;
+                bound = listener->listen(options_.listener(i), i, std::move(bindings[i]));
+                bound_udp = true;
+            }
+#endif
+            if (!bound_udp) {
+                auto listener = std::make_shared<engine::listener_engine>(*backend_, pool_, registry_, hooks_, budget_, peers_, *scope_, config);
+                listeners_[i] = listener;
+                bound = listener->listen(options_.listener(i), i, handshake_runtime_,
+#ifdef NATIVE_V3_TLS
+                    std::move(bindings[i]));
+#else
+                    {});
+#endif
+            }
+            if (!bound.ok()) {
+                request_stop(); return bound;
+            }
+        }
+        activate_listeners();
+        return {};
+    }
     http::outcome listen() {
         if (stop_requested_.load(std::memory_order_acquire)) {
             return http::outcome(
@@ -194,7 +240,8 @@ class native_server::impl {
             if (!endpoint.tls) continue;
             engine::tls_credentials_binding policy{options_.tls().profile,
                 detail::resolved_client_certificate_mode(options_.tls().profile, options_.tls().client_auth),
-                options_.protocols().contains(http::protocol::http_1_1), options_.protocols().contains(http::protocol::http_2)};
+                options_.protocols().contains(http::protocol::http_1_1), options_.protocols().contains(http::protocol::http_2),
+                options_.protocols().contains(http::protocol::http_3), endpoint.transport == listener_transport::udp};
             const auto bound = engine::tls_credentials_access::bind(*endpoint.credentials, policy, bindings[i]);
             if (!bound.ok()) return bound;
         }
@@ -235,26 +282,12 @@ class native_server::impl {
             }
         }
 #endif
-        for (std::size_t i = 0; i < options_.listener_count(); ++i) {
-            listeners_.push_back(std::make_shared<engine::listener_engine>(
-                *backend_, pool_, registry_, hooks_, budget_, peers_,
-                *scope_, config));
-            const http::outcome bound =
-                listeners_.back()->listen(options_.listener(i), i, handshake_runtime_,
 #ifdef NATIVE_V3_TLS
-                    std::move(bindings[i]));
+        const auto bound = bind_listeners(config, bindings);
 #else
-                    {});
+        const auto bound = bind_listeners(config);
 #endif
-            if (!bound.ok()) {
-                // Terminal for this object: stop what bound and fail
-                // typed. The listeners stay owned until the destructor
-                // drains, so no engine outlives its listener.
-                request_stop();
-                return bound;
-            }
-        }
-        for (const auto& listener : listeners_) listener->activate();
+        if (!bound.ok()) return bound;
         backend_->activate_external();
         running_.store(true, std::memory_order_release);
         return http::outcome::okay();
@@ -265,13 +298,28 @@ class native_server::impl {
         running_.store(false, std::memory_order_release);
         for (const std::shared_ptr<engine::listener_engine>& listener :
              listeners_) {
-            listener->request_stop();
+            if (listener) listener->request_stop();
         }
+#ifdef NATIVE_V3_TLS
+        for (const auto& listener : udp_listeners_) if (listener) listener->request_stop();
+#endif
         static_cast<void>(backend_->wake());
     }
 
     void stop() {
         request_stop();
+#ifdef NATIVE_V3_TLS
+        if (options_.loop() == loop_mode::external) backend_->begin_retirement();
+        for (;;) {
+            const auto waiting = std::find_if(udp_listeners_.begin(), udp_listeners_.end(), [](const auto& listener) { return listener && !listener->retired(); });
+            if (waiting == udp_listeners_.end()) break;
+            if (options_.loop() == loop_mode::external) {
+                backend_->retirement_progress(std::chrono::milliseconds(50));
+            } else {
+                (*waiting)->await_progress(std::chrono::milliseconds(50));
+            }
+        }
+#endif
         // Terminal-fails every pending operation; the completions queue
         // onto the pool, and the drain joins the engines' unwinding.
         static_cast<void>(backend_->close());
@@ -284,6 +332,22 @@ class native_server::impl {
         }
 #endif
         pool_.drain_and_join();
+    }
+
+    std::vector<std::weak_ptr<engine::listener_engine>> weak_tcp_listeners() const {
+        std::vector<std::weak_ptr<engine::listener_engine>> listeners;
+        listeners.reserve(listeners_.size());
+        for (const auto& listener : listeners_) if (listener) listeners.push_back(listener);
+        return listeners;
+    }
+    void quiesce_listeners(std::chrono::steady_clock::time_point deadline) {
+        for (const std::shared_ptr<engine::listener_engine>& listener :
+             listeners_) {
+            if (listener) listener->quiesce(deadline);
+        }
+#ifdef NATIVE_V3_TLS
+        for (const auto& listener : udp_listeners_) if (listener) listener->quiesce(deadline);
+#endif
     }
 
     // TASK-110: drain initiation (PRD-V3N-REQ-032). Arms the counted
@@ -318,9 +382,7 @@ class native_server::impl {
         // connection keeps its listener available for cancellation.
         // Compare executor identity without dereferencing the pool:
         // a retiring provider step may retain the counted scope after stop.
-        std::vector<std::weak_ptr<engine::listener_engine>> listeners;
-        listeners.reserve(listeners_.size());
-        for (const auto& listener : listeners_) listeners.push_back(listener);
+        const auto listeners = weak_tcp_listeners();
         const auto deadline = std::chrono::steady_clock::now() + budget;
         scope_->arm(deadline,
                     [identity = static_cast<const executor*>(&pool_), scope = scope_.get()] { return current_executor() == identity || engine::counted_drain_slot() == scope; },
@@ -329,10 +391,7 @@ class native_server::impl {
                             if (auto listener = weak.lock()) listener->request_stop(http::outcome_code::timeout);
                         }
                     });
-        for (const std::shared_ptr<engine::listener_engine>& listener :
-             listeners_) {
-            listener->quiesce(deadline);
-        }
+        quiesce_listeners(deadline);
         static_cast<void>(backend_->wake());
         return http::outcome::okay();
     }
@@ -347,7 +406,10 @@ class native_server::impl {
 
     std::uint16_t get_bound_port(std::size_t listener_index) const noexcept {
         if (listener_index >= listeners_.size()) return 0;
-        return listeners_[listener_index]->bound_port();
+#ifdef NATIVE_V3_TLS
+        if (udp_listeners_[listener_index]) return udp_listeners_[listener_index]->bound_port();
+#endif
+        return listeners_[listener_index] ? listeners_[listener_index]->bound_port() : 0;
     }
 
     readiness_driver* readiness() noexcept {
@@ -384,6 +446,9 @@ class native_server::impl {
     mutable server::peer_policy peers_;
     std::shared_ptr<engine::tls_psk_runtime> handshake_runtime_;
     std::vector<std::shared_ptr<engine::listener_engine>> listeners_;
+#ifdef NATIVE_V3_TLS
+    std::vector<std::shared_ptr<engine::quic_udp_listener>> udp_listeners_;
+#endif
     engine::worker_pool pool_;
     std::unique_ptr<engine::io_socket_backend> backend_;
     std::atomic<bool> running_{false};

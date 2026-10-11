@@ -13,6 +13,7 @@
 #include <vector>
 #include <utility>
 #include <httpserver/detail/drain_scope.hpp>
+#include <httpserver/detail/resource_scope.hpp>
 #include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/detail/lifecycle_sink.hpp>
 #include <httpserver/detail/http3_request_engine.hpp>
@@ -38,9 +39,14 @@ struct wire_section {
 }  // namespace http3_request_helpers
 struct http3_request_engine::state : std::enable_shared_from_this<state> {
     struct record;
-    struct stream final : exchange_sink, body_sink {
+    struct stream final : exchange_sink, body_sink, std::enable_shared_from_this<stream> {
         state& owner;
         record& transport;
+        server::resource_budget budget;
+        std::uint64_t id;
+        http::method_id method;
+        std::uint64_t peer_section_limit;
+        server::reservation seat;
         http3_body_stream body;
         bool response_refused = false;
         exchange request;
@@ -52,6 +58,19 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         std::shared_ptr<websocket_driver> websocket;
         server::reservation websocket_input_charge, websocket_output_charge, websocket_message_charge;
         bool streaming = false;
+        std::shared_ptr<http2_dispatch> affinity;
+        std::shared_ptr<http3_request_helpers::route_executor> native_handlers;
+        std::shared_ptr<state> native_lifetime;
+        std::atomic<bool> native_closed{false}, native_done{false}, native_retired{false}, native_abort{false}, native_continue{false}, native_suspended{false}, native_refused{false};
+        struct command { std::uint16_t status; http::fields fields; bool streaming; server::reservation charge; };
+        std::mutex command_mutex;
+        std::shared_ptr<command> response;
+        void notify() const;
+        void native_start();
+        void native_cancel(http::outcome_code reason);
+        void native_finish(http::outcome_code reason);
+        void native_respond(std::uint16_t status, const http::fields& fields, bool streaming);
+        bool done() const { return owner.native.workers ? native_done.load() : handler.done(); }
         stream(state& s, record& r, http::request_head head);
         ~stream() override;
         void on_admit(const body_policy& policy) override;
@@ -71,16 +90,18 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         bool local = false, cancelled = false, abandoned = false, receive_done = false, fin_retained = false, reset_settled = false;
         bool event_recorded = false, accepted = false, receiving = false, websocket_input_blocked = false;
         bool diagnostic_terminal = false, flow_blocked = false, retention_blocked = false;
-        std::optional<drain_scope::unit> drain_unit;
+        std::optional<drain_scope::unit> drain_unit, native_drain_unit;
         std::optional<quic_stream_terminal> terminal;
         http3_request_action action;
         server::reservation charge, output_charge;
-        std::unique_ptr<stream> semantic;
+        std::shared_ptr<stream> semantic;
+        std::optional<time_point> body_anchor, suspension_anchor, write_anchor, header_deadline;
         std::vector<std::byte> scratch;
         std::size_t scratch_position = 0, scratch_size = 0, event_position = 0;
         std::vector<http3_request_helpers::receipt> receipts;
         std::size_t receipt_head = 0, receipt_count = 0;
-        std::uint64_t accounted = 0, retained_offset = 0;
+        std::uint64_t accounted = 0, retained_offset = 0, sent_offset = 0;
+        bool fin_sent = false;
         std::vector<quic_information_id> information;
         std::deque<http3_request_helpers::wire_section> sections;
         std::vector<std::byte> output;
@@ -125,6 +146,17 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     std::size_t critical_next = 0;
     bool disconnected = false;
     executor& owner;
+    http3_native_context native;
+    time_point header_anchor = std::chrono::steady_clock::now();
+    void apply_native();
+    void cancel_semantic(record&, http::outcome_code);
+    bool retire_semantic(record&);
+    bool stream_refused(const stream&) const;
+    void configure_record(record&);
+    void start_request(record&);
+    bool prepare_response_body(stream&, std::optional<std::uint64_t>, bool forbidden);
+    std::optional<time_point> record_deadline(record&, time_point);
+    std::optional<time_point> semantic_deadline(record&, time_point);
     enum class drain_phase { running, draining, finished };
     struct drain_control { std::atomic<bool> cancel_requested{false}; };
     std::shared_ptr<drain_scope> scope;
@@ -141,7 +173,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
     void retire_drain_request(record& r);
     void drain_requests();
     state(quic_storage_lease d, quic_storage_lease c, quic_flow_control& f, quic_recovery& q, const server::route_registry& r, executor& e, http3_request_limits l, std::uint64_t id,
-          net::peer_address p, request_dispatch_context context)
+          net::peer_address p, request_dispatch_context context, http3_native_context n)
         : data(std::move(d)),
           critical(std::move(c)),
           flow(f),
@@ -149,11 +181,12 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
           routes(r),
           dispatch_context(std::move(context)),
           limits(l),
-          connection(data, critical, l.framing),
+          connection(data, critical, l.framing, n.workers != nullptr),
           handlers(std::make_shared<http3_request_helpers::route_executor>(e)),
           connection_id(id),
           peer(p),
           owner(e),
+          native(std::move(n)),
           scope(std::make_shared<drain_scope>(dispatch_context.diagnostics)) {
         scope->enter();
     }

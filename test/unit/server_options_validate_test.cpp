@@ -177,7 +177,7 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, listener_address_validated)
     }
 LT_END_AUTO_TEST(listener_address_validated)
 
-// V3: identical (address, port, tls) listeners collide.
+// V3: a fixed address/port/transport identifies one listener.
 LT_BEGIN_AUTO_TEST(server_options_validate_suite, duplicate_listener_fails)
     srv::server_options options;
     srv::listener_options first;
@@ -196,6 +196,7 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, duplicate_listener_fails)
     distinct.add_listener(other_port);
     srv::listener_options other_tls = first;
     other_tls.tls = true;
+    other_tls.port = 8082;
     distinct.add_listener(other_tls);
     srv::listener_options other_address = first;
     other_address.address = "127.0.0.2";
@@ -480,6 +481,22 @@ LT_BEGIN_AUTO_TEST(server_options_validate_suite, initial_client_auth_policy)
     options.protocols().enable(http::protocol::http_3);
     LT_CHECK(options.validate().code() == outcome_code::not_supported);
 LT_END_AUTO_TEST(initial_client_auth_policy)
+
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, h3_requires_explicit_udp_endpoint)
+    auto options = with_listener("127.0.0.1", 0, true);
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::certificates;
+    options.protocols().enable(http::protocol::http_3);
+    LT_CHECK(options.validate().code() == outcome_code::invalid_argument);
+LT_END_AUTO_TEST(h3_requires_explicit_udp_endpoint)
+
+LT_BEGIN_AUTO_TEST(server_options_validate_suite, fixed_tcp_duplicate_ignores_tls)
+    auto options = with_listener("127.0.0.1", 8443, true);
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::certificates;
+    options.add_listener({"127.0.0.1", 8443, false});
+    LT_CHECK(options.validate().code() == outcome_code::invalid_argument);
+LT_END_AUTO_TEST(fixed_tcp_duplicate_ignores_tls)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -76,12 +76,21 @@ LT_BEGIN_AUTO_TEST(udp_suite, external_budget_rearm_and_stale_generation)
     hd::udp_receive_operation replacement(owner, 1, 1);
     replacement.submit(backend);
     LT_CHECK(!replacement.is_terminal());
+    backend.adopt_datagram(2, udp_socket());
+    hd::udp_receive_operation sibling(owner, 2, 1);
+    sibling.submit(backend);
     backend.release_connection(1);
     backend.adopt_datagram(1, udp_socket());
     hd::udp_receive_operation fresh(owner, 1, 1);
     fresh.submit(backend);
     LT_CHECK(backend.dispatch(std::span(&event, 1), std::chrono::steady_clock::now()).ok());
     LT_CHECK(!fresh.is_terminal());
+    LT_CHECK(!sibling.is_terminal());
+    LT_CHECK(backend.native_handle(2) != ps::k_invalid_socket);
+    event.error = true;
+    LT_CHECK(backend.dispatch(std::span(&event, 1), std::chrono::steady_clock::now()).ok());
+    LT_CHECK(!fresh.is_terminal());
+    LT_CHECK(!sibling.is_terminal());
     backend.close();
     ex.run_pending();
 LT_END_AUTO_TEST(external_budget_rearm_and_stale_generation)

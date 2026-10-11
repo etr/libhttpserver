@@ -121,11 +121,14 @@ class protocol_set {
 // or a numeric IPv4/IPv6 literal; names are resolved by the caller, not
 // by validation. port 0 requests an ephemeral port. tls selects whether
 // the endpoint speaks TLS (which requires a tls_provider).
+enum class listener_transport : std::uint8_t { tcp, udp };
+
 struct listener_options {
     std::string address;
     std::uint16_t port = 0;
     bool tls = false;
     std::shared_ptr<tls_credentials> credentials;
+    listener_transport transport = listener_transport::tcp;
 };
 
 // The §3.4 timeout inventory, in milliseconds. Every field must be
@@ -354,7 +357,7 @@ inline http::outcome check_budget(const budget_limits& limits) {
 constexpr bool same_listener(const listener_options& a,
                              const listener_options& b) noexcept {
     return a.port != 0 && b.port != 0
-        && a.address == b.address && a.port == b.port && a.tls == b.tls;
+        && a.address == b.address && a.port == b.port && a.transport == b.transport;
 }
 
 // V2 and V3: every listener address is well-formed and no two listeners
@@ -362,6 +365,9 @@ constexpr bool same_listener(const listener_options& a,
 inline http::outcome check_listeners(
         const std::vector<listener_options>& listeners) {
     for (std::size_t i = 0; i < listeners.size(); ++i) {
+        if (listeners[i].transport != listener_transport::tcp && listeners[i].transport != listener_transport::udp) {
+            return {http::outcome_code::invalid_argument, "server_options: invalid listener transport"};
+        }
         if (!valid_listen_address(listeners[i].address)) {
             return http::outcome(
                 http::outcome_code::invalid_argument,
@@ -584,6 +590,23 @@ inline http::outcome check_client_auth(tls_profile profile, const tls_client_aut
     return {};
 }
 
+inline http::outcome check_transports(const protocol_set& protocols, const std::vector<listener_options>& listeners) {
+    bool udp = false;
+    const bool h3 = protocols.contains(http::protocol::http_3);
+    const bool tcp_available = protocols.contains(http::protocol::http_1_0) ||
+        protocols.contains(http::protocol::http_1_1) || protocols.contains(http::protocol::http_2);
+    for (const auto& endpoint : listeners) {
+        if (endpoint.transport == listener_transport::udp) {
+            udp = true;
+            if (!endpoint.tls || !h3) return {http::outcome_code::invalid_argument, "server_options: UDP requires TLS and HTTP/3"};
+        } else if (!tcp_available) {
+            return {http::outcome_code::invalid_argument, "server_options: TCP needs an enabled HTTP/1 or HTTP/2 protocol"};
+        }
+    }
+    if (h3 && !udp) return {http::outcome_code::invalid_argument, "server_options: HTTP/3 requires an explicit UDP listener"};
+    return {};
+}
+
 // V7-V11: provider, profile, protocol, and per-listener TLS flags must
 // combine into a servable configuration.
 inline http::outcome check_tls_protocol_combination(
@@ -610,7 +633,7 @@ inline http::outcome check_tls_protocol_combination(
         !result.ok()) {
         return result;
     }
-    return http::outcome::okay();
+    return check_transports(protocols, listeners);
 }
 
 }  // namespace detail

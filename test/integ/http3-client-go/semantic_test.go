@@ -9,6 +9,7 @@ import (
 	"github.com/quic-go/quic-go/logging"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestControlPreserves62BitGOAWAY(t *testing.T) {
@@ -70,5 +71,45 @@ func TestDrainACKWaitIsBoundedAndTerminal(t *testing.T) {
 	completed.sentACK(ack)
 	if err := completed.waitFINACK(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAcceptedFINACKWaitsForApplicationConsumption(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	observer := &drainACKWitness{finACK: make(chan struct{})}
+	observer.expectResponseBeforeACK(ctx)
+	observer.receivedPacket(7, []logging.Frame{&logging.StreamFrame{StreamID: 0, Fin: true}})
+	finished := make(chan struct{})
+	go func() {
+		observer.sentACK(&logging.AckFrame{AckRanges: []logging.AckRange{{Smallest: 7, Largest: 7}}})
+		close(finished)
+	}()
+	probe, stop := context.WithTimeout(ctx, 25*time.Millisecond)
+	defer stop()
+	select {
+	case <-finished:
+		t.Fatal("accepted FIN ACK escaped before application consumed its response")
+	case <-probe.Done():
+	}
+	observer.responseConsumed()
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		t.Fatal("consumed response did not release original ACK")
+	}
+	if !observer.finAcknowledged() {
+		t.Fatal("real covering ACK not observed")
+	}
+}
+func TestConsumptionOrderingCannotClaimACKAfterDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	observer := &drainACKWitness{finACK: make(chan struct{})}
+	observer.expectResponseBeforeACK(ctx)
+	observer.receivedPacket(7, []logging.Frame{&logging.StreamFrame{StreamID: 0, Fin: true}})
+	observer.sentACK(&logging.AckFrame{AckRanges: []logging.AckRange{{Smallest: 7, Largest: 7}}})
+	if observer.finAcknowledged() {
+		t.Fatal("expired consumption barrier claimed positive ACK schedule")
 	}
 }

@@ -8,6 +8,11 @@
 #include <httpserver/detail/http3_websocket_handshake.hpp>
 namespace httpserver::detail {
 websocket_upgrade_result http3_request_engine::state::stream::on_upgrade(const ws_upgrade_options& options) {
+    if (owner.native.workers) {
+        websocket_upgrade_result out;
+        out.status = {http::outcome_code::not_supported, "Native HTTP/3 WebSocket upgrade is unavailable"};
+        return out;
+    }
     try {
         return owner.upgrade(*this, options);
     } catch (const std::bad_alloc&) {

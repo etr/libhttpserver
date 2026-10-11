@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -147,6 +148,15 @@ class FullGateContracts(unittest.TestCase):
                 (path / 'manifest.json').write_text(json.dumps(receipt))
                 with self.subTest(stage=stage), self.assertRaises(self.gate.GateFailure):
                     self.gate.validate_network(stage, path, {})
+
+    def test_network_forwards_explicit_simulator_clock_provenance(self):
+        args = types.SimpleNamespace(runner_python="python", runner_dir="runner", server_image="endpoint",
+                                     docker_direct_routing_compat=False, simulator_clock_receipt="clock.json")
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(self.gate, "checked", return_value={}) as checked, patch.object(self.gate, "validate_network", return_value={}):
+                self.gate.network_stage("quic-interop", args, Path(temp) / "stage", {})
+                command = checked.call_args.args[0]
+                self.assertEqual(command[command.index("--simulator-clock-receipt") + 1], "clock.json")
 
     def test_network_child_success_requires_manifest_and_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -304,7 +314,7 @@ class FullGateContracts(unittest.TestCase):
             (build / 'src').mkdir()
             (build / 'config.h').write_text('/* TLS disabled */')
             (build / 'config.log').write_text('configured with clang')
-            (build / 'src/Makefile').write_text('abs_top_srcdir = ' + str(ROOT) + '\nCXXFLAGS = -std=c++20\n')
+            (build / 'src/Makefile').write_text('abs_top_srcdir = ' + str(ROOT) + '\nCXXFLAGS = -std=c++20\nall:\n\t@echo configured source build\n')
             (build / 'Makefile').write_text('all:\n\t@echo configured build\nclean:\n\trm prior.log\n')
             (build / 'test/Makefile').write_text('http3_frame:\n\t@test -f $@\n')
             prior = build / 'prior.log'
