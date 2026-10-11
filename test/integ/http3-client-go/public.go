@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/quic-go/qpack"
 	quic "github.com/quic-go/quic-go"
@@ -193,11 +194,33 @@ func runPublic(port int, ca string) error {
 		return fmt.Errorf("public metadata")
 	}
 	record("tls_peer_metadata")
+	entered := func(index int, minimum int) error {
+		for attempt := 0; attempt < 100; attempt++ {
+			counts, err := request("GET", "/counts", nil, false)
+			if err != nil {
+				return err
+			}
+			values := strings.Fields(string(counts.body))
+			if len(values) != 4 {
+				return fmt.Errorf("public counts shape")
+			}
+			value, err := strconv.Atoi(values[index])
+			if err != nil {
+				return err
+			}
+			if value >= minimum {
+				return nil
+			}
+		}
+		return fmt.Errorf("public handler entry absent")
+	}
 	held, err := publicOpen(ctx, c, "GET", "/running", nil, true, false)
 	if err != nil {
 		return err
 	}
-	time.Sleep(50 * time.Millisecond)
+	if err = entered(2, 1); err != nil {
+		return err
+	}
 	started := time.Now()
 	healthy, err := request("GET", "/hello", nil, false)
 	if err != nil {
@@ -242,7 +265,9 @@ func runPublic(port int, ca string) error {
 	if err != nil {
 		return err
 	}
-	time.Sleep(50 * time.Millisecond)
+	if err = entered(3, 1); err != nil {
+		return err
+	}
 	reset.CancelRead(0x10c)
 	reset.CancelWrite(0x10c)
 	settled := false
@@ -269,6 +294,17 @@ func runPublic(port int, ca string) error {
 	}
 	record("reset_stream_local_once")
 	rows[len(rows)-1]["cancellation_entries"] = 1
+	for at := 0; at < 24; at++ {
+		recovered, err := request("GET", "/hello", nil, false)
+		if err != nil {
+			return err
+		}
+		if string(recovered.body) != "hello native h3\n" || !recovered.has("x-end", "native-fin", true) {
+			return fmt.Errorf("stream capacity recovery payload")
+		}
+	}
+	record("transport_stream_capacity_recovery")
+	rows[len(rows)-1]["requests"] = 24
 	result := identity()
 	result["alpn"] = "h3"
 	result["verified"] = true
@@ -307,11 +343,33 @@ func runPublicStop(port int, ca string) error {
 	}
 	time.Sleep(50 * time.Millisecond)
 	fmt.Println("H3_ACTIVE")
-	if _, err = publicRead(s); err == nil {
-		return fmt.Errorf("destruction did not cancel stream")
+	_, err = publicRead(s)
+	observed, code := publicStopObservation(err)
+	if observed == "" {
+		return fmt.Errorf("destruction lacked expected remote cancellation: %w", err)
 	}
 	result := identity()
 	result["status"] = "passed"
 	result["case"] = "active_stream_server_destruction"
+	result["terminal"] = observed
+	result["error_code"] = code
 	return json.NewEncoder(os.Stdout).Encode(result)
+}
+
+// Only a decoded remote terminal proves server destruction; decoder errors,
+// local cancellation and client deadlines cannot satisfy this witness.
+func publicStopObservation(err error) (string, uint64) {
+	var stream *quic.StreamError
+	if errors.As(err, &stream) && stream.Remote && stream.ErrorCode == 0x10c {
+		return "remote_stream_cancelled", uint64(stream.ErrorCode)
+	}
+	var app *quic.ApplicationError
+	if errors.As(err, &app) && app.Remote && app.ErrorCode == 0x100 {
+		return "remote_connection_closed", uint64(app.ErrorCode)
+	}
+	var transport *quic.TransportError
+	if errors.As(err, &transport) && transport.Remote && transport.ErrorCode == quic.NoError {
+		return "remote_transport_closed", uint64(transport.ErrorCode)
+	}
+	return "", 0
 }

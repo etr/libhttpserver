@@ -9,7 +9,7 @@ from v3_package_commands import Commands, runtime_environment
 from v3_package_integration import compile_probe
 from v3_package_matrix import check_linkage
 from v3_package_process import Consumer
-from v3_public_http3_inventory import CLIENTS, ONESHOTS, validate_client, validate_matrix
+from v3_public_http3_inventory import CLIENTS, ONESHOTS, validate_client, validate_matrix, validate_stop_observation
 from v3_public_http2_h2 import Client as H2Client
 
 def require(value,message):
@@ -20,11 +20,12 @@ def load(path,name):
     module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     return module
 
-def scenarios(executable,loop,args,directory,env,fixtures,commands,client):
+def scenarios(executable,loop,args,directory,env,fixtures,commands,client,example):
     rows=[]
     if args.tls=='no':
         output=commands([executable,fixtures,loop],directory,env)
         require(output.strip()=='TLS_OFF_H3_REJECTED','same-source TLS-off typed H3 rejection')
+        require(commands([example],directory,env).strip()=='TLS_OFF_H3_REJECTED','installed example TLS-off rejection')
         return [],[dict(case='tls_off_h3_rejected',status='passed')]
     for name in CLIENTS:
         process_receipt=directory/(name+'-basic-process.json')
@@ -47,6 +48,20 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client):
         if loop=='external': require('INACTIVE_DRIVER_REJECTED' in process['stderr'],'inactive external readiness driver')
         rows.append(dict(**result,process_receipt=str(process_receipt)))
     checks=[dict(case=name+'_bad_initial_listener_recovery',status='passed') for name in CLIENTS]
+    for name in CLIENTS:
+        with Consumer([str(executable),str(fixtures),loop],directory,env,directory/(name+'-websocket-process.json')) as child:
+            port=child.port()
+            if name == 'aioquic': observation=asyncio.run(client.websocket_cases(port,fixtures))
+            else: observation=json.loads(commands([args.quic_go,'-matrix','public-websocket','-port',str(port),'-ca',fixtures/'root.pem'],directory,env,timeout=15).strip().splitlines()[-1])
+            observation['case']=name+'_rfc9220_wire_corpus'; checks.append(observation); child.stop()
+    for name in CLIENTS:
+        with Consumer([str(example),str(fixtures/'example-chain.pem'),str(fixtures/'a-key.pem'),loop],directory,env,directory/(name+'-example-process.json')) as child:
+            port=child.port(); tcp_port=int(child.line().split()[1]); mixed_tcp(tcp_port,fixtures)
+            if name=='aioquic': observed=asyncio.run(client.websocket_cases(port,fixtures))
+            else: observed=json.loads(commands([args.quic_go,'-matrix','public-websocket','-port',str(port),'-ca',fixtures/'root.pem'],directory,env,timeout=15).strip().splitlines()[-1])
+            observed['case']=name+'_example_rfc9220_wire_corpus'; checks.append(observed);child.stop()
+    with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'websocket-refusals-process.json') as child:
+        checks.append(asyncio.run(client.websocket_refusals(child.port(),fixtures)));child.stop()
     for mode,expected in ONESHOTS.items():
         output=commands([executable,fixtures,loop,mode],directory,env)
         require(output.strip()==expected,'prebind/rollback predicate '+mode)
@@ -74,7 +89,8 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client):
             server.stop()
             result=json.loads(independent.line());require(result.get('status')=='passed' and result.get('client')=='quic-go','independent destruction witness')
             require(independent.process.wait(timeout=5)==0,'independent destruction process failed')
-        checks.append(dict(case='quic_go_active_stream_server_destruction',status='passed'))
+        validate_stop_observation(result)
+        checks.append(dict(case='quic_go_active_stream_server_destruction',status='passed', terminal=result['terminal'], error_code=result['error_code']))
     for name in CLIENTS:
         with Consumer([str(executable),str(fixtures),loop,'mixed'],directory,env,directory/(name+'-mixed-process.json')) as child:
             port=child.port();mixed_tcp(port,fixtures)
@@ -84,6 +100,52 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client):
                 validate_client(result)
             child.stop()
         checks.append(dict(case=name+'_mixed_tcp_udp_same_port',status='passed'))
+    credentials=load(args.source/'test/installed/v3_http3_credentials.py','public_h3_credentials')
+    lifecycle=load(args.source/'test/installed/v3_http3_lifecycle.py','public_h3_lifecycle')
+    qpack=load(args.source/'test/installed/v3_http3_qpack.py','public_h3_qpack')
+    for family in ('migration','qpack'):
+        with Consumer([str(executable),str(fixtures),loop],directory,env,directory/(family+'-process.json')) as child:
+            port=child.port(); checks.append(asyncio.run(lifecycle.migrated_policy(child,port,fixtures,client) if family=='migration' else qpack.unblock(child,port,fixtures,client)));child.stop()
+    flow=load(args.source/'test/installed/v3_http3_flow.py','public_h3_flow')
+    with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'impairment-process.json') as child:
+        checks.append(asyncio.run(flow.loss_reordering(child,child.port(),fixtures,client,lifecycle,bool(args.sanitize))));child.stop()
+    with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'ws-writable-process.json') as child:
+        checks.append(asyncio.run(flow.websocket_backpressure(child,child.port(),fixtures,client,lifecycle)));child.stop()
+    with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'multipart-cancel-process.json') as child:
+        checks.append(asyncio.run(flow.multipart_cancellation(child.port(),fixtures,client)));child.stop()
+    with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'leases-process.json') as child:
+        checks.append(asyncio.run(flow.lease_cancellation(child,child.port(),fixtures,client,lifecycle)));child.stop()
+    with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'flow-process.json') as child:
+        checks.append(asyncio.run(flow.saturation(child,child.port(),fixtures,client,lifecycle,not args.sanitize)));child.stop()
+    for mode in ('reset','initial','trailers'):
+        with Consumer([str(executable),str(fixtures),loop],directory,env,directory/('qpack-'+mode+'-process.json')) as child:
+            checks.append(asyncio.run(qpack.terminal_case(child,child.port(),fixtures,client,lifecycle,mode)));child.stop()
+    for expiry in (False,True):
+        with Consumer([str(executable),str(fixtures),loop,'aggregate'],directory,env,directory/('aggregate-'+str(expiry)+'-process.json')) as child:
+            child.port(); checks.append(asyncio.run(lifecycle.aggregate(child,fixtures,client,H2Client,expiry)))
+    for mode, witness in [('basic','stalled_tls'),('basic','handler_drain')]:
+        with Consumer([str(executable),str(fixtures),loop,mode],directory,env,directory/(witness+'-process.json')) as child:
+            port=child.port()
+            checks.append(asyncio.run(lifecycle.stalled_tls(child,port,fixtures,client) if witness=='stalled_tls' else lifecycle.handler_drain(port,fixtures,client)))
+            child.stop()
+    with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'handler-stop-process.json') as child:
+        checks.append(asyncio.run(lifecycle.handler_stop(child,child.port(),fixtures,client)));child.stop()
+    with Consumer([str(executable),str(fixtures),loop,'credentials'],directory,env,directory/'credential-process.json') as child:
+        observed=asyncio.run(credentials.credentials(child.port(),fixtures,client,child));checks.append(dict(case='quic_credentials',status='passed',scenarios=observed));child.stop()
+    with Consumer([str(executable),str(fixtures),loop,'credentials'],directory,env,directory/'store-first-process.json') as first, Consumer([str(executable),str(fixtures),loop,'credentials'],directory,env,directory/'store-second-process.json') as second:
+        checks.append(asyncio.run(credentials.independent_stores(first,second,first.port(),second.port(),fixtures,client)));first.stop();second.stop()
+    for required in (False,True):
+        mode='mtls-require' if required else 'mtls-request'
+        with Consumer([str(executable),str(fixtures),loop,mode],directory,env,directory/(mode+'-process.json')) as child:
+            observed=asyncio.run(credentials.mtls(child.port(),fixtures,client,required));checks.append(dict(case=mode,status='passed',scenarios=observed));child.stop()
+    with Consumer([str(executable),str(fixtures),loop,'mixed'],directory,env,directory/'semantic-process.json') as child:
+        port=child.port()
+        semantics=load(args.source/'test/installed/v3_http3_semantics.py','public_h3_semantics')
+        for protocol in ('h1','h2','h3'):
+            observed=asyncio.run(semantics.h3_cases(port,fixtures,client) if protocol=='h3' else semantics.tcp_cases(port,fixtures,protocol,H2Client))
+            require({row['case'] for row in observed}==set(semantics.CASES),'semantic scenario omissions')
+            checks.append(dict(case=protocol+'_semantic_parity',status='passed',scenarios=observed))
+        child.stop()
     return rows,checks
 
 def mixed_tcp(port,fixtures):
@@ -130,7 +192,10 @@ def main():
             receipt['clients']['aioquic']['source_hashes']={str(p):digest(p) for p in Path(aioquic.__file__).parent.rglob('*') if p.is_file() and p.suffix in ('.py','.so')}
             receipt['provider']={str(p):digest(p) for pattern in ('libssl.so*','libcrypto.so*','libssl.a','libcrypto.a') for p in (provider/'lib').glob(pattern) if p.is_file()}
         inputs=sorted(p for p in (source/'src').rglob('*') if p.suffix in ('.cpp','.hpp'))
-        inputs += [source/p for p in ('src/Makefile.am','test/Makefile.am','configure.ac','test/installed/v3_http3_consumer.cpp','test/installed/v3_http3_aioquic.py','test/integ/http3-client-go/public.go','scripts/check-v3-public-http3.py','scripts/lib/v3_public_http3_inventory.py')]
+        inputs += [source/p for p in ('src/Makefile.am','test/Makefile.am','configure.ac','test/installed/v3_http3_consumer.cpp','test/installed/v3_http3_aioquic.py','test/installed/v3_http3_semantics.hpp','test/installed/v3_http3_semantics.py','test/installed/v3_http3_credentials.py','test/installed/v3_tls_client.cpp','test/integ/http3-client-go/public.go','scripts/check-v3-public-http3.py','scripts/lib/v3_public_http3_inventory.py','test/integ/http3_websocket_wire.py','scripts/test-v3-public-http3.py')]
+        inputs += [source/'scripts/lib/resource_limits_probe.py',source/'test/installed/v3_http3_flow.py',source/'test/installed/v3_http3_lifecycle.py',source/'test/installed/v3_http3_qpack.py']
+        inputs += [source/'examples/v3_http3.cpp',source/'examples/v3_host_poll.hpp',source/'examples/v3_protocol_options.cpp',source/'examples/Makefile.am']
+        inputs += [source/'scripts/lib/v3_public_http2_h2.py']
         inputs += sorted((source/'test/integ/http3-client-go').glob('*.go')) + [source/'test/integ/http3-client-go/go.mod',source/'test/integ/http3-client-go/go.sum']
         receipt['source_hashes']={str(p.relative_to(source)):digest(p) for p in inputs}
         receipt['source_identity']=hashlib.sha256(json.dumps(receipt['source_hashes'],sort_keys=True).encode()).hexdigest()
@@ -139,21 +204,41 @@ def main():
         cflags=shlex.split(commands(['pkg-config','--cflags','libhttpserver'],args.output,env))
         require(not audit.consumer_flag_violations(cflags,(source,build)),'compile flag contamination')
         directory=Path(tempfile.mkdtemp(prefix='task196-installed-')); receipt['consumer_directory']=str(directory)
-        for name in ('test/installed/v3_http3_consumer.cpp','examples/v3_host_poll.hpp'): shutil.copyfile(source/name,directory/Path(name).name)
+        for name in ('test/installed/v3_http3_consumer.cpp','test/installed/v3_http3_semantics.hpp','examples/v3_host_poll.hpp','examples/v3_http3.cpp','examples/v3_protocol_options.cpp'): shutil.copyfile(source/name,directory/Path(name).name)
         fixtures=directory/'fixtures';shutil.copytree(source/'test/data/tls_credentials',fixtures)
+        if args.tls=='yes':
+            independent=directory/'credential-fixtures'
+            commands([args.compiler,'-std=c++20','-I'+str(provider/'include'),source/'test/installed/v3_tls_client.cpp','-L'+str(provider/'lib'),'-Wl,-rpath,'+str(provider/'lib'),'-lssl','-lcrypto','-o',independent],directory,env)
+            require('libhttpserver' not in json.dumps(audit.dependency_graph([str(independent)])),'credential fixture tool links server')
+            commands([independent,'fixtures',fixtures],directory,env)
+            for identity in ('client-valid','client-other'):
+                chain=(fixtures/(identity+'.pem')).read_bytes()
+                if identity=='client-valid':chain+=(fixtures/'client-intermediate.pem').read_bytes()
+                (fixtures/(identity+'-chain.pem')).write_bytes(chain)
+            receipt['credential_fixture_tool']=dict(path=str(independent),sha256=digest(independent))
+        (fixtures/'example-chain.pem').write_bytes((fixtures/'a.pem').read_bytes()+(fixtures/'intermediate.pem').read_bytes())
         receipt['fixture_hashes']={p.name:digest(p) for p in fixtures.iterdir() if p.is_file()}
         for linkage in ('shared','static'):
             libraries=shlex.split(commands(['pkg-config','--libs']+(['--static'] if linkage=='static' else [])+['libhttpserver'],directory,env))
             if linkage=='static':libraries=[str(prefix/'lib/libhttpserver.a') if f=='-lhttpserver' else f for f in libraries]
             libraries += ['-pthread','-Wl,-rpath,'+str(prefix/'lib'),'-Wl,-rpath,'+str(provider/'lib')]+shlex.split(args.sanitize)
             executable=directory/linkage
-            provenance=compile_probe(args.compiler,[directory/'v3_http3_consumer.cpp'],cflags+shlex.split(args.sanitize),libraries,executable,commands,env,source,build,prefix,False)
+            provenance=compile_probe(args.compiler,[directory/'v3_http3_consumer.cpp'],cflags+['-Wall','-Werror=return-type']+shlex.split(args.sanitize),libraries,executable,commands,env,source,build,prefix,False)
             graph=audit.dependency_graph([str(executable)]);check_linkage(graph,linkage,prefix)
             require(not audit.graph_violations(graph,'strict',args.tls,'aggregate',audit.load_policy(),provider),'dependency graph violations')
+            example=directory/(linkage+'-example')
+            example_provenance=compile_probe(args.compiler,[directory/'v3_http3.cpp'],cflags+shlex.split(args.sanitize),libraries,example,commands,env,source,build,prefix,False)
+            check_linkage(audit.dependency_graph([str(example)]),linkage,prefix)
+            protocol_example=directory/(linkage+'-protocol-example')
+            compile_probe(args.compiler,[directory/'v3_protocol_options.cpp'],cflags+shlex.split(args.sanitize),libraries,protocol_example,commands,env,source,build,prefix,False)
+            report=commands([protocol_example]+([fixtures/'example-chain.pem',fixtures/'a-key.pem'] if args.tls=='yes' else []),directory,env)
+            require('HTTP/1.1 validate=ok listen=ok port=' in report,'protocol example plaintext bind')
+            for label in ('TLS','HTTP/2','HTTP/3'):
+                require(label+(' validate=ok listen=ok port=' if args.tls=='yes' else ' validate=ok listen=not_supported port=0') in report,'protocol example encrypted boundary: '+label)
             for loop in ('managed','external'):
                 out=args.output/(linkage+'-'+loop);out.mkdir()
-                cell=dict(linkage=linkage,loop=loop,compile=provenance,dependencies=graph);receipt['cells'].append(cell)
-                cell['clients'],cell['configuration']=scenarios(executable,loop,args,out,env,fixtures,commands,client)
+                cell=dict(linkage=linkage,loop=loop,compile=provenance,example_compile=example_provenance,dependencies=graph);receipt['cells'].append(cell)
+                cell['clients'],cell['configuration']=scenarios(executable,loop,args,out,env,fixtures,commands,client,example)
                 cell['status']='passed';print('PASS installed H3',args.tls,linkage,loop,flush=True)
         receipt['status']='passed'
         if args.tls=='yes':validate_matrix(receipt)

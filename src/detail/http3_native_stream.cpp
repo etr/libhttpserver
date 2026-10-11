@@ -62,7 +62,22 @@ void http3_request_engine::state::apply_native() {
         }
         std::shared_ptr<stream::command> prepared;
         { std::lock_guard lock(value->command_mutex); prepared = std::move(value->response); }
-        if (prepared && !value->native_closed.load()) respond(*r, prepared->status, prepared->fields, prepared->streaming);
+        if (!prepared || value->native_closed.load()) continue;
+        if (prepared->websocket) {
+            // The wire owner commits the opening response without abandoning input.
+            if (!upgrade_available(*value) || !section(*r, 200, prepared->fields, false)) {
+                prepared->websocket->transport_failed({http::outcome_code::connection_closed, "WebSocket opening refused"});
+                reset(*r, 0x10c); continue;
+            }
+            value->websocket = std::move(prepared->websocket);
+            value->websocket_input_charge = std::move(prepared->websocket_input);
+            value->websocket_output_charge = std::move(prepared->websocket_output);
+            value->websocket_message_charge = std::move(prepared->websocket_message);
+            observe_websocket(*value->websocket, id);
+            pump_websocket_input(*r);
+        } else {
+            respond(*r, prepared->status, prepared->fields, prepared->streaming);
+        }
     }
 }
 bool http3_request_engine::native_retired() {
@@ -89,6 +104,14 @@ std::optional<time_point> http3_request_engine::state::semantic_deadline(record&
     const auto v = r.semantic;
     if (!v) return {};
     std::optional<time_point> next;
+    if (v->websocket) {
+        const auto progress = v->websocket->snapshot();
+        if (progress.closing && !progress.terminal && progress.closing_since)
+            include_deadline(next, *progress.closing_since + limits.timeouts.ws_close);
+        if (progress.output_pending && progress.output_pending_since)
+            include_deadline(next, *progress.output_pending_since + limits.timeouts.write_idle);
+        return next;
+    }
     if (v->body.admitted() && !r.body_anchor) r.body_anchor = now;
     if (r.body_anchor && !r.receive_done && !r.abandoned) next = *r.body_anchor + limits.timeouts.body_idle;
     if (v->native_suspended.load()) {

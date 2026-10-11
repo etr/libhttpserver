@@ -111,6 +111,7 @@ void http2_request_engine::state::apply_native() {
     if (!native.workers) return;
     for (auto& [id, value] : streams) {
         if (value->native_abort.exchange(false) && !value->reset_pending) reset(id, http2_error_code::internal_error);
+        if (value->native_continue.exchange(false) && !value->reset_pending && !value->native_closed.load()) continue_response(*value);
         std::shared_ptr<head_command> prepared;
         { std::lock_guard lock(value->command_mutex); prepared = std::move(value->command); }
         if (value->websocket && !value->reset_pending) pump_websocket_input(*value);

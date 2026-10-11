@@ -340,6 +340,14 @@ class native_server::impl {
         for (const auto& listener : listeners_) if (listener) listeners.push_back(listener);
         return listeners;
     }
+#ifdef NATIVE_V3_TLS
+    std::vector<std::weak_ptr<engine::quic_udp_listener>> weak_udp_listeners() const {
+        std::vector<std::weak_ptr<engine::quic_udp_listener>> listeners;
+        listeners.reserve(udp_listeners_.size());
+        for (const auto& listener : udp_listeners_) if (listener) listeners.push_back(listener);
+        return listeners;
+    }
+#endif
     void quiesce_listeners(std::chrono::steady_clock::time_point deadline) {
         for (const std::shared_ptr<engine::listener_engine>& listener :
              listeners_) {
@@ -383,13 +391,25 @@ class native_server::impl {
         // Compare executor identity without dereferencing the pool:
         // a retiring provider step may retain the counted scope after stop.
         const auto listeners = weak_tcp_listeners();
+#ifdef NATIVE_V3_TLS
+        const auto udp = weak_udp_listeners();
+#endif
         const auto deadline = std::chrono::steady_clock::now() + budget;
         scope_->arm(deadline,
                     [identity = static_cast<const executor*>(&pool_), scope = scope_.get()] { return current_executor() == identity || engine::counted_drain_slot() == scope; },
-                    [listeners] {
+                    [listeners
+#ifdef NATIVE_V3_TLS
+                     , udp
+#endif
+                    ] {
                         for (const auto& weak : listeners) {
                             if (auto listener = weak.lock()) listener->request_stop(http::outcome_code::timeout);
                         }
+#ifdef NATIVE_V3_TLS
+                        for (const auto& weak : udp) {
+                            if (auto listener = weak.lock()) listener->request_stop(http::outcome_code::timeout);
+                        }
+#endif
                     });
         quiesce_listeners(deadline);
         static_cast<void>(backend_->wake());

@@ -414,9 +414,10 @@ LT_BEGIN_AUTO_TEST(http3_qpack_scheduling_suite, concurrent_transcript_preserves
     for (unsigned turn = 0; turn < 8; ++turn) {
         f.engine->begin_turn(); f.engine->pump_output(); f.executor.run_pending();
     }
+    LT_CHECK_EQ(f.credit(0), 65536U + post.size());
     f.drain(16);
     LT_CHECK_EQ(body, "abcd"); LT_CHECK_EQ(ended, 1U); LT_CHECK_EQ(f.fins[0], 1U); LT_CHECK_EQ(f.fins[4], 1U); LT_CHECK_EQ(f.fins[8], 1U);
-    LT_CHECK_EQ(f.credit(0), 65536U + post.size()); LT_CHECK(f.output[12].empty());
+    LT_CHECK(!f.flow.pending_credit(hd::quic_flow_kind::max_stream_data, 0)); LT_CHECK(f.output[12].empty());
     hd::qpack_dynamic_table decoder(hd::qpack_table_role::decoder); LT_ASSERT(decoder.initialize(h3test::budget(), 256).ok());
     auto blocked = hd::qpack_decoder{}.decode_dynamic(first_section(f.output[4]), decoder, {65536, 65536, 256});
     LT_CHECK(blocked.status.state == hd::qpack_state::inserts_unavailable);

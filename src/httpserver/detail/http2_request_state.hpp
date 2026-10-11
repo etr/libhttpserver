@@ -74,7 +74,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         std::shared_ptr<state> native_lifetime;
         std::shared_ptr<http2_dispatch> affinity;
         std::shared_ptr<route_executor> native_handlers;
-        std::atomic<bool> native_closed{false}, native_done{false}, native_retired{false}, native_abort{false};
+        std::atomic<bool> native_closed{false}, native_done{false}, native_retired{false}, native_abort{false}, native_continue{false};
         std::atomic<bool> native_suspended{false}, native_refused{false};
         std::optional<http2_connection::time_point> native_suspension_anchor, native_write_anchor;
         http2_connection::time_point native_body_anchor = std::chrono::steady_clock::now();
@@ -118,6 +118,15 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
                 notify();
             } else {
                     owner.reset(id, http2_error_code::refused_stream);
+                }
+                return;
+            }
+            if (head.head_fields.first("expect").value_or("") == "100-continue") {
+                if (affinity) {
+                    native_continue = true;
+                    notify();
+                } else {
+                    owner.continue_response(*this);
                 }
             }
         }
@@ -163,6 +172,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     struct response {
         std::uint32_t stream = 0;
         bool ended = true;
+        bool informational = false;
         std::vector<hpack_field> fields;
         std::optional<http2_error_code> reset;
         server::reservation charge;
@@ -451,6 +461,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
     std::optional<std::size_t> response_size(std::uint16_t status, const http::fields& fields) const;
     bool response_fields(response& value, std::uint16_t status, const http::fields& fields);
     void respond(std::uint32_t id, std::uint16_t status, const http::fields& fields, bool streaming);
+    void continue_response(stream& value);
     std::optional<http2_error> field_block_error(bool decoded) const {
         // RFC 9113 section 4.3 requires decompression even for discarded fields.
         if (!decoded) return connection_error(http2_error_code::compression_error);

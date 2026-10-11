@@ -44,8 +44,13 @@ std::optional<http3_error> http3_connection::fail(std::uint64_t code, std::strin
 }
 void http3_connection::retire_request(std::uint64_t id) {
     auto it = streams_.find(id);
-    if (it != streams_.end() && it->second->role == http3_role::request)
-        it->second->stream_charge.release();
+    if (it != streams_.end() && it->second->role == http3_role::request) {
+        auto& s = *it->second;
+        release_event(id);
+        s.parser.reset();
+        release_retained(s);
+        s.stream_charge.release();
+    }
 }
 std::optional<http3_error> http3_connection::attach_stream(std::uint64_t id) {
     if (error_) return error_;

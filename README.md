@@ -28,16 +28,17 @@ There is no v2 source or ABI compatibility shim. Include native headers such as
 | Native capability | Current public availability |
 | --- | --- |
 | HTTP/1.0 and HTTP/1.1 plaintext | Managed and external listeners |
-| HTTP/1.1 WebSocket | Coroutine upgrade/echo; independent of legacy WS flags |
-| TLS / HTTP/2 / HTTP/3 listeners | Typed `not_supported` before binding |
-| Certificate rotation | Repository-internal demonstration only; no public installation API |
+| WebSocket over HTTP/1.1, HTTP/2 and HTTP/3 | Coroutine upgrade, bounded sessions, RFC8441/RFC9220 Extended CONNECT |
+| TLS / HTTP/2 / HTTP/3 listeners | Certificate and initial mTLS; TCP ALPN `h2`, explicit UDP QUICv1 ALPN `h3`; managed and external loops |
+| Certificate rotation | Public `tls_credentials::replace`; accepted sessions retain immutable selections |
+| TLS-off encrypted listeners | Same declarations; typed `not_supported` before binding |
 
 Build native examples with `./bootstrap`, an out-of-tree configure using
 `CXX=clang++ CXXFLAGS='-std=c++20 -O0 -g'`, `--enable-examples` and
 `--disable-v3-tls`, then `make -j2`. For the optional native provider use
 `--enable-v3-tls` and genuine OpenSSL 3.5.x patch 9 or later as described in
-[the native TLS build guide](docs/native-tls-build.md). Provider availability
-and configuration validation do not imply public encrypted listener availability.
+[the native TLS build guide](docs/native-tls-build.md). Encrypted listeners require
+valid published credentials; HTTP/3 additionally requires explicit UDP configuration.
 The installed library is native-only: TLS-off needs C++20, threads and platform
 socket libraries; TLS-on adds the selected private OpenSSL provider. MHD and
 GnuTLS are no longer build or package prerequisites. Version **3.0.0** uses ELF

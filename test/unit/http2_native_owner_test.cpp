@@ -16,12 +16,60 @@ namespace httpserver::detail {
 struct http2_native_test_access {
     static void age_unadmitted_body(http2_request_engine& engine, std::uint32_t id) { engine.state_->streams.at(id)->native_body_anchor -= std::chrono::seconds(5); }
     static hs::resource_budget stream_budget(http2_request_engine& engine, std::uint32_t id) { return engine.state_->streams.at(id)->budget; }
+    static void data_turn(http2_request_engine& engine) { engine.state_->non_data_burst=8; }
 };
 }
 LT_BEGIN_SUITE(http2_native_owner_suite)
     void set_up() {}
     void tear_down() {}
 LT_END_SUITE(http2_native_owner_suite)
+LT_BEGIN_AUTO_TEST(http2_native_owner_suite, expect_continue_is_admitted_before_upload_in_both_owner_modes)
+    for (const bool native_mode : {false,true}) {
+        auto budget=h2test::budget();hs::route_registry routes;
+        LT_ASSERT(hs::route_registry::create(budget,routes).ok());
+        LT_ASSERT(routes.route(http::method::known(http::method_id::post),"/hello",[](httpserver::exchange& x)->httpserver::task<void> {
+            x.admit_body({16});std::array<std::byte,1> bytes;
+            auto body=co_await x.body().read_some(bytes);
+            if (body.status.ok()) x.respond(http::status::from_code(204),{});
+        }).ok());
+        httpserver::manual_executor owner,workers;hd::http2_native_context native;
+        if (native_mode) native.workers=&workers;
+        hd::http2_request_engine engine(budget,routes,owner,{},{},0,{},std::move(native));
+        hd::hpack_encoder encoder(budget);auto fields=h2test::get();fields[0].value="POST";
+        fields.push_back({"expect","100-continue"});fields.push_back({"content-length","1"});
+        auto wire=h2test::preface();h2test::append(wire,h2test::frame(1,4,1,h2test::encode(encoder,fields)));
+        LT_ASSERT(h2test::feed(engine,wire));owner.run_pending();workers.run_pending();
+        auto interim=h2test::responses(h2test::output(engine),true);
+        LT_ASSERT_EQ(interim.size(),1u);LT_CHECK(!interim[0].end_stream);
+        LT_CHECK(std::any_of(interim[0].fields.begin(),interim[0].fields.end(),[](const auto& f){return f.name==":status"&&f.value=="100";}));
+        LT_ASSERT(h2test::feed(engine,h2test::frame(0,1,1,{'x'})));owner.run_pending();workers.run_pending();
+        auto final=h2test::responses(h2test::output(engine),true);
+        LT_ASSERT_EQ(final.size(),1u);LT_CHECK(final[0].end_stream);
+        LT_CHECK(std::any_of(final[0].fields.begin(),final[0].fields.end(),[](const auto& f){return f.name==":status"&&f.value=="204";}));
+        engine.stop(http::outcome_code::cancelled);owner.run_pending();workers.run_pending();engine.begin_turn();
+    }
+LT_END_AUTO_TEST(expect_continue_is_admitted_before_upload_in_both_owner_modes)
+LT_BEGIN_AUTO_TEST(http2_native_owner_suite, informational_head_does_not_enable_data_before_final_head)
+    auto budget=h2test::budget();hs::route_registry routes;
+    LT_ASSERT(hs::route_registry::create(budget,routes).ok());
+    LT_ASSERT(routes.route(http::method::known(http::method_id::post),"/hello",[](httpserver::exchange& x)->httpserver::task<void> {
+        x.admit_body({16});std::array<std::byte,1> buffer;
+        if (!(co_await x.body().read_some(buffer)).status.ok()) co_return;
+        x.start_response(http::status::from_code(200),{});
+        co_await x.writer().write(buffer);co_await x.writer().finish();
+    }).ok());
+    httpserver::manual_executor owner,workers;hd::http2_native_context native;native.workers=&workers;
+    hd::http2_request_engine engine(budget,routes,owner,{},{},0,{},std::move(native));
+    hd::hpack_encoder encoder(budget);auto fields=h2test::get();fields[0].value="POST";fields.push_back({"expect","100-continue"});
+    auto wire=h2test::preface();h2test::append(wire,h2test::frame(1,4,1,h2test::encode(encoder,fields)));
+    LT_ASSERT(h2test::feed(engine,wire));workers.run_pending();h2test::output(engine);
+    LT_ASSERT(h2test::feed(engine,h2test::frame(0,1,1,{'x'})));workers.run_pending();
+    hd::http2_native_test_access::data_turn(engine);
+    const auto frames=h2test::frames(h2test::output(engine));
+    const auto response=std::find_if(frames.begin(),frames.end(),[](const auto& f){return f.stream==1&&(f.type==0||f.type==1);});
+    LT_ASSERT(response!=frames.end());LT_CHECK_EQ(response->type,1u);
+    engine.stop(http::outcome_code::cancelled);workers.run_pending();engine.begin_turn();
+LT_END_AUTO_TEST(informational_head_does_not_enable_data_before_final_head)
 LT_BEGIN_AUTO_TEST(http2_native_owner_suite, reset_running_resume_cancellation_waits_for_stream_affinity)
     auto budget = h2test::budget(); hs::route_registry routes;
     LT_ASSERT(hs::route_registry::create(budget, routes).ok());

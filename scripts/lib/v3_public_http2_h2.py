@@ -83,6 +83,8 @@ class Client:
             result = self.responses.setdefault(event.stream_id, {'headers': [], 'trailers': [], 'body': b'', 'ended': False})
             if isinstance(event, h2.events.ResponseReceived):
                 result['headers'] = event.headers
+            if isinstance(event, h2.events.InformationalResponseReceived):
+                result.setdefault('informational',[]).append(event.headers)
             if isinstance(event, h2.events.TrailersReceived):
                 result['trailers'] = event.headers
             if isinstance(event, h2.events.DataReceived):

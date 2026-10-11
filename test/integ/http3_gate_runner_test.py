@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 from pathlib import Path
 import unittest
+from types import SimpleNamespace
 import struct
 import queue
 import time
@@ -259,7 +260,12 @@ class GoawayWitness(unittest.TestCase):
             now = [0.0]
             def advance(seconds): now[0] += seconds
 
-            with patch.object(gate.time, 'monotonic', lambda: now[0]), patch.object(gate.time, 'sleep', advance):
+            # Replacing the gate's clock preserves subprocess's real clock and
+            # wait backoff; patching the shared time module advances this fake
+            # deadline during child-process settlement as well.
+            decoded = SimpleNamespace(returncode=0, stdout=self.first, stderr='')
+            with patch.object(gate, 'time', SimpleNamespace(monotonic=lambda: now[0], sleep=advance)), \
+                    patch.object(gate.subprocess, 'run', return_value=decoded):
                 with self.assertRaisesRegex(gate.GateFailure, 'GOAWAY witness deadline exceeded'):
                     gate.goaway_witness(decoder, directory, 443, deadline=0.1)
 

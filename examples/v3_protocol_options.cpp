@@ -3,7 +3,11 @@
      SPDX-License-Identifier: LGPL-2.1-or-later
 */
 #include <iostream>
+#include <fstream>
+#include <memory>
+#include <httpserver/features.hpp>
 #include <httpserver/server/server.hpp>
+#include <httpserver/server/tls_credentials.hpp>
 
 namespace {
 const char* outcome_name(const httpserver::http::outcome& result) {
@@ -15,7 +19,8 @@ const char* outcome_name(const httpserver::http::outcome& result) {
     }
 }
 
-bool demonstrate(const char* label, httpserver::http::protocol protocol, bool tls) {
+bool demonstrate(const char* label, httpserver::http::protocol protocol, bool tls,
+                 const std::string& chain, const std::string& key) {
     namespace srv = httpserver::server;
     namespace http = httpserver::http;
     srv::server_options options;
@@ -27,7 +32,15 @@ bool demonstrate(const char* label, httpserver::http::protocol protocol, bool tl
         options.tls().provider = srv::tls_provider::system_default;
         options.tls().profile = srv::tls_profile::certificates;
     }
-    options.add_listener({"127.0.0.1", 0, tls});
+    std::shared_ptr<srv::tls_credentials> credentials;
+    const bool available = httpserver::query_features().tls_provider;
+    if (tls && available) {
+        credentials = std::make_shared<srv::tls_credentials>();
+        const std::string alpn = protocol == http::protocol::http_3 ? "h3" : protocol == http::protocol::http_2 ? "h2" : "http/1.1";
+        if (!credentials->replace({{{"a.example", chain, key, {alpn}}}, 0}).ok()) return false;
+    }
+    options.add_listener({"127.0.0.1", 0, tls, credentials,
+        protocol == http::protocol::http_3 ? srv::listener_transport::udp : srv::listener_transport::tcp});
     const auto validated = options.validate();
     srv::native_server server(options);
     const auto listened = server.listen();
@@ -35,18 +48,21 @@ bool demonstrate(const char* label, httpserver::http::protocol protocol, bool tl
     std::cout << label << " validate=" << outcome_name(validated)
               << " listen=" << outcome_name(listened) << " port=" << port << '\n';
     server.stop();
-    if (!tls) return validated.ok() && listened.ok() && port != 0;
-    // A provider permits semantic validation; public encrypted listeners
-    // still return not_supported before any bind, even in TLS-on builds.
-    return validated.ok() && listened.code() == http::outcome_code::not_supported && port == 0;
+    if (!tls || available) return validated.ok() && listened.ok() && port != 0;
+    return listened.code() == http::outcome_code::not_supported && port == 0;
 }
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
     namespace http = httpserver::http;
-    const bool h1 = demonstrate("HTTP/1.1", http::protocol::http_1_1, false);
-    const bool tls = demonstrate("TLS", http::protocol::http_1_1, true);
-    const bool h2 = demonstrate("HTTP/2", http::protocol::http_2, true);
-    const bool h3 = demonstrate("HTTP/3", http::protocol::http_3, true);
+    if (httpserver::query_features().tls_provider && argc != 3) {
+        std::cerr << "usage: v3_protocol_options CHAIN_PEM KEY_PEM\n"; return 2;
+    }
+    const auto read = [](const char* path) { std::ifstream file(path); return std::string(std::istreambuf_iterator<char>(file), {}); };
+    const std::string chain = argc == 3 ? read(argv[1]) : "", key = argc == 3 ? read(argv[2]) : "";
+    const bool h1 = demonstrate("HTTP/1.1", http::protocol::http_1_1, false, chain, key);
+    const bool tls = demonstrate("TLS", http::protocol::http_1_1, true, chain, key);
+    const bool h2 = demonstrate("HTTP/2", http::protocol::http_2, true, chain, key);
+    const bool h3 = demonstrate("HTTP/3", http::protocol::http_3, true, chain, key);
     return h1 && tls && h2 && h3 ? 0 : 1;
 }

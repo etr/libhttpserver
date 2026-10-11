@@ -5,6 +5,7 @@
 #include <string>
 #include <thread>
 #include "./http3_request_fixture.hpp"
+#include "./http3_websocket_fixture.hpp"
 #include "./littletest.hpp"
 namespace hd = httpserver::detail;
 namespace hs = httpserver::server;
@@ -75,6 +76,19 @@ LT_BEGIN_AUTO_TEST(native_h3_suite, response_command_owns_cached_field_storage_a
     LT_ASSERT(!response.heads.empty());
     LT_CHECK(std::any_of(response.heads[0].begin(), response.heads[0].end(), [](const auto& field) { return field.name == "x-owned-h3" && field.value == std::string(128, 'a'); }));
 LT_END_AUTO_TEST(response_command_owns_cached_field_storage_after_handler_returns)
+LT_BEGIN_AUTO_TEST(native_h3_suite, exception_after_response_commit_resets_and_retires_native_exchange)
+    fixture f;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [](exchange& x) -> task<void> {
+        x.start_response(http::status::from_code(200), {});
+        throw std::runtime_error("after response commitment"); co_return;
+    }).ok());
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true));
+    f.workers.run_pending(); f.drain(); f.workers.run_pending(); f.drain();
+    const auto action = f.engine->take_action();
+    LT_CHECK(action && action->reset && action->reset->error == 0x102);
+    LT_CHECK(f.engine->native_retired());
+    LT_CHECK_EQ(f.global->active(), 0u);
+LT_END_AUTO_TEST(exception_after_response_commit_resets_and_retires_native_exchange)
 LT_BEGIN_AUTO_TEST(native_h3_suite, retained_but_unsent_response_has_write_deadline)
     hd::http3_request_limits limits; limits.timeouts.write_idle = std::chrono::milliseconds(10);
     fixture f(limits);
@@ -100,7 +114,7 @@ LT_BEGIN_AUTO_TEST(native_h3_suite, native_upgrade_refuses_before_touching_wire_
         x.respond(http::status::from_code(204), {});
     }).ok());
     f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true)); f.workers.run_pending();
-    LT_CHECK(result == http::outcome_code::not_supported);
+    LT_CHECK(result == http::outcome_code::protocol_error);
 LT_END_AUTO_TEST(native_upgrade_refuses_before_touching_wire_domain)
 LT_BEGIN_AUTO_TEST(native_h3_suite, already_admitted_native_connection_is_not_charged_twice)
     fixture f;
@@ -154,6 +168,91 @@ LT_BEGIN_AUTO_TEST(native_h3_suite, native_global_and_protocol_tickets_both_coun
     LT_CHECK(result.status == hs::drain_status::deadline_expired); LT_CHECK_EQ(result.remaining, 2u);
     held.signal(); f.workers.run_pending();
 LT_END_AUTO_TEST(native_global_and_protocol_tickets_both_count_unretired_request)
+LT_BEGIN_AUTO_TEST(native_h3_suite, extended_connect_command_preserves_immediate_data_and_handler_return)
+    fixture f;
+    std::optional<httpserver::websocket::session> session;
+    http::outcome_code outcome = http::outcome_code::invalid_state;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::connect), "/chat", [&](exchange& x) -> task<void> {
+        auto result = co_await x.upgrade({}); outcome = result.status.code();
+        if (result.session) session.emplace(std::move(*result.session));
+    }).ok());
+    f.open(2); LT_ASSERT(f.feed(2, h3test::bytes({0, 4, 2, 8, 1})));
+    f.open(0);
+    auto wire = h3test::headers(h3ws::connect());
+    const auto data = h3test::frame(0, h3ws::masked(1, "immediate"));
+    wire.insert(wire.end(), data.begin(), data.end());
+    LT_ASSERT(f.feed(0, wire)); f.workers.run_pending();
+    LT_CHECK(outcome == http::outcome_code::ok); LT_ASSERT(session);
+    LT_CHECK(f.output[0].empty());
+    LT_ASSERT(f.feed(0, h3test::frame(0, h3ws::masked(1, "before commit"))));
+    f.drain(); f.workers.run_pending(); f.drain();
+    const auto reply = h3test::decode_response(f.output[0]);
+    LT_ASSERT(!reply.heads.empty());
+    LT_CHECK(std::any_of(reply.heads[0].begin(), reply.heads[0].end(), [](const auto& field) {
+        return field.name == ":status" && field.value == "200";
+    }));
+    std::optional<httpserver::websocket::receive_result> message;
+    httpserver::spawn(f.workers, session->receive(), [&](auto result) { message.emplace(std::move(result.value())); });
+    f.workers.run_pending();
+    LT_ASSERT(message); LT_CHECK_EQ(h3ws::text(*message), std::string("immediate"));
+    message.reset();
+    httpserver::spawn(f.workers, session->receive(), [&](auto result) { message.emplace(std::move(result.value())); });
+    f.workers.run_pending();
+    LT_ASSERT(message); LT_CHECK_EQ(h3ws::text(*message), std::string("before commit"));
+    LT_CHECK_EQ(f.fins[0], 0u);
+LT_END_AUTO_TEST(extended_connect_command_preserves_immediate_data_and_handler_return)
+LT_BEGIN_AUTO_TEST(native_h3_suite, queued_native_upgrade_reset_cancels_session_without_opening_response)
+    fixture f;
+    std::optional<httpserver::websocket::session> session;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::connect), "/chat", [&](exchange& x) -> task<void> {
+        auto result = co_await x.upgrade({});
+        if (result.session) session.emplace(std::move(*result.session));
+    }).ok());
+    f.open(2); LT_ASSERT(f.feed(2, h3test::bytes({0, 4, 2, 8, 1})));
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3ws::connect()))); f.workers.run_pending();
+    LT_ASSERT(session);
+    std::optional<httpserver::websocket::receive_result> received;
+    httpserver::spawn(f.workers, session->receive(), [&](auto result) { received.emplace(std::move(result.value())); });
+    f.workers.run_pending(); LT_CHECK(!received);
+    f.engine->stop_sending(0, 0x10c); f.workers.run_pending(); f.drain();
+    LT_ASSERT(received); LT_CHECK(!received->status.ok()); LT_CHECK(f.output[0].empty());
+LT_END_AUTO_TEST(queued_native_upgrade_reset_cancels_session_without_opening_response)
+LT_BEGIN_AUTO_TEST(native_h3_suite, native_websocket_close_timeout_terminates_pending_receive_once)
+    hd::http3_request_limits limits; limits.timeouts.ws_close = std::chrono::milliseconds(10);
+    fixture f(limits); std::optional<httpserver::websocket::session> session;
+    unsigned closed = 0; http::outcome_code close_reason = http::outcome_code::ok;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::connect), "/chat", [&](exchange& x) -> task<void> {
+        auto result = co_await x.upgrade({});
+        if (result.session) session.emplace(std::move(*result.session));
+    }).ok());
+    f.open(2); LT_ASSERT(f.feed(2, h3test::bytes({0, 4, 2, 8, 1})));
+    f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3ws::connect()))); f.workers.run_pending();
+    LT_ASSERT(session); f.drain();
+    LT_ASSERT(session->on_close([&](auto info) { ++closed; close_reason = info.status.code(); }).ok());
+    LT_ASSERT(session->close().ok());
+    const auto now = std::chrono::steady_clock::now();
+    f.engine->pump_output();
+    const auto due = f.engine->next_deadline(); LT_ASSERT(due);
+    LT_CHECK(*due <= now + std::chrono::milliseconds(10));
+    f.engine->expire(now + std::chrono::milliseconds(20)); f.workers.run_pending();
+    LT_CHECK_EQ(closed, 1u); LT_CHECK(close_reason == http::outcome_code::timeout);
+    f.engine->expire(now + std::chrono::seconds(1)); f.workers.run_pending(); LT_CHECK_EQ(closed, 1u);
+LT_END_AUTO_TEST(native_websocket_close_timeout_terminates_pending_receive_once)
+LT_BEGIN_AUTO_TEST(native_h3_suite, queued_opening_accounts_for_copied_subprotocol_bytes)
+    const auto queued_bytes = [](std::size_t length) {
+        fixture f; const std::string protocol(length, 'a');
+        f.routes.route(http::method::known(http::method_id::connect), "/chat", [&](exchange& x) -> task<void> {
+            httpserver::ws_upgrade_options options; options.subprotocols = {protocol}; options.require_subprotocol = true;
+            co_await x.upgrade(options);
+        });
+        f.open(2); f.feed(2, h3test::bytes({0, 4, 2, 8, 1}));
+        auto fields = h3ws::connect(); fields.push_back({"sec-websocket-protocol", protocol});
+        f.open(0); f.feed(0, h3test::headers(fields)); f.workers.run_pending();
+        return f.root.in_use(hs::resource::response_queue_bytes);
+    };
+    const auto small = queued_bytes(16), large = queued_bytes(2048);
+    LT_CHECK(large >= small + 6 * (2048 - 16));
+LT_END_AUTO_TEST(queued_opening_accounts_for_copied_subprotocol_bytes)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

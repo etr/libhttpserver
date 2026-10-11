@@ -144,3 +144,9 @@ __pycache__/
 !scripts/check-v3-public-tls.py
 !scripts/check-v3-public-http2.py
 !scripts/test-v3-public-http2.py
+!test/installed/v3_http3_credentials.py
+!test/installed/v3_http3_semantics.py
+!test/installed/v3_http3_lifecycle.py
+!test/installed/v3_http3_qpack.py
+
+!test/installed/v3_http3_flow.py

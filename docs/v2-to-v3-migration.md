@@ -23,16 +23,17 @@ TCP/TLS/QUIC transport evidence; these are different kinds of proof.
 | Plaintext HTTP/1.0 and HTTP/1.1 | Managed and external listeners available | `v3_routes`, `v3_external_event_loop` |
 | HTTP/1.1 WebSocket Upgrade | Coroutine API available without legacy WS build flags | `v3_websocket_echo` |
 | Certificate TCP TLS HTTP/1 listeners | Public credential store, managed/external listeners in TLS-on builds | `test/installed/v3_tls_consumer.cpp` |
-| HTTP/2 and HTTP/3 listeners | `native_server::listen()` returns `not_supported` before binding any endpoint | `v3_protocol_options` |
+| HTTP/2 and HTTP/3 listeners | TLS-on: TCP ALPN `h2`; explicit UDP QUICv1/TLS1.3 ALPN `h3`, managed/external | `v3_protocol_options`, `v3_http3` |
+| HTTP/2 and HTTP/3 WebSocket | RFC8441/RFC9220 Extended CONNECT shares the bounded session API | Installed independent wire corpora |
 | Common HTTP/1.1, HTTP/2, HTTP/3 handlers | Semantic exchange contract exercised for each version | `test/unit/v3_examples_test.cpp` |
 | Certificate rotation | Public `tls_credentials::replace`, immutable accepted selections | `test/examples/v3_tls_rotation.cpp`, installed TLS runner |
 
-`server_options::validate()` checks configuration semantics, not transport
-availability. A TLS-on build can validate certificate-profile H2/H3 options and
-still refuse `listen()`. `query_features()` distinguishes provider availability
-from public transports. Valid credential-backed mixed plaintext/TLS listeners
-serve HTTP/1; missing credentials reject atomically. Private H2/H3 and Extended
-CONNECT evidence remains distinct from public protocol availability.
+`server_options::validate()` checks configuration semantics. TLS-on encrypted
+listeners also require compatible published credentials. HTTP/3 requires a UDP
+listener entry; TCP and UDP may share a fixed numeric port through two explicit
+entries. Missing credentials and invalid mappings reject atomically. TLS-off keeps
+the same declarations and typed `not_supported` outcomes. Public installed-client
+evidence supplements the retained private transport and Extended CONNECT gates.
 
 ## Server construction and routing
 

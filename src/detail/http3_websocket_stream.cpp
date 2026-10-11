@@ -6,6 +6,12 @@
 #include <httpserver/detail/http3_request_state.hpp>
 namespace httpserver::detail {
 void http3_request_engine::state::observe_websocket(websocket_driver& driver, std::uint64_t id) {
+    if (native.workers) {
+        driver.observe_progress([weak = weak_from_this()] {
+            if (auto self = weak.lock(); self && self->native.progress && *self->native.progress) (*self->native.progress)();
+        });
+        return;
+    }
     auto queued = std::make_shared<std::atomic<bool>>(false);
     auto progress = [weak = weak_from_this(), id, queued] {
         if (queued->exchange(true)) return;

@@ -4,6 +4,13 @@
 namespace httpserver::detail {
 quic_flow_result quic_flow_control::implementation::receive_admission(const quic_stream_state& stream, std::uint64_t id, std::uint64_t end, record*& value) {
     if (id != stream.id() || !ids.opened(id) || !quic_stream_sender_allowed(id, false, ids.local_role())) return {quic_flow_code::stream_state_error};
+    value = find(id);
+    // Retired IDs retain their original stream owner and final-size checks.
+    // A retransmission must not recreate the stream or spend credit again.
+    if (value && value->retired) {
+        if (value->receive_owner != &stream) return {quic_flow_code::stream_state_error};
+        return {};
+    }
     auto admitted = record_admission(id);
     if (admitted != quic_flow_code::ok) return {admitted};
     value = create(id);

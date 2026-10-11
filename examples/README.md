@@ -38,11 +38,18 @@ Run `./examples/v3_protocol_options` for the configuration report and
 The WebSocket example accepts `/echo` without an Origin policy for local smoke
 use; applications should configure allowed origins, subprotocols and limits.
 
-The protocol example compiles in TLS-off and TLS-on builds. It validates each
-configuration and reports `not_supported` with port zero for public TLS/H2/H3
-listeners. It does not serve H2/H3. Shared-handler tests exercise their semantic
-contract; the [TASK-179 audit](../docs/task-179-behavior-parity.md) separately
-records private encrypted transport and Extended CONNECT evidence.
+The protocol example compiles in TLS-off and TLS-on builds. In TLS-on, pass a PEM
+certificate chain and matching private key: `v3_protocol_options CHAIN_PEM KEY_PEM`.
+It binds each supported listener, reports the actual port, then stops. TLS-off
+reports typed `not_supported` with port zero for TLS/H2/H3.
+
+`v3_http3 CHAIN_PEM KEY_PEM [managed|external]` serves `/hello` through the same
+route on TCP H1/H2 and UDP H3, and `/ws/echo` through RFC9220 Extended CONNECT.
+Its sample SNI is `a.example` and required WebSocket subprotocol is `harness.v1`;
+adapt both to your certificates/application. The first output line is the UDP
+port; the second reports `TCP_PORT`. Enter `stop` or close stdin to shut down.
+The installed runner compiles this example in shared/static cells and exercises
+both loops with independent clients. The retained private gates remain separate.
 
 The native examples also compile as installed consumers. With libhttpserver.pc and prerequisite .pc metadata
 available via PKG_CONFIG_PATH, run from the repository root:
@@ -54,21 +61,20 @@ clang++ -std=c++20 examples/v3_protocol_options.cpp -o /tmp/v3_protocol_options 
 clang++ -std=c++20 examples/v3_external_event_loop.cpp -o /tmp/v3_external_event_loop $(pkg-config --cflags --libs libhttpserver)
 ```
 
-Private TLS rotation demonstration
-----------------------------------
+Public TLS rotation example
+---------------------------
 
-[test/examples/v3_tls_rotation.cpp](../test/examples/v3_tls_rotation.cpp) is
-repository-internal, requires `HTTPSERVER_COMPILATION`, and cannot use installed
-public headers. Build with the genuine provider described in
-[native-tls-build.md](../docs/native-tls-build.md): configure a fresh build with
-`--enable-v3-tls --enable-examples` and explicit `V3_TLS_CFLAGS`/`V3_TLS_LIBS`, run
-`make -j2`, then `make -C test v3_tls_rotation`. Run `./test/v3_tls_rotation` from
-the build root. It loads committed fixtures and demonstrates retained old
-selection, new active selection, and failed replacement preserving that selection.
-`make -C test check TESTS='tls_credentials tls_credentials_rotation v3_tls_rotation'
-check_PROGRAMS='tls_credentials tls_credentials_rotation v3_tls_rotation'` runs
-the private demonstration and independent established-session handshake tests.
-There is no public native credential installation/rotation API.
+[test/examples/v3_tls_rotation.cpp](../test/examples/v3_tls_rotation.cpp) uses
+public headers and the `server::tls_credentials` store. Build with the genuine
+provider described in [native-tls-build.md](../docs/native-tls-build.md), then
+run `make -C test v3_tls_rotation` in the configured build. Supply a certificate
+directory containing the committed fixture names, a loop mode and a TCP port:
+`./test/v3_tls_rotation /path/to/test/data/tls_credentials managed 0`.
+The first output line is the actual listener port. The `/installed` route returns
+`rotation-example`. Stdin `invalid` preserves the active generation, `replace`
+publishes the `b.example` material, and `stop` shuts down. Existing connections
+continue across replacement; new handshakes select the new generation. The
+example smoke test and installed TCP/QUIC matrices verify these public operations.
 
 Legacy v2 examples
 ------------------

@@ -8,13 +8,8 @@
 #include <httpserver/detail/http3_websocket_handshake.hpp>
 namespace httpserver::detail {
 websocket_upgrade_result http3_request_engine::state::stream::on_upgrade(const ws_upgrade_options& options) {
-    if (owner.native.workers) {
-        websocket_upgrade_result out;
-        out.status = {http::outcome_code::not_supported, "Native HTTP/3 WebSocket upgrade is unavailable"};
-        return out;
-    }
     try {
-        return owner.upgrade(*this, options);
+        return owner.native.workers ? native_upgrade(options) : owner.upgrade(*this, options);
     } catch (const std::bad_alloc&) {
         websocket_upgrade_result out;
         out.status = {http::outcome_code::limit_exceeded, "WebSocket allocation refused"}; return out;
@@ -22,6 +17,43 @@ websocket_upgrade_result http3_request_engine::state::stream::on_upgrade(const w
         websocket_upgrade_result out;
         out.status = {http::outcome_code::limit_exceeded, "WebSocket allocation size refused"}; return out;
     }
+}
+websocket_upgrade_result http3_request_engine::state::stream::native_upgrade(const ws_upgrade_options& options) {
+    websocket_upgrade_result out;
+    auto plan = negotiate_http3_websocket(request.head(), connect, options, owner.limits.framing.headers.max_expanded_bytes,
+                                          owner.limits.framing.headers.max_fields);
+    out.status = plan.status; out.rejection_status = plan.rejection_status; out.rejection_fields = std::move(plan.rejection_fields);
+    if (!out.status.ok()) return out;
+    if (native_closed.load() || body.receive_ended()) {
+        out.status = {http::outcome_code::connection_closed, "WebSocket stream unavailable"}; return out;
+    }
+    const auto limit = std::min<std::uint64_t>(owner.limits.framing.headers.max_expanded_bytes, peer_section_limit);
+    auto remaining = static_cast<std::size_t>(limit);
+    const auto fields = plan.selected_subprotocol.empty() ? 0u : 1u;
+    if (fields + 1 > owner.limits.framing.headers.max_fields || !qpack_admit_field(7, 3, remaining) ||
+        (fields && !qpack_admit_field(21, plan.selected_subprotocol.size(), remaining))) {
+        out.status = {http::outcome_code::limit_exceeded, "WebSocket opening fields refused"}; return out;
+    }
+    auto prepared = std::make_shared<command>();
+    const auto retained_bytes = 6 * (limit - remaining + 32) + fields * 128;
+    auto effective = options.limits;
+    if (!budget.reserve(server::resource::response_queue_bytes, retained_bytes, prepared->charge).ok() ||
+        !owner.reserve_websocket(effective, prepared->websocket_input, prepared->websocket_output, prepared->websocket_message)) {
+        out.status = {http::outcome_code::limit_exceeded, "WebSocket storage admission refused"}; return out;
+    }
+    if (fields) prepared->fields.append("sec-websocket-protocol", plan.selected_subprotocol);
+    prepared->websocket = std::make_shared<websocket_driver>(effective);
+    auto session = prepared->websocket->take_session();
+    {
+        std::lock_guard lock(command_mutex);
+        if (native_closed.load() || response) {
+            out.status = {http::outcome_code::connection_closed, "WebSocket stream unavailable"}; return out;
+        }
+        response = std::move(prepared);
+    }
+    out.selected_subprotocol = std::move(plan.selected_subprotocol);
+    out.session.emplace(std::move(session));
+    notify(); return out;
 }
 bool http3_request_engine::state::upgrade_available(const stream& value) const {
     const auto& r = value.transport;

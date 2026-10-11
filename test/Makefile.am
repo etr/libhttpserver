@@ -1596,7 +1596,7 @@ noinst_PROGRAMS += http3_semantic_parity_fixture
 http3_semantic_parity_fixture_SOURCES = integ/http3_semantic_parity_fixture.cpp parity/response_frame.cpp
 http3_semantic_parity_fixture_LDADD = $(http3_headers_LDADD)
 http3_semantic_parity_fixture_LDFLAGS = $(http3_headers_LDFLAGS)
-EXTRA_DIST += support/http3_semantic_routes.hpp integ/http3_semantic_aioquic.py integ/http3-client-go/semantic.go integ/http3-client-go/semantic_test.go
+EXTRA_DIST += support/http3_semantic_routes.hpp integ/http3_semantic_aioquic.py integ/http3-client-go/semantic.go integ/http3-client-go/semantic_test.go integ/http3-client-go/public_test.go integ/http3-client-go/public_websocket.go
 
 check_PROGRAMS += http3_semantic_h1
 http3_semantic_h1_SOURCES = unit/http3_semantic_h1_test.cpp parity/response_frame.cpp
@@ -1801,3 +1801,8 @@ http3_native_stream_SOURCES = unit/http3_native_stream_test.cpp
 http3_native_stream_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -I$(top_srcdir) -DHTTPSERVER_COMPILATION
 http3_native_stream_LDADD = $(top_builddir)/src/libhttpserver_v3core.la $(V3_TLS_LIBS)
 http3_native_stream_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+
+EXTRA_DIST += installed/v3_http3_semantics.hpp installed/v3_http3_semantics.py
+EXTRA_DIST += installed/v3_http3_credentials.py
+EXTRA_DIST += installed/v3_http3_lifecycle.py
+EXTRA_DIST += installed/v3_http3_qpack.py installed/v3_http3_flow.py

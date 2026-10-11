@@ -117,6 +117,42 @@ LT_BEGIN_AUTO_TEST(http3_cancellation_suite, stop_sending_uses_emitted_size_and_
     f.drain();
     LT_CHECK_EQ(f.output[0].size(), 0u);
 LT_END_AUTO_TEST(stop_sending_uses_emitted_size_and_clean_fin_does_not_cancel_response)
+LT_BEGIN_AUTO_TEST(http3_cancellation_suite, peer_reset_before_stop_sending_still_resets_send_half_once)
+    for (const bool reset_first : {false, true}) {
+        h3test::request_fixture f;
+        httpserver::resume_signal pause;
+        unsigned resumed = 0;
+        LT_ASSERT(f.routes.route(http::method::known(http::method_id::post), "/hello",
+            [&](exchange& x) -> task<void> {
+                x.admit_body({});
+                co_await pause.wait();
+                ++resumed;
+            }).ok());
+        auto& stream = f.open(0);
+        LT_ASSERT(f.feed(0, h3test::headers(h3test::get("POST"))));
+        f.executor.run_pending();
+        const auto reset_receive = [&] {
+            LT_ASSERT(f.flow.receive(stream, hd::quic_reset_stream_frame{0, 0x10c, f.incoming[0]}));
+            const auto terminal = stream.take_terminal();
+            LT_ASSERT(terminal);
+            f.engine->terminal(0, *terminal);
+        };
+        if (reset_first) reset_receive();
+        f.engine->stop_sending(0, 0x10c);
+        const auto action = f.engine->take_action();
+        LT_ASSERT(action);
+        LT_ASSERT(action->reset);
+        LT_CHECK_EQ(action->reset->error, 0x10cu);
+        LT_CHECK_EQ(action->reset->final_size, 0u);
+        if (!reset_first) reset_receive();
+        f.engine->stop_sending(0, 0x10c);
+        LT_CHECK(!f.engine->take_action());
+        pause.signal();
+        f.executor.run_pending();
+        LT_CHECK_EQ(resumed, 0u);
+        LT_CHECK(!f.engine->failure());
+    }
+LT_END_AUTO_TEST(peer_reset_before_stop_sending_still_resets_send_half_once)
 LT_BEGIN_AUTO_TEST(http3_cancellation_suite, unfinished_streaming_handler_is_reset)
     h3test::request_fixture f;
     LT_ASSERT(f.routes
@@ -272,7 +308,11 @@ LT_BEGIN_AUTO_TEST(http3_cancellation_suite, reset_releases_partial_response_sto
     f.engine->stop_sending(0, 7);
     f.executor.run_pending();
     LT_CHECK_EQ(f.pool.data().budget.in_use(h3test::hs::resource::header_bytes), 0u);
-    LT_CHECK_EQ(f.pool.data().budget.in_use(h3test::hs::resource::quic_reassembly_bytes), before + stream.retained_storage());
+    // Cancellation returns parser and reusable bridge buffers while retaining
+    // the bounded stream-ID descriptor and any actual transport bytes.
+    const auto retained = f.pool.data().budget.in_use(h3test::hs::resource::quic_reassembly_bytes);
+    LT_CHECK(retained < before + stream.retained_storage());
+    LT_CHECK(retained >= stream.retained_storage());
     LT_CHECK_EQ(stream.highest_sent(), 0u);
 LT_END_AUTO_TEST(reset_releases_partial_response_storage_and_semantic_reservations)
 LT_BEGIN_AUTO_TEST(http3_cancellation_suite, transport_reset_interrupts_an_outstanding_borrowed_data_event)

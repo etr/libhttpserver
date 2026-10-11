@@ -50,6 +50,19 @@ bool http2_request_engine::state::reserve_response(response& value, std::size_t 
     return (scope ? *scope : budget).reserve(server::resource::response_queue_bytes,
         semantic + 5 * value.wire_limit + value.framed_limit + sizeof(response) + sizeof(head_command) + 256, value.charge).ok();
 }
+void http2_request_engine::state::continue_response(stream& stream) {
+    if (connection.failure() || stream.reset_pending || !queue_room()) return;
+    response value;
+    value.stream = stream.id;
+    value.ended = false;
+    value.informational = true;
+    if (!reserve_response(value, 42, 0, &stream.budget)) {
+        reset(stream.id, http2_error_code::internal_error);
+        return;
+    }
+    response_fields(value, 100, {});
+    pending.push_back(std::move(value));
+}
 void http2_request_engine::state::respond(std::uint32_t id, std::uint16_t status, const http::fields& fields, bool streaming) {
     if (connection.failure()) return;
     const auto found = streams.find(id);
@@ -101,7 +114,7 @@ bool http2_request_engine::state::encode_next() {
         fail(connection_error(http2_error_code::internal_error)); return false;
     }
     frame_headers(value, hpack_octets(encoded.value));
-    if (auto found = streams.find(value.stream); found != streams.end()) {
+    if (auto found = streams.find(value.stream); found != streams.end() && !value.informational) {
         found->second->headers_sent = true;
     }
     return true;

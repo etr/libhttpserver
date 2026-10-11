@@ -13,7 +13,7 @@ selection, budgets, timeouts, worker concurrency and loop ownership.
 Plaintext HTTP/1.0 and HTTP/1.1 listeners are available. TLS-on builds also serve
 public HTTP/1 certificate, initial mTLS and eligible external-PSK listeners.
 Certificate and initial mTLS listeners also serve HTTP/2 when enabled and negotiated
-with TLS ALPN `h2`. HTTP/3 listeners still return not_supported before binding.
+with TLS ALPN `h2`. Explicit UDP listeners serve QUICv1 HTTP/3 with ALPN `h3`.
 HTTP/2 has no cleartext upgrade or prior-knowledge listener.
 Provider availability from \ref httpserver::query_features is a separate fact.
 
@@ -54,7 +54,10 @@ canonical attribute ordering, SameSite=None and bounded GMT Expires behavior.
 \ref httpserver::exchange::upgrade returns a typed rejection or owning
 \ref httpserver::websocket::session. Check try_send backpressure and await
 writable; keep the session alive through close notification. The public example
-uses HTTP/1.1 Upgrade; private H2/H3 evidence uses Extended CONNECT.
+uses HTTP/1.1 Upgrade. Native H2 uses RFC8441 Extended CONNECT and native H3
+uses RFC9220 Extended CONNECT through the same operation. The public
+examples/v3_http3.cpp example demonstrates a certificate-backed UDP listener and
+keeps the WebSocket session alive through Close/FIN.
 
 \include v3_websocket_echo.cpp
 
@@ -100,4 +103,28 @@ options.add_listener({"127.0.0.1", 0, true, credentials,
 
 Publish a certificate host with `h3` ALPN through the ordinary public credential store and register the ordinary public routes. `get_bound_port(index)` reports that UDP entry's actual port. To serve TCP and UDP on the same fixed port, configure two entries with different transports. All endpoints bind before any becomes active; partial failure rolls back every port. H3 without explicit UDP and UDP without H3/TLS fail before bind. TLS-off builds retain these declarations and return typed `not_supported`. External PSK remains HTTP/1-only.
 
-The native path supports authenticated QUICv1/TLS1.3 routes, incremental bodies, ordered trailers and independent concurrent request streams. Native RFC9220 and comprehensive HTTP/3 parity/rotation/staged drain are subsequent v3 tasks. `request_stop()` is immediate; `stop()` and destruction retain callback services until pending completions and protocol close expiry, including when an external host loop has stopped dispatching.
+The native path supports authenticated QUICv1/TLS1.3 routes, incremental bodies,
+ordered trailers, independent concurrent request streams and RFC9220 WebSocket
+Extended CONNECT. Routes use the same authentication, forms and immutable response
+services as TCP. Stream credit follows actual application consumption; a stalled
+body or writer leaves admitted siblings and critical protocol output usable.
+Credential replacement preserves established connections and isolates new
+handshakes by host/store/generation. Initial mTLS is available; external PSK remains
+HTTP/1-only and QUIC never selects ACME challenge credentials or accepts 0-RTT data.
+
+One `begin_drain` ticket includes every TCP/UDP listener, accepted application work
+and reliable response retirement. H3 staged GOAWAY refuses new requests, accepted
+streams can finish, and WebSocket sessions receive Close 1001. Deadline expiry
+cancels remaining work. Protocol closing retention is separate from unfinished
+application work. `request_stop()` is immediate; `stop()` and destruction retain
+callback services through pending atomic sends and actual three-PTO close expiry,
+including when an external host loop has stopped dispatching.
+
+The current native connection has bounded history for 64 transport stream records
+and 16 active requests. A terminal request releases heavy buffers and replenishes
+MAX_STREAMS only after reliable FIN/reset acknowledgment; retained IDs cannot be
+recreated. The fixed lifetime history remains a connection envelope, even after
+live application charges return to baseline.
+
+See `examples/v3_http3.cpp` for one route registry serving TCP H1/H2 and UDP H3,
+with an RFC9220 echo route and either loop mode.

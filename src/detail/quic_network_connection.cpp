@@ -114,7 +114,7 @@ void quic_network_connection::receive_datagram(const io_datagram& packet, const 
 bool quic_network_connection::credit_datagram(const io_datagram& packet, const quic_path_identity& path) {
     if (path != identity_->application_path()) return false;
     close_blocked_ = false;
-    if (!(&packet == facts_.initial.get() && !initial_delivered_)) facts_.budget->receive_datagram(packet.bytes.size());
+    if (!(&packet == facts_.initial.get() && !initial_delivered_)) identity_->application_budget()->receive_datagram(packet.bytes.size());
     return true;
 }
 void quic_network_connection::signal_progress() {
@@ -146,7 +146,14 @@ void quic_network_connection::drain(clock_type::time_point deadline) { drain_req
 void quic_network_connection::check_drain(clock_type::time_point now) {
     if (!active() || !engine_) return;
     if (drain_requested_) {
-        static_cast<void>(engine_->begin_drain(*drain_requested_, drain_ticket_, now));
+        const auto result = engine_->begin_drain(*drain_requested_, drain_ticket_, now);
+        if (!result.ok() && result.code() != http::outcome_code::invalid_state) {
+            if (now >= *drain_requested_) {
+                request_close({true, 0x100, 0, {}}, now); return;
+            }
+            // Retain the original deadline when GOAWAY admission is refused.
+            return;
+        }
         drain_requested_.reset();
     }
     engine_->check_drain(now);

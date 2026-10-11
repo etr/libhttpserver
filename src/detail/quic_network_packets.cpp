@@ -202,6 +202,8 @@ void quic_network_connection::admit_h3() {
     http3_request_limits limits;
     limits.max_active_requests = config_.max_requests;
     limits.framing.headers = {8192, 16384, 128};
+    limits.framing.qpack_capacity = std::min<std::size_t>(4096, root_.capacity(server::resource::qpack_table_bytes));
+    limits.framing.qpack_blocked_streams = std::min<std::size_t>(8, root_.capacity(server::resource::blocked_headers));
     limits.framing.data_chunk = 4096;
     limits.max_receipt_records = 16;
     limits.max_pending_output_records = 32;
@@ -252,6 +254,13 @@ void quic_network_connection::drain_completions() {
         } else if (done->kind == quic_information_kind::flow && done->flow) {
             flow_->credit_acknowledged(*done->flow);
         } else if (engine_ && (done->kind == quic_information_kind::stream || done->kind == quic_information_kind::reset_stream)) {
+            if (done->kind == quic_information_kind::reset_stream) {
+                auto found = streams_.find(done->stream);
+                if (found != streams_.end()) {
+                    require(static_cast<bool>(found->second->acknowledge_reset()), "RESET acknowledgement");
+                    static_cast<void>(flow_->retire(*found->second));
+                }
+            }
             engine_->information_completed(*done);
         }
     }
