@@ -100,6 +100,9 @@ quic_flow_result quic_flow_control::apply_stream_control(const quic_flow_frame& 
     const bool send_half = frame.kind == quic_flow_kind::max_stream_data;
     if (frame.stream > k_quic_max_integer) return {quic_flow_code::frame_encoding_error};
     if (!quic_stream_sender_allowed(frame.stream, send_half, impl_->ids.local_role())) return {quic_flow_code::stream_state_error};
+    // Late flow-control frames remain valid after reliable stream retirement.
+    // Keep the terminal record without recreating an owner or applying credit.
+    if (const auto* value = impl_->find(frame.stream); value && value->retired) return {};
     auto opened = observe_peer(frame.stream);
     if (!opened) return opened;
     if (send_half) {

@@ -74,6 +74,14 @@ void http3_request_engine::state::fail(http3_error failure) {
 }
 void http3_request_engine::state::cancel_semantic(record& r, http::outcome_code reason) {
     if (r.semantic && native.workers) {
+        auto driver = std::move(r.semantic->websocket);
+        std::shared_ptr<stream::command> pending;
+        { std::lock_guard lock(r.semantic->command_mutex); pending = std::move(r.semantic->response); }
+        if (driver) {
+            driver->observe_progress({});
+            driver->transport_failed({reason, "HTTP/3 request cancelled"});
+        }
+        if (pending && pending->websocket) pending->websocket->transport_failed({reason, "HTTP/3 opening cancelled"});
         r.semantic->native_cancel(reason);
     } else if (r.semantic) {
         auto driver = std::move(r.semantic->websocket);
@@ -112,10 +120,12 @@ void http3_request_engine::state::cancel(record& r, http::outcome_code reason) {
 }
 
 void http3_request_engine::state::reset(record& r, std::uint64_t code, http::outcome_code reason) {
+    // Receive-side RESET may already have cancelled semantic work. A later
+    // STOP_SENDING still requires the independent send half's RESET_STREAM.
+    r.transport->receive(quic_stop_sending_frame{r.transport->id(), code});
+    if (auto reset = r.transport->take_reset_request()) r.action.reset = *reset;
     if (r.cancelled) return;
     if (!r.receive_done) r.action.stop_sending = quic_stop_sending_frame{r.transport->id(), code};
-    r.transport->receive(quic_stop_sending_frame{r.transport->id(), code});
-    r.action.reset = r.transport->take_reset_request();
     connection.terminal(r.transport->id(), {quic_terminal_kind::reset, code});
     cancel(r, reason);
 }
@@ -179,12 +189,13 @@ bool http3_request_engine::state::attach(quic_stream_state& transport, std::opti
         return false;
     }
     auto& storage = role || (id & 2) ? critical : data;
-    server::reservation charge;
+    server::reservation charge, buffers;
     const auto scratch = std::min<std::size_t>(16384, std::max<std::size_t>(1, limits.framing.data_chunk));
     const auto output_records = role ? critical_output_records : limits.max_pending_output_records;
     const auto bytes =
-        sizeof(record) + 1024 + scratch + limits.max_receipt_records * sizeof(http3_request_helpers::receipt) + output_records * sizeof(quic_information_id);
-    if (!storage.budget.reserve(server::resource::quic_reassembly_bytes, bytes, charge).ok()) {
+        scratch + limits.max_receipt_records * sizeof(http3_request_helpers::receipt) + output_records * sizeof(quic_information_id);
+    if (!storage.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(record) + 1024, charge).ok() ||
+        !storage.budget.reserve(server::resource::quic_reassembly_bytes, bytes, buffers).ok()) {
         fail(h3_error(0x107, "Bridge record storage exhausted", id));
         return false;
     }
@@ -193,6 +204,7 @@ bool http3_request_engine::state::attach(quic_stream_state& transport, std::opti
     r->local = role.has_value();
     r->local_role = role.value_or(http3_role::pending);
     r->charge = std::move(charge);
+    r->buffer_charge = std::move(buffers);
     r->scratch.resize(scratch);
     r->receipts.resize(limits.max_receipt_records);
     r->information.reserve(output_records);
@@ -300,9 +312,8 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
     std::optional<std::uint64_t> length;
     http3_content_length(head.head_fields, length);
     auto value = std::make_shared<stream>(*this, r, std::move(head));
-    if (!value->budget.reserve(server::resource::streams, 1, value->seat).ok()) {
-        reset(r, 0x107); return false;
-    }
+    // The framing owner already holds the request's stream seat until its
+    // semantic work and reliable response retire. Do not charge it twice.
     value->connect = std::move(connect);
     value->head_charge = std::move(bytes);
     value->fields_charge = std::move(descriptors);

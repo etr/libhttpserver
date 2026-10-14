@@ -353,10 +353,11 @@ LT_BEGIN_AUTO_TEST(http3_streaming_suite, coalesced_post_uses_admission_backpres
         f.pump(0);
     }
     f.executor.run_pending();
+    LT_CHECK_EQ(f.credit(0), 65536u + wire.size());
     f.drain();
     LT_CHECK_EQ(received, "abcdef");
     LT_CHECK_EQ(ended, 1u);
-    LT_CHECK_EQ(f.credit(0), 65536u + wire.size());
+    LT_CHECK(!f.flow.pending_credit(hd::quic_flow_kind::max_stream_data, 0));
     LT_CHECK_EQ(f.fins[0], 1u);
 LT_END_AUTO_TEST(coalesced_post_uses_admission_backpressure_before_handler_runs)
 LT_BEGIN_AUTO_TEST(http3_streaming_suite, single_retention_slot_rotates_to_ready_sibling)

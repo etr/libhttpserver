@@ -62,7 +62,13 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         std::shared_ptr<http3_request_helpers::route_executor> native_handlers;
         std::shared_ptr<state> native_lifetime;
         std::atomic<bool> native_closed{false}, native_done{false}, native_retired{false}, native_abort{false}, native_continue{false}, native_suspended{false}, native_refused{false};
-        struct command { std::uint16_t status; http::fields fields; bool streaming; server::reservation charge; };
+        struct command {
+            std::uint16_t status = 200;
+            http::fields fields;
+            bool streaming = false;
+            server::reservation charge, websocket_input, websocket_output, websocket_message;
+            std::shared_ptr<websocket_driver> websocket;
+        };
         std::mutex command_mutex;
         std::shared_ptr<command> response;
         void notify() const;
@@ -70,6 +76,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         void native_cancel(http::outcome_code reason);
         void native_finish(http::outcome_code reason);
         void native_respond(std::uint16_t status, const http::fields& fields, bool streaming);
+        websocket_upgrade_result native_upgrade(const ws_upgrade_options& options);
         bool done() const { return owner.native.workers ? native_done.load() : handler.done(); }
         stream(state& s, record& r, http::request_head head);
         ~stream() override;
@@ -93,7 +100,7 @@ struct http3_request_engine::state : std::enable_shared_from_this<state> {
         std::optional<drain_scope::unit> drain_unit, native_drain_unit;
         std::optional<quic_stream_terminal> terminal;
         http3_request_action action;
-        server::reservation charge, output_charge;
+        server::reservation charge, buffer_charge, output_charge;
         std::shared_ptr<stream> semantic;
         std::optional<time_point> body_anchor, suspension_anchor, write_anchor, header_deadline;
         std::vector<std::byte> scratch;

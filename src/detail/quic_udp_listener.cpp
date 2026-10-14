@@ -135,7 +135,14 @@ void quic_udp_listener::admit(quic_server_admission::pending_handle handle) {
 void quic_udp_listener::finish_admission(quic_server_admission::pending_handle handle, const std::shared_ptr<record>& pending, bool accepted) {
     --admissions_;
     const auto facts = admission_->inspect(handle);
-    if (!accepted || !facts || stop_requested_.load()) {
+    bool draining;
+    { std::lock_guard lock(control_); draining = draining_.has_value(); }
+    // Retain the bounded, already claimed refusal until admission expiry.
+    // Retransmitted authenticated Initials must not repeat the policy hook.
+    if (!accepted && facts && !stop_requested_.load() && !draining) {
+        pump(); return;
+    }
+    if (!accepted || !facts || stop_requested_.load() || draining) {
         admission_->cancel(handle); pump(); return;
     }
     try {

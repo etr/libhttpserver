@@ -572,3 +572,6 @@ EXTRA_DIST += scripts/test-v3-http3-full-gates.py scripts/check-v3-public-http3.
     test/installed/v3_http3_aioquic.py test/integ/http3-client-go/public.go
 EXTRA_DIST += specs/architecture/v3/TASK-196-design.md \
     specs/architecture/v3/TASK-196-implementation-evidence.md specs/architecture/v3/TASK-196-receipt.json
+
+EXTRA_DIST += specs/architecture/v3/TASK-197-design.md \
+    specs/architecture/v3/TASK-197-implementation-evidence.md specs/architecture/v3/TASK-197-receipt.json

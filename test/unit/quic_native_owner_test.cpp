@@ -73,6 +73,12 @@ struct fixture {
         value->bytes.resize(sealed.consumed); return value;
     }
     hd::quic_key_state client_keys;
+    std::uint64_t peer_stream_limit = 16;
+    bool acknowledge_application = false;
+    unsigned response_fins = 0;
+    std::optional<hd::quic_path_frame> challenge;
+    std::array<std::byte, 8> challenge_bytes{};
+    std::map<std::uint64_t, std::vector<std::byte>> received_streams;
     std::array<std::uint64_t, 3> next_number{1, 0, 0}, copied{}, delivered{};
     std::array<std::optional<std::uint64_t>, 3> largest;
     std::array<std::vector<std::byte>, 3> received_crypto;
@@ -167,6 +173,17 @@ struct fixture {
             while (cursor.offset < opened.payload_size) {
                 const auto frame = hd::next_quic_frame(std::span(plain).first(opened.payload_size), cursor, {envelope.value.kind, hd::quic_endpoint_role::server});
                 if (frame.code != hd::quic_codec_code::ok) throw std::runtime_error("native server frame");
+                if (const auto* path = std::get_if<hd::quic_path_frame>(&frame.value); path && !path->response && transmission.peer.peer.port == 4999) {
+                    std::copy(path->data.begin(), path->data.end(), challenge_bytes.begin());
+                    challenge = hd::quic_path_frame{false, challenge_bytes};
+                }
+                if (const auto* credit = std::get_if<hd::quic_flow_frame>(&frame.value); credit && credit->kind == hd::quic_flow_kind::max_streams_bidi)
+                    peer_stream_limit = std::max(peer_stream_limit, credit->limit);
+                if (const auto* stream = std::get_if<hd::quic_stream_frame>(&frame.value); stream && !(stream->stream & 2) && stream->fin) ++response_fins;
+                if (const auto* stream = std::get_if<hd::quic_stream_frame>(&frame.value)) {
+                    auto& bytes = received_streams[stream->stream];
+                    if (stream->offset == bytes.size()) bytes.insert(bytes.end(), stream->data.begin(), stream->data.end());
+                }
                 if (const auto* crypto = std::get_if<hd::quic_crypto_frame>(&frame.value)) {
                     auto& bytes = received_crypto[level]; bytes.resize(std::max(bytes.size(), crypto->offset + crypto->data.size()));
                     std::copy(crypto->data.begin(), crypto->data.end(), bytes.begin() + crypto->offset);
@@ -176,7 +193,7 @@ struct fixture {
                     install_client_keys();
                 }
             }
-            if (level != 0 || !owner->connected()) {
+            if ((level != 0 || !owner->connected()) && (level != 2 || acknowledge_application)) {
                 const std::array<hd::quic_frame, 1> ack{hd::quic_ack_frame{opened.header.packet_number, 0, 0, 0, {}, {}}};
                 owner->on_datagram(protected_frames(ack, level));
             }
@@ -337,6 +354,123 @@ LT_BEGIN_AUTO_TEST(native_quic_suite, authenticated_close_on_unvalidated_path_is
     const auto expiry = f.owner->deadline(); LT_ASSERT(expiry);
     f.owner->tick(*expiry); LT_CHECK(f.owner->retired());
 LT_END_AUTO_TEST(authenticated_close_on_unvalidated_path_is_terminal_without_path_or_payload_effects)
+LT_BEGIN_AUTO_TEST(native_quic_suite, acknowledged_terminal_requests_replenish_transport_stream_capacity)
+    fixture f;
+    unsigned dispatched = 0;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [&](httpserver::exchange& x) -> httpserver::task<void> {
+        ++dispatched; x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    f.connect(); f.acknowledge_application = true;
+    const auto wire = h3test::headers(h3test::get());
+    for (unsigned n = 0; n < 24; ++n) {
+        LT_ASSERT(!f.owner->terminal());
+        LT_ASSERT(n < f.peer_stream_limit);
+        const std::array<hd::quic_frame, 1> request{hd::quic_stream_frame{4 * n, 0, wire, true}};
+        f.owner->on_datagram(f.protected_frames(request)); f.executor.run_pending();
+        for (unsigned turn = 0; turn < 100 && f.peer_stream_limit <= n + 16; ++turn) {
+            const auto now = std::chrono::steady_clock::now(); f.owner->tick(now);
+            if (auto sent = f.owner->prepare(now)) { f.owner->emitted(true, now); f.consume_server(*sent); }
+            f.executor.run_pending();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        LT_ASSERT(f.peer_stream_limit > n + 16);
+    }
+    LT_CHECK_EQ(dispatched, 24u); LT_CHECK_EQ(f.response_fins, 24u);
+LT_END_AUTO_TEST(acknowledged_terminal_requests_replenish_transport_stream_capacity)
+LT_BEGIN_AUTO_TEST(native_quic_suite, retransmitted_terminal_stream_does_not_close_or_dispatch_again)
+    fixture f;
+    unsigned dispatched = 0;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [&](httpserver::exchange& x) -> httpserver::task<void> {
+        ++dispatched; x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    f.connect(); f.acknowledge_application = true;
+    const auto wire = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 1> request{hd::quic_stream_frame{0, 0, wire, true}};
+    f.owner->on_datagram(f.protected_frames(request)); f.executor.run_pending();
+    for (unsigned turn = 0; turn < 100 && f.peer_stream_limit == 16; ++turn) {
+        const auto now = std::chrono::steady_clock::now(); f.owner->tick(now);
+        if (auto sent = f.owner->prepare(now)) { f.owner->emitted(true, now); f.consume_server(*sent); }
+        f.executor.run_pending(); std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    LT_ASSERT(f.peer_stream_limit > 16);
+    f.owner->on_datagram(f.protected_frames(request)); f.executor.run_pending();
+    LT_CHECK(!f.owner->terminal()); LT_CHECK_EQ(dispatched, 1u);
+    const std::array<hd::quic_frame, 1> late_credit{hd::quic_flow_frame{hd::quic_flow_kind::max_stream_data, 131072, 0}};
+    f.owner->on_datagram(f.protected_frames(late_credit));
+    LT_CHECK(!f.owner->terminal()); LT_CHECK_EQ(dispatched, 1u);
+LT_END_AUTO_TEST(retransmitted_terminal_stream_does_not_close_or_dispatch_again)
+LT_BEGIN_AUTO_TEST(native_quic_suite, migrated_datagrams_do_not_credit_the_original_path_budget)
+    fixture f;
+    unsigned peer_port = 0;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [&](httpserver::exchange& x) -> httpserver::task<void> {
+        peer_port = x.peer().port; x.respond(http::status::from_code(204), {}); co_return;
+    }).ok());
+    f.connect(); f.acknowledge_application = true;
+    const std::array<hd::quic_frame, 1> ping{hd::quic_ping_frame{}};
+    const std::array<hd::quic_frame, 2> discovery{hd::quic_ping_frame{}, hd::quic_padding_frame{1170}};
+    auto candidate = f.protected_frames(discovery); candidate->peer.peer.port = 4999;
+    f.owner->on_datagram(candidate);
+    for (unsigned turn = 0; turn < 100 && !f.challenge; ++turn) {
+        const auto now = std::chrono::steady_clock::now(); f.owner->tick(now);
+        if (auto output = f.owner->prepare(now)) { f.owner->emitted(true, now); f.consume_server(*output); }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    LT_ASSERT(f.challenge);
+    f.challenge->response = true;
+    const std::array<hd::quic_frame, 1> validation{*f.challenge};
+    auto response = f.protected_frames(validation); response->peer.peer.port = 4999;
+    f.owner->on_datagram(response); f.owner->tick(std::chrono::steady_clock::now());
+    auto migrated = f.protected_frames(ping); migrated->peer.peer.port = 4999;
+    const auto original = f.facts.budget->received();
+    f.owner->on_datagram(migrated);
+    const auto wire = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 1> headers{hd::quic_stream_frame{0, 0, wire, true}};
+    auto request = f.protected_frames(headers); request->peer.peer.port = 4999;
+    f.owner->on_datagram(request); f.executor.run_pending();
+    LT_CHECK_EQ(peer_port, 4999u);
+    LT_CHECK_EQ(f.facts.budget->received(), original);
+    LT_CHECK(!f.owner->terminal());
+LT_END_AUTO_TEST(migrated_datagrams_do_not_credit_the_original_path_budget)
+LT_BEGIN_AUTO_TEST(native_quic_suite, delayed_drain_initiation_preserves_elapsed_server_deadline)
+    fixture f; httpserver::resume_signal held;
+    unsigned entered = 0;
+    LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [&](httpserver::exchange&) -> httpserver::task<void> {
+        ++entered; co_await held.wait();
+    }).ok());
+    f.connect();
+    const auto wire = h3test::headers(h3test::get());
+    const std::array<hd::quic_frame, 1> request{hd::quic_stream_frame{0, 0, wire, true}};
+    f.owner->on_datagram(f.protected_frames(request)); f.executor.run_pending(); LT_ASSERT(entered == 1u);
+    const auto now = std::chrono::steady_clock::now();
+    const auto drain_due = now + std::chrono::milliseconds(1);
+    f.owner->drain(drain_due);
+    LT_CHECK(f.owner->deadline() && *f.owner->deadline() <= drain_due);
+    f.owner->drain(now - std::chrono::milliseconds(1)); f.owner->tick(now);
+    LT_CHECK(f.owner->terminal());
+    held.signal(); f.executor.run_pending();
+LT_END_AUTO_TEST(delayed_drain_initiation_preserves_elapsed_server_deadline)
+LT_BEGIN_AUTO_TEST(native_quic_suite, native_settings_offer_bounded_dynamic_qpack)
+    fixture f; f.connect(); f.acknowledge_application = true;
+    for (unsigned turn = 0; turn < 100 && f.received_streams[3].empty(); ++turn) {
+        const auto now = std::chrono::steady_clock::now(); f.owner->tick(now);
+        if (auto sent = f.owner->prepare(now)) { f.owner->emitted(true, now); f.consume_server(*sent); }
+    }
+    auto wire = std::span(f.received_streams[3]);
+    const auto integer = [&]() {
+        const auto decoded = hd::decode_quic_varint(wire);
+        if (decoded.code != hd::quic_codec_code::ok) throw std::runtime_error("native SETTINGS integer");
+        wire = wire.subspan(decoded.consumed); return decoded.value;
+    };
+    const auto role = integer(), type = integer();
+    LT_ASSERT_EQ(role, 0u); LT_ASSERT_EQ(type, 4u);
+    const auto length = integer(); LT_ASSERT_EQ(wire.size(), length);
+    const auto capacity_key = integer(), capacity = integer();
+    const auto blocked_key = integer(), blocked = integer();
+    const auto connect_key = integer(), connect = integer();
+    LT_ASSERT_EQ(capacity_key, 1u); LT_CHECK_EQ(capacity, 4096u);
+    LT_ASSERT_EQ(blocked_key, 7u); LT_CHECK_EQ(blocked, 8u);
+    LT_ASSERT_EQ(connect_key, 8u); LT_CHECK_EQ(connect, 1u);
+LT_END_AUTO_TEST(native_settings_offer_bounded_dynamic_qpack)
 LT_BEGIN_AUTO_TEST_ENV()
 AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

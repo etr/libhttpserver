@@ -81,6 +81,7 @@ std::optional<quic_network_connection::clock_type::time_point> quic_network_conn
         return due;
     }
     auto due = pending() ? std::nullopt : recovery_.next_send_deadline();
+    include_deadline(due, drain_requested_);
     include_deadline(due, identity_->deadline());
     include_deadline(due, lifecycle_.deadline(recovery_.current_pto()));
     if (engine_) {

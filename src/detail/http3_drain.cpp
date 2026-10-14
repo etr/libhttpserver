@@ -47,7 +47,16 @@ void http3_request_engine::state::leave_connection() {
 }
 void http3_request_engine::state::retire_drain_request(record& r) {
     if (!r.semantic && r.information.empty() && (r.cancelled || r.fin_retained)) {
+        // All retained response information, including preceding DATA, has
+        // retired before FIN can release transport stream-count credit.
+        if (!r.cancelled && r.fin_retained && r.transport->send_state() == quic_send_state::fin_sent)
+            r.transport->acknowledge_all_stream_data();
+        static_cast<void>(flow.retire(*r.transport));
         if (!r.local) connection.retire_request(r.transport->id());
+        std::vector<std::byte>().swap(r.scratch);
+        std::vector<http3_request_helpers::receipt>().swap(r.receipts);
+        std::vector<quic_information_id>().swap(r.information);
+        r.buffer_charge.release();
         r.drain_unit.reset();
         r.native_drain_unit.reset();
     }

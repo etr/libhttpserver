@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded public example smoke tests; H2/H3 checks are configuration only."""
+"""Bounded public example smoke tests against native installed capabilities."""
 import contextlib
 import hashlib
 import base64
@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import queue
 import socket
+import ssl
 import subprocess
 import threading
 import unittest
@@ -105,13 +106,17 @@ class ExampleTests(unittest.TestCase):
     def test_protocol_selection_reports_public_boundary(self):
         binary = EXAMPLES / 'v3_protocol_options'
         self.assertTrue(binary.is_file(), f'missing compiled example: {binary}')
-        result = subprocess.run([str(binary)], capture_output=True, timeout=5,
-                                check=True, text=True)
+        args = [str(binary)]
+        tls = os.environ.get('V3_TLS_MODE') == 'yes'
+        if tls:
+            fixtures = Path(__file__).resolve().parents[1] / 'data/tls_credentials'
+            args += [str(fixtures / 'a.pem'), str(fixtures / 'a-key.pem')]
+        result = subprocess.run(args, capture_output=True, timeout=5,
+                                check=False, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('HTTP/1.1 validate=ok listen=ok', result.stdout)
-        for version in ('HTTP/2', 'HTTP/3'):
-            self.assertRegex(result.stdout, version + r' validate=(ok|not_supported) listen=not_supported port=0')
-        self.assertIn('TLS validate=', result.stdout)
-        self.assertIn('listen=not_supported port=0', result.stdout)
+        for version in ('TLS', 'HTTP/2', 'HTTP/3'):
+            self.assertRegex(result.stdout, version + (r' validate=ok listen=ok port=[1-9][0-9]*' if tls else r' validate=(ok|not_supported) listen=not_supported port=0'))
 
     def test_websocket_rejection_echo_and_close(self):
         with running('v3_websocket_echo') as (_, port):
@@ -142,12 +147,51 @@ class ExampleTests(unittest.TestCase):
                              (200, '28', b'hello from an external loop\n'))
 
     @unittest.skipUnless(os.environ.get('V3_TLS_MODE') == 'yes', 'TLS-off build')
-    def test_private_rotation_demonstration(self):
+    def test_public_rotation_demonstration(self):
         binary = Path('v3_tls_rotation').resolve()
-        self.assertTrue(binary.is_file(), f'missing private demonstration: {binary}')
-        result = subprocess.run([str(binary)], capture_output=True, timeout=5,
-                                check=True, text=True)
-        self.assertEqual(result.stdout, 'private rotation: old=1 active=2 failed replacement preserved=2\n')
+        self.assertTrue(binary.is_file(), f'missing rotation demonstration: {binary}')
+        fixtures = Path(__file__).resolve().parents[1] / 'data/tls_credentials'
+        context = ssl.create_default_context(cafile=str(fixtures / 'root.pem'))
+        context.set_alpn_protocols(['http/1.1'])
+        with subprocess.Popen([str(binary), str(fixtures), 'managed', '0'],
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE) as child:
+            lines = queue.Queue(maxsize=4)
+            def read_lines():
+                for line in child.stdout:
+                    lines.put(line)
+            reader = threading.Thread(target=read_lines, daemon=True)
+            reader.start()
+            try:
+                port = int(lines.get(timeout=5))
+                self.assertGreater(port, 0)
+                def hello(sock):
+                    sock.sendall(b'GET /installed HTTP/1.1\r\nHost: example\r\n\r\n')
+                    reply = http.client.HTTPResponse(sock)
+                    reply.begin()
+                    self.assertEqual((reply.status, reply.read()), (200, b'rotation-example\n'))
+                with context.wrap_socket(socket.create_connection(('127.0.0.1', port), timeout=3),
+                                         server_hostname='a.example') as established:
+                    hello(established)
+                    child.stdin.write(b'invalid\n'); child.stdin.flush()
+                    self.assertEqual(lines.get(timeout=3), b'PRESERVED\n')
+                    hello(established)
+                    child.stdin.write(b'replace\n'); child.stdin.flush()
+                    self.assertEqual(lines.get(timeout=3), b'REPLACED\n')
+                    hello(established)
+                    with context.wrap_socket(socket.create_connection(('127.0.0.1', port), timeout=3),
+                                             server_hostname='b.example') as replacement:
+                        hello(replacement)
+                child.stdin.write(b'stop\n'); child.stdin.flush()
+                self.assertEqual(child.wait(timeout=3), 0)
+            finally:
+                if child.poll() is None:
+                    child.terminate()
+                try:
+                    child.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    child.kill(); child.wait(timeout=3)
+                reader.join(timeout=1)
 
 
 if __name__ == '__main__':
