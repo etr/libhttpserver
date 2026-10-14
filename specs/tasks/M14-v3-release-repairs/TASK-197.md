@@ -26,6 +26,6 @@
 - Blocks: TASK-198, TASK-185
 **Related Requirements:** PRD-V3N-REQ-007, PRD-V3N-REQ-008, PRD-V3N-REQ-009, PRD-V3N-REQ-011, PRD-V3N-REQ-012, PRD-V3N-REQ-013, PRD-V3N-REQ-015, PRD-V3N-REQ-017, PRD-V3N-REQ-021, PRD-V3N-REQ-023, PRD-V3N-REQ-024, PRD-V3N-REQ-025, PRD-V3N-REQ-026, PRD-V3N-REQ-027, PRD-V3N-REQ-028, PRD-V3N-REQ-029, PRD-V3N-REQ-030, PRD-V3N-REQ-031, PRD-V3N-REQ-032, PRD-V3N-REQ-033, PRD-V3N-REQ-034, PRD-V3N-REQ-035, PRD-V3N-REQ-036, PRD-V3N-REQ-038.
 **Related Decisions:** DR-V3-001 through DR-V3-008.
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [Local gate evidence](../../architecture/v3/TASK-197-implementation-evidence.md) and [versioned receipt](../../architecture/v3/TASK-197-receipt.json). All implementation action items are verified; validation/finalization remain runner-owned.
