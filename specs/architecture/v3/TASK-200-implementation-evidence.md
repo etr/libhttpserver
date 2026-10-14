@@ -1,5 +1,11 @@
 # TASK-200 implementation evidence
 
+Validation recovery subsequently repaired the test probe's reader lifetime; see
+[recovery evidence](TASK-200-recovery-evidence.md) and the
+[recovery receipt](TASK-200-recovery-receipt.json) for current source identities,
+the deterministic cleanup regression, and six passing local lane reruns. The
+implementation results below are historical. Runner validation retry is pending.
+
 TASK-200 is ready for caller-owned Groundwork validation/finalization. Its card and the global index remain **In Progress**. No commit, staging, validation agent, merge, worktree operation or TASK-185 edit was performed during implementation.
 
 Registered runner identity: `/home/etr/progs/libhttpserver/.worktrees/TASK-200`, `task/TASK-200`, base `v3` at `4604fa2fcd29ea32f7fd62fbdf21ee15d7f217ee`. The starting worktree was clean and registered on that branch, at the same commit as `v3`. The identity helper invoked inside this checkout proposed a nested worktree; the primary checkout helper requested monorepo selection. The caller's explicit registered identity took precedence; neither helper result caused a workspace change.

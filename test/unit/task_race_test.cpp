@@ -34,6 +34,7 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
@@ -337,8 +338,8 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timer_publication_has_no_executor_tail)
 #if defined(LHS_TEST_POST_TAIL_WRAP)
     manual_executor ex;
     resume_signal sig;
-    post_probe::publication probe;
-    post_probe::capture = &probe;
+    auto probe = std::make_shared<post_probe::publication>();
+    post_probe::capture = probe.get();
     ex.pending();
     post_probe::capture = nullptr;
     resume_outcome observed = resume_outcome::resumed;
@@ -353,15 +354,15 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timer_publication_has_no_executor_tail)
               affinity = ex.is_current()
                   && httpserver::current_executor() == &ex;
           });
-    post_probe::active.store(&probe, std::memory_order_release);
+    post_probe::active.store(probe, std::memory_order_release);
     ex.run_pending();
-    const bool entered = post_probe::await(probe.entered);
+    const bool entered = post_probe::await(probe->entered);
     ex.run_pending();
-    probe.retired.store(true, std::memory_order_release);
+    probe->retired.store(true, std::memory_order_release);
     sig.signal();  // loses to timeout; frame already retired
     sig.cancel();
     const auto remaining = ex.pending();
-    probe.release.store(true, std::memory_order_release);
+    probe->release.store(true, std::memory_order_release);
     // A callback on the same serial timer thread acknowledges post exit.
     auto exit = std::make_shared<std::promise<void>>();
     auto exited = exit->get_future();
@@ -376,14 +377,14 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timer_publication_has_no_executor_tail)
     ex.run_pending();
     LT_CHECK(entered);
     LT_CHECK(timely_exit);
-    LT_CHECK(!probe.expired.load());
-    LT_CHECK_EQ(probe.publications.load(), 1);
+    LT_CHECK(!probe->expired.load());
+    LT_CHECK_EQ(probe->publications.load(), 1);
     LT_CHECK_EQ(deliveries, 1);
     LT_CHECK(valid_result);
     LT_CHECK(affinity);
     LT_CHECK(observed == resume_outcome::timeout);
     LT_CHECK_EQ(remaining, 0u);
-    LT_CHECK_EQ(probe.late_notifications.load(), 0);
+    LT_CHECK_EQ(probe->late_notifications.load(), 0);
     LT_CHECK_EQ(ex.pending(), 0u);
 #else
     LT_SKIP("Queue-unlock interposition is Linux-only; nonlocal proof is CI-owned");
@@ -397,7 +398,7 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timed_wait_trigger_winners_retire_before_tim
     for (const bool cancel : {false, true}) {
         manual_executor ex;
         resume_signal sig;
-        post_probe::publication probe;
+        auto probe = std::make_shared<post_probe::publication>();
         std::atomic<bool> timer_entered{false};
         std::atomic<bool> timer_release{false};
         std::atomic<bool> timer_expired{false};
@@ -407,7 +408,7 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timed_wait_trigger_winners_retire_before_tim
                 if (!post_probe::await(timer_release)) timer_expired = true;
             });
         const bool entered = post_probe::await(timer_entered);
-        post_probe::capture = &probe;
+        post_probe::capture = probe.get();
         ex.pending();
         post_probe::capture = nullptr;
         resume_outcome observed = resume_outcome::timeout;
@@ -424,18 +425,18 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timed_wait_trigger_winners_retire_before_tim
                       && httpserver::current_executor() == &ex;
               });
         ex.run_pending();
-        post_probe::active.store(&probe, std::memory_order_release);
+        post_probe::active.store(probe, std::memory_order_release);
         std::thread firing([&] {
             if (cancel) sig.cancel();
             else sig.signal();
             post_probe::producer = nullptr;
         });
-        const bool published = post_probe::await(probe.entered);
+        const bool published = post_probe::await(probe->entered);
         ex.run_pending();
-        probe.retired.store(true, std::memory_order_release);
+        probe->retired.store(true, std::memory_order_release);
         sig.signal();
         sig.cancel();
-        probe.release.store(true, std::memory_order_release);
+        probe->release.store(true, std::memory_order_release);
         firing.join();
         timer_release.store(true, std::memory_order_release);
         auto exit = std::make_shared<std::promise<void>>();
@@ -450,13 +451,13 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timed_wait_trigger_winners_retire_before_tim
         LT_CHECK(published);
         LT_CHECK(timely_exit);
         LT_CHECK(!timer_expired.load());
-        LT_CHECK(!probe.expired.load());
-        LT_CHECK_EQ(probe.publications.load(), 1);
+        LT_CHECK(!probe->expired.load());
+        LT_CHECK_EQ(probe->publications.load(), 1);
         LT_CHECK_EQ(deliveries, 1);
         LT_CHECK(valid_result);
         LT_CHECK(affinity);
         LT_CHECK(observed == expected);
-        LT_CHECK_EQ(probe.late_notifications.load(), 0);
+        LT_CHECK_EQ(probe->late_notifications.load(), 0);
         LT_CHECK_EQ(late_work, 0u);
     }
 #else
@@ -464,10 +465,45 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timed_wait_trigger_winners_retire_before_tim
 #endif
 LT_END_AUTO_TEST(timed_wait_trigger_winners_retire_before_timer)
 
+// An unrelated unlock can hold a lookup across owner retirement. Keep that
+// reader paused until the owner has dropped every reference to the probe.
+LT_BEGIN_AUTO_TEST(task_race_suite, probe_lookup_retains_retired_publication)
+#if defined(LHS_TEST_POST_TAIL_WRAP)
+    manual_executor ex;
+    std::mutex unrelated;
+    post_probe::lookup_gate gate;
+    auto probe = std::make_shared<post_probe::publication>();
+    std::weak_ptr<post_probe::publication> lifetime = probe;
+    post_probe::capture = probe.get();
+    ex.pending();
+    post_probe::capture = nullptr;
+    post_probe::active.store(probe, std::memory_order_release);
+    std::thread reader([&] {
+        post_probe::lookup_pause = &gate;
+        unrelated.lock();
+        unrelated.unlock();
+        post_probe::lookup_pause = nullptr;
+    });
+    const bool entered = post_probe::await(gate.entered);
+    post_probe::active.store(nullptr, std::memory_order_release);
+    probe.reset();
+    const bool retained = !lifetime.expired();
+    gate.release.store(true, std::memory_order_release);
+    reader.join();
+    LT_CHECK(entered);
+    LT_CHECK(!gate.expired.load());
+    LT_CHECK(retained);
+    LT_CHECK(lifetime.expired());
+#else
+    LT_SKIP("Queue-unlock interposition is Linux-only; nonlocal proof is CI-owned");
+#endif
+LT_END_AUTO_TEST(probe_lookup_retains_retired_publication)
+
 LT_BEGIN_AUTO_TEST_ENV()
 #if defined(LHS_TEST_POST_TAIL_ONLY)
     littletest::auto_test_runner(&timer_publication_has_no_executor_tail);
     littletest::auto_test_runner(&timed_wait_trigger_winners_retire_before_timer);
+    littletest::auto_test_runner(&probe_lookup_retains_retired_publication);
     int __lt_result__ = littletest::auto_test_runner();
 #else
     AUTORUN_TESTS()
