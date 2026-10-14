@@ -150,3 +150,8 @@ __pycache__/
 !test/installed/v3_http3_qpack.py
 
 !test/installed/v3_http3_flow.py
+
+# TASK-198 opt-in benchmark tools and contracts.
+!scripts/run-v3-native-benchmarks.py
+!scripts/test-v3-native-benchmark.py
+!test/installed/v3_benchmark_client.py
