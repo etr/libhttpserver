@@ -101,3 +101,37 @@ warmups/one window. TLS-off additionally verifies encrypted pre-bind rejection.
 Full input/command/artifact hashes and supporting gate receipts are recorded in
 `TASK-198-receipt.json`. Distribution and offline revalidation proof remain in
 `build/task198/distribution-receipt.json` and `build/task198/offline-validation.log`.
+
+
+## Validation repair evidence
+
+The strengthened acceptance contract binds the complete required matrix to the
+supplied TLS identity, compares every exported cell statistic with recomputed raw
+samples, honors the last compiler optimization option, and requires executable,
+source/header, link-map, command, client and fixture provenance. Installed headers
+remain bound by the independently supplied package hashes. Eight requested review
+IDs cover these four defects. The new regressions failed before the repair (55
+subtest failures) and all 18 focused contracts now pass; the 27 existing
+installed-consumer contracts also pass.
+
+Original full-workload receipt/sample directories remain immutable. Changes to
+runner preflight and validator bytes invalidate their old current-source identity;
+they are now revalidated explicitly against their original recorded identity.
+`build/task198/repair-verification/receipt.json` records bounded equivalence:
+every other source/package/provider/build/fixture/workload/compiler/client
+identity is unchanged, original/current validator and runner snapshots and diffs
+are hashed, and the producer's live `run` function has an identical AST. No old
+sample is represented as a fresh measurement by the repaired producer. The
+repaired producer separately passed a fresh TLS-on reduced smoke with all 16
+cells and 16 requests per cell (256 total). Its first preflight attempt selected
+system Python without the pinned clients and failed; that attempt is retained.
+The retry selected the existing pinned client environment.
+
+The source summary records the verification receipt, repair RED/GREEN logs and
+new smoke. Distribution is refreshed into a separate `-repair` archive with
+extracted runner help and focused contracts; the original archive is preserved.
+The existing evidence checker verifies recorded identities plus the explicit
+bounded-equivalence proof, while the public validation API continues to reject
+any mismatched expected identity. Resource/installed protocol results retain
+their original valid receipts because measured inputs and production policy are
+unchanged. Nonlocal checks remain CI/v3 PR owned.

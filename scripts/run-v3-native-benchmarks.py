@@ -29,7 +29,8 @@ def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 def normal_build(makefile, env):
     flags = re.findall(r'^CXXFLAGS\s*=\s*(.*)$', makefile, re.M)
-    bench.require(flags and all(re.search(r'(^|\s)-O[23](\s|$)', flag) for flag in flags), 'optimized library build required')
+    optimization = [[option for option in shlex.split(flag) if re.fullmatch(r'-O(?:[0-9]+|g|s|z|fast)?', option)] for flag in flags]
+    bench.require(optimization and all(options and options[-1] in ('-O2', '-O3') for options in optimization), 'optimized library build required')
     forbidden = r'sanitize|fprofile|coverage|jemalloc|tcmalloc|mimalloc|asan|ubsan|tsan'
     bench.require(not re.search(forbidden, makefile, re.I) or not re.search(forbidden, ' '.join(flags), re.I), 'instrumented/substituted allocator build')
     bench.require(not any(env.get(key) for key in ('LD_PRELOAD', 'DYLD_INSERT_LIBRARIES')), 'allocator/interposer injection')

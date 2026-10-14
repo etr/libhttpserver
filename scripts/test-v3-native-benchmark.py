@@ -121,20 +121,57 @@ class MeasurementTest(unittest.TestCase):
 
 
 class ReceiptTest(unittest.TestCase):
+    def receipt(self, root, tls='no'):
+        root = Path(root)
+        consumer = root / 'consumer'; consumer.mkdir()
+        files = {'consumer.cpp': 'consumer', 'v3_host_poll.hpp': 'poll', 'client.py': 'client',
+                 'fixtures/root.pem': 'certificate', 'shared': 'shared binary', 'static': 'static binary',
+                 'shared.map': 'shared map', 'static.map': 'static map', 'header.hpp': 'installed header',
+                 'client-input.py': 'client dependency'}
+        for name, content in files.items():
+            path = consumer / name; path.parent.mkdir(exist_ok=True); path.write_text(content)
+        sha = lambda path: bench.artifact(path)['sha256']
+        identity = dict(source={name: sha(consumer / copy) for name, copy in (
+            ('test/installed/v3_benchmark_consumer.cpp', 'consumer.cpp'),
+            ('examples/v3_host_poll.hpp', 'v3_host_poll.hpp'),
+            ('test/installed/v3_benchmark_client.py', 'client.py'))},
+            package={str(consumer / 'header.hpp'): sha(consumer / 'header.hpp')},
+            fixtures={'root.pem': sha(consumer / 'fixtures/root.pem')}, tls=tls)
+        consumers = {}
+        for linkage in ('shared', 'static'):
+            sources = {str(consumer / 'consumer.cpp'): sha(consumer / 'consumer.cpp')}
+            dependencies = {str(consumer / name): sha(consumer / name) for name in
+                            ('consumer.cpp', 'v3_host_poll.hpp', 'header.hpp')}
+            consumers[linkage] = dict(compile=dict(sources=sources, dependencies=list(dependencies),
+                dependency_sha256=dependencies, artifact_sha256=sha(consumer / linkage),
+                link_map=str(consumer / (linkage + '.map')), private_test_headers=False))
+        commands = []
+        for index, output in enumerate(('compiler version', '1', 'client version',
+                                       json.dumps([str(consumer / 'client-input.py')]))):
+            log = root / ('command-%04d.log' % index); log.write_text(output)
+            commands.append(dict(argv=['tool'], exit=0, log=str(log), sha256=sha(log), bytes=log.stat().st_size))
+        (root / 'commands.json').write_text(json.dumps(commands))
+        cells = []
+        for index, (linkage, loop, protocol) in enumerate(bench.required_cells(tls)):
+            observed = observation(); observed['protocol'] = protocol
+            for row in observed['samples']: row['protocol'] = protocol
+            cell_root = root / ('cell-%d' % index); cell_root.mkdir()
+            samples = cell_root / 'samples.json'; samples.write_text(json.dumps(observed))
+            server = cell_root / 'server.json'
+            server.write_text(json.dumps(dict(exit=0, stdout='1\nCOUNTS ' + json.dumps(dict(
+                run_id='a' * 32, warmup=1, measured=4, errors=0)))))
+            cells.append(dict(linkage=linkage, loop=loop, protocol=protocol, observation=bench.artifact(samples),
+                server=bench.artifact(server), statistics=observed['statistics'], client_exit=0, fresh_execution=True))
+        return dict(schema_version=1, status='passed', run_id='a' * 32, tls=tls, identity=identity,
+                    consumer_directory=str(consumer), consumers=consumers,
+                    tools=dict(compiler='compiler version', pkg_config='1', clients='client version'),
+                    client_inputs=[bench.artifact(consumer / 'client-input.py')], cells=cells,
+                    artifacts=[bench.artifact(path) for path in root.rglob('*') if path.is_file()])
+
     def test_receipt_requires_bound_live_execution_and_current_inputs(self):
         with tempfile.TemporaryDirectory() as root:
-            root = Path(root)
-            samples = root / 'samples.json'; samples.write_text(json.dumps(observation()))
-            server = root / 'server.json'; server.write_text(json.dumps(dict(exit=0, stdout='1\nCOUNTS ' + json.dumps(dict(run_id='a' * 32, warmup=1, measured=4, errors=0)))))
-            cells = []
-            for index, (l, m, p) in enumerate(bench.required_cells('no')):
-                cell_samples = root / ('samples-%d.json' % index); cell_samples.write_bytes(samples.read_bytes())
-                cell_server = root / ('server-%d.json' % index); cell_server.write_bytes(server.read_bytes())
-                cells.append(dict(linkage=l, loop=m, protocol=p, observation=bench.artifact(cell_samples), server=bench.artifact(cell_server),
-                                  client_exit=0, fresh_execution=True))
-            value = dict(schema_version=1, status='passed', run_id='a' * 32, tls='no', identity={'source':'current'},
-                         artifacts=[cell[key] for cell in cells for key in ('observation', 'server')], cells=cells)
-            bench.validate_receipt(value, {'source':'current'}, 'a' * 32)
+            value = self.receipt(root); expected = copy.deepcopy(value['identity'])
+            bench.validate_receipt(value, expected, 'a' * 32)
             for change in ('identity', 'run', 'live', 'missing', 'exit', 'artifact', 'config', 'reused'):
                 bad = copy.deepcopy(value)
                 if change == 'identity': bad['identity']['source'] = 'stale'
@@ -146,7 +183,56 @@ class ReceiptTest(unittest.TestCase):
                 if change == 'config': bad['workload'] = {'requests':100}
                 if change == 'reused': bad['cells'][1]['observation'] = bad['cells'][0]['observation']
                 with self.subTest(change=change), self.assertRaises((ValueError, KeyError)):
-                    bench.validate_receipt(bad, {'source':'current'}, 'a' * 32)
+                    bench.validate_receipt(bad, expected, 'a' * 32)
+
+    def test_tls_identity_cannot_be_downgraded_to_an_h1_only_matrix(self):
+        with tempfile.TemporaryDirectory() as root:
+            value = self.receipt(root, 'yes'); expected = copy.deepcopy(value['identity'])
+            bench.validate_receipt(value, expected)
+            value['tls'] = 'no'
+            value['cells'] = [cell for cell in value['cells'] if cell['protocol'] == 'h1']
+            with self.assertRaises(ValueError): bench.validate_receipt(value, expected)
+        with tempfile.TemporaryDirectory() as root:
+            value = self.receipt(root); expected = copy.deepcopy(value['identity']); value['tls'] = 'yes'
+            with self.assertRaises(ValueError): bench.validate_receipt(value, expected)
+
+    def test_exported_statistics_must_match_raw_samples(self):
+        with tempfile.TemporaryDirectory() as root:
+            value = self.receipt(root)
+            for key in observation()['statistics']:
+                for alteration in ('different', 'missing', 'nan', 'infinite', 'units'):
+                    bad = copy.deepcopy(value); stats = bad['cells'][0]['statistics']
+                    if alteration == 'different': stats[key] = 1e99
+                    if alteration == 'missing': del stats[key]
+                    if alteration == 'nan': stats[key] = float('nan')
+                    if alteration == 'infinite': stats[key] = float('inf')
+                    if alteration == 'units': stats[key.replace('_ms', '_s') + '_wrong_units'] = stats.pop(key)
+                    with self.subTest(key=key, alteration=alteration), self.assertRaises(ValueError):
+                        bench.validate_receipt(bad, value['identity'])
+
+    def test_required_provenance_cannot_be_pruned_or_contradicted(self):
+        with tempfile.TemporaryDirectory() as root:
+            value = self.receipt(root)
+            for key in ('consumers', 'consumer_directory', 'client_inputs', 'tools'):
+                bad = copy.deepcopy(value); del bad[key]
+                with self.subTest(missing=key), self.assertRaises((ValueError, KeyError)):
+                    bench.validate_receipt(bad, value['identity'])
+            for record in value['artifacts']:
+                if Path(record['path']).name in ('samples.json', 'server.json', 'header.hpp'): continue
+                bad = copy.deepcopy(value); bad['artifacts'].remove(record)
+                with self.subTest(pruned=record['path']), self.assertRaises(ValueError):
+                    bench.validate_receipt(bad, value['identity'])
+            for change in ('executable', 'source', 'header', 'dependencies', 'link_map', 'client_inputs', 'tools'):
+                bad = copy.deepcopy(value); compiled = bad['consumers']['shared']['compile']
+                if change == 'executable': compiled['artifact_sha256'] = '0' * 64
+                if change == 'source': compiled['sources'][str(Path(value['consumer_directory']) / 'consumer.cpp')] = '0' * 64
+                if change == 'header': compiled['dependency_sha256'][str(Path(value['consumer_directory']) / 'header.hpp')] = '0' * 64
+                if change == 'dependencies': compiled['dependencies'] = []
+                if change == 'link_map': compiled['link_map'] = str(Path(root) / 'absent.map')
+                if change == 'client_inputs': bad['client_inputs'] = []
+                if change == 'tools': bad['tools'] = {}
+                with self.subTest(change=change), self.assertRaises((ValueError, KeyError)):
+                    bench.validate_receipt(bad, value['identity'])
 
     def test_runner_preflight_missing_client_and_normal_build_required(self):
         spec = importlib.util.spec_from_file_location('benchmark_runner', Path(__file__).with_name('run-v3-native-benchmarks.py'))
@@ -155,6 +241,11 @@ class ReceiptTest(unittest.TestCase):
         with self.assertRaises(ValueError): runner.normal_build('CXXFLAGS = -O2 -fsanitize=address', {})
         with self.assertRaises(ValueError): runner.normal_build('CXXFLAGS = -O2', {'LD_PRELOAD':'allocator.so'})
         runner.normal_build('CXXFLAGS = -O2', {})
+        runner.normal_build('CXXFLAGS = -O0 -O2', {})
+        runner.normal_build('CXXFLAGS = -O3 -O2', {})
+        for flags in ('-O2 -O0', '-O3 -O1', '-O2 -Og', '-O2 -Os', '-O2 -Oz', '-O2 -O'):
+            with self.subTest(flags=flags), self.assertRaises(ValueError):
+                runner.normal_build('CXXFLAGS = ' + flags, {})
 
 
 class ClientTest(unittest.TestCase):

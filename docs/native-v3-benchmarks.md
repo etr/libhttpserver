@@ -30,7 +30,8 @@ make bench BENCH_PREFIX="$PREFIX" BENCH_PROVIDER_PREFIX="$PROVIDER" \
 
 Repeat with a distinct fresh build/prefix/output and `--enable-v3-tls=no`,
 `BENCH_TLS=no`. Library and consumer optimization flags are recorded. The runner
-rejects nonoptimized libraries, sanitizer flags/symbols and allocator preload.
+requires the final optimization option to be `-O2` or `-O3`, and rejects
+sanitizer flags/symbols and allocator preload.
 Sanitizer measurements are correctness evidence and cannot enter comparisons.
 The direct entry point provides `--source`, `--build`, `--prefix`,
 `--provider-prefix`, `--tls`, `--compiler`, `--client-python` and `--output`.
@@ -88,7 +89,12 @@ after orderly shutdown. Client exit zero alone is insufficient.
 `validate(path, expected_identity, expected_run_id)` is available from
 `scripts/run-v3-native-benchmarks.py` for release adapter integration. Offline
 verification checks current source/package/build/workload identities and every
-artifact, then recomputes samples/statistics and compares server counts. A caller
+artifact, then recomputes samples/statistics and compares server counts. The
+expected TLS identity selects the required matrix, and every exported cell metric
+must agree with raw observations in the declared units. Required consumer source,
+local header, executable, link map, command, copied client/fixture and client-input
+records must remain present and consistent; installed headers are bound by the
+expected package identity. A caller
 requiring new execution must obtain the fresh runner's run ID; revalidating an old
 receipt is integrity verification, not a new benchmark. CLI `--validate RECEIPT`
 accepts `--expected-run-id`. Hashes establish integrity against recorded inputs;

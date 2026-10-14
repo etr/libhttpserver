@@ -1704,6 +1704,26 @@
       "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/make-bench-smoke.log",
       "bytes": 1254,
       "sha256": "f39305c60e241bd0b5ec0a4cc253c0c61922080674ad68e916481fe524f48deb"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/repair-red.log",
+      "bytes": 35245,
+      "sha256": "3a25c6f797f6b55a99e4a4e7ea7ca2bf2da00b890595203c989addd9ff0d42f2"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/repair-green.log",
+      "bytes": 117,
+      "sha256": "4f4ca2d33bf939a1ae495e698dd8ffcda071a1dc53c222375bfcc7ef3737481b"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/repair-installed-contracts.log",
+      "bytes": 126,
+      "sha256": "485c25f86ddf27723c3c04232f9fe739cf92f47a12f54c326a4287b24351dadf"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/repair-verification.log",
+      "bytes": 343,
+      "sha256": "88f6b722a61ac4cc3988a9931a7283f62b4db2be9c3b643b109586b90b44ba78"
     }
   ],
   "retained_failed_attempts": [
@@ -1741,6 +1761,11 @@
       "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/smoke-on-3/receipt.json",
       "bytes": 108590,
       "sha256": "f71922277e3726c6e80bf41e03eaaf03433cda7b7d8863a1147d7b9c87b2b864"
+    },
+    {
+      "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/repair-smoke-on/receipt.json",
+      "bytes": 83824,
+      "sha256": "7103a173a9c6a4f2c65fa627dc00ec220fefd692e0385dcf0238a06ac25aa654"
     }
   ],
   "retained_h3_discriminators": [
@@ -1758,7 +1783,7 @@
   "required_local_results": {
     "benchmark_cells": 20,
     "benchmark_measured_requests": 81920,
-    "focused_contracts": 15,
+    "focused_contracts": 18,
     "installed_contracts": 27,
     "resource_contracts": 3,
     "resource_limits_cases": 28,
@@ -1767,8 +1792,8 @@
     "native_memory_rss_plateaus": 4
   },
   "distribution": {
-    "command": "make dist-gzip",
-    "archive": "build/task198/normal-on/libhttpserver-3.0.0.tar.gz",
+    "command": "make dist-gzip distdir=libhttpserver-3.0.0-repair",
+    "archive": "build/task198/normal-on/libhttpserver-3.0.0-repair.tar.gz",
     "required_entries": [
       "scripts/run-v3-native-benchmarks.py",
       "scripts/lib/v3_native_benchmark.py",
@@ -1788,5 +1813,21 @@
     "Preserve artifact/build/consumer/provider/client paths before worktree cleanup; hashes prove recorded-input integrity, not whole-producer cryptographic attestation."
   ],
   "memory_note": "/tmp/task198-agent-memory.md",
-  "task_tracking": "In Progress; validation/finalization caller owned"
+  "task_tracking": "In Progress; validation/finalization caller owned",
+  "repair_verification": {
+    "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/repair-verification/receipt.json",
+    "bytes": 139503,
+    "sha256": "026200356a6134ffed58563c4e37114d61cb3e30a8e4ef6d991eff4247e00926"
+  },
+  "repair_smoke": {
+    "path": "/home/etr/progs/libhttpserver/.worktrees/TASK-198/build/task198/repair-smoke-on-retry/receipt.json",
+    "bytes": 167513,
+    "sha256": "93ea053007c7a39a5e8214afcb7ac82801233c994d79caf775b6dc5eac7f7d1d"
+  },
+  "validation_repairs": {
+    "phase": "scoped repair iteration 1",
+    "measured_workloads_unchanged": true,
+    "current_full_measurement": false,
+    "verification": "Original recorded-identity validation plus separately hashed bounded equivalence and fresh reduced smoke"
+  }
 }

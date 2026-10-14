@@ -100,12 +100,16 @@ def validate_observation(value, run_id, protocol):
         following = bisect_right(epoch_ends, row['start_ns'])
         require(following == len(epochs) or row['end_ns'] <= epochs[following]['start_ns'], 'warmup contamination')
     expected = statistics(samples, epochs)
-    require(set(value['statistics']) == set(expected), 'missing statistics or units')
-    for key, result in expected.items():
-        actual = value['statistics'][key]
-        require(type(actual) in (int, float) and math.isfinite(actual) and actual > 0 and
-                math.isclose(actual, result, rel_tol=1e-12), 'statistics disagreement: ' + key)
+    validate_statistics(value['statistics'], expected)
     return expected
+
+
+def validate_statistics(actual, expected):
+    require(set(actual) == set(expected), 'missing statistics or units')
+    for key, result in expected.items():
+        number = actual[key]
+        require(type(number) in (int, float) and math.isfinite(number) and number > 0 and
+                math.isclose(number, result, rel_tol=1e-12), 'statistics disagreement: ' + key)
 
 
 def artifact(path):
@@ -129,6 +133,62 @@ def validate_server(server, observation):
                            measured=observation['completed'], errors=0), 'server/client counts differ')
 
 
+def validate_provenance(receipt, expected_identity):
+    records = {record['path']: record for record in receipt['artifacts']}
+    require(len(records) == len(receipt['artifacts']), 'duplicate artifact paths')
+
+    def bound(path, expected=None):
+        path = str(Path(path).resolve())
+        require(path in records, 'unbound provenance artifact: ' + path)
+        if expected is not None:
+            require(records[path]['sha256'] == expected, 'provenance digest disagreement: ' + path)
+        return records[path]
+
+    directory = Path(receipt['consumer_directory'])
+    copies = {'consumer.cpp': 'test/installed/v3_benchmark_consumer.cpp',
+              'v3_host_poll.hpp': 'examples/v3_host_poll.hpp',
+              'client.py': 'test/installed/v3_benchmark_client.py'}
+    local = {str(directory / name): expected_identity['source'][source] for name, source in copies.items()}
+    for path, sha256 in local.items(): bound(path, sha256)
+    for name, sha256 in expected_identity['fixtures'].items(): bound(directory / 'fixtures' / name, sha256)
+    require(set(receipt['consumers']) == {'shared', 'static'}, 'missing consumer provenance')
+    for linkage, consumer in receipt['consumers'].items():
+        compiled = consumer['compile']
+        bound(directory / linkage, compiled['artifact_sha256'])
+        require(compiled['private_test_headers'] is False, 'private consumer headers')
+        require(compiled['sources'] == {str(directory / 'consumer.cpp'): local[str(directory / 'consumer.cpp')]},
+                'wrong consumer sources')
+        deps = compiled['dependency_sha256']
+        require(set(compiled['dependencies']) == set(deps), 'missing dependency digests')
+        resolved = {str(Path(path).resolve()): sha256 for path, sha256 in deps.items()}
+        require(all(path in resolved for path in local if not path.endswith('client.py')), 'missing local dependencies')
+        require(any(path in expected_identity['package'] for path in resolved), 'missing installed headers')
+        for path, sha256 in resolved.items():
+            # Installed headers are bound by the independently supplied package identity.
+            expected = expected_identity['package'].get(path, local.get(path))
+            require(expected is not None and sha256 == expected, 'unexpected consumer dependency: ' + path)
+            require(artifact(path)['sha256'] == sha256, 'changed consumer dependency: ' + path)
+            if path in local: bound(path, sha256)
+        require(Path(compiled['link_map']).resolve() == (directory / (linkage + '.map')).resolve(), 'wrong link map')
+        bound(compiled['link_map'])
+    output = Path(receipt['cells'][0]['observation']['path']).parent.parent
+    command_record = bound(output / 'commands.json')
+    commands = parse_json(Path(command_record['path']).read_text())
+    require(len(commands) >= 4, 'missing tool commands')
+    for command in commands:
+        require(command['exit'] == 0 and 'error' not in command and command['argv'], 'failed provenance command')
+        bound(command['log'], command['sha256'])
+        require(records[str(Path(command['log']).resolve())]['bytes'] == command['bytes'], 'wrong command length')
+    require(set(receipt['tools']) == {'compiler', 'pkg_config', 'clients'}, 'missing tool versions')
+    for key, command in zip(('compiler', 'pkg_config', 'clients'), commands):
+        require(receipt['tools'][key] and receipt['tools'][key] == Path(command['log']).read_text(), 'wrong tool version')
+    inputs = receipt['client_inputs']
+    require(inputs and [item['path'] for item in inputs] == parse_json(Path(commands[3]['log']).read_text()),
+            'missing client input provenance')
+    for record in inputs:
+        require(bound(record['path']) == record, 'unbound client input')
+
+
 def validate_receipt(receipt, expected_identity, expected_run_id=None):
     require(receipt['schema_version'] == 1 and receipt['status'] == 'passed', 'failed or unknown receipt')
     require(receipt['identity'] == expected_identity, 'stale source/package/configuration identity')
@@ -136,11 +196,13 @@ def validate_receipt(receipt, expected_identity, expected_run_id=None):
     require(len(receipt['run_id']) == 32 and all(c in '0123456789abcdef' for c in receipt['run_id']), 'invalid run identifier')
     if expected_run_id is not None:
         require(receipt['run_id'] == expected_run_id, 'reused run identifier')
-    validate_cells([tuple(cell[k] for k in ('linkage', 'loop', 'protocol')) for cell in receipt['cells']], receipt['tls'])
+    require(receipt['tls'] == expected_identity['tls'], 'contradictory TLS mode')
+    validate_cells([tuple(cell[k] for k in ('linkage', 'loop', 'protocol')) for cell in receipt['cells']], expected_identity['tls'])
     require(receipt['artifacts'], 'missing immutable artifacts')
     sample_paths = [cell['observation']['path'] for cell in receipt['cells']]
     require(len(sample_paths) == len(set(sample_paths)), 'reused samples across cells')
     for record in receipt['artifacts']: verify_artifact(record)
+    validate_provenance(receipt, expected_identity)
     for cell in receipt['cells']:
         require(cell['client_exit'] == 0 and cell['fresh_execution'] is True, 'missing live client execution')
         for key in ('observation', 'server'):
@@ -154,6 +216,7 @@ def validate_receipt(receipt, expected_identity, expected_run_id=None):
             expected_epochs, expected_warmup = epoch_workload(cell['protocol'], workload['requests'], concurrency, workload['warmup'])
             require(observation['warmup_requested'] == expected_warmup, 'wrong warmup workload')
             require(len(observation['epochs']) == expected_epochs, 'wrong epoch count')
-        validate_observation(observation, receipt['run_id'], cell['protocol'])
+        expected = validate_observation(observation, receipt['run_id'], cell['protocol'])
+        validate_statistics(cell['statistics'], expected)
         validate_server(parse_json(Path(cell['server']['path']).read_text()), observation)
     return receipt
