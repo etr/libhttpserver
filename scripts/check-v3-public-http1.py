@@ -34,7 +34,9 @@ def websocket(executable, loop, directory, env, codec):
         port = child.port()
         def counts():
             child.process.stdin.write(b'stats\n'); child.process.stdin.flush()
-            return [int(n) for n in child.line().split()]
+            observed = [int(n) for n in child.line().split()]
+            require(len(observed) == 8, 'missing WS receive counters')
+            return observed
         def wait(predicate):
             deadline = time.monotonic() + 3
             while True:
@@ -70,9 +72,15 @@ def websocket(executable, loop, directory, env, codec):
             require(refused.head().startswith(b'HTTP/1.1 426 '), 'invalid WS version accepted')
         finally: refused.close()
         rows.append(dict(case='refusal', status=426))
-        peer = open_peer(); peer.close()
-        wait(lambda c: c[0] == 2)
-        rows.append(dict(case='close_cancel', clean_close_code=1000, close_callbacks=2, cancelled_receive=1))
+        peer = open_peer('/cancel')
+        try:
+            wait(lambda c: c[3] == 1 and c[4:7] == [0, 0, 0])
+        finally: peer.close()
+        observed = wait(lambda c: c[0] == 2 and c[4:7] == [1, 1, 1])
+        require(observed[7] == 6, 'pending receive did not terminate with connection_closed')
+        rows.append(dict(case='close_cancel', clean_close_code=1000, close_callbacks=observed[0],
+                         receive_entered=observed[3], receive_completed=observed[4], receive_retired=observed[5],
+                         cancelled_receive=observed[6], receive_outcome='connection_closed'))
         peer = codec.Peer(port)
         try:
             peer.socket.setsockopt(__import__('socket').SOL_SOCKET, __import__('socket').SO_RCVBUF, 4096)

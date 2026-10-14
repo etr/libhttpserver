@@ -8,11 +8,16 @@ and [current report](../../../test/installed/task199-capabilities.md) retain the
 specific proof boundary; [the adapter interface](../../../docs/v3-packaged-release-adapters.md)
 provides TASK-185's two callable families and independent validators.
 
-## Fresh distribution and installed execution
+The initial execution below is retained as historical implementation evidence.
+The validation-repair receipt added to the machine receipt records renewed
+public execution from the repaired archive; reduced benchmark execution remains
+separately identified with its original archive and unchanged covered inputs.
 
-The frozen integration archive is `/tmp/task199-dist-build4/libhttpserver-3.0.0.tar.gz`, SHA-256
-`75cfe738dd0857f4be9c347d9db36c170007c67dc4dbcfb47c8ca9f25b5f50a1`; its extraction has no `.git`. Current executable
-adapter/consumer sources match their distributed members. Documentation and
+## Initial distribution and installed execution
+
+The initial frozen integration archive is `/tmp/task199-dist-build4/libhttpserver-3.0.0.tar.gz`, SHA-256
+`75cfe738dd0857f4be9c347d9db36c170007c67dc4dbcfb47c8ca9f25b5f50a1`; its extraction has no `.git`. The implementation executable
+adapter/consumer sources matched their distributed members before validation repairs. Documentation and
 this receipt were reconciled after execution, so the archive does not contain
 its own generated evidence. The final distribution check separately verifies
 all newly registered files.
@@ -58,7 +63,7 @@ returns zero and a new-process `--validate OUTPUT/receipt.json` with the same
 input/run-ID/workload arguments returns zero. All artifacts, archive inputs,
 consumer directories and staged packages remain available for revalidation.
 
-## RED/GREEN and integrity gates
+## Initial RED/GREEN and integrity gates
 
 RED preceded adapter implementation, caller run-ID propagation, supported
 configuration parsing, installed H1/WS support, copied/private provenance
@@ -106,3 +111,52 @@ invented. TASK-199's implementation action items are checked, while its status
 remains In Progress for caller validation/finalization. TASK-185 stays open.
 BSD/macOS/Windows checks are honestly unexecuted locally and belong to CI/v3 PR.
 Existing local sanitizer/resource/release requirements remain unchanged.
+
+## Validation repair iteration 1
+
+Seven validator-authorized findings were repaired without staging, commits,
+merges or TASK-185 changes. RED produced 23 expected semantic rejection failures
+in `/tmp/task199-repair-red.log`; the retained no-second-receive executable still
+passed the original live gate (`/tmp/task199-repair-ws-red.log`). The repaired
+gate rejects both that original mutation and a freshly compiled mutation with
+valid eight-field counters and a close callback but no `/cancel` receive. The
+original foreign-first static link also rejects. Exact logs, assertions and
+semantic repair receipts are retained in the machine receipt's
+`validation_repair` section.
+
+The repair archive is `/tmp/task199-dist-repair/libhttpserver-3.0.0.tar.gz`,
+SHA-256 `4f5327a740d9d1e4ae21548a8d82c5b45ff498daa50498829309b1c655345626`,
+extracted without Git at `/tmp/task199-extract-repair/libhttpserver-3.0.0`. All
+changed executable adapter/test/consumer sources match distributed members.
+Documentation and generated receipts were reconciled afterward. Production
+library sources and installed package hashes remain unchanged; the existing
+optimized TLS-off/on builds and installations supply the selected libraries.
+
+Both full public matrices were executed anew: `/tmp/task199-repair-public-no`
+(run ID `19900000000000000000000000000041`) and
+`/tmp/task199-repair-public-yes` (run ID
+`19900000000000000000000000000042`). TLS-on uses an isolated network namespace
+with loopback enabled and authentic TCP443. Each outer adapter exits zero and
+its independent new-process `--validate` exits zero. All eight H1/WebSocket
+cells record pending receive entry, actual `connection_closed` completion on
+peer EOF, and retirement before stop. `cancelled_receive` counts this actual
+transport termination; it does not claim an `outcome_code::cancelled` result.
+A preliminary independent-validation harness incorrectly used system Python
+instead of the selected venv, failed its module check, and was corrected; the
+failed attempt remains explicitly separate from the accepted validations.
+
+Forty adapter, 28 installed-consumer, 18 benchmark, six H2 and 13 H3 focused
+tests pass (105 affected contracts). Adapter Automake, C++ cpplint, Python
+compilation and whitespace checks pass. Thirty-five independent child-semantic
+mutations plus six blank-readiness process mutations reject after catalogs and
+child artifacts are rehashed, preserving the original accepted outputs. They
+cover both TLS modes' required family provenance, H1 versions/multiplicity,
+WebSocket receive retirement, and contradictory TLS credentials, callbacks,
+SNI, session rotation and ACME observations.
+
+The original reduced benchmark receipts are preserved under their original
+archive identity and independently revalidated with the repaired checker. All
+298 recorded benchmark source inputs are unchanged in each lane. No new
+benchmark measurements, full performance gate or nonlocal execution is claimed.
+TASK-185 retains final wiring and release acceptance; CI/v3 PR owns nonlocal
+platform checks.

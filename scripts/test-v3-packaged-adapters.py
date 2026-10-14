@@ -99,7 +99,7 @@ class AdapterContracts(unittest.TestCase):
         unit = directory / 'consumer.cpp'; unit.write_text('public source\n')
         executable = directory / 'static'; executable.write_text('consumer')
         depfile = directory / 'static-0.d'; depfile.write_text(f'static.o: {unit} {header}\n')
-        linkmap = directory / 'static.map'; linkmap.write_text('LOAD ' + str(library) + '\n')
+        linkmap = directory / 'static.map'; linkmap.write_text(str(library) + '(public.o)\nLOAD ' + str(library) + '\n')
         obj = directory / 'static-0.o'; obj.write_text('object')
         log = self.root / 'command.log'; log.write_text('compile/link ok')
         commands = [dict(argv=['c++', '-std=c++20', '-MMD', '-MF', str(depfile), '-c', str(unit), '-o', str(obj)],
@@ -179,7 +179,8 @@ class AdapterContracts(unittest.TestCase):
 
     def test_process_requires_readiness_and_clean_exit(self):
         for bad in [dict(exit=0, stdout='', command=['server']), dict(exit=1, stdout='1234\n', command=['server']),
-                    dict(exit=0, stdout='0\n', command=['server']), dict(exit=0, stdout='1234\n', command=['server'], error='timeout')]:
+                    dict(exit=0, stdout='0\n', command=['server']),
+                    *[dict(exit=0, stdout=blank, command=['server']) for blank in ('\n', '   \n', '\t\n')], dict(exit=0, stdout='1234\n', command=['server'], error='timeout')]:
             with self.subTest(bad=bad), self.assertRaises(ValueError): adapter.validate_process(bad, require_port=True)
         adapter.validate_process(dict(exit=0, stdout='1234\n', stderr='', command=['server']), require_port=True)
 
@@ -282,11 +283,11 @@ class AdapterContracts(unittest.TestCase):
         from v3_release_package_adapters import validate_ws_rows
         rows = [dict(case='upgrade', status=101, port=1234),
                 dict(case='text_binary_fragmented', text='public text', binary_hex='00ff62696e617279', fragmented_hex='667261676d656e7420e282ac20646f6e65', pong='ping'),
-                dict(case='refusal', status=426), dict(case='close_cancel', clean_close_code=1000, close_callbacks=2, cancelled_receive=1),
+                dict(case='refusal', status=426), dict(case='close_cancel', clean_close_code=1000, close_callbacks=2, receive_entered=1, receive_completed=1, receive_retired=1, cancelled_receive=1, receive_outcome='connection_closed'),
                 dict(case='backpressure_cancel', blocked=2, cancelled=1, close_callbacks=3, output_limit=65546)]
         validate_ws_rows(rows)
         for index, key, value in [(0,'status',200),(0,'port',0),(1,'text',''),(1,'fragmented_hex',''),
-                                  (2,'status',101),(3,'close_callbacks',0),(4,'cancelled',0),(4,'cancelled',True),(4,'blocked',True),(4,'status','failed')]:
+                                  (2,'status',101),(3,'close_callbacks',0),(3,'receive_entered',0),(3,'receive_completed',0),(3,'receive_retired',0),(3,'cancelled_receive',True),(3,'receive_outcome','ok'),(4,'cancelled',0),(4,'cancelled',True),(4,'blocked',True),(4,'status','failed')]:
             broken = copy.deepcopy(rows); broken[index][key] = value
             with self.subTest(index=index,key=key), self.assertRaises(ValueError): validate_ws_rows(broken)
 
@@ -322,6 +323,166 @@ class AdapterContracts(unittest.TestCase):
         runner = adapter.load_runner(Path(__file__).parent.parent, 'check-v3-public-http1.py')
         self.assertTrue(callable(runner.run))
         self.assertTrue((Path(__file__).parent.parent / 'test/installed/v3_websocket_consumer.cpp').is_file())
+
+    def test_missing_public_cell_provenance_cannot_skip_checks(self):
+        from v3_release_package_provenance import validate_child_provenance
+        child = dict(status='passed', run_id='a' * 32, library_hashes={'library': 'digest'},
+                     cells=[dict(linkage=linkage, loop=loop) for linkage in ('shared', 'static')
+                            for loop in ('managed', 'external')])
+        with self.assertRaisesRegex(ValueError, 'provenance'):
+            validate_child_provenance(child, dict(package={'library': 'digest'}, tls='no'), {}, [])
+
+    def test_each_public_family_requires_its_compile_and_dependency_records(self):
+        from unittest.mock import patch
+        import v3_release_package_provenance as provenance
+        common = ['compile', 'dependencies']
+        for tls in ('no', 'yes'):
+            for family, keys in [('h1', common + ['websocket_compile']),
+                                 ('tls', common + ['profile_compile', 'profile_dependencies'] +
+                                  (['example_compile', 'example_dependencies'] if tls == 'yes' else [])),
+                                 ('h2', common), ('h3', common + ['example_compile'])]:
+                cells = [dict(linkage=linkage, loop=loop, **{key: {'link_map': '/consumer/map.map'} for key in keys})
+                         for linkage in ('shared', 'static') for loop in ('managed', 'external')]
+                child = dict(status='passed', run_id='a' * 32, library_hashes={'library':'digest'}, cells=cells,
+                             independent_client={'sha256':'digest'},
+                             examples=[dict(linkage=linkage, compile={'link_map':'/example/map.map'}, dependencies={'nodes':[]})
+                                       for linkage in ('shared', 'static')])
+                identity = dict(package={'library':'digest'}, tls=tls, prefix='/prefix')
+                with patch.object(provenance, 'validate_compile'), patch.object(provenance, 'validate_runtime'), \
+                     patch.object(provenance, 'validate_fixture_client'), patch.object(provenance, 'check_linkage'):
+                    provenance.validate_child_provenance(child, identity, {}, [], family)
+                    for key in keys:
+                        bad = copy.deepcopy(child); bad['cells'][0].pop(key)
+                        with self.subTest(tls=tls,family=family,key=key), self.assertRaisesRegex(ValueError, 'provenance'):
+                            provenance.validate_child_provenance(bad, identity, {}, [], family)
+                    if family == 'h2' and tls == 'yes':
+                        for replacement in ([], [child['examples'][0]]):
+                            bad = dict(child, examples=replacement)
+                            with self.assertRaises(ValueError): provenance.validate_child_provenance(bad, identity, {}, [], family)
+                    if family == 'tls' or family == 'h3' and tls == 'yes':
+                        bad = copy.deepcopy(child); bad.pop('independent_client')
+                        with self.assertRaises(ValueError): provenance.validate_child_provenance(bad, identity, {}, [], family)
+
+    def test_unused_selected_static_archive_cannot_supply_link_identity(self):
+        import subprocess
+        compiled, identity, artifacts, commands = self.provenance()
+        directory = Path(compiled['link_map']).parent
+        header = Path(next(p for p in identity['package'] if '/include/' in p))
+        header.write_text('int implementation();\n')
+        unit = Path(next(iter(compiled['sources'])))
+        unit.write_text('#include <httpserver/server.hpp>\nint main() { return implementation(); }\n')
+        libraries = []
+        for folder, value in ((self.root / 'foreign', 2), (Path(identity['prefix']) / 'lib', 1)):
+            folder.mkdir(exist_ok=True)
+            source = folder / 'implementation.cpp'; source.write_text('int implementation() { return %d; }\n' % value)
+            obj = folder / 'implementation.o'; archive = folder / 'libhttpserver.a'
+            archive.unlink(missing_ok=True)
+            subprocess.run(['c++', '-c', str(source), '-o', str(obj)], check=True, capture_output=True)
+            subprocess.run(['ar', 'rcs', str(archive), str(obj)], check=True, capture_output=True)
+            libraries.append(str(archive))
+        commands[0]['argv'].insert(2, '-I' + str(Path(identity['prefix']) / 'include'))
+        commands[1]['argv'][2:3] = libraries
+        for command in commands: subprocess.run(command['argv'], check=True, capture_output=True)
+        self.assertEqual(subprocess.run([str(directory / 'static')]).returncode, 2)
+        compiled['sources'] = {str(unit): bench.artifact(unit)['sha256']}
+        compiled['dependency_sha256'] = {str(p): bench.artifact(p)['sha256'] for p in (unit, header)}
+        compiled['artifact_sha256'] = bench.artifact(directory / 'static')['sha256']
+        identity['archive']['members']['test/installed/consumer.cpp'] = compiled['sources'][str(unit)]
+        identity['package'] = {p: bench.artifact(p)['sha256'] for p in identity['package']}
+        artifacts = {str(p): bench.artifact(p) for p in directory.iterdir() if p.is_file()}
+        with self.assertRaisesRegex(ValueError, 'static archive'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+        # The same real consumer succeeds when the selected archive contributes.
+        commands[1]['argv'].remove(libraries[0])
+        subprocess.run(commands[1]['argv'], check=True, capture_output=True)
+        self.assertEqual(subprocess.run([str(directory / 'static')]).returncode, 1)
+        compiled['artifact_sha256'] = bench.artifact(directory / 'static')['sha256']
+        artifacts = {str(p): bench.artifact(p) for p in directory.iterdir() if p.is_file()}
+        adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
+    def validate_scenario_cell(self, family, cell, tls='yes'):
+        # Isolate scenario semantics from archive/compile integrity (covered above).
+        from unittest.mock import patch
+        run_id = 'a' * 32
+        children, artifacts = {}, {}
+        for name in ('h1', 'tls', 'h2', 'h3'):
+            path = self.root / (name + '.json')
+            path.write_text(json.dumps(dict(run_id=run_id, cells=[cell] if name == family else [])))
+            children[name] = bench.artifact(path); artifacts[str(path)] = children[name]
+        inventory = adapter.required_inventory(adapter.PUBLIC, tls)
+        if family == 'tls': inventory['tls'] = [r['case'] for r in cell['scenarios']]
+        commands = []
+        if family == 'tls':
+            log = self.root / 'configuration.log'; log.write_text('ROLLBACK_OK')
+            record = dict(exit=0, log=str(log), sha256=bench.artifact(log)['sha256'])
+            cell['scenarios'][0]['command_receipt'] = record
+            (self.root / 'tls.json').write_text(json.dumps(dict(run_id=run_id, cells=[cell])))
+            children['tls'] = bench.artifact(self.root / 'tls.json'); artifacts[str(self.root / 'tls.json')] = children['tls']
+            artifacts[str(log)] = bench.artifact(log); commands = [record]
+        receipt = dict(children=children, inventory=inventory)
+        with patch.object(adapter, 'validate_base', return_value=(receipt, artifacts, commands)), \
+             patch.object(adapter, 'validate_child_provenance'), patch.object(adapter, 'validate_h2'), patch.object(adapter, 'validate_h3'):
+            adapter.validate_public_receipt(self.root / 'outer.json', dict(tls=tls), run_id)
+
+    def test_h1_requires_exact_versions_and_two_persistent_pipeline_responses(self):
+        cell = dict(port=1234, traffic=[dict(case='http10', response='HTTP/1.0 200 OK', body='installed-v3-ok\n'),
+                    dict(case='http11', response='HTTP/1.1 200 OK', body='installed-v3-ok\n'),
+                    dict(case='post', response='HTTP/1.1 200 OK', body='bounded-post-body'),
+                    dict(case='persistent', responses=2), dict(case='pipeline', responses=2), dict(case='shutdown', exit=0)],
+                    websocket=[dict(case='upgrade', status=101, port=1234),
+                    dict(case='text_binary_fragmented', text='public text', binary_hex='00ff62696e617279', fragmented_hex='667261676d656e7420e282ac20646f6e65', pong='ping'),
+                    dict(case='refusal', status=426), dict(case='close_cancel', clean_close_code=1000, close_callbacks=2,
+                         receive_entered=1, receive_completed=1, receive_retired=1, cancelled_receive=1, receive_outcome='connection_closed'),
+                    dict(case='backpressure_cancel', blocked=2, cancelled=1, close_callbacks=3, output_limit=65546)],
+                    supported_configurations=[dict(case=name, outcome='not_supported', bound_port=0) for name in ('tls','h2','h3')])
+        self.validate_scenario_cell('h1', cell, 'no')
+        for index, key, value in ((0,'response','HTTP/1.1 200 OK'), (1,'response','HTTP/1.0 200 OK'),
+                                  (3,'responses',1), (4,'responses',1), (3,'responses',True), (4,'responses',None)):
+            bad = copy.deepcopy(cell)
+            if value is None: bad['traffic'][index].pop(key)
+            else: bad['traffic'][index][key] = value
+            with self.subTest(index=index, key=key), self.assertRaises(ValueError): self.validate_scenario_cell('h1', bad, 'no')
+
+    def test_tls_profile_contradictions_cannot_pass_by_scenario_name(self):
+        base = [dict(case='partial_bind_rollback'), dict(case='acme_actual443_exact', local_port=443,
+                client=dict(connected=True, alpn='acme-tls/1', certificate_messages=1, certificate_sha256='a'*64, reused=0, ticket=0, body_hex=''))]
+        invalid = [dict(case='mtls_require_13_client-valid', accepted=False, handler_delta=0, head='', body=''),
+                   dict(case='mtls_require_13_absent', accepted=True, handler_delta=1),
+                   dict(case='psk_13_identity', client=[], handler_delta=0),
+                   dict(case='psk_12_wrong-key', client=[dict(connected=True, early_sent=0)], handler_delta=1),
+                   dict(case='psk_blocked_drain', terminal_seconds=.1, callbacks_entered=0, callbacks_retired=0, callbacks_cancelled=0, handler_count=0),
+                   dict(case='certificate_resumption_13', client=[]),
+                   dict(case='acme_real_expiry', expires_unix=20, observed_unix=10, waited_seconds=1),
+                   dict(case='sni_a', certificate_sha256='', verified_chain=False, verified_hostname=False)]
+        for row in invalid:
+            cell = dict(scenarios=copy.deepcopy(base) + [row], wire=[dict(body='installed-v3-tls-ok\n', head='HTTP/1.1 200 OK')])
+            with self.subTest(case=row['case']), self.assertRaises(ValueError): self.validate_scenario_cell('tls', cell)
+
+    def test_tls_profile_positive_witnesses_and_corrupt_metadata(self):
+        certificate = dict(connected=True, version='TLSv1.3', alpn='http/1.1', certificate_sha256='a'*64,
+                           certificate_messages=1, reused=0, ticket=1,
+                           body_hex=b'HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nprofile-ok\n\n'.hex())
+        psk = dict(certificate, certificate_sha256='', certificate_messages=0, ticket=0, cipher='TLS_AES_128_GCM_SHA256')
+        acme = dict(certificate, alpn='acme-tls/1', ticket=0, body_hex='')
+        rows = [dict(case='mtls_require_13_client-valid', accepted=True, handler_delta=1,
+                     head='HTTP/1.1 200 OK', body='profile-ok\n'+'b'*64+'\n', certificate_sha256='a'*64),
+                dict(case='mtls_require_13_absent', accepted=False, handler_delta=0),
+                dict(case='psk_13_identity', client=[psk], handler_delta=1),
+                dict(case='psk_13_wrong-key', client=[dict(connected=False, early_sent=0)], handler_delta=0),
+                dict(case='psk_blocked_drain', callbacks_entered=1, callbacks_retired=1, callbacks_cancelled=1,
+                     handler_count=0, terminal_seconds=.1, caller_handles_dropped=False),
+                dict(case='certificate_resumption_13', client=[certificate,dict(certificate,reused=1,certificate_messages=0)]),
+                dict(case='acme_actual443_exact', client=acme, local_port=443),
+                dict(case='acme_real_expiry', expires_unix=10, observed_unix=11, waited_seconds=1)]
+        adapter.validate_tls_rows(rows)
+        mutations = [(0,'handler_delta',True), (0,'body','profile-ok\n\n'), (1,'accepted',True),
+                     (2,'client',[dict(psk,body_hex='')]), (2,'client',[dict(psk,ticket=1)]),
+                     (3,'handler_delta',1), (4,'callbacks_retired',0), (4,'callbacks_cancelled',True),
+                     (5,'client',[certificate,certificate]), (6,'local_port',444),
+                     (6,'client',dict(acme,body_hex='aa')), (7,'observed_unix',9)]
+        for index, key, value in mutations:
+            bad = copy.deepcopy(rows); bad[index][key] = value
+            with self.subTest(index=index,key=key), self.assertRaises(ValueError): adapter.validate_tls_rows(bad)
 
     def test_archive_child_runners_have_callable_entry_points(self):
         for filename in ('check-v3-public-tls.py', 'check-v3-public-http2.py', 'check-v3-public-http3.py'):

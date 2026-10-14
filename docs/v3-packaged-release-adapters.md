@@ -85,11 +85,25 @@ catalog covers child receipts, command outputs, process receipts, copied
 consumers/fixtures/client code, objects, depfiles, link maps, executable files
 and benchmark raw samples. Compilation must use installed public headers,
 C++20, and archive-distributed copied sources. Private headers, source/build
-includes and `HTTPSERVER_COMPILATION` cannot supply public proof. Static link
-commands/maps must name the selected installed archive; shared runtime
-inspection must resolve the selected installation. Readiness alone cannot
+includes and `HTTPSERVER_COMPILATION` cannot supply public proof. Every cell must retain its family's compile and dependency records, including
+H1 WebSocket, TLS profile/rotation, and H2/H3 example consumers where applicable.
+Static link maps must show contributing members from the selected installed
+archive and no foreign libhttpserver archive contribution; an unused LOAD entry
+cannot supply proof. Shared runtime inspection must resolve the selected
+installation. The first readiness line must contain at least one valid bound
+port. Readiness alone cannot
 supply response proof. Child inventories and decoded lifecycle/semantic
 observations remain subject to their original validators.
+
+H1 validation requires exact HTTP/1.0 or HTTP/1.1 response prefixes and exactly
+two recorded persistent and pipelined responses. WebSocket peer-close evidence
+records actual pending receive entry, completion with the public
+`connection_closed` outcome, and handler retirement before server stop. The
+legacy `cancelled_receive` count represents this observed transport termination;
+it does not assert an `outcome_code::cancelled` result. TLS profile rows retain
+and validate positive and negative authentication, handler deltas, decoded
+responses, callback cancellation/retirement, SNI generations, session rotation,
+and applicable ACME observations independently of their scenario names.
 
 TLS authentication rejection controls retain the independent provider client's
 exit 2 only with a decoded `connected=false` handshake and the exact bounded

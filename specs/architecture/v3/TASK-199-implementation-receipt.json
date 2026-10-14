@@ -863,5 +863,770 @@
     "owner": "CI / v3 PR"
   },
   "release_acceptance": "TASK-185 remains open; full release/performance/sanitizer gates unchanged",
-  "task_182_status": "Already Complete in both card and index; preserved without a fabricated transition"
+  "task_182_status": "Already Complete in both card and index; preserved without a fabricated transition",
+  "validation_repair": {
+    "iteration": 1,
+    "status": "repairs-verified",
+    "archive": {
+      "path": "/tmp/task199-dist-repair/libhttpserver-3.0.0.tar.gz",
+      "bytes": 2691028,
+      "sha256": "4f5327a740d9d1e4ae21548a8d82c5b45ff498daa50498829309b1c655345626"
+    },
+    "extracted_source": "/tmp/task199-extract-repair/libhttpserver-3.0.0",
+    "public_executions": [
+      {
+        "tls": "no",
+        "run_id": "19900000000000000000000000000041",
+        "status": "passed",
+        "receipt": {
+          "path": "/tmp/task199-repair-public-no/receipt.json",
+          "bytes": 304877,
+          "sha256": "d22115249c2a60d6950aae77f3cf6b8e1bad4e7491750c4790b4c67d0d380cdc"
+        },
+        "validation_log": {
+          "path": "/tmp/task199-repair-public-no-validate.log",
+          "bytes": 63,
+          "sha256": "9811819a387ba51aa4c928fde04bb87c15c615ef6bbbf35fccdb9a480da14988"
+        },
+        "validation_argv": [
+          "/tmp/task197-validation-clients/bin/python",
+          "/tmp/task199-extract-repair/libhttpserver-3.0.0/scripts/run-v3-packaged-adapters.py",
+          "--family",
+          "public-capabilities",
+          "--source",
+          "/tmp/task199-extract-repair/libhttpserver-3.0.0",
+          "--build",
+          "/tmp/task199-build-off4",
+          "--prefix",
+          "/tmp/task199-prefix-off4",
+          "--provider-prefix",
+          "/home/etr/progs/libhttpserver/build/tooling/provider",
+          "--compiler",
+          "/usr/bin/clang++-18",
+          "--tls",
+          "no",
+          "--archive",
+          "/tmp/task199-dist-repair/libhttpserver-3.0.0.tar.gz",
+          "--archive-sha256",
+          "4f5327a740d9d1e4ae21548a8d82c5b45ff498daa50498829309b1c655345626",
+          "--client-python",
+          "/tmp/task197-validation-clients/bin/python",
+          "--node",
+          "/tmp/node-v24.15.0-linux-x64/bin/node",
+          "--quic-go",
+          "/tmp/task198-go-client",
+          "--run-id",
+          "19900000000000000000000000000041",
+          "--output",
+          "/tmp/task199-repair-public-no",
+          "--validate",
+          "/tmp/task199-repair-public-no/receipt.json"
+        ],
+        "identity_sha256": "9a3b0d7ac091437a380c11620c1a0a0f7aa5bb9c78a6b7d02924e2e5f0ea7e00",
+        "installed_package_unchanged": true,
+        "websocket_receive_witnesses": [
+          {
+            "linkage": "shared",
+            "loop": "managed",
+            "case": "close_cancel",
+            "clean_close_code": 1000,
+            "close_callbacks": 2,
+            "receive_entered": 1,
+            "receive_completed": 1,
+            "receive_retired": 1,
+            "cancelled_receive": 1,
+            "receive_outcome": "connection_closed"
+          },
+          {
+            "linkage": "shared",
+            "loop": "external",
+            "case": "close_cancel",
+            "clean_close_code": 1000,
+            "close_callbacks": 2,
+            "receive_entered": 1,
+            "receive_completed": 1,
+            "receive_retired": 1,
+            "cancelled_receive": 1,
+            "receive_outcome": "connection_closed"
+          },
+          {
+            "linkage": "static",
+            "loop": "managed",
+            "case": "close_cancel",
+            "clean_close_code": 1000,
+            "close_callbacks": 2,
+            "receive_entered": 1,
+            "receive_completed": 1,
+            "receive_retired": 1,
+            "cancelled_receive": 1,
+            "receive_outcome": "connection_closed"
+          },
+          {
+            "linkage": "static",
+            "loop": "external",
+            "case": "close_cancel",
+            "clean_close_code": 1000,
+            "close_callbacks": 2,
+            "receive_entered": 1,
+            "receive_completed": 1,
+            "receive_retired": 1,
+            "cancelled_receive": 1,
+            "receive_outcome": "connection_closed"
+          }
+        ],
+        "artifacts": 453
+      },
+      {
+        "tls": "yes",
+        "run_id": "19900000000000000000000000000042",
+        "status": "passed",
+        "receipt": {
+          "path": "/tmp/task199-repair-public-yes/receipt.json",
+          "bytes": 499669,
+          "sha256": "f4a0cb35f6c621227b121ee7672abef404db29057a84be99ad44be9f4d344c95"
+        },
+        "validation_log": {
+          "path": "/tmp/task199-repair-public-yes-validate.log",
+          "bytes": 63,
+          "sha256": "62ae1a57bcc6169c39d26e1b36bde3ea15807c2c7341b1d2d570358e5377f585"
+        },
+        "validation_argv": [
+          "/tmp/task197-validation-clients/bin/python",
+          "/tmp/task199-extract-repair/libhttpserver-3.0.0/scripts/run-v3-packaged-adapters.py",
+          "--family",
+          "public-capabilities",
+          "--source",
+          "/tmp/task199-extract-repair/libhttpserver-3.0.0",
+          "--build",
+          "/tmp/task199-build-on4",
+          "--prefix",
+          "/tmp/task199-prefix-on4",
+          "--provider-prefix",
+          "/home/etr/progs/libhttpserver/build/tooling/provider",
+          "--compiler",
+          "/usr/bin/clang++-18",
+          "--tls",
+          "yes",
+          "--archive",
+          "/tmp/task199-dist-repair/libhttpserver-3.0.0.tar.gz",
+          "--archive-sha256",
+          "4f5327a740d9d1e4ae21548a8d82c5b45ff498daa50498829309b1c655345626",
+          "--client-python",
+          "/tmp/task197-validation-clients/bin/python",
+          "--node",
+          "/tmp/node-v24.15.0-linux-x64/bin/node",
+          "--quic-go",
+          "/tmp/task198-go-client",
+          "--run-id",
+          "19900000000000000000000000000042",
+          "--output",
+          "/tmp/task199-repair-public-yes",
+          "--validate",
+          "/tmp/task199-repair-public-yes/receipt.json"
+        ],
+        "identity_sha256": "27b62afb09f9ca908b2d8883711bdf69b60762c695a0de77ee8516bec8662b9e",
+        "installed_package_unchanged": true,
+        "websocket_receive_witnesses": [
+          {
+            "linkage": "shared",
+            "loop": "managed",
+            "case": "close_cancel",
+            "clean_close_code": 1000,
+            "close_callbacks": 2,
+            "receive_entered": 1,
+            "receive_completed": 1,
+            "receive_retired": 1,
+            "cancelled_receive": 1,
+            "receive_outcome": "connection_closed"
+          },
+          {
+            "linkage": "shared",
+            "loop": "external",
+            "case": "close_cancel",
+            "clean_close_code": 1000,
+            "close_callbacks": 2,
+            "receive_entered": 1,
+            "receive_completed": 1,
+            "receive_retired": 1,
+            "cancelled_receive": 1,
+            "receive_outcome": "connection_closed"
+          },
+          {
+            "linkage": "static",
+            "loop": "managed",
+            "case": "close_cancel",
+            "clean_close_code": 1000,
+            "close_callbacks": 2,
+            "receive_entered": 1,
+            "receive_completed": 1,
+            "receive_retired": 1,
+            "cancelled_receive": 1,
+            "receive_outcome": "connection_closed"
+          },
+          {
+            "linkage": "static",
+            "loop": "external",
+            "case": "close_cancel",
+            "clean_close_code": 1000,
+            "close_callbacks": 2,
+            "receive_entered": 1,
+            "receive_completed": 1,
+            "receive_retired": 1,
+            "cancelled_receive": 1,
+            "receive_outcome": "connection_closed"
+          }
+        ],
+        "artifacts": 1334
+      }
+    ],
+    "red_logs": [
+      {
+        "path": "/tmp/task199-repair-red.log",
+        "bytes": 15788,
+        "sha256": "2994370331ca2f6142de9e930bb877c79770e704309b256ffc77086445e9ce79"
+      },
+      {
+        "path": "/tmp/task199-repair-ws-red.log",
+        "bytes": 44,
+        "sha256": "a75498982e40252d9990d7749cef0d4e2c6ca736d6346b9ad46e83c3f752ec84"
+      }
+    ],
+    "focused_checks": [
+      {
+        "name": "adapters",
+        "tests": 40,
+        "log": {
+          "path": "/tmp/task199-repair-green2.log",
+          "bytes": 139,
+          "sha256": "75e141500ac890c7713a0491e215ef79d562f2ac274c5d93ea004cbbb171cac6"
+        }
+      },
+      {
+        "name": "installed-consumer",
+        "tests": 28,
+        "log": {
+          "path": "/tmp/task199-repair-consumer-tests.log",
+          "bytes": 127,
+          "sha256": "8af5467670b5e6c05b6f6e1dc06d1483a41f2a9f175ef8607da7cec3dc2089f2"
+        }
+      },
+      {
+        "name": "native-benchmark",
+        "tests": 18,
+        "log": {
+          "path": "/tmp/task199-repair-benchmark-tests.log",
+          "bytes": 117,
+          "sha256": "b8bfe1c1bbfe520e32fe1772498d6e3ae9aafefa9446696718b886b81d1d2c85"
+        }
+      },
+      {
+        "name": "public-h2",
+        "tests": 6,
+        "log": {
+          "path": "/tmp/task199-repair-h2-tests.log",
+          "bytes": 104,
+          "sha256": "65378dcad145da2497120819bebfc3c46534dce9714ce064b3d809a56654aca2"
+        }
+      },
+      {
+        "name": "public-h3",
+        "tests": 13,
+        "log": {
+          "path": "/tmp/task199-repair-h3-tests.log",
+          "bytes": 112,
+          "sha256": "0fe5cb662bfff14a9884376c5dc9b13021e73aa15d1c18bc3ecfc2226a9f364f"
+        }
+      }
+    ],
+    "lint": [
+      {
+        "path": "/tmp/task199-repair-cpplint.log",
+        "bytes": 57,
+        "sha256": "1a30814329f1a78eb6795321cb72df934f588613729395895dbb2afd19a683b9"
+      },
+      {
+        "path": "/tmp/task199-repair-automake.log",
+        "bytes": 159,
+        "sha256": "202f890cce853d104ec15209b4c4469258ee0501a071aafd4d6ea5f39f5f7a07"
+      }
+    ],
+    "semantic_tampering": [
+      {
+        "case": "no-h1-missing-provenance",
+        "status": "rejected",
+        "reason": "missing required public cell provenance",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h1-missing-provenance-receipt.json",
+          "bytes": 305188,
+          "sha256": "1fa370c6381350a52dc55d7ffd2879aedc770b5f531da89725f1ab660e1e6bda"
+        }
+      },
+      {
+        "case": "no-tls-missing-provenance",
+        "status": "rejected",
+        "reason": "missing required public cell provenance",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-tls-missing-provenance-receipt.json",
+          "bytes": 305190,
+          "sha256": "9f797dfab9aaf5a9cac9ebdaff774d6f8c78f7f229ab7146cbd2e3a2a37c99bd"
+        }
+      },
+      {
+        "case": "no-h2-missing-provenance",
+        "status": "rejected",
+        "reason": "missing required public cell provenance",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h2-missing-provenance-receipt.json",
+          "bytes": 305188,
+          "sha256": "bf1909cfa6278d05c45653d1a2e2b3c76986f6f4139dbce5c78252218ece4097"
+        }
+      },
+      {
+        "case": "no-h3-missing-provenance",
+        "status": "rejected",
+        "reason": "missing required public cell provenance",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h3-missing-provenance-receipt.json",
+          "bytes": 305188,
+          "sha256": "335397f9d03a23701292e9f8d4a6a0fd3eacdcf52404793e347c7e7394d4946a"
+        }
+      },
+      {
+        "case": "no-h1-wrong-version",
+        "status": "rejected",
+        "reason": "wrong H1 response bytes",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h1-wrong-version-receipt.json",
+          "bytes": 305175,
+          "sha256": "2c43b6370e59d3d69a3251d111394e9a60422da3781baa37c28cd436eb8d11eb"
+        }
+      },
+      {
+        "case": "no-h1-persistent-1",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h1-persistent-1-receipt.json",
+          "bytes": 305172,
+          "sha256": "d2156438d4d2da6df306a1f745223428f7dc31206bbddec2114ecbad8bd2a951"
+        }
+      },
+      {
+        "case": "no-h1-persistent-True",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h1-persistent-True-receipt.json",
+          "bytes": 305181,
+          "sha256": "b6ff749c4431de4be1ebececf045ec5df7d5f0ad62f9a335abba3826f30a351b"
+        }
+      },
+      {
+        "case": "no-h1-persistent-None",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h1-persistent-None-receipt.json",
+          "bytes": 305181,
+          "sha256": "736bfbbfde1c630ecf48e68fe8f7c46289152f514fc9b698509c1948bc86fc76"
+        }
+      },
+      {
+        "case": "no-h1-pipeline-1",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h1-pipeline-1-receipt.json",
+          "bytes": 305166,
+          "sha256": "4410c8b0effc307f95f502a38eabd9ca2d358b18af7054c5bfb8f317de60cd16"
+        }
+      },
+      {
+        "case": "no-h1-pipeline-True",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h1-pipeline-True-receipt.json",
+          "bytes": 305175,
+          "sha256": "85e730f6a9bd2c0b735088334f79dbbeca9fbf267b0fd045d206534bf80b17b1"
+        }
+      },
+      {
+        "case": "no-h1-pipeline-None",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-h1-pipeline-None-receipt.json",
+          "bytes": 305175,
+          "sha256": "d499775d8ecb9d1995bae6b612bec7994b912a5d3c66a40b5c947dacf456e87a"
+        }
+      },
+      {
+        "case": "no-ws-close-without-receive",
+        "status": "rejected",
+        "reason": "missing actual receive cancellation/retirement",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-ws-close-without-receive-receipt.json",
+          "bytes": 305199,
+          "sha256": "a640862da8989ea7dc9c32b7dcae54789df0f517d17d334c8a3b8b11b0776869"
+        }
+      },
+      {
+        "case": "yes-h1-missing-provenance",
+        "status": "rejected",
+        "reason": "missing required public cell provenance",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h1-missing-provenance-receipt.json",
+          "bytes": 499982,
+          "sha256": "2b7f954d0328a29ab03ff8c260e11a5bf2fd0546f2d3d26951e9d8c411e79a15"
+        }
+      },
+      {
+        "case": "yes-tls-missing-provenance",
+        "status": "rejected",
+        "reason": "missing required public cell provenance",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-missing-provenance-receipt.json",
+          "bytes": 499986,
+          "sha256": "b53c23c7ac6b6dcdcc4595f102a963e04164bbfa6ccfa8cdc2e79ba3b2e5db3d"
+        }
+      },
+      {
+        "case": "yes-h2-missing-provenance",
+        "status": "rejected",
+        "reason": "missing required public cell provenance",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h2-missing-provenance-receipt.json",
+          "bytes": 499984,
+          "sha256": "7cd46778b07541de1775463da8127bb49b0e35ea9fd3071fffd5611a261add73"
+        }
+      },
+      {
+        "case": "yes-h3-missing-provenance",
+        "status": "rejected",
+        "reason": "missing required public cell provenance",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h3-missing-provenance-receipt.json",
+          "bytes": 499984,
+          "sha256": "264698a2fa70842c65f3af2b8fc239fe96286fbc9393aaf68c0e51f2c1e457d3"
+        }
+      },
+      {
+        "case": "yes-h1-wrong-version",
+        "status": "rejected",
+        "reason": "wrong H1 response bytes",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h1-wrong-version-receipt.json",
+          "bytes": 499969,
+          "sha256": "7f669d8674f43adc67f629570b473b0068b82f22d949f246f7408344cb5acc90"
+        }
+      },
+      {
+        "case": "yes-h1-persistent-1",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h1-persistent-1-receipt.json",
+          "bytes": 499966,
+          "sha256": "69d8d00128950511762e240af727e9858d871592f8c936f54124cb40d1b651ba"
+        }
+      },
+      {
+        "case": "yes-h1-persistent-True",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h1-persistent-True-receipt.json",
+          "bytes": 499975,
+          "sha256": "541cbbef69e3bd89354b4aaa20c1c63d37afcf436428010fe15c12dc68c36bbb"
+        }
+      },
+      {
+        "case": "yes-h1-persistent-None",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h1-persistent-None-receipt.json",
+          "bytes": 499975,
+          "sha256": "92d343c03cc01fcaf14fe0f21b16389483c4b14ef8556626ca4d1d084a89ebd4"
+        }
+      },
+      {
+        "case": "yes-h1-pipeline-1",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h1-pipeline-1-receipt.json",
+          "bytes": 499960,
+          "sha256": "4a361625519027c34723351554293b2451101215f8e16730d84eab5748893e30"
+        }
+      },
+      {
+        "case": "yes-h1-pipeline-True",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h1-pipeline-True-receipt.json",
+          "bytes": 499969,
+          "sha256": "f401d1752cb1b503ce870d096a73c3a1ffa8ed9660cfb5b7b39998ace67a2c71"
+        }
+      },
+      {
+        "case": "yes-h1-pipeline-None",
+        "status": "rejected",
+        "reason": "incomplete H1 persistent/pipeline exchange",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-h1-pipeline-None-receipt.json",
+          "bytes": 499969,
+          "sha256": "3ead4bf83a356c6fd158c1396afb6806597b3c448e4d2b18a7a4cc7c688cf528"
+        }
+      },
+      {
+        "case": "yes-ws-close-without-receive",
+        "status": "rejected",
+        "reason": "missing actual receive cancellation/retirement",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-ws-close-without-receive-receipt.json",
+          "bytes": 499993,
+          "sha256": "508708db0da45ab0d6da19730eed447695277d2f633583ed87786030c6031dfa"
+        }
+      },
+      {
+        "case": "yes-tls-mtls_require_13_client-valid",
+        "status": "rejected",
+        "reason": "wrong mTLS authentication outcome",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-mtls_require_13_client-valid-receipt.json",
+          "bytes": 500016,
+          "sha256": "7e45d52d73af2a8a7c411a45fefbc730f19d54a2d89ca3fc9d9f720397159289"
+        }
+      },
+      {
+        "case": "yes-tls-mtls_require_13_absent",
+        "status": "rejected",
+        "reason": "wrong mTLS authentication outcome",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-mtls_require_13_absent-receipt.json",
+          "bytes": 499998,
+          "sha256": "ca7fa44e280621c8ee9c8eaf8117cd06d57ec7f9df90692ee6d3cb538b7f39f7"
+        }
+      },
+      {
+        "case": "yes-tls-psk_13_identity",
+        "status": "rejected",
+        "reason": "missing PSK client observations",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-psk_13_identity-receipt.json",
+          "bytes": 499977,
+          "sha256": "b21d11d12b5601dd088600315b260c7f0277f211042220ddf752101932711a12"
+        }
+      },
+      {
+        "case": "yes-tls-psk_12_wrong-key",
+        "status": "rejected",
+        "reason": "PSK rejection authenticated/routed",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-psk_12_wrong-key-receipt.json",
+          "bytes": 499980,
+          "sha256": "22519a54700034a6901eae8d281ed95052250bebcf4537da5e5680c150670fe1"
+        }
+      },
+      {
+        "case": "yes-tls-psk_blocked_drain",
+        "status": "rejected",
+        "reason": "wrong TLS callbacks_entered",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-psk_blocked_drain-receipt.json",
+          "bytes": 499983,
+          "sha256": "ecfdacfd20f4186bf15a339035e65e9486bd3b20dafb1bf302b9282b71eecec5"
+        }
+      },
+      {
+        "case": "yes-tls-psk_blocked_request_stop",
+        "status": "rejected",
+        "reason": "wrong TLS callbacks_retired",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-psk_blocked_request_stop-receipt.json",
+          "bytes": 500004,
+          "sha256": "84df945fc5d90966dd8321aa3a41de5832c9048b2bc338ec940fbbb7a74580bf"
+        }
+      },
+      {
+        "case": "yes-tls-certificate_resumption_13",
+        "status": "rejected",
+        "reason": "missing certificate resumption observations",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-certificate_resumption_13-receipt.json",
+          "bytes": 500007,
+          "sha256": "c8494b061755e41415f57b722962632fbe0cf186d7ef314836c26a5e778fbb20"
+        }
+      },
+      {
+        "case": "yes-tls-certificate_rotation_rejects_old_session_13",
+        "status": "rejected",
+        "reason": "wrong TLS established_requests",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-certificate_rotation_rejects_old_session_13-receipt.json",
+          "bytes": 500061,
+          "sha256": "77ab79a0003cfe6dbcb3c1393ebbe65477c96c54ba42b59053b1ce04c99d79dd"
+        }
+      },
+      {
+        "case": "yes-tls-sni_a",
+        "status": "rejected",
+        "reason": "missing verified SNI certificate",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-sni_a-receipt.json",
+          "bytes": 499947,
+          "sha256": "6dfdc7835858c04a1261ebd74c75fda41b6edee273df84b461c09978032ae3f8"
+        }
+      },
+      {
+        "case": "yes-tls-acme_real_expiry",
+        "status": "rejected",
+        "reason": "missing actual ACME expiry",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-acme_real_expiry-receipt.json",
+          "bytes": 499980,
+          "sha256": "6d5c77c0c22cb23927c9acad56f7a41c4698c0027a99769fd3b547343f7f47bf"
+        }
+      },
+      {
+        "case": "yes-tls-acme_actual443_exact",
+        "status": "rejected",
+        "reason": "wrong TLS local_port",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-tls-acme_actual443_exact-receipt.json",
+          "bytes": 499992,
+          "sha256": "42579bbcc0722da16493ae68babf7cb70ff12b0938500f4cb46e4748fb0b13b4"
+        }
+      },
+      {
+        "case": "no-readiness-blank-0",
+        "status": "rejected",
+        "reason": "missing bound readiness port",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-readiness-blank-0-receipt.json",
+          "bytes": 305157,
+          "sha256": "117fe506de0a09f8e5cacff8006bf276f5cba0b597582a948a8bf6ca36cb0913"
+        }
+      },
+      {
+        "case": "no-readiness-blank-1",
+        "status": "rejected",
+        "reason": "missing bound readiness port",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-readiness-blank-1-receipt.json",
+          "bytes": 305157,
+          "sha256": "e9cee542ac878480083ae4fa0e7131b10f2909288038eca26b1091fa411f58b8"
+        }
+      },
+      {
+        "case": "no-readiness-blank-2",
+        "status": "rejected",
+        "reason": "missing bound readiness port",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/no-readiness-blank-2-receipt.json",
+          "bytes": 305157,
+          "sha256": "9547b4b2dc059ad99d44f96092edacaab8171be22021ccd414820dc1d0a242a3"
+        }
+      },
+      {
+        "case": "yes-readiness-blank-0",
+        "status": "rejected",
+        "reason": "missing bound readiness port",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-readiness-blank-0-receipt.json",
+          "bytes": 499951,
+          "sha256": "d9fb0f372092f2f686e456f974ec79660f30dceade78637bbed5e075f83a9b34"
+        }
+      },
+      {
+        "case": "yes-readiness-blank-1",
+        "status": "rejected",
+        "reason": "missing bound readiness port",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-readiness-blank-1-receipt.json",
+          "bytes": 499951,
+          "sha256": "15ff15051fce431dd0a73229a613cbc8f39fdde9f2e78fd5f429fa12cc3497b7"
+        }
+      },
+      {
+        "case": "yes-readiness-blank-2",
+        "status": "rejected",
+        "reason": "missing bound readiness port",
+        "receipt": {
+          "path": "/tmp/task199-repair-semantic-probes/yes-readiness-blank-2-receipt.json",
+          "bytes": 499951,
+          "sha256": "dd2f9ae9f7c285813cb86344d880a8dc72a310f4789ced9434958b6b58befb5a"
+        }
+      }
+    ],
+    "live_negative_probes": [
+      {
+        "path": "/tmp/task199-repair-ws-original-negative.log",
+        "bytes": 38,
+        "sha256": "f0c99b725850831d9f8e3536cfe2ba17f531ef1c540683b015854dd64d999535"
+      },
+      {
+        "path": "/tmp/task199-repair-ws-current-negative.log",
+        "bytes": 130,
+        "sha256": "cd3fc66237a03155a41fc09dcbdc31fc7c45a32f62b755ae86a021c0a4e5df4c"
+      },
+      {
+        "path": "/tmp/task199-repair-static-original-negative.log",
+        "bytes": 105,
+        "sha256": "b2d2db1c370aef75e0f768542fa12a16de2dff2e47c8d80b48b4ba35784178bb"
+      }
+    ],
+    "retained_mutation": "/tmp/task199-repair-ws-negative",
+    "benchmark_reuse": [
+      {
+        "tls": "no",
+        "receipt": {
+          "path": "/tmp/task199-evidence4/native-throughput-latency-no/receipt.json",
+          "bytes": 257510,
+          "sha256": "c69be94c232380c49caebea585783bb1f911f06875e9d9197213466d266316e0"
+        },
+        "run_id": "19900000000000000000000000000033",
+        "full_workload": false,
+        "unchanged_recorded_source_inputs": 298,
+        "source_identity_sha256": "bd4ef21a559fd748e473fee00fa3ddb423911788bc863d4526f33dca4dc17f71",
+        "verification_log": {
+          "path": "/tmp/task199-repair-reused-benchmarks.log",
+          "bytes": 215,
+          "sha256": "3d4cfb3f13a83f41a9da6fbff1f73ca52e0b1f4b256bba1c378feb1714da2b39"
+        },
+        "classification": "Existing reduced integration, independently revalidated; no new measurements"
+      },
+      {
+        "tls": "yes",
+        "receipt": {
+          "path": "/tmp/task199-evidence4/native-throughput-latency-yes/receipt.json",
+          "bytes": 264959,
+          "sha256": "01bacad0c0bfb4d84ad8fd3773126aec2286ef9539da454865f83a65c610b15d"
+        },
+        "run_id": "19900000000000000000000000000034",
+        "full_workload": false,
+        "unchanged_recorded_source_inputs": 298,
+        "source_identity_sha256": "bd4ef21a559fd748e473fee00fa3ddb423911788bc863d4526f33dca4dc17f71",
+        "verification_log": {
+          "path": "/tmp/task199-repair-reused-benchmarks.log",
+          "bytes": 215,
+          "sha256": "3d4cfb3f13a83f41a9da6fbff1f73ca52e0b1f4b256bba1c378feb1714da2b39"
+        },
+        "classification": "Existing reduced integration, independently revalidated; no new measurements"
+      }
+    ],
+    "initial_harness_failure": {
+      "log": {
+        "path": "/tmp/task199-repair-public-no-validate-initial.log",
+        "bytes": 1345,
+        "sha256": "5a69ac694c02e34b270d403140ec0b18c1cb42d95d1323651b4df7b5b9fe522d"
+      },
+      "reason": "Harness substituted resolved system Python for selected venv; corrected to preserve receipt.inputs before accepted independent validation"
+    },
+    "source_proof_boundary": "Executable adapter and consumer inputs match repair archive; installed production libraries unchanged. Evidence/docs reconciled after execution.",
+    "ownership": "TASK-185 full performance and release gates unchanged; nonlocal checks remain CI/v3 PR owned"
+  }
 }

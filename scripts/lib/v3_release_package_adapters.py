@@ -186,8 +186,150 @@ def validate_ws_rows(rows):
     require(exchange['text'] == 'public text' and exchange['binary_hex'] == '00ff62696e617279' and
             exchange['fragmented_hex'] == '667261676d656e7420e282ac20646f6e65' and exchange['pong'] == 'ping', 'wrong WS exchange bytes')
     close, pressure = by_case['close_cancel'], by_case['backpressure_cancel']
-    require(close['clean_close_code'] == 1000 and close['close_callbacks'] == 2 and close['cancelled_receive'] == 1, 'missing close/cancellation')
+    require(close['clean_close_code'] == 1000 and close['close_callbacks'] == 2 and
+            all(type(close.get(key)) is int and close[key] == 1 for key in
+                ('receive_entered', 'receive_completed', 'receive_retired', 'cancelled_receive')) and
+            close.get('receive_outcome') == 'connection_closed', 'missing actual receive cancellation/retirement')
     require(bench.positive_integer(pressure['blocked']) and type(pressure['cancelled']) is int and pressure['cancelled'] == 1 and pressure['close_callbacks'] == 3 and pressure['output_limit'] == 65546, 'missing bounded WS pressure cancellation')
+
+
+def validate_tls_rows(rows):
+    """Recheck recorded profile outcomes independently of scenario inventory."""
+    by_case = {row['case']: row for row in rows}
+
+    def integer(row, key, expected):
+        require(type(row.get(key)) is int and row[key] == expected, 'wrong TLS ' + key)
+
+    def fingerprint(value):
+        return isinstance(value, str) and len(value) == 64 and all(c in '0123456789abcdef' for c in value)
+
+    def client(value, version=None, psk=False, acme=False):
+        require(isinstance(value, dict) and value.get('connected') is True, 'missing authenticated TLS client')
+        require(value.get('alpn') == ('acme-tls/1' if acme else 'http/1.1'), 'wrong TLS client ALPN')
+        if version: require(value.get('version') == 'TLSv1.' + ('2' if version == '12' else '3'), 'wrong TLS client version')
+        if psk:
+            integer(value, 'ticket', 0)
+            integer(value, 'certificate_messages', 0)
+            require(value.get('certificate_sha256') == '' and value.get('cipher') ==
+                    ('PSK-AES128-GCM-SHA256' if version == '12' else 'TLS_AES_128_GCM_SHA256'), 'wrong PSK authentication')
+        else: require(fingerprint(value.get('certificate_sha256')), 'missing TLS certificate')
+        if acme:
+            integer(value, 'certificate_messages', 1)
+            integer(value, 'reused', 0)
+            require(value.get('body_hex') == '', 'ACME reached HTTP handler')
+        else:
+            try: response = bytes.fromhex(value.get('body_hex', ''))
+            except (ValueError, TypeError): raise ValueError('malformed TLS client response')
+            require(response.startswith(b'HTTP/1.1 200 ') and response.split(b'\r\n\r\n', 1)[-1] == b'profile-ok\n\n', 'missing TLS profile response')
+
+    for row in rows:
+        case = row['case']
+        if case in ('sni_a', 'sni_b', 'second_b', 'unknown_sni', 'absent_sni', 'isolated_store', 'http1.0', 'http1.1'):
+            version = '1.0' if case == 'http1.0' else '1.1'
+            require(row.get('protocol') == version and row.get('head', '').startswith('HTTP/' + version + ' 200 ') and
+                    row.get('body') == 'installed-v3-tls-ok\n', 'wrong TLS HTTP/SNI exchange')
+            if case.startswith('http'): continue
+            require(fingerprint(row.get('certificate_sha256')) and row.get('verified_chain') is True and
+                    row.get('verified_hostname') is (case in ('sni_a', 'sni_b', 'second_b')), 'missing verified SNI certificate')
+        elif case.startswith(('mtls_request_12_', 'mtls_request_13_', 'mtls_require_12_', 'mtls_require_13_')):
+            _, auth, version, identity = case.split('_', 3)
+            accepted = identity == 'client-valid' or identity == 'absent' and auth == 'request'
+            require(row.get('accepted') is accepted, 'wrong mTLS authentication outcome')
+            integer(row, 'handler_delta', int(accepted))
+            if accepted:
+                body = row.get('body', '')
+                require(row.get('head', '').startswith('HTTP/1.1 200 ') and fingerprint(row.get('certificate_sha256')) and
+                        (body == 'profile-ok\n\n' if identity == 'absent' else
+                         body.startswith('profile-ok\n') and body.endswith('\n') and fingerprint(body[len('profile-ok\n'):-1])), 'missing mTLS response/metadata')
+            else: require(not row.get('body') and not row.get('head'), 'rejected mTLS client reached route')
+        elif case.startswith(('psk_12_', 'psk_13_')) or case in ('psk_binary13', 'psk_no_ticket_resumption'):
+            version = '12' if case.startswith('psk_12_') else '13'
+            success = case in ('psk_binary13', 'psk_no_ticket_resumption') or case.endswith('_identity')
+            clients = row.get('client', [])
+            require(isinstance(clients, list) and len(clients) == (2 if case == 'psk_no_ticket_resumption' else 1), 'missing PSK client observations')
+            for value in clients:
+                if success: client(value, version, psk=True)
+                else:
+                    require(value.get('connected') is False and not value.get('body_hex'), 'PSK rejection authenticated/routed')
+                    integer(value, 'early_sent', 0)
+            if case.startswith(('psk_12_', 'psk_13_')): integer(row, 'handler_delta', int(success))
+        elif case in ('psk_wire_early_data_rejected', 'acme_wire_early_data_rejected'):
+            value = row.get('client', {})
+            client(value, '13', psk=case.startswith('psk'), acme=case.startswith('acme'))
+            require(bench.positive_integer(value.get('early_sent')), 'missing actual early data')
+            integer(value, 'early_status', 1)
+            integer(row, 'handler_delta', 1 if case.startswith('psk') else 0)
+        elif case.startswith('psk_blocked_'):
+            for key in ('callbacks_entered', 'callbacks_retired', 'callbacks_cancelled'): integer(row, key, 1)
+            integer(row, 'handler_count', 0)
+            require(type(row.get('terminal_seconds')) in (int, float) and 0 <= row['terminal_seconds'] < 2 and
+                    row.get('caller_handles_dropped') is (case == 'psk_blocked_peer_close'), 'missing bounded callback cancellation')
+        elif case == 'psk_saturation_rotation_recovery':
+            integer(row, 'callbacks_entered', 2); integer(row, 'callbacks_retired', 2); integer(row, 'handler_count', 1)
+        elif case == 'psk_shared_runtime_server_isolation': integer(row, 'callback_count', 3)
+        elif case.startswith('psk_handler_'): require(row.get('handler_returned') is True, 'handler joined held callback')
+        elif case == 'psk_identity_key_bounds':
+            for key, value in (('maximum_identity', 64), ('maximum_key', 32), ('negative_handshakes', 3)): integer(row, key, value)
+        elif case.startswith('certificate_resumption_'):
+            values = row.get('client', [])
+            require(isinstance(values, list) and len(values) == 2, 'missing certificate resumption observations')
+            for value in values: client(value, case[-2:])
+            integer(values[0], 'reused', 0); integer(values[1], 'reused', 1)
+            integer(values[0], 'certificate_messages', 1); integer(values[1], 'certificate_messages', 0)
+            require(values[0]['certificate_sha256'] == values[1]['certificate_sha256'], 'resumption certificate changed')
+        elif case.startswith('certificate_rotation_rejects_old_session_'):
+            old, resumed, fresh = [row.get(key, {}) for key in ('old', 'resumed', 'fresh')]
+            for value in (old, resumed, fresh): client(value, case[-2:])
+            integer(old, 'reused', 0); integer(resumed, 'reused', 1); integer(fresh, 'reused', 0)
+            integer(resumed, 'certificate_messages', 0); integer(fresh, 'certificate_messages', 1)
+            integer(row, 'established_requests', 2)
+            require(old['certificate_sha256'] == resumed['certificate_sha256'] != fresh['certificate_sha256'] and
+                    row.get('sni') == 'a.example' and row.get('endpoint', [None])[0] == '127.0.0.1' and
+                    len(row['endpoint']) == 2 and bench.positive_integer(row['endpoint'][1]) and row['endpoint'][1] <= 65535, 'missing pinned rotation endpoint/generation')
+        elif case.startswith('certificate_cross_host_') or case == 'certificate_cross_store':
+            value = row.get('client', {}); client(value, case[-2:] if case[-2:] in ('12', '13') else '13')
+            integer(value, 'reused', 0); integer(value, 'certificate_messages', 1)
+        elif case == 'certificate_selected_handshake_rotation':
+            old, fresh = row.get('selected', {}), row.get('fresh', {})
+            client(old, '13'); client(fresh, '13')
+            require(old['certificate_sha256'] != fresh['certificate_sha256'], 'selected handshake generation changed')
+        elif case in ('acme_actual443_exact', 'acme_canonical_sni', 'acme_selected_handshake_pinned', 'acme_mtls-require_auth_isolation', 'acme_psk_auth_isolation'):
+            client(row.get('client', {}), '13', acme=True)
+            if case == 'acme_actual443_exact': integer(row, 'local_port', 443)
+        elif case == 'acme_no_resumption':
+            values = row.get('client', [])
+            require(isinstance(values, list) and len(values) == 2, 'missing ACME resumption observations')
+            for value in values: client(value, '13', acme=True); integer(value, 'ticket', 0)
+        elif case == 'acme_normal_session_isolation':
+            client(row.get('normal', {}), '13'); client(row.get('challenge', {}), '13', acme=True)
+            require(row['normal']['certificate_sha256'] != row['challenge']['certificate_sha256'], 'ACME normal certificate isolation absent')
+        elif case == 'acme_real_expiry':
+            require(all(type(row.get(key)) in (int, float) for key in ('expires_unix', 'observed_unix', 'waited_seconds')) and
+                    row['observed_unix'] >= row['expires_unix'] + .1 and 0 <= row['waited_seconds'] < 12, 'missing actual ACME expiry')
+        elif case == 'acme_wrong_port_rejected':
+            require(bench.positive_integer(row.get('local_port')) and row['local_port'] <= 65535 and row['local_port'] != 443, 'wrong ACME rejection port')
+        elif case in ('acme_sni_rejections', 'acme_alpn_normal_isolation', 'acme_invalid_material_preserves'):
+            integer(row, 'checks', {'acme_sni_rejections': 5, 'acme_alpn_normal_isolation': 3, 'acme_invalid_material_preserves': 18}[case])
+            if case == 'acme_invalid_material_preserves': require(len(set(row.get('variants', []))) == 18, 'pruned ACME invalid variants')
+        elif case == 'acme_concurrent_writers': integer(row, 'writers', 3); integer(row, 'operations', 9)
+        elif case == 'installed_rotation_example':
+            require(fingerprint(row.get('old_certificate_sha256')) and fingerprint(row.get('new_certificate_sha256')) and
+                    row['old_certificate_sha256'] != row['new_certificate_sha256'], 'missing example rotation')
+            integer(row, 'held_requests', 3); integer(row, 'fresh_verified_requests', 2)
+        elif case == 'bounded_handshake_timeout_and_recovery':
+            integer(row, 'stalled', 4)
+            require(type(row.get('refusal_seconds')) in (int, float) and 0 <= row['refusal_seconds'] < .2 and
+                    row.get('refusal_deadline_seconds') == .2 and row.get('handshake_deadline_seconds') == .5 and
+                    bench.positive_integer(row.get('recovery_attempts')), 'missing bounded handshake recovery')
+        elif case in ('timer_budget_retirement', 'storage_budget_retirement'):
+            require(bench.positive_integer(row.get('recovery_attempts')), 'missing TLS budget retirement/recovery')
+        elif case in ('handler_stop', 'handler_drain'):
+            require(row.get('handler_shutdown') == ('STOPPED' if case == 'handler_stop' else 'DRAINED'), 'missing handler shutdown')
+    if 'sni_a' in by_case and 'sni_b' in by_case:
+        a, b = by_case['sni_a']['certificate_sha256'], by_case['sni_b']['certificate_sha256']
+        require(a != b, 'SNI stores supplied same certificate')
+        for case in ('unknown_sni', 'absent_sni'): require(by_case[case]['certificate_sha256'] == a, 'wrong fallback SNI generation')
+        for case in ('second_b', 'isolated_store'): require(by_case[case]['certificate_sha256'] == b, 'wrong isolated SNI generation')
 
 
 def validate_public_receipt(path, expected_identity, expected_run_id):
@@ -197,7 +339,7 @@ def validate_public_receipt(path, expected_identity, expected_run_id):
         require(artifacts.get(record['path']) == record, 'unbound child receipt')
         child = bench.parse_json(Path(record['path']).read_text())
         require(child['run_id'] == expected_run_id, 'stale child run ID')
-        validate_child_provenance(child, expected_identity, artifacts, commands)
+        validate_child_provenance(child, expected_identity, artifacts, commands, family)
         if expected_identity['tls'] == 'yes':
             if family == 'h2':
                 validate_h2(child)
@@ -215,6 +357,7 @@ def validate_public_receipt(path, expected_identity, expected_run_id):
                 if expected_identity['tls'] == 'yes':
                     wire = cell.get('wire', [])
                     require(wire and all(r['body'] == 'installed-v3-tls-ok\n' and ' 200 ' in r['head'] for r in wire), 'missing meaningful TLS response witness')
+                    validate_tls_rows(cell['scenarios'])
                     acme = next(r for r in cell['scenarios'] if r['case'] == 'acme_actual443_exact')
                     require(acme['local_port'] == 443 and acme['client']['certificate_messages'] == 1, 'ACME witness requires actual TCP443')
             elif family == 'h1':
@@ -227,10 +370,13 @@ def validate_public_receipt(path, expected_identity, expected_run_id):
                     if expected_identity['tls'] == 'yes':
                         require(bench.positive_integer(row['bound_port']) and row['bound_port'] <= 65535 and row['body'] == 'installed-v3-ok\n' and row['alpn'] == ('http/1.1' if row['case'] == 'tls' else row['case']), 'supported configuration lacks independent exchange')
                     else: require(row['bound_port'] == 0, 'TLS-off supported configuration bound')
-                require(bench.positive_integer(cell['port']) and cell['port'] <= 65535 and all(r.get('responses', 1) > 0 for r in cell['traffic']), 'unbound H1/no exchange')
+                require(bench.positive_integer(cell['port']) and cell['port'] <= 65535 , 'unbound H1/no exchange')
                 for row in cell['traffic']:
                     if row['case'] in ('http10', 'http11', 'post'):
-                        require(' 200 ' in row['response'] and row['body'] == ('bounded-post-body' if row['case'] == 'post' else 'installed-v3-ok\n'), 'wrong H1 response bytes')
+                        require(row['response'].startswith(('HTTP/1.0' if row['case'] == 'http10' else 'HTTP/1.1') + ' 200 ') and row['body'] == ('bounded-post-body' if row['case'] == 'post' else 'installed-v3-ok\n'), 'wrong H1 response bytes')
+                    elif row['case'] in ('persistent', 'pipeline'):
+                        require(type(row.get('responses')) is int and row['responses'] == 2, 'incomplete H1 persistent/pipeline exchange')
+                    elif row['case'] == 'shutdown': require(type(row.get('exit')) is int and row['exit'] == 0, 'unclean H1 shutdown')
                 require(cell['websocket'][1]['text'] == 'public text' and cell['websocket'][1]['binary_hex'] == '00ff62696e617279', 'wrong H1 WS bytes')
                 require(cell['websocket'][-1]['blocked'] > 0 and cell['websocket'][-1]['cancelled'] == 1, 'missing bounded WS cancellation')
             elif expected_identity['tls'] == 'no':

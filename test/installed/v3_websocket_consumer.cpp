@@ -15,6 +15,12 @@
 
 namespace h = httpserver;
 std::atomic<unsigned> closes{0}, blocked{0}, cancelled{0};
+std::atomic<unsigned> receive_entered{0}, receive_completed{0}, receive_retired{0};
+std::atomic<unsigned> receive_cancelled{0}, receive_outcome{0};
+struct receive_retirement {
+    bool observed;
+    ~receive_retirement() { if (observed) ++receive_retired; }
+};
 h::task<void> echo(h::exchange& exchange) {
     h::ws_upgrade_options options;
     options.limits.max_message_bytes = 65536;
@@ -29,6 +35,8 @@ h::task<void> echo(h::exchange& exchange) {
         co_return;
     }
     auto session = std::move(*upgraded.session);
+    const bool observe_receive = exchange.head().route_path == "/cancel";
+    receive_retirement retirement{observe_receive};
     h::resume_signal closed;
     auto notified = std::make_shared<std::atomic<bool>>(false);
     session.on_close([closed, notified](h::websocket::close_info) mutable {
@@ -52,7 +60,15 @@ h::task<void> echo(h::exchange& exchange) {
         }
     } else {
         for (;;) {
+            if (observe_receive) ++receive_entered;
             auto received = co_await session.receive();
+            if (observe_receive) {
+                receive_outcome = static_cast<unsigned>(received.status.code());
+                ++receive_completed;
+                // Transport EOF terminates the pending public receive with
+                // connection_closed; distinguish it from a delivered message.
+                if (!received.value && received.status.code() == h::http::outcome_code::connection_closed) ++receive_cancelled;
+            }
             if (!received.value) break;
             auto sent = session.try_send(received.value->kind, received.value->data);
             if (sent.disposition != h::websocket::send_disposition::accepted) break;
@@ -70,7 +86,7 @@ int main(int argc, char** argv) {
     options.timeouts().ws_close = std::chrono::milliseconds(500);
     options.add_listener({"127.0.0.1", 0, false});
     srv::native_server server(options);
-    for (const auto* route : {"/echo", "/pressure"}) {
+    for (const auto* route : {"/echo", "/cancel", "/pressure"}) {
         if (!server.route(h::http::method::known(h::http::method_id::get), route, echo).ok()) return 2;
     }
     if (!server.listen().ok() || !server.get_bound_port(0)) return 3;
@@ -89,12 +105,14 @@ int main(int argc, char** argv) {
     std::cout << server.get_bound_port(0) << std::endl;
     std::string command;
     while (std::getline(std::cin, command) && command != "stop") {
-        if (command == "stats") std::cout << closes << ' ' << blocked << ' ' << cancelled << std::endl;
+        if (command == "stats") std::cout << closes << ' ' << blocked << ' ' << cancelled << ' ' << receive_entered << ' ' << receive_completed << ' ' << receive_retired
+            << ' ' << receive_cancelled << ' ' << receive_outcome << std::endl;
     }
     stopping = true;
     server.request_stop();
     if (host.joinable()) host.join();
     server.stop();
-    std::cerr << "WS_COUNTS " << closes << ' ' << blocked << ' ' << cancelled << std::endl;
+    std::cerr << "WS_COUNTS " << closes << ' ' << blocked << ' ' << cancelled << ' ' << receive_entered << ' ' << receive_completed << ' ' << receive_retired
+            << ' ' << receive_cancelled << ' ' << receive_outcome << std::endl;
     return failed || server.is_running() ? 4 : 0;
 }

@@ -1,14 +1,15 @@
 # Current packaged public capabilities — 2026-10-13
 
-TASK-199 executed both adapters from a fresh distribution extraction without Git
-metadata. All public cells compile C++20 against the selected staged headers and
+TASK-199 renewed public adapter execution from the repaired distribution
+extraction without Git metadata. Original benchmark execution is identified
+separately below. All public cells compile C++20 against the selected staged headers and
 shared/static library, outside source/build trees. Private engine suites provide
 no success witness for these adapters. The [machine receipt](../../specs/architecture/v3/TASK-199-implementation-receipt.json)
 and [implementation evidence](../../specs/architecture/v3/TASK-199-implementation-evidence.md)
 retain exact inputs, commands and independent validation results.
 
-Archive SHA-256: `75cfe738dd0857f4be9c347d9db36c170007c67dc4dbcfb47c8ca9f25b5f50a1`. Retained source:
-`/tmp/task199-extract4/libhttpserver-3.0.0`. Each TLS lane has four shared/static × managed/external
+Archive SHA-256: `4f5327a740d9d1e4ae21548a8d82c5b45ff498daa50498829309b1c655345626`. Retained source:
+`/tmp/task199-extract-repair/libhttpserver-3.0.0`. Each TLS lane has four shared/static × managed/external
 cells for H1/RFC6455, TLS profiles, H2 and H3. TLS-on executes 328
 credential/profile scenario rows, 548 H2 scenario rows and
 64 independent H3 basic rows plus
@@ -29,9 +30,19 @@ credential/profile scenario rows, 548 H2 scenario rows and
 | PRD-V3N-REQ-037 | Same installed declarations and typed encrypted rejection before binding in TLS-off |
 | PRD-V3N-REQ-038, as applicable | Current public semantic/TLS/policy replays; complete release parity, including remaining historical feature gates, remains TASK-185 owned |
 
-The complete benchmark matrix passes as reduced integration evidence: four
+Validation repairs renew the public matrices from the repaired archive. The
+close/cancellation rows now record a pending receive, its actual public
+`connection_closed` completion, and retirement before stop in all eight cells.
+Independent validation rejects omitted family provenance, unused selected static
+archives, blank readiness lines, incorrect H1 versions or response counts, and
+contradictory TLS authentication/lifecycle observations after artifact rehashing.
+
+The complete original benchmark matrix passes as reduced integration evidence: four
 TLS-off and sixteen TLS-on cells, 16 measured requests per cell, 320 measured
-requests total. Defaults for a full benchmark remain 4096 requests, payload 1024,
+requests total. Its original archive and receipts remain preserved; all 298
+recorded benchmark source inputs are unchanged and the repaired independent
+validator rechecks both original receipts. This does not claim new benchmark
+measurements. Defaults for a full benchmark remain 4096 requests, payload 1024,
 four workers, H1/H2 concurrency eight and H3 concurrency four. Independent
 validation rejects use of this reduced workload as full performance acceptance.
 

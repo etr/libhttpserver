@@ -14,7 +14,7 @@ def validate_process(record, require_port=False):
     require(record.get('exit') == 0 and 'error' not in record and record.get('command'), 'process exit/cleanup failure')
     if require_port:
         lines = record.get('stdout', '').splitlines()
-        require(lines and all(word.isdecimal() and 0 < int(word) <= 65535 for word in lines[0].split()), 'missing bound readiness port')
+        require(lines and lines[0].split() and all(word.isdecimal() and 0 < int(word) <= 65535 for word in lines[0].split()), 'missing bound readiness port')
 
 
 def validate_compile(compiled, linkage, identity, artifacts, commands):
@@ -54,7 +54,8 @@ def validate_compile(compiled, linkage, identity, artifacts, commands):
     require('-Wl,-Map,' + str(linkmap) in link, 'wrong link map command')
     if linkage == 'static':
         archive = str(prefix / 'lib/libhttpserver.a')
-        require(archive in link and archive in linkmap.read_text(), 'different installed static archive')
+        contributors = {str(Path(name).resolve()) for name in re.findall(r'([^\s()]+libhttpserver\.a)\([^()\n]+\)', linkmap.read_text())}
+        require(archive in link and contributors == {archive}, 'different or noncontributing installed static archive')
     compile_rows = [row for row in commands if '-c' in row['argv'] and '-o' in row['argv'] and
                     row['argv'][row['argv'].index('-o') + 1] in link and
                     row['argv'][row['argv'].index('-c') + 1] in sources]
@@ -170,7 +171,7 @@ def validate_fixture_client(client, identity, artifacts, commands):
     require(links[0]['argv'][:len(compiler)] == compiler, 'different independent client compiler')
 
 
-def validate_child_provenance(child, identity, artifacts, commands):
+def validate_child_provenance(child, identity, artifacts, commands, family=None):
     require(child.get('status') == 'passed' and child.get('run_id'), 'failed child receipt')
     for name, digest in child.get('source_hashes', {}).items():
         require(identity['archive']['members'].get(name) == digest, 'child source outside archive')
@@ -178,7 +179,20 @@ def validate_child_provenance(child, identity, artifacts, commands):
     cells = child.get('cells', [])
     require(len(cells) == 4 and {(c['linkage'], c['loop']) for c in cells} ==
             {(a, b) for a in ('shared', 'static') for b in ('managed', 'external')}, 'missing/duplicate child cells')
+    required = ['compile', 'dependencies']
+    if family == 'h1': required += ['websocket_compile']
+    elif family == 'tls':
+        required += ['profile_compile', 'profile_dependencies']
+        if identity['tls'] == 'yes': required += ['example_compile', 'example_dependencies']
+    elif family == 'h3': required += ['example_compile']
+    for cell in cells:
+        require(all(isinstance(cell.get(key), dict) and cell[key] for key in required), 'missing required public cell provenance')
+    examples = child.get('examples', [])
+    if family == 'h2' and identity['tls'] == 'yes':
+        require(len(examples) == 2 and {c.get('linkage') for c in examples} == {'shared', 'static'}, 'missing installed example provenance')
+        require(all(c.get('compile') and c.get('dependencies') for c in examples), 'missing installed example compile/runtime provenance')
     client = child.get('independent_client', child.get('credential_fixture_tool'))
+    require(family != 'tls' and not (family == 'h3' and identity['tls'] == 'yes') or client, 'missing independent client provenance')
     if client: validate_fixture_client(client, identity, artifacts, commands)
     seen = set()
     for cell in cells + child.get('examples', []):
