@@ -9,10 +9,10 @@
 **Workflow:** Follow `../v3-release-repair-workflow.md`; use the Groundwork identity helper, branch from `v3`, systematic debugging, verified RED/GREEN, validation and finalization. Preserve historical receipts and unrelated worktrees.
 
 **Action Items:**
-- [ ] Read TASK-187's unresolved extra finding and immutable receipts at `build/task187-evidence/implementation-ad76a561/build/task187-implementation/tsan-off/extra-task-race-failure.log`, `focused-check.log`, and `base-task-race-identities.json`. The observed failure is `pthread_cond_destroy` versus timer-thread `manual_executor::post`, exit 66; a single equivalent unchanged base comparison passed. Treat this as unresolved intermittent behavior, not a proven production or fixture cause.
-- [ ] Identify the timer, callback, task frame and executor lifetime boundary using bounded deterministic interleaving. Add a regression that fails for the demonstrated cause and cleans up all threads/owners even on failure. Do not replace a failing diagnostic with retries, sleeps, longer deadlines or a new suppression.
-- [ ] Repair the proven production or fixture ownership boundary while preserving executor borrowing, cancellation, one-shot delivery and timer cleanup contracts. Use the smallest causal change; inspect public/API implications before changing a contract.
-- [ ] Execute affected task/timer/resume/cancellation suites under normal, ASan/nonrecovering UBSan and TSan in TLS-off/on, with leak/stack checks and existing suppressions unchanged. Run relevant installed consumers and record assertion counts, RED/GREEN receipts and ownership conclusions.
+- [x] Read TASK-187's unresolved extra finding and immutable receipts at `build/task187-evidence/implementation-ad76a561/build/task187-implementation/tsan-off/extra-task-race-failure.log`, `focused-check.log`, and `base-task-race-identities.json`. The observed failure is `pthread_cond_destroy` versus timer-thread `manual_executor::post`, exit 66; a single equivalent unchanged base comparison passed. Treat this as unresolved intermittent behavior, not a proven production or fixture cause.
+- [x] Identify the timer, callback, task frame and executor lifetime boundary using bounded deterministic interleaving. Add a regression that fails for the demonstrated cause and cleans up all threads/owners even on failure. Do not replace a failing diagnostic with retries, sleeps, longer deadlines or a new suppression.
+- [x] Repair the proven production or fixture ownership boundary while preserving executor borrowing, cancellation, one-shot delivery and timer cleanup contracts. Use the smallest causal change; inspect public/API implications before changing a contract.
+- [x] Execute affected task/timer/resume/cancellation suites under normal, ASan/nonrecovering UBSan and TSan in TLS-off/on, with leak/stack checks and existing suppressions unchanged. Run relevant installed consumers and record assertion counts, RED/GREEN receipts and ownership conclusions.
 
 **Acceptance Criteria:**
 - A meaningful deterministic regression demonstrates and closes the observed race with exactly-once outcomes and safe executor/timer teardown.
@@ -24,4 +24,6 @@
 - Blocks: TASK-185
 **Related Requirements:** PRD-V3N-REQ-024, PRD-V3N-REQ-025, PRD-V3N-REQ-031, PRD-V3N-REQ-037; owned-engine sanitizer acceptance.
 **Related Decisions:** DR-V3-003, DR-V3-006, DR-V3-008.
-**Status:** Not Started
+**Status:** Complete
+
+**Implementation evidence:** [Ownership and local verification proof](../../architecture/v3/TASK-200-implementation-evidence.md) and [machine receipt](../../architecture/v3/TASK-200-implementation-receipt.json). Implementation is ready for caller-owned Groundwork validation/finalization; status remains In Progress. Nonlocal platform checks remain CI/v3-PR owned. TASK-185 is unchanged.

@@ -1,0 +1,1091 @@
+{
+  "v": 1,
+  "task_id": "TASK-200",
+  "phase": "implement",
+  "base_branch": "v3",
+  "base_sha": "4604fa2fcd29ea32f7fd62fbdf21ee15d7f217ee",
+  "worktree_path": "/home/etr/progs/libhttpserver/.worktrees/TASK-200",
+  "branch": "task/TASK-200",
+  "suppression_sha256": "bef8512659b644216f9b4ad3640fd77cf911a11c3e9899f8f5ff36b32f7aee85",
+  "regression": {
+    "red": {
+      "exit": 3,
+      "cases": 2,
+      "checks": 35,
+      "failures": 3,
+      "skips": 0,
+      "log_sha256": "913e90b1eae86d012793edc708209792e765043d6c2006718370e88bd961ecb8",
+      "binary_sha256": "e1dfd3fb120e72da34eadd4995ef41491f577c6dfba9e22ad5a55f8ad5df0668"
+    },
+    "green": {
+      "exit": 0,
+      "cases": 2,
+      "checks": 35,
+      "failures": 0,
+      "skips": 0,
+      "log_sha256": "eaaff637cb58b679d18f608ffc043ad7ab2302d401619464766d0957c6eef965",
+      "binary_sha256": "2a1ff7163ed88aa2825d0a09b984fbf5283121ec66a97da0e8d2447d221064ae"
+    },
+    "final_baseline_replay": {
+      "exit": 3,
+      "cases": 2,
+      "checks": 35,
+      "failures": 3,
+      "skips": 0,
+      "baseline_executor_sha256": "0d3b841c43bbe4bad1fc4ff8ce59ee373773e84c3ee85ffbcc52111fe0b58bb5",
+      "log_sha256": "004345df73a82d6eef3649378197a98db013b9fe44e8ac3b3593e5dbdec1d697",
+      "binary_sha256": "402d1e1da5f13c9f6f2cc543e3a7d89a4b0974b2700728806e62cbd2fd38d94b",
+      "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -DLHS_TEST_POST_TAIL_WRAP -DLHS_TEST_POST_TAIL_ONLY -Ibuild/task200-implementation/red-include -Isrc -Itest test/unit/task_race_test.cpp -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=_ZNSt18condition_variable10notify_oneEv -o build/task200-implementation/red-replay"
+    }
+  },
+  "lanes": [
+    {
+      "name": "normal-off",
+      "base": "4604fa2fcd29ea32f7fd62fbdf21ee15d7f217ee",
+      "flags": [
+        "-std=c++20",
+        "-pthread",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer"
+      ],
+      "environment": {
+        "CC": "/usr/bin/clang-18",
+        "CXX": "/usr/bin/clang++-18",
+        "CXXFLAGS": "-std=c++20 -pthread -O1 -g -fno-omit-frame-pointer",
+        "LDFLAGS": "-pthread -O1 -g -fno-omit-frame-pointer",
+        "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+        "TSAN_OPTIONS": "halt_on_error=1:suppressions=/home/etr/progs/libhttpserver/.worktrees/TASK-200/test/tsan.supp"
+      },
+      "steps": [
+        {
+          "label": "configure",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/configure --disable-v3-tls",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "focused-check",
+          "command": "make -j2 -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/test check 'TESTS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' 'check_PROGRAMS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' noinst_PROGRAMS=",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "stage",
+          "command": "make -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/src install-nobase_includeHEADERS prefix=/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/stage",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_executor.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_concurrency.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_timed_resume.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        },
+        {
+          "label": "skip-exit-gate",
+          "command": "make lint-littletest-skip-exit-code",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-off",
+          "exit": 0
+        }
+      ],
+      "suppression_sha256": "bef8512659b644216f9b4ad3640fd77cf911a11c3e9899f8f5ff36b32f7aee85",
+      "counts": {
+        "task_executor": {
+          "cases": 10,
+          "checks": 33,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_core": {
+          "cases": 15,
+          "checks": 248,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_cancellation": {
+          "cases": 10,
+          "checks": 1342,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal": {
+          "cases": 11,
+          "checks": 134,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal_lifetime": {
+          "cases": 3,
+          "checks": 1812,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_race": {
+          "cases": 6,
+          "checks": 2037,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_stop_inside_handler": {
+          "cases": 2,
+          "checks": 211,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_executor": {},
+        "consumer_v3_concurrency": {},
+        "v3_header_hygiene": {
+          "cases": 2,
+          "checks": 2,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_timed_resume": {}
+      },
+      "staged_header_hashes": {
+        "resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+        "task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+        "cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+        "concurrency.hpp": "6358d1429a64c887fc173a99e0772d1608e51c5498bc018de33a84e079ae6224",
+        "executor.hpp": "bc0406a7ad1fce2e8306a8755bb47b9eb04e92ef4671a1292b5aef29734ad10d"
+      }
+    },
+    {
+      "name": "normal-on",
+      "base": "4604fa2fcd29ea32f7fd62fbdf21ee15d7f217ee",
+      "flags": [
+        "-std=c++20",
+        "-pthread",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer"
+      ],
+      "environment": {
+        "CC": "/usr/bin/clang-18",
+        "CXX": "/usr/bin/clang++-18",
+        "CXXFLAGS": "-std=c++20 -pthread -O1 -g -fno-omit-frame-pointer",
+        "LDFLAGS": "-pthread -O1 -g -fno-omit-frame-pointer",
+        "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+        "TSAN_OPTIONS": "halt_on_error=1:suppressions=/home/etr/progs/libhttpserver/.worktrees/TASK-200/test/tsan.supp"
+      },
+      "steps": [
+        {
+          "label": "configure",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/configure --enable-v3-tls",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "focused-check",
+          "command": "make -j2 -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/test check 'TESTS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' 'check_PROGRAMS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' noinst_PROGRAMS=",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "stage",
+          "command": "make -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/src install-nobase_includeHEADERS prefix=/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/stage",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_executor.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_concurrency.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_timed_resume.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        },
+        {
+          "label": "skip-exit-gate",
+          "command": "make lint-littletest-skip-exit-code",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/normal-on",
+          "exit": 0
+        }
+      ],
+      "suppression_sha256": "bef8512659b644216f9b4ad3640fd77cf911a11c3e9899f8f5ff36b32f7aee85",
+      "counts": {
+        "task_executor": {
+          "cases": 10,
+          "checks": 33,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_core": {
+          "cases": 15,
+          "checks": 248,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_cancellation": {
+          "cases": 10,
+          "checks": 1342,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal": {
+          "cases": 11,
+          "checks": 134,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal_lifetime": {
+          "cases": 3,
+          "checks": 1812,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_race": {
+          "cases": 6,
+          "checks": 2037,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_stop_inside_handler": {
+          "cases": 2,
+          "checks": 211,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_executor": {},
+        "consumer_v3_concurrency": {},
+        "v3_header_hygiene": {
+          "cases": 2,
+          "checks": 2,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_timed_resume": {}
+      },
+      "staged_header_hashes": {
+        "resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+        "task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+        "cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+        "concurrency.hpp": "6358d1429a64c887fc173a99e0772d1608e51c5498bc018de33a84e079ae6224",
+        "executor.hpp": "bc0406a7ad1fce2e8306a8755bb47b9eb04e92ef4671a1292b5aef29734ad10d"
+      }
+    },
+    {
+      "name": "asan-ubsan-off",
+      "base": "4604fa2fcd29ea32f7fd62fbdf21ee15d7f217ee",
+      "flags": [
+        "-std=c++20",
+        "-pthread",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer",
+        "-fsanitize=address,undefined",
+        "-fno-sanitize-recover=undefined",
+        "-fsanitize-address-use-after-scope"
+      ],
+      "environment": {
+        "CC": "/usr/bin/clang-18",
+        "CXX": "/usr/bin/clang++-18",
+        "CXXFLAGS": "-std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope",
+        "LDFLAGS": "-pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope",
+        "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+        "TSAN_OPTIONS": "halt_on_error=1:suppressions=/home/etr/progs/libhttpserver/.worktrees/TASK-200/test/tsan.supp"
+      },
+      "steps": [
+        {
+          "label": "configure",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/configure --disable-v3-tls",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "focused-check",
+          "command": "make -j2 -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/test check 'TESTS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' 'check_PROGRAMS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' noinst_PROGRAMS=",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "stage",
+          "command": "make -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/src install-nobase_includeHEADERS prefix=/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/stage",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_executor.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_concurrency.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_timed_resume.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        },
+        {
+          "label": "skip-exit-gate",
+          "command": "make lint-littletest-skip-exit-code",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-off",
+          "exit": 0
+        }
+      ],
+      "suppression_sha256": "bef8512659b644216f9b4ad3640fd77cf911a11c3e9899f8f5ff36b32f7aee85",
+      "counts": {
+        "task_executor": {
+          "cases": 10,
+          "checks": 33,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_core": {
+          "cases": 15,
+          "checks": 248,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_cancellation": {
+          "cases": 10,
+          "checks": 1342,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal": {
+          "cases": 11,
+          "checks": 134,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal_lifetime": {
+          "cases": 3,
+          "checks": 1812,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_race": {
+          "cases": 6,
+          "checks": 2037,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_stop_inside_handler": {
+          "cases": 2,
+          "checks": 211,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_executor": {},
+        "consumer_v3_concurrency": {},
+        "v3_header_hygiene": {
+          "cases": 2,
+          "checks": 2,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_timed_resume": {}
+      },
+      "staged_header_hashes": {
+        "resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+        "task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+        "cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+        "concurrency.hpp": "6358d1429a64c887fc173a99e0772d1608e51c5498bc018de33a84e079ae6224",
+        "executor.hpp": "bc0406a7ad1fce2e8306a8755bb47b9eb04e92ef4671a1292b5aef29734ad10d"
+      }
+    },
+    {
+      "name": "asan-ubsan-on",
+      "base": "4604fa2fcd29ea32f7fd62fbdf21ee15d7f217ee",
+      "flags": [
+        "-std=c++20",
+        "-pthread",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer",
+        "-fsanitize=address,undefined",
+        "-fno-sanitize-recover=undefined",
+        "-fsanitize-address-use-after-scope"
+      ],
+      "environment": {
+        "CC": "/usr/bin/clang-18",
+        "CXX": "/usr/bin/clang++-18",
+        "CXXFLAGS": "-std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope",
+        "LDFLAGS": "-pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope",
+        "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+        "TSAN_OPTIONS": "halt_on_error=1:suppressions=/home/etr/progs/libhttpserver/.worktrees/TASK-200/test/tsan.supp"
+      },
+      "steps": [
+        {
+          "label": "configure",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/configure --enable-v3-tls",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "focused-check",
+          "command": "make -j2 -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/test check 'TESTS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' 'check_PROGRAMS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' noinst_PROGRAMS=",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "stage",
+          "command": "make -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/src install-nobase_includeHEADERS prefix=/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/stage",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_executor.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_concurrency.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined -fsanitize-address-use-after-scope -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_timed_resume.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        },
+        {
+          "label": "skip-exit-gate",
+          "command": "make lint-littletest-skip-exit-code",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/asan-ubsan-on",
+          "exit": 0
+        }
+      ],
+      "suppression_sha256": "bef8512659b644216f9b4ad3640fd77cf911a11c3e9899f8f5ff36b32f7aee85",
+      "counts": {
+        "task_executor": {
+          "cases": 10,
+          "checks": 33,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_core": {
+          "cases": 15,
+          "checks": 248,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_cancellation": {
+          "cases": 10,
+          "checks": 1342,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal": {
+          "cases": 11,
+          "checks": 134,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal_lifetime": {
+          "cases": 3,
+          "checks": 1812,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_race": {
+          "cases": 6,
+          "checks": 2037,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_stop_inside_handler": {
+          "cases": 2,
+          "checks": 211,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_executor": {},
+        "consumer_v3_concurrency": {},
+        "v3_header_hygiene": {
+          "cases": 2,
+          "checks": 2,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_timed_resume": {}
+      },
+      "staged_header_hashes": {
+        "resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+        "task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+        "cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+        "concurrency.hpp": "6358d1429a64c887fc173a99e0772d1608e51c5498bc018de33a84e079ae6224",
+        "executor.hpp": "bc0406a7ad1fce2e8306a8755bb47b9eb04e92ef4671a1292b5aef29734ad10d"
+      }
+    },
+    {
+      "name": "tsan-off",
+      "base": "4604fa2fcd29ea32f7fd62fbdf21ee15d7f217ee",
+      "flags": [
+        "-std=c++20",
+        "-pthread",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer",
+        "-fsanitize=thread",
+        "-DLHS_SANITIZER_OWNS_OPERATOR_NEW"
+      ],
+      "environment": {
+        "CC": "/usr/bin/clang-18",
+        "CXX": "/usr/bin/clang++-18",
+        "CXXFLAGS": "-std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW",
+        "LDFLAGS": "-pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread",
+        "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+        "TSAN_OPTIONS": "halt_on_error=1:suppressions=/home/etr/progs/libhttpserver/.worktrees/TASK-200/test/tsan.supp"
+      },
+      "steps": [
+        {
+          "label": "configure",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/configure --disable-v3-tls",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "focused-check",
+          "command": "make -j2 -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/test check 'TESTS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' 'check_PROGRAMS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' noinst_PROGRAMS=",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "stage",
+          "command": "make -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/src install-nobase_includeHEADERS prefix=/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/stage",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_executor.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_concurrency.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_timed_resume.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        },
+        {
+          "label": "skip-exit-gate",
+          "command": "make lint-littletest-skip-exit-code",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-off",
+          "exit": 0
+        }
+      ],
+      "suppression_sha256": "bef8512659b644216f9b4ad3640fd77cf911a11c3e9899f8f5ff36b32f7aee85",
+      "counts": {
+        "task_executor": {
+          "cases": 10,
+          "checks": 33,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_core": {
+          "cases": 15,
+          "checks": 248,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_cancellation": {
+          "cases": 10,
+          "checks": 1342,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal": {
+          "cases": 11,
+          "checks": 134,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal_lifetime": {
+          "cases": 3,
+          "checks": 1800,
+          "failures": 0,
+          "skips": 1
+        },
+        "task_race": {
+          "cases": 6,
+          "checks": 2037,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_stop_inside_handler": {
+          "cases": 2,
+          "checks": 211,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_executor": {},
+        "consumer_v3_concurrency": {},
+        "v3_header_hygiene": {
+          "cases": 2,
+          "checks": 2,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_timed_resume": {}
+      },
+      "staged_header_hashes": {
+        "resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+        "task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+        "cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+        "concurrency.hpp": "6358d1429a64c887fc173a99e0772d1608e51c5498bc018de33a84e079ae6224",
+        "executor.hpp": "bc0406a7ad1fce2e8306a8755bb47b9eb04e92ef4671a1292b5aef29734ad10d"
+      }
+    },
+    {
+      "name": "tsan-on",
+      "base": "4604fa2fcd29ea32f7fd62fbdf21ee15d7f217ee",
+      "flags": [
+        "-std=c++20",
+        "-pthread",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer",
+        "-fsanitize=thread",
+        "-DLHS_SANITIZER_OWNS_OPERATOR_NEW"
+      ],
+      "environment": {
+        "CC": "/usr/bin/clang-18",
+        "CXX": "/usr/bin/clang++-18",
+        "CXXFLAGS": "-std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW",
+        "LDFLAGS": "-pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread",
+        "ASAN_OPTIONS": "detect_leaks=1:detect_stack_use_after_return=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+        "TSAN_OPTIONS": "halt_on_error=1:suppressions=/home/etr/progs/libhttpserver/.worktrees/TASK-200/test/tsan.supp"
+      },
+      "steps": [
+        {
+          "label": "configure",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/configure --enable-v3-tls",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "focused-check",
+          "command": "make -j2 -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/test check 'TESTS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' 'check_PROGRAMS=task_executor task_core task_cancellation task_resume_signal task_resume_signal_lifetime task_race task_stop_inside_handler consumer_v3_executor consumer_v3_concurrency v3_header_hygiene consumer_v3_timed_resume' noinst_PROGRAMS=",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "stage",
+          "command": "make -C /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/src install-nobase_includeHEADERS prefix=/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/stage",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_executor.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_executor-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/consumer_v3_executor",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_concurrency.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_concurrency-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/consumer_v3_concurrency",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-compile",
+          "command": "/usr/bin/clang++-18 -std=c++20 -pthread -O1 -g -fno-omit-frame-pointer -fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW -I/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/stage/include /home/etr/progs/libhttpserver/.worktrees/TASK-200/test/headers/consumer_v3_timed_resume.cpp -o /home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "consumer_v3_timed_resume-run",
+          "command": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on/consumer_v3_timed_resume",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        },
+        {
+          "label": "skip-exit-gate",
+          "command": "make lint-littletest-skip-exit-code",
+          "cwd": "/home/etr/progs/libhttpserver/.worktrees/TASK-200/build/task200-implementation/tsan-on",
+          "exit": 0
+        }
+      ],
+      "suppression_sha256": "bef8512659b644216f9b4ad3640fd77cf911a11c3e9899f8f5ff36b32f7aee85",
+      "counts": {
+        "task_executor": {
+          "cases": 10,
+          "checks": 33,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_core": {
+          "cases": 15,
+          "checks": 248,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_cancellation": {
+          "cases": 10,
+          "checks": 1342,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal": {
+          "cases": 11,
+          "checks": 134,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_resume_signal_lifetime": {
+          "cases": 3,
+          "checks": 1800,
+          "failures": 0,
+          "skips": 1
+        },
+        "task_race": {
+          "cases": 6,
+          "checks": 2037,
+          "failures": 0,
+          "skips": 0
+        },
+        "task_stop_inside_handler": {
+          "cases": 2,
+          "checks": 211,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_executor": {},
+        "consumer_v3_concurrency": {},
+        "v3_header_hygiene": {
+          "cases": 2,
+          "checks": 2,
+          "failures": 0,
+          "skips": 0
+        },
+        "consumer_v3_timed_resume": {}
+      },
+      "staged_header_hashes": {
+        "resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+        "task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+        "cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+        "concurrency.hpp": "6358d1429a64c887fc173a99e0772d1608e51c5498bc018de33a84e079ae6224",
+        "executor.hpp": "bc0406a7ad1fce2e8306a8755bb47b9eb04e92ef4671a1292b5aef29734ad10d"
+      }
+    }
+  ],
+  "artifact_sha256": {
+    "build/task200-implementation/baseline-identities.txt": "12558f806bb41d8fc2eaf984791a140d461f6db52afa567bded040fef0a83087",
+    "build/task200-implementation/baseline-race.log": "cf355b0446632ee33109e448c570f0491b366a7831534791504d0a5cb6507efe",
+    "build/task200-implementation/red-race.log": "6d3fbe866fc297ef90617fdac6ebfc98b6893941911ad440d0a8d3bc62ea86f4",
+    "build/task200-implementation/red-regression.log": "913e90b1eae86d012793edc708209792e765043d6c2006718370e88bd961ecb8",
+    "build/task200-implementation/green-regression.log": "eaaff637cb58b679d18f608ffc043ad7ab2302d401619464766d0957c6eef965",
+    "build/task200-implementation/lint.log": "da0f3c33f35db8ffda8399113f1e73e2934191921514a507162cab56f44c4e55",
+    "build/task200-implementation/run-lanes.py": "9001bb3a8c396c5a4835a86780eef10c98111be0c97a7fbc3ea5a5808342345a",
+    "build/task200-implementation/normal-off/config.log": "d527c8e936db26171ca6a42ccff5e879c38ae288a1242d935349350e46143a0c",
+    "build/task200-implementation/normal-off/configure.log": "21cbbbec6b7c7e78afb00afdf21418e0bed1143d52e32a4cb288d27a35aeb04a",
+    "build/task200-implementation/normal-off/consumer_v3_concurrency-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-off/consumer_v3_concurrency-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-off/consumer_v3_executor-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-off/consumer_v3_executor-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-off/consumer_v3_timed_resume-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-off/consumer_v3_timed_resume-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-off/focused-check.log": "07e982ec5e8161e7f6228b23ed937060f949223230f21f683c3615aea987570f",
+    "build/task200-implementation/normal-off/skip-exit-gate.log": "3db16b1975df312e929b249f5175bc2e28b42cb0a5db54b407476edaf4533fae",
+    "build/task200-implementation/normal-off/stage.log": "d44b0b030298d8cb7b0e07b9dd6dc507ac59eeaecf0a8c70b5018b4693582ae2",
+    "build/task200-implementation/normal-off/test/consumer_v3_concurrency.log": "75d06ebb630dc8e8573ce4e0f070252eec1ad286f87d2b016264cd43c4d2a8d0",
+    "build/task200-implementation/normal-off/test/consumer_v3_executor.log": "164eadce1f9b9518dff732c78e720069f66d0327227fdff1d5192abb1e1d17b0",
+    "build/task200-implementation/normal-off/test/consumer_v3_timed_resume.log": "36bcfaef903f5ac1f4c28a19af9888838cffb25a03234049446e55425aa8a92c",
+    "build/task200-implementation/normal-off/test/task_cancellation.log": "04e929e30d0236ba5d5267afe800636d492a5232ec784197191c3ba502ed05d8",
+    "build/task200-implementation/normal-off/test/task_core.log": "a48e0bfd84b95f6fdb9474a3592b30c3eb673c915101059d078fb227df57e263",
+    "build/task200-implementation/normal-off/test/task_executor.log": "6853fb4dffaab75ac96e2d470377e5e4ce4a3feea5cf2808d660c75fe7990c10",
+    "build/task200-implementation/normal-off/test/task_race.log": "b4c8ed2f9c5bf1175f30df9ce2909aac30f9d1cc2ece4c8dc5214128df7b23ad",
+    "build/task200-implementation/normal-off/test/task_resume_signal.log": "6323e71509b9ce27547ad184012102283c0e1536791f6cea38d660b920931b80",
+    "build/task200-implementation/normal-off/test/task_resume_signal_lifetime.log": "3c88a8e4ae7c099e9982b62e677fec472f30c06d91bc7ca97942368921f0b599",
+    "build/task200-implementation/normal-off/test/task_stop_inside_handler.log": "7110561949ccd7d443cb3c4e6448c23fcd38f892b7934f15d0fa6141117b7e1d",
+    "build/task200-implementation/normal-off/test/test-suite.log": "97fc19a956b01843f8698ea248d0a23ff19c9183054c9fa5e92eaa0809d52c39",
+    "build/task200-implementation/normal-off/test/v3_header_hygiene.log": "67bad7a7c8431e0d0bb511ef09b752d874563583a12ca6a401f9ebab2f36b9df",
+    "build/task200-implementation/normal-on/config.log": "c94a859d5e7030e19d7416178a2fce30ce1d40b97762d22c803313611b4e0a89",
+    "build/task200-implementation/normal-on/configure.log": "91e48f20fc363fc53ebb83edce0b9b091af693207d2b7e6436ccefa282b848b1",
+    "build/task200-implementation/normal-on/consumer_v3_concurrency-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-on/consumer_v3_concurrency-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-on/consumer_v3_executor-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-on/consumer_v3_executor-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-on/consumer_v3_timed_resume-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-on/consumer_v3_timed_resume-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/normal-on/focused-check.log": "0d98fb8164ed4f6128abe14ec924c05acfe347f9bb58bec70bc8b1b2bacd30de",
+    "build/task200-implementation/normal-on/skip-exit-gate.log": "3db16b1975df312e929b249f5175bc2e28b42cb0a5db54b407476edaf4533fae",
+    "build/task200-implementation/normal-on/stage.log": "d119b3e0db702f62ead6ade6e538349cdf6b8705ee5052ae1b9590943b9d6d7c",
+    "build/task200-implementation/normal-on/test/consumer_v3_concurrency.log": "75d06ebb630dc8e8573ce4e0f070252eec1ad286f87d2b016264cd43c4d2a8d0",
+    "build/task200-implementation/normal-on/test/consumer_v3_executor.log": "164eadce1f9b9518dff732c78e720069f66d0327227fdff1d5192abb1e1d17b0",
+    "build/task200-implementation/normal-on/test/consumer_v3_timed_resume.log": "36bcfaef903f5ac1f4c28a19af9888838cffb25a03234049446e55425aa8a92c",
+    "build/task200-implementation/normal-on/test/task_cancellation.log": "94fddce9dc9e3b48a3227cc0ace59e8679843aa829efeaeae02eee104e725a13",
+    "build/task200-implementation/normal-on/test/task_core.log": "4f9476e88552f6e09e23575ea27b16f43451e39602e7e89606b83a443c1e14c9",
+    "build/task200-implementation/normal-on/test/task_executor.log": "eb361c10c3132fe5fb28166384c96a2f0c95c138fcf4b0387583211f42a95359",
+    "build/task200-implementation/normal-on/test/task_race.log": "43decc946c484ed1265245e4bcc0e2fff37d288c30096f84dc884318ae1a97da",
+    "build/task200-implementation/normal-on/test/task_resume_signal.log": "8d332db1c7a1177b4807dd5f6fb7f2a339721a184bb540390a594b69b8f6d044",
+    "build/task200-implementation/normal-on/test/task_resume_signal_lifetime.log": "6fe1bd18396ff81209cd7dc86bb1a63daf412bd185c1ac2cac4c57d8f8bcf046",
+    "build/task200-implementation/normal-on/test/task_stop_inside_handler.log": "bf33589bb592a9d1982af808f0566b581aa70564a49e74771b27343f5fd6cb81",
+    "build/task200-implementation/normal-on/test/test-suite.log": "97fc19a956b01843f8698ea248d0a23ff19c9183054c9fa5e92eaa0809d52c39",
+    "build/task200-implementation/normal-on/test/v3_header_hygiene.log": "e5381e539f7039b44fa80f093db56201f7b3b2ad5dcb9598a99cf25a4f1d7964",
+    "build/task200-implementation/asan-ubsan-off/config.log": "61f9e2971d398fa3751ab27c36d39e62c6afcb0534743cf72dec6ff5bab7dc6f",
+    "build/task200-implementation/asan-ubsan-off/configure.log": "24ba2c1374a16d5b75104a8580e8063e7693bdcea7f7eb24640eb2b3e7ddc7ec",
+    "build/task200-implementation/asan-ubsan-off/consumer_v3_concurrency-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-off/consumer_v3_concurrency-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-off/consumer_v3_executor-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-off/consumer_v3_executor-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-off/consumer_v3_timed_resume-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-off/consumer_v3_timed_resume-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-off/focused-check.log": "c1cb5f6f45173a18c4dd33a4e4701b55ff61aa882b9637868572a2775bebf039",
+    "build/task200-implementation/asan-ubsan-off/skip-exit-gate.log": "3db16b1975df312e929b249f5175bc2e28b42cb0a5db54b407476edaf4533fae",
+    "build/task200-implementation/asan-ubsan-off/stage.log": "471921f64f8398fbb82826e023bdb958399aea8d26d7ef48896098f7ee208103",
+    "build/task200-implementation/asan-ubsan-off/test/consumer_v3_concurrency.log": "75d06ebb630dc8e8573ce4e0f070252eec1ad286f87d2b016264cd43c4d2a8d0",
+    "build/task200-implementation/asan-ubsan-off/test/consumer_v3_executor.log": "164eadce1f9b9518dff732c78e720069f66d0327227fdff1d5192abb1e1d17b0",
+    "build/task200-implementation/asan-ubsan-off/test/consumer_v3_timed_resume.log": "36bcfaef903f5ac1f4c28a19af9888838cffb25a03234049446e55425aa8a92c",
+    "build/task200-implementation/asan-ubsan-off/test/task_cancellation.log": "e829a6177604cebb97fe093880ca3aa7c9c143079e4bb6d63585bd81b4c93f0b",
+    "build/task200-implementation/asan-ubsan-off/test/task_core.log": "5af528a4554066305f79465be27d9cc28db386ee48f7ad394b2494803c4deab7",
+    "build/task200-implementation/asan-ubsan-off/test/task_executor.log": "e5ec4bca52338e6e0c1a6ea93ab431c00dd299723cd1f5061e4dfca6642e22f9",
+    "build/task200-implementation/asan-ubsan-off/test/task_race.log": "414d1edca829d8a37558a40d698170d8a94e5a3e0dcf57d0660f6c3d1dc968b1",
+    "build/task200-implementation/asan-ubsan-off/test/task_resume_signal.log": "8ccb2ac317edd9ae451ea8c41a8f821bbe396b36a0f430730c944bf0071524f1",
+    "build/task200-implementation/asan-ubsan-off/test/task_resume_signal_lifetime.log": "dd4c7908101cc814a2d64e398960885feccf6b7229b5bbd9d84c5e58b9c7ec8a",
+    "build/task200-implementation/asan-ubsan-off/test/task_stop_inside_handler.log": "8b29718b6b9fc33cd008504b48dbc18ac517bab8f3058911b905253905803442",
+    "build/task200-implementation/asan-ubsan-off/test/test-suite.log": "97fc19a956b01843f8698ea248d0a23ff19c9183054c9fa5e92eaa0809d52c39",
+    "build/task200-implementation/asan-ubsan-off/test/v3_header_hygiene.log": "5fa51a3cc570ce03d7205288480b7865f0f33624a113b6fb93b2508116327859",
+    "build/task200-implementation/asan-ubsan-on/config.log": "928ce9bcea7a1ae496afc0b354cd470a689012f8df9fcf290e7f564f49ed0efc",
+    "build/task200-implementation/asan-ubsan-on/configure.log": "7a324942c04af31fa681bcdc85ff22d65a1d66e94394de3c9840b0ce03f0cdd1",
+    "build/task200-implementation/asan-ubsan-on/consumer_v3_concurrency-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-on/consumer_v3_concurrency-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-on/consumer_v3_executor-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-on/consumer_v3_executor-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-on/consumer_v3_timed_resume-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-on/consumer_v3_timed_resume-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/asan-ubsan-on/focused-check.log": "09296fc2e3a1d87ab07efaabcd85dbd14df9ac66209a6639fc69305d15215cf7",
+    "build/task200-implementation/asan-ubsan-on/skip-exit-gate.log": "3db16b1975df312e929b249f5175bc2e28b42cb0a5db54b407476edaf4533fae",
+    "build/task200-implementation/asan-ubsan-on/stage.log": "8788d6ea3de6117f760badf79d3f4a58d0389ede2d5df4790d53603b734d705d",
+    "build/task200-implementation/asan-ubsan-on/test/consumer_v3_concurrency.log": "75d06ebb630dc8e8573ce4e0f070252eec1ad286f87d2b016264cd43c4d2a8d0",
+    "build/task200-implementation/asan-ubsan-on/test/consumer_v3_executor.log": "164eadce1f9b9518dff732c78e720069f66d0327227fdff1d5192abb1e1d17b0",
+    "build/task200-implementation/asan-ubsan-on/test/consumer_v3_timed_resume.log": "36bcfaef903f5ac1f4c28a19af9888838cffb25a03234049446e55425aa8a92c",
+    "build/task200-implementation/asan-ubsan-on/test/task_cancellation.log": "147c02095d7f38c72d51be4d9be73cd44b3a8e4cbc2cefb12b490c68a913f984",
+    "build/task200-implementation/asan-ubsan-on/test/task_core.log": "b6111ebbe834ac7103276c4d271a4ba0ca781f0dfcda87f23e07b1bad5d815d1",
+    "build/task200-implementation/asan-ubsan-on/test/task_executor.log": "b447b0f76ef66d1c9f59a210041687031b0dc0244f705ab86bb223bcd75adf8a",
+    "build/task200-implementation/asan-ubsan-on/test/task_race.log": "6e7b5c67eb452f28ccd2aab72dc1851ae6f805c5f4e33a367f964e613e7f25cc",
+    "build/task200-implementation/asan-ubsan-on/test/task_resume_signal.log": "26197e4e658835994bd9211530555f2443ec2c80a5e98e4908b9be0e94f99aaf",
+    "build/task200-implementation/asan-ubsan-on/test/task_resume_signal_lifetime.log": "4b8a84d6c8754508d9fa25fc2e0e4bc3b17cd69e87bbbde06aceaf0ba5c1ff6e",
+    "build/task200-implementation/asan-ubsan-on/test/task_stop_inside_handler.log": "73e9a54ae40ea2a640b3f926f6e49b44af68f1e1b1c62f674406c9161eb2d468",
+    "build/task200-implementation/asan-ubsan-on/test/test-suite.log": "97fc19a956b01843f8698ea248d0a23ff19c9183054c9fa5e92eaa0809d52c39",
+    "build/task200-implementation/asan-ubsan-on/test/v3_header_hygiene.log": "c4bd02b792c9f08bff9c0759821628e5aed75b090b1dda1c39ffd8726e3604cb",
+    "build/task200-implementation/tsan-off/config.log": "d5d3c8ecd14f0f3b71b5d8ed2282d65fd89e2f7929c6e702df11baccc1396858",
+    "build/task200-implementation/tsan-off/configure.log": "24ba2c1374a16d5b75104a8580e8063e7693bdcea7f7eb24640eb2b3e7ddc7ec",
+    "build/task200-implementation/tsan-off/consumer_v3_concurrency-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-off/consumer_v3_concurrency-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-off/consumer_v3_executor-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-off/consumer_v3_executor-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-off/consumer_v3_timed_resume-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-off/consumer_v3_timed_resume-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-off/focused-check.log": "a35a91bb77d3e8738a08bcfa4adf3d93b924bca1a0315b38520e706ffd5110f0",
+    "build/task200-implementation/tsan-off/skip-exit-gate.log": "3db16b1975df312e929b249f5175bc2e28b42cb0a5db54b407476edaf4533fae",
+    "build/task200-implementation/tsan-off/stage.log": "bc3de9b4b96d8dc27b23792978cc9a0533a2ba517076d6a75e023437f6a56e86",
+    "build/task200-implementation/tsan-off/test/consumer_v3_concurrency.log": "75d06ebb630dc8e8573ce4e0f070252eec1ad286f87d2b016264cd43c4d2a8d0",
+    "build/task200-implementation/tsan-off/test/consumer_v3_executor.log": "164eadce1f9b9518dff732c78e720069f66d0327227fdff1d5192abb1e1d17b0",
+    "build/task200-implementation/tsan-off/test/consumer_v3_timed_resume.log": "36bcfaef903f5ac1f4c28a19af9888838cffb25a03234049446e55425aa8a92c",
+    "build/task200-implementation/tsan-off/test/task_cancellation.log": "46b70909f17c5779bcbe6f85855779127514b57a4d150474c3445840b4ae186f",
+    "build/task200-implementation/tsan-off/test/task_core.log": "1a146beac21d3b966130c26a3c0a77aaf06d7f1c61a704bc3018212222cb1a77",
+    "build/task200-implementation/tsan-off/test/task_executor.log": "2111361d7c2bb080cd538a3809887ec0e5eb2bdb545308ab771d4ce5e08dca8b",
+    "build/task200-implementation/tsan-off/test/task_race.log": "9191259f56cba6a96ce65e19c3c2ec1ebc6da6ebafef6b05773e61cda2aaa18c",
+    "build/task200-implementation/tsan-off/test/task_resume_signal.log": "f37d9fd25e2ac3aedaf48a6d89288633dd95de00e3eb973c322dc4f69a46cf9f",
+    "build/task200-implementation/tsan-off/test/task_resume_signal_lifetime.log": "87b076e93e1acd30f1048758fe3e6ba0ec77159ebd08444119c52326f3d5f030",
+    "build/task200-implementation/tsan-off/test/task_stop_inside_handler.log": "35f1b63f7d0222cd580c7b58e434ba23a73c9a8509f5838bb338ca16790be82e",
+    "build/task200-implementation/tsan-off/test/test-suite.log": "97fc19a956b01843f8698ea248d0a23ff19c9183054c9fa5e92eaa0809d52c39",
+    "build/task200-implementation/tsan-off/test/v3_header_hygiene.log": "9ce785ce987da95c13345e8bace7ac5515c390e7396293430ea1ed94dd43f0e3",
+    "build/task200-implementation/tsan-on/config.log": "7593fb242a6b9eb3d1e4f423f6e6a91a0b7d374d37cad747604a00fee3c1e78e",
+    "build/task200-implementation/tsan-on/configure.log": "7a324942c04af31fa681bcdc85ff22d65a1d66e94394de3c9840b0ce03f0cdd1",
+    "build/task200-implementation/tsan-on/consumer_v3_concurrency-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-on/consumer_v3_concurrency-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-on/consumer_v3_executor-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-on/consumer_v3_executor-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-on/consumer_v3_timed_resume-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-on/consumer_v3_timed_resume-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/task200-implementation/tsan-on/focused-check.log": "ded9e5a4f68259c9300cce72391fa4e0c4c31c7cbce1d5a2408e3bf19a7c1f9b",
+    "build/task200-implementation/tsan-on/skip-exit-gate.log": "3db16b1975df312e929b249f5175bc2e28b42cb0a5db54b407476edaf4533fae",
+    "build/task200-implementation/tsan-on/stage.log": "e3f890bec1d266d48b199cff6d424eaf90541fdc1c8cd138a52eb2997fc64cf7",
+    "build/task200-implementation/tsan-on/test/consumer_v3_concurrency.log": "75d06ebb630dc8e8573ce4e0f070252eec1ad286f87d2b016264cd43c4d2a8d0",
+    "build/task200-implementation/tsan-on/test/consumer_v3_executor.log": "164eadce1f9b9518dff732c78e720069f66d0327227fdff1d5192abb1e1d17b0",
+    "build/task200-implementation/tsan-on/test/consumer_v3_timed_resume.log": "36bcfaef903f5ac1f4c28a19af9888838cffb25a03234049446e55425aa8a92c",
+    "build/task200-implementation/tsan-on/test/task_cancellation.log": "05a87c791adea5356b543f562b21c0636c3b15fce3e78effc97f7fb459659de9",
+    "build/task200-implementation/tsan-on/test/task_core.log": "18bc1dd4a318aa5978ade4c248f05766f1cfbc4a27f9030f1773853acb150523",
+    "build/task200-implementation/tsan-on/test/task_executor.log": "34a1ef1c8d22022d250c93394772381b9ed7d80531b91d0376c030136f45e1b0",
+    "build/task200-implementation/tsan-on/test/task_race.log": "5db549024a9ac761c52f3c11861665c95999960baecf6dfe997d85fbc051c3bd",
+    "build/task200-implementation/tsan-on/test/task_resume_signal.log": "c7fcbe275cf6def17cb45c177022218f7cf3c81bd39988e365e452deb808ba74",
+    "build/task200-implementation/tsan-on/test/task_resume_signal_lifetime.log": "3685d212e01b489ac5ca78de560231902d0eb63ca6fc0a85eb5f420e5bf495d2",
+    "build/task200-implementation/tsan-on/test/task_stop_inside_handler.log": "3c695a096a69a26ed4f8d7b4e1e03f9b61659b4f80cc25dcd0c22d9bc91c5ead",
+    "build/task200-implementation/tsan-on/test/test-suite.log": "97fc19a956b01843f8698ea248d0a23ff19c9183054c9fa5e92eaa0809d52c39",
+    "build/task200-implementation/tsan-on/test/v3_header_hygiene.log": "cb33d120df34cdcca5a4484a1f6d3dc271187cf8715ccdc151da224012ca56e1",
+    "build/task200-implementation/red-replay.log": "004345df73a82d6eef3649378197a98db013b9fe44e8ac3b3593e5dbdec1d697",
+    "build/task200-implementation/recheck-focused.py": "2cb08c31440f0e1c7006a77cdf3e9a040526fa91f36f29e2f47259b4d4cbb653"
+  },
+  "source_sha256": {
+    "configure.ac": "f6a8bd1cc30579bfcb156330b374880220bf93067b61a1b87b7ef239867b8f7c",
+    "src/httpserver/concurrency/executor.hpp": "bc0406a7ad1fce2e8306a8755bb47b9eb04e92ef4671a1292b5aef29734ad10d",
+    "src/httpserver/concurrency/resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+    "src/httpserver/concurrency/task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+    "src/httpserver/concurrency/cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+    "test/Makefile.am": "bdf22242d950d9ef2acde42a07584876f3dbb932e7edf96eb8234a593b98f186",
+    "test/unit/task_race_test.cpp": "058d6d1c1c7b8e31c18f9692cac42572883b44297b60cacd14636811732ac95a",
+    "test/unit/manual_executor_post_probe.hpp": "18d3cc91a1afedd75f698825e24d1c034b0671fe186614b71b4acdc0ead60946",
+    "test/headers/consumer_v3_timed_resume.cpp": "f397fe7a99c79a43859d3c4b38865739fa6f94f695ce13b03eb303079ccab077"
+  },
+  "nonlocal": {
+    "status": "unexecuted",
+    "owner": "CI and v3 PR platform maintainers",
+    "platforms": [
+      "BSD",
+      "macOS",
+      "Windows",
+      "other nonlocal backends"
+    ]
+  },
+  "later_phases": "Groundwork validation/finalization/merge remain caller-owned",
+  "verification": {
+    "changed_file_lint": "exit 0; cpplint executor.hpp, task_race_test.cpp, manual_executor_post_probe.hpp, consumer_v3_timed_resume.cpp",
+    "diff_check": "exit 0",
+    "skip_exit_gate": "exit 0 in all six lanes",
+    "program_passes": 66,
+    "staged_consumer_passes": 18,
+    "new_local_race_skips": 0,
+    "existing_tsan_allocator_skips": 2
+  }
+}
