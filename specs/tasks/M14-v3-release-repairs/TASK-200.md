@@ -24,6 +24,6 @@
 - Blocks: TASK-185
 **Related Requirements:** PRD-V3N-REQ-024, PRD-V3N-REQ-025, PRD-V3N-REQ-031, PRD-V3N-REQ-037; owned-engine sanitizer acceptance.
 **Related Decisions:** DR-V3-003, DR-V3-006, DR-V3-008.
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [Ownership and local verification proof](../../architecture/v3/TASK-200-implementation-evidence.md) and [machine receipt](../../architecture/v3/TASK-200-implementation-receipt.json). Implementation is ready for caller-owned Groundwork validation/finalization; status remains In Progress. Nonlocal platform checks remain CI/v3-PR owned. TASK-185 is unchanged.
