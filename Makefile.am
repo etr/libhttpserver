@@ -575,3 +575,18 @@ EXTRA_DIST += specs/architecture/v3/TASK-196-design.md \
 
 EXTRA_DIST += specs/architecture/v3/TASK-197-design.md \
     specs/architecture/v3/TASK-197-implementation-evidence.md specs/architecture/v3/TASK-197-receipt.json
+
+# Full workloads require explicitly selected installed packages and client tools.
+.PHONY: bench
+bench:
+	@test -n "$(BENCH_PREFIX)" -a -n "$(BENCH_PROVIDER_PREFIX)" -a -n "$(BENCH_OUTPUT)" -a -n "$(BENCH_TLS)" || { echo "Set BENCH_PREFIX, BENCH_PROVIDER_PREFIX, BENCH_OUTPUT, BENCH_TLS (yes/no)"; exit 1; }
+	$(BENCH_PYTHON_COMMAND) "$(top_srcdir)/scripts/run-v3-native-benchmarks.py" \
+	  --source "$(abs_top_srcdir)" --build "$(abs_top_builddir)" \
+	  --prefix "$(BENCH_PREFIX)" --provider-prefix "$(BENCH_PROVIDER_PREFIX)" \
+	  --output "$(BENCH_OUTPUT)" --tls "$(BENCH_TLS)" --compiler "$(CXX)" \
+	  --client-python "$(BENCH_PYTHON_COMMAND)" $(BENCH_ARGS)
+BENCH_PYTHON_COMMAND = python3
+EXTRA_DIST += scripts/run-v3-native-benchmarks.py scripts/lib/v3_native_benchmark.py \
+ scripts/test-v3-native-benchmark.py test/installed/v3_benchmark_consumer.cpp \
+ test/installed/v3_benchmark_client.py docs/native-v3-benchmarks.md \
+ specs/architecture/v3/TASK-198-evidence.md specs/architecture/v3/TASK-198-receipt.json

@@ -9,19 +9,19 @@ from v3_package_commands import dependencies
 import v3_package_matrix as matrix
 
 
-def compile_probe(compiler, sources, flags, libraries, executable, command, env, source, build, prefix, private):
+def compile_probe(compiler, sources, flags, libraries, executable, command, env, source, build, prefix, private, compile_options=None):
     objects, included = [], set()
     for index, unit in enumerate(sources):
         obj = executable.parent / (executable.stem + '-' + str(index) + '.o')
         depfile = obj.with_suffix('.d')
-        command(shlex.split(compiler) + ['-std=c++20', '-O0', '-g'] + flags +
+        command(shlex.split(compiler) + ['-std=c++20'] + (['-O0', '-g'] if compile_options is None else list(compile_options)) + flags +
                 ['-MMD', '-MF', str(depfile), '-c', str(unit), '-o', str(obj)], executable.parent, env)
         included.update(dependencies(depfile))
         objects.append(str(obj))
     matrix.check_dependencies(included, prefix, source, build, private)
     command(shlex.split(compiler) + objects + libraries + ['-Wl,-Map,' + str(executable) + '.map', '-o', str(executable)],
             executable.parent, env)
-    return {'dependencies': sorted(included), 'sources': {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources},
+    return {'compile_options': ['-O0', '-g'] if compile_options is None else list(compile_options), 'dependencies': sorted(included), 'sources': {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources},
             'artifact_sha256': hashlib.sha256(executable.read_bytes()).hexdigest(), 'private_test_headers': private,
             'dependency_sha256': {path: hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in sorted(included)},
             'link_map': str(executable) + '.map'}
