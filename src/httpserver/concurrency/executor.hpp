@@ -174,8 +174,10 @@ class manual_executor final : public executor {
         {
             std::lock_guard<std::mutex> lock(mu_);
             queue_.push_back(std::move(work));
+            // Draining may complete and retire the owner as soon as mu_
+            // is released. Finish all executor accesses before publication.
+            cv_.notify_one();
         }
-        cv_.notify_one();
     }
 
     bool is_current() const noexcept override {

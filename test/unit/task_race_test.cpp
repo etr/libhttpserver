@@ -31,7 +31,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <future>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <thread>
 #include <utility>
@@ -41,6 +43,7 @@
 #include <httpserver/concurrency/resume_signal.hpp>
 
 #include "./littletest.hpp"
+#include "unit/manual_executor_post_probe.hpp"
 
 using httpserver::executor;
 using httpserver::manual_executor;
@@ -160,9 +163,10 @@ LT_BEGIN_AUTO_TEST(task_race_suite, completion_race_spawn_vs_drain)
     }
 LT_END_AUTO_TEST(completion_race_spawn_vs_drain)
 
-// Family 2: timeout race. A sub-millisecond deadline expires while a
+// Family 2: timeout race. A short deadline expires while a
 // concurrent thread fires signal(): each waiter delivered exactly once
-// with resumed or timeout, and both classes must occur overall.
+// with resumed or timeout. The first two cases guarantee both outcomes;
+// the remaining cases still race real deadlines.
 LT_BEGIN_AUTO_TEST(task_race_suite, timeout_race_signal_vs_deadline)
     constexpr int kIterations = 200;
     int resumed_count = 0;
@@ -174,11 +178,13 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timeout_race_signal_vs_deadline)
         std::atomic<int> deliveries{0};
         const auto deadline = std::chrono::milliseconds(1 + (i % 5));
 
+        if (i == 0) sig.signal();
         spawn(ex, timed_signal_waiter(sig, deadline, &observed),
               [&](task_result<resume_outcome>) { ++deliveries; });
         ex.run_pending();  // suspend + arm
 
         std::thread firing([&] {
+            if (i == 1) return;  // the real deadline wins this case
             std::this_thread::sleep_for(deadline);  // race the deadline
             sig.signal();
         });
@@ -188,8 +194,8 @@ LT_BEGIN_AUTO_TEST(task_race_suite, timeout_race_signal_vs_deadline)
             std::this_thread::sleep_for(1ms);
             ex.run_pending();
         }
-        // Let any losing trigger drain while the executor is alive.
-        std::this_thread::sleep_for(6ms);
+        // No guessed teardown grace period: the losing node cannot post,
+        // and the winning post has no executor access after publication.
         ex.run_pending();
 
         LT_CHECK_EQ(deliveries.load(), 1);
@@ -325,6 +331,145 @@ LT_BEGIN_AUTO_TEST(task_race_suite, stop_race_eight_threads)
     }
 LT_END_AUTO_TEST(stop_race_eight_threads)
 
+// The real timer publishes its resumption, then pauses at the queue unlock.
+// Frame completion is observable while post() is still on the producer stack.
+LT_BEGIN_AUTO_TEST(task_race_suite, timer_publication_has_no_executor_tail)
+#if defined(LHS_TEST_POST_TAIL_WRAP)
+    manual_executor ex;
+    resume_signal sig;
+    post_probe::publication probe;
+    post_probe::capture = &probe;
+    ex.pending();
+    post_probe::capture = nullptr;
+    resume_outcome observed = resume_outcome::resumed;
+    int deliveries = 0;
+    bool valid_result = false;
+    bool affinity = false;
+    spawn(ex, timed_signal_waiter(sig, 0ms, &observed),
+          [&](task_result<resume_outcome> result) {
+              ++deliveries;
+              valid_result = result.has_value()
+                  && result.value() == resume_outcome::timeout;
+              affinity = ex.is_current()
+                  && httpserver::current_executor() == &ex;
+          });
+    post_probe::active.store(&probe, std::memory_order_release);
+    ex.run_pending();
+    const bool entered = post_probe::await(probe.entered);
+    ex.run_pending();
+    probe.retired.store(true, std::memory_order_release);
+    sig.signal();  // loses to timeout; frame already retired
+    sig.cancel();
+    const auto remaining = ex.pending();
+    probe.release.store(true, std::memory_order_release);
+    // A callback on the same serial timer thread acknowledges post exit.
+    auto exit = std::make_shared<std::promise<void>>();
+    auto exited = exit->get_future();
+    auto fence = httpserver::detail::default_timer_queue().schedule(
+        std::chrono::steady_clock::now(), [exit] {
+            post_probe::producer = nullptr;
+            exit->set_value();
+        });
+    const bool timely_exit = exited.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+    exited.wait();  // keep probe/executor alive even if diagnostics failed
+    post_probe::active.store(nullptr, std::memory_order_release);
+    ex.run_pending();
+    LT_CHECK(entered);
+    LT_CHECK(timely_exit);
+    LT_CHECK(!probe.expired.load());
+    LT_CHECK_EQ(probe.publications.load(), 1);
+    LT_CHECK_EQ(deliveries, 1);
+    LT_CHECK(valid_result);
+    LT_CHECK(affinity);
+    LT_CHECK(observed == resume_outcome::timeout);
+    LT_CHECK_EQ(remaining, 0u);
+    LT_CHECK_EQ(probe.late_notifications.load(), 0);
+    LT_CHECK_EQ(ex.pending(), 0u);
+#else
+    LT_SKIP("Queue-unlock interposition is Linux-only; nonlocal proof is CI-owned");
+#endif
+LT_END_AUTO_TEST(timer_publication_has_no_executor_tail)
+
+// Hold the real timer service before arming zero deadlines. Signal/cancel
+// must complete first; releasing the service exercises the cancelled entry.
+LT_BEGIN_AUTO_TEST(task_race_suite, timed_wait_trigger_winners_retire_before_timer)
+#if defined(LHS_TEST_POST_TAIL_WRAP)
+    for (const bool cancel : {false, true}) {
+        manual_executor ex;
+        resume_signal sig;
+        post_probe::publication probe;
+        std::atomic<bool> timer_entered{false};
+        std::atomic<bool> timer_release{false};
+        std::atomic<bool> timer_expired{false};
+        auto blocked = httpserver::detail::default_timer_queue().schedule(
+            std::chrono::steady_clock::now(), [&] {
+                timer_entered.store(true, std::memory_order_release);
+                if (!post_probe::await(timer_release)) timer_expired = true;
+            });
+        const bool entered = post_probe::await(timer_entered);
+        post_probe::capture = &probe;
+        ex.pending();
+        post_probe::capture = nullptr;
+        resume_outcome observed = resume_outcome::timeout;
+        const auto expected = cancel ? resume_outcome::cancelled
+                                     : resume_outcome::resumed;
+        int deliveries = 0;
+        bool valid_result = false;
+        bool affinity = false;
+        spawn(ex, timed_signal_waiter(sig, 0ms, &observed),
+              [&](task_result<resume_outcome> result) {
+                  ++deliveries;
+                  valid_result = result.has_value() && result.value() == expected;
+                  affinity = ex.is_current()
+                      && httpserver::current_executor() == &ex;
+              });
+        ex.run_pending();
+        post_probe::active.store(&probe, std::memory_order_release);
+        std::thread firing([&] {
+            if (cancel) sig.cancel();
+            else sig.signal();
+            post_probe::producer = nullptr;
+        });
+        const bool published = post_probe::await(probe.entered);
+        ex.run_pending();
+        probe.retired.store(true, std::memory_order_release);
+        sig.signal();
+        sig.cancel();
+        probe.release.store(true, std::memory_order_release);
+        firing.join();
+        timer_release.store(true, std::memory_order_release);
+        auto exit = std::make_shared<std::promise<void>>();
+        auto exited = exit->get_future();
+        auto fence = httpserver::detail::default_timer_queue().schedule(
+            std::chrono::steady_clock::now(), [exit] { exit->set_value(); });
+        const bool timely_exit = exited.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+        exited.wait();
+        post_probe::active.store(nullptr, std::memory_order_release);
+        const auto late_work = ex.run_pending();
+        LT_CHECK(entered);
+        LT_CHECK(published);
+        LT_CHECK(timely_exit);
+        LT_CHECK(!timer_expired.load());
+        LT_CHECK(!probe.expired.load());
+        LT_CHECK_EQ(probe.publications.load(), 1);
+        LT_CHECK_EQ(deliveries, 1);
+        LT_CHECK(valid_result);
+        LT_CHECK(affinity);
+        LT_CHECK(observed == expected);
+        LT_CHECK_EQ(probe.late_notifications.load(), 0);
+        LT_CHECK_EQ(late_work, 0u);
+    }
+#else
+    LT_SKIP("Queue-unlock interposition is Linux-only; nonlocal proof is CI-owned");
+#endif
+LT_END_AUTO_TEST(timed_wait_trigger_winners_retire_before_timer)
+
 LT_BEGIN_AUTO_TEST_ENV()
+#if defined(LHS_TEST_POST_TAIL_ONLY)
+    littletest::auto_test_runner(&timer_publication_has_no_executor_tail);
+    littletest::auto_test_runner(&timed_wait_trigger_winners_retire_before_timer);
+    int __lt_result__ = littletest::auto_test_runner();
+#else
     AUTORUN_TESTS()
+#endif
 LT_END_AUTO_TEST_ENV()

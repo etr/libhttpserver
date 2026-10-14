@@ -287,6 +287,27 @@ else
     AM_CFLAGS="$AM_CXXFLAGS -O3"
 fi
 
+# Linux/libstdc++ race tests interpose the publication/notification boundary.
+# These flags apply only to task_race, never the library or public headers.
+TASK_RACE_WRAP_CPPFLAGS=""
+TASK_RACE_WRAP_LDFLAGS=""
+case $host_os in
+    linux* )
+        AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+            #include <condition_variable>
+            #ifndef __GLIBCXX__
+            #error libstdc++ interposition unavailable
+            #endif
+            int main() { return 0; }
+        ]])], [
+            TASK_RACE_WRAP_CPPFLAGS="-DLHS_TEST_POST_TAIL_WRAP"
+            TASK_RACE_WRAP_LDFLAGS="-Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=_ZNSt18condition_variable10notify_oneEv"
+        ])
+        ;;
+esac
+AC_SUBST([TASK_RACE_WRAP_CPPFLAGS])
+AC_SUBST([TASK_RACE_WRAP_LDFLAGS])
+
 case $host_os in
     darwin* )
         AM_CXXFLAGS="$AM_CXXFLAGS -DDARWIN"
