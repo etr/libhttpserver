@@ -62,7 +62,7 @@ def validate(path, expected_identity, expected_run_id=None):
 def run(args):
     bench.require(not args.output.exists(), '--output must be new; failed evidence is preserved')
     args.output.mkdir(parents=True)
-    receipt = dict(schema_version=1, status='failed', run_id=secrets.token_hex(16), tls=args.tls, cells=[],
+    receipt = dict(schema_version=1, status='failed', run_id=getattr(args, 'run_id', None) or secrets.token_hex(16), tls=args.tls, cells=[],
                    source=str(args.source), build=str(args.build), prefix=str(args.prefix),
                    full_workload=all(getattr(args, key) == value for key, value in bench.DEFAULTS.items()),
                    host=dict(platform=platform.platform(), machine=platform.machine(), cpu=platform.processor(),
@@ -163,6 +163,7 @@ def main():
     parser.add_argument('--client-python', default=sys.executable)
     parser.add_argument('--validate', type=Path)
     parser.add_argument('--expected-run-id')
+    parser.add_argument('--run-id')
     for key, value in bench.DEFAULTS.items(): parser.add_argument('--' + key.replace('_', '-'), type=int, default=value)
     args = parser.parse_args()
     for name in ('source', 'build', 'prefix', 'provider_prefix', 'output'): setattr(args, name, getattr(args, name).resolve())

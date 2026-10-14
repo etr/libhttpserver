@@ -5,7 +5,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -16,6 +18,7 @@
 #include <httpserver.hpp>
 #include <httpserver/features.hpp>
 #include <httpserver/server/server.hpp>
+#include <httpserver/server/tls_credentials.hpp>
 #include "./v3_host_poll.hpp"
 
 namespace srv = httpserver::server;
@@ -68,7 +71,7 @@ void configuration_cases(srv::loop_mode loop, bool tls_enabled) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 3) return 1;
+    if (argc != 3 && argc != 5) return 1;
     const std::string_view tls_mode(argv[1]), loop_name(argv[2]);
     if ((tls_mode != "yes" && tls_mode != "no") || (loop_name != "managed" && loop_name != "external")) return 1;
     const auto features = httpserver::query_features();
@@ -77,7 +80,31 @@ int main(int argc, char** argv) {
     const auto loop = loop_name == "external" ? srv::loop_mode::external : srv::loop_mode::managed;
     try {
         configuration_cases(loop, tls_mode == "yes");
-        srv::native_server server(options(loop));
+        auto configured = options(loop);
+        const std::string protocol = argc == 5 ? argv[4] : "h1";
+        if (protocol != "h1") {
+            const auto pem = [&](const std::string& name) {
+                std::ifstream input(std::string(argv[3]) + "/" + name);
+                if (!input) throw std::runtime_error("missing credentials");
+                return std::string(std::istreambuf_iterator<char>(input), {});
+            };
+            auto credentials = std::make_shared<srv::tls_credentials>();
+            srv::tls_host_credentials host{"a.example", pem("a.pem") + pem("intermediate.pem"),
+                pem("a-key.pem"), {protocol == "tls" ? "http/1.1" : protocol}};
+            const auto replaced = credentials->replace({{host}, 0});
+            if (replaced.code() != (tls_mode == "yes" ? http::outcome_code::ok : http::outcome_code::not_supported)) return 8;
+            configured = srv::server_options{};
+            configured.loop() = loop;
+            configured.concurrency().workers = 2;
+            configured.tls().provider = srv::tls_provider::system_default;
+            configured.tls().profile = srv::tls_profile::certificates;
+            if (protocol == "h2") configured.protocols().enable(http::protocol::http_2);
+            if (protocol == "h3") configured.protocols().enable(http::protocol::http_3);
+            srv::listener_options listener{"127.0.0.1", 0, true, credentials};
+            if (protocol == "h3") listener.transport = srv::listener_transport::udp;
+            configured.add_listener(listener);
+        }
+        srv::native_server server(configured);
         const auto respond = [](const http::request_head&, std::span<const std::byte> body) {
             srv::sync_response response;
             response.status = http::status::from_code(200);
@@ -90,7 +117,15 @@ int main(int argc, char** argv) {
         for (auto method : {http::method_id::get, http::method_id::post}) {
             if (!server.route_sync(http::method::known(method), "/installed", respond, 1024).ok()) return 4;
         }
-        if (!server.listen().ok() || server.get_bound_port(0) == 0) return 5;
+        const auto listened = server.listen();
+        if (protocol != "h1") {
+            const bool expected = tls_mode == "yes" ? listened.ok() && server.get_bound_port(0) != 0 :
+                listened.code() == http::outcome_code::not_supported && server.get_bound_port(0) == 0;
+            if (!expected) return 9;
+            std::cerr << "PACKAGE_SUPPORTED " << protocol << (tls_mode == "yes" ? " ok bound" : " not_supported unbound") << std::endl;
+            if (tls_mode == "no") return 0;
+        }
+        if (!listened.ok() || server.get_bound_port(0) == 0) return 5;
         std::atomic<bool> stopping{false};
         std::atomic<bool> failed{false};
         std::jthread host;

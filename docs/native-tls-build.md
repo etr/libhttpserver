@@ -29,8 +29,9 @@ in both builds, without backend headers or configuration macros. Availability of
 the provider is distinct from availability of TCP TLS, HTTP/2, and HTTP/3. TCP TLS is available in TLS-on builds for certificate, initial mTLS and eligible
 external-PSK HTTP/1.0 and HTTP/1.1 in both managed and external modes. Certificate
 and initial mTLS profiles also serve enabled HTTP/2 through TLS ALPN `h2`.
-HTTP/3 public listeners remain unavailable. `listen()`
-rejects unsupported protocol/profile requests before binding;
+HTTP/3 public listeners use explicit UDP endpoints with QUICv1, TLS1.3 and
+ALPN `h3`, with certificate or initial mTLS credentials in both loop modes.
+`listen()` rejects unsupported protocol/profile requests before binding;
 `server_options::validate()` remains semantic.
 
 Run `make check-v3-native-linkage` in each mode. It inspects the executable behind
@@ -59,7 +60,8 @@ checks configure/build provenance, installed metadata, effective public headers,
 recursive dependency graphs and all static-archive members, including unused
 members. Provider build proof remains distinct from encrypted listener or QUIC
 interoperability proof. Nonlocal BSD, macOS and Windows execution belongs to CI
-and the v3 PR; public H2/H3 listeners remain later-task work.
+and the v3 PR. Installed public H2/H3 and credential/profile witnesses are
+composed by the [archive-bound release adapters](v3-packaged-release-adapters.md).
 
 Run the clean installed-consumer matrix from a bootstrapped source checkout:
 
@@ -248,8 +250,8 @@ ordinary HTTP use normal credentials; challenge sessions cannot route HTTP. This
 API performs no certificate issuance or challenge-client orchestration.
 
 TLS-off installs identical declarations and secure key operations, with typed
-`not_supported` for credential/runtime/ACME availability. Public H2/H3 listeners
-remain later-task work; external PSK remains HTTP/1-only. The installed rotation
+`not_supported` for credential/runtime/ACME availability. Certificate and initial
+mTLS profiles support public H2/H3 listeners; external PSK remains HTTP/1-only. The installed rotation
 example takes `certificate-directory managed|external port`, opens a real public
 listener and accepts `replace`, `invalid` and `stop` on stdin. Its independent
 installed witness holds a usable connection across rotation and validates the
@@ -276,3 +278,12 @@ remaining requests and WebSockets at its absolute deadline. A retained ticket
 keeps the original deadline result; its remaining count describes unfinished
 work at expiry, even after actual retirement. A counted handler cannot wait
 on its own drain ticket.
+
+## Current packaged capability evidence
+
+The [TASK-199 report](../test/installed/task199-capabilities.md) identifies the
+current archive/install/tool inputs and independent receipt validation for
+shared/static consumers in managed/external modes. Supported TLS/H2/UDP-H3
+configurations bind and complete exchanges; missing credentials and invalid
+configurations retain their separate pre-bind rejection checks. Historical
+TASK-179 and TASK-182 records describe their original execution boundaries.

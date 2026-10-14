@@ -77,7 +77,7 @@ class MeasurementTest(unittest.TestCase):
             with self.assertRaises(ValueError): bench.validate_cells(bad, 'yes')
 
     def test_strict_json(self):
-        for data in ('{"x":1,"x":2}', '{', '{"x":NaN}'):
+        for data in ('{"x":1,"x":2}', '{', '{"x":NaN}', '{"x":1e309}'):
             with self.assertRaises(ValueError): bench.parse_json(data)
 
     def test_artifacts_and_expected_identity(self):

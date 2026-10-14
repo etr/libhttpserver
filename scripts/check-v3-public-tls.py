@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Installed public-only certificate TLS/H1 witnesses with independent clients."""
 import argparse
+from functools import partial
 import hashlib
 import importlib.util
 import json
@@ -29,13 +30,15 @@ def check(value, message):
         raise RuntimeError(message)
 
 
-def exchange(connection, version='1.1', close=True):
+def exchange(connection, version='1.1', close=True, observations=None):
     connection.sendall(('GET /installed HTTP/' + version + '\r\nHost: a.example\r\nConnection: ' +
                         ('close' if close else 'keep-alive') + '\r\n\r\n').encode())
     body, pending, head = response(connection)
     check(head.startswith('HTTP/' + version + ' 200 '), 'response protocol differs')
     check(body == b'installed-v3-tls-ok\n' and not pending, 'complete TLS body differs')
-    return dict(protocol=version, head=head, body=body.decode())
+    observed = dict(protocol=version, head=head, body=body.decode())
+    if observations is not None: observations.append(observed)
+    return observed
 
 
 def command(child, text, expected=None):
@@ -82,15 +85,19 @@ def recover(port, context):
     raise RuntimeError('handshake admission did not recover after retirement')
 
 
-def scenarios(executable, loop, mode, directory, env, fixtures):
+def scenarios(executable, loop, mode, directory, env, fixtures, wire=None):
+    exchange = partial(globals()['exchange'], observations=wire)
+    command_directory = directory / 'credential-commands'
+    command_directory.mkdir()
+    configuration_commands = Commands(command_directory)
     rows = []
     def launch(name):
         return Consumer([str(executable), mode, loop, str(fixtures), name], directory, env,
                         directory / (loop + '-' + name + '-process.json'))
     if mode == 'no':
-        output = Commands(directory)([str(executable), mode, loop, str(fixtures), 'off'], directory, env)
+        output = configuration_commands([str(executable), mode, loop, str(fixtures), 'off'], directory, env)
         check('PUBLIC_TLS_CONFIGURATION 14' in output, 'TLS-off outcome inventory absent')
-        return [dict(case='tls_off_same_source', configuration_checks=14)]
+        return [dict(case='tls_off_same_source', configuration_checks=14, command_receipt=configuration_commands.records[-1])]
     context = ssl.create_default_context(cafile=str(fixtures / 'root.pem'))
     context.set_alpn_protocols(['http/1.1'])
     fallback = ssl.create_default_context(cafile=str(fixtures / 'root.pem'))
@@ -257,11 +264,11 @@ def scenarios(executable, loop, mode, directory, env, fixtures):
         free.bind(('127.0.0.1', 0))
         earlier, later = free.getsockname()[1], occupied.getsockname()[1]
         free.close()
-        output = Commands(directory)([str(executable), mode, loop, str(fixtures), 'rollback', str(earlier), str(later)], directory, env)
+        output = configuration_commands([str(executable), mode, loop, str(fixtures), 'rollback', str(earlier), str(later)], directory, env)
         check('ROLLBACK_OK' in output, 'partial bind rollback absent')
         with socket.socket() as reusable:
             reusable.bind(('127.0.0.1', earlier))
-        rows.append(dict(case='partial_bind_rollback'))
+        rows.append(dict(case='partial_bind_rollback', command_receipt=configuration_commands.records[-1]))
     return rows
 
 
@@ -274,29 +281,34 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--compiler', default='/usr/bin/clang++-18')
     parser.add_argument('--sanitize', default='')
-    args = parser.parse_args()
+    parser.add_argument('--source', type=Path, default=ROOT)
+    parser.add_argument('--run-id')
+    return run(parser.parse_args())
+
+
+def run(args):
+    source = args.source.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     prefix = args.prefix.resolve()
     command_log = Commands(args.output)
     env = runtime_environment(dict(os.environ), prefix, args.provider_prefix, [])
     env.update(PKG_CONFIG_PATH='', PKG_CONFIG_LIBDIR=str(prefix / 'lib/pkgconfig'))
-    receipt = dict(version=1, tls=args.tls, prefix=str(prefix), build=str(args.build.resolve()), cells=[])
+    receipt = dict(version=1, run_id=args.run_id, source=str(source), tls=args.tls, prefix=str(prefix), build=str(args.build.resolve()), cells=[])
     try:
-        spec = importlib.util.spec_from_file_location('audit', ROOT / 'scripts/audit-v3-installed-package.py')
+        spec = importlib.util.spec_from_file_location('audit', source / 'scripts/audit-v3-installed-package.py')
         audit = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(audit)
-        receipt['revision'] = command_log(['git', 'rev-parse', 'HEAD'], ROOT, env).strip()
-        receipt['branch'] = command_log(['git', 'branch', '--show-current'], ROOT, env).strip()
-        inputs = sorted(path for path in (ROOT / 'src').rglob('*')
+        receipt['revision'] = receipt['branch'] = None
+        inputs = sorted(path for path in (source / 'src').rglob('*')
                         if path.is_file() and path.suffix in ('.cpp', '.hpp'))
-        inputs += [ROOT / name for name in ('src/Makefile.am', 'configure.ac',
+        inputs += [source / name for name in ('src/Makefile.am', 'configure.ac',
                    'scripts/check-v3-public-tls.py', 'scripts/lib/v3_public_tls_profiles.py', 'scripts/lib/v3_package_matrix.py',
                    'test/installed/v3-package-matrix.json', 'test/installed/v3_tls_consumer.cpp',
                    'test/installed/v3_tls_profiles.cpp', 'test/installed/v3_tls_client.cpp', 'test/examples/v3_tls_rotation.cpp')]
-        receipt['source_hashes'] = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+        receipt['source_hashes'] = {str(path.relative_to(source)): hashlib.sha256(path.read_bytes()).hexdigest()
                                     for path in inputs}
         receipt['source_identity'] = hashlib.sha256(json.dumps(receipt['source_hashes'], sort_keys=True).encode()).hexdigest()
-        receipt['compiler_version'] = command_log([args.compiler, '--version'], ROOT, env)
+        receipt['compiler_version'] = command_log([args.compiler, '--version'], source, env)
         receipt['client'] = dict(executable=sys.executable, sha256=hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest(),
                                  version=sys.version, ssl=ssl.OPENSSL_VERSION)
         receipt['client']['dependencies'] = audit.dependency_graph([ssl._ssl.__file__])
@@ -305,13 +317,13 @@ def main():
         receipt['pkg_config'] = (prefix / 'lib/pkgconfig/libhttpserver.pc').read_text()
         receipt['library_hashes'] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in (prefix / 'lib').glob('libhttpserver.*') if path.is_file()}
         cflags = shlex.split(command_log(['pkg-config', '--cflags', 'libhttpserver'], args.output, env))
-        check(not audit.consumer_flag_violations(cflags, (ROOT, args.build)), 'contaminated public compile flags')
+        check(not audit.consumer_flag_violations(cflags, (source, args.build)), 'contaminated public compile flags')
         consumer = Path(tempfile.mkdtemp(prefix='task193-public-tls-client-'))
         receipt['consumer_directory'] = str(consumer)
         for unit in ('test/installed/v3_tls_consumer.cpp', 'test/installed/v3_tls_profiles.cpp', 'test/installed/v3_tls_client.cpp', 'test/examples/v3_tls_rotation.cpp', 'examples/v3_host_poll.hpp'):
-            shutil.copyfile(ROOT / unit, consumer / Path(unit).name)
+            shutil.copyfile(source / unit, consumer / Path(unit).name)
         fixtures = consumer / 'fixtures'
-        shutil.copytree(ROOT / 'test/data/tls_credentials', fixtures)
+        shutil.copytree(source / 'test/data/tls_credentials', fixtures)
         (fixtures / 'client-valid-fingerprint.txt').write_text(hashlib.sha256(ssl.PEM_cert_to_DER_cert((fixtures / 'client-valid.pem').read_text())).hexdigest())
         for identity in ('client-valid', 'client-other'):
             chain = (fixtures / (identity + '.pem')).read_bytes()
@@ -345,13 +357,13 @@ def main():
             libraries += shlex.split(args.sanitize)
             executable = consumer / (linkage + ('.exe' if os.name == 'nt' else ''))
             provenance = compile_probe(args.compiler, [consumer / 'v3_tls_consumer.cpp'], cflags + shlex.split(args.sanitize),
-                                       libraries, executable, command_log, env, ROOT, args.build.resolve(), prefix, False)
+                                       libraries, executable, command_log, env, source, args.build.resolve(), prefix, False)
             profiles = consumer / (linkage + '-profiles' + ('.exe' if os.name == 'nt' else ''))
             profile_compile = compile_probe(args.compiler, [consumer / 'v3_tls_profiles.cpp'], cflags + shlex.split(args.sanitize),
-                                           libraries, profiles, command_log, env, ROOT, args.build.resolve(), prefix, False)
+                                           libraries, profiles, command_log, env, source, args.build.resolve(), prefix, False)
             example = consumer / (linkage + '-rotation-example' + ('.exe' if os.name == 'nt' else ''))
             example_compile = compile_probe(args.compiler, [consumer / 'v3_tls_rotation.cpp'], cflags + shlex.split(args.sanitize),
-                                           libraries, example, command_log, env, ROOT, args.build.resolve(), prefix, False)
+                                           libraries, example, command_log, env, source, args.build.resolve(), prefix, False)
             example_graph = audit.dependency_graph([str(example)])
             check_linkage(example_graph, linkage, prefix)
             profile_graph = audit.dependency_graph([str(profiles)])
@@ -362,7 +374,8 @@ def main():
                 cell = args.output / (linkage + '-' + loop)
                 cell.mkdir()
                 result = dict(linkage=linkage, loop=loop, compile=provenance, dependencies=graph)
-                result['scenarios'] = scenarios(executable, loop, args.tls, cell, env, fixtures)
+                result['wire'] = []
+                result['scenarios'] = scenarios(executable, loop, args.tls, cell, env, fixtures, result['wire'])
                 profile_rows = profile_scenarios(profiles, independent, loop, args.tls, cell, env, fixtures)
                 result['profile_compile'], result['profile_dependencies'] = profile_compile, profile_graph
                 if args.tls == 'yes':
@@ -383,6 +396,7 @@ def main():
         raise
     finally:
         (args.output / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    return receipt
 
 
 if __name__ == '__main__':

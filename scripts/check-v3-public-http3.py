@@ -10,7 +10,6 @@ from v3_package_integration import compile_probe
 from v3_package_matrix import check_linkage
 from v3_package_process import Consumer
 from v3_public_http3_inventory import CLIENTS, ONESHOTS, validate_client, validate_matrix, validate_stop_observation
-from v3_public_http2_h2 import Client as H2Client
 
 def require(value,message):
     if not value: raise ValueError(message)
@@ -27,6 +26,7 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client,exampl
         require(output.strip()=='TLS_OFF_H3_REJECTED','same-source TLS-off typed H3 rejection')
         require(commands([example],directory,env).strip()=='TLS_OFF_H3_REJECTED','installed example TLS-off rejection')
         return [],[dict(case='tls_off_h3_rejected',status='passed')]
+    from v3_public_http2_h2 import Client as H2Client
     for name in CLIENTS:
         process_receipt=directory/(name+'-basic-process.json')
         with Consumer([str(executable),str(fixtures),loop],directory,env,process_receipt) as child:
@@ -149,6 +149,7 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client,exampl
     return rows,checks
 
 def mixed_tcp(port,fixtures):
+    from v3_public_http2_h2 import Client as H2Client
     context=ssl.create_default_context(cafile=str(fixtures/'root.pem'))
     context.set_alpn_protocols(['http/1.1'])
     with context.wrap_socket(socket.create_connection(('127.0.0.1',port),timeout=3),server_hostname='a.example') as peer:
@@ -172,17 +173,21 @@ def main():
     parser.add_argument('--compiler',default='/usr/bin/clang++-18')
     parser.add_argument('--quic-go',type=Path,required=True)
     parser.add_argument('--sanitize',default='')
-    args=parser.parse_args(); args.output=args.output.resolve(); args.output.mkdir(parents=True,exist_ok=False)
+    parser.add_argument('--run-id')
+    return run(parser.parse_args())
+
+
+def run(args):
+    args.output=args.output.resolve(); args.output.mkdir(parents=True,exist_ok=False)
     prefix,source,build,provider=[p.resolve() for p in (args.prefix,args.source,args.build,args.provider_prefix)]
     commands=Commands(args.output); env=runtime_environment(os.environ,prefix,provider,[])
     env.update(PKG_CONFIG_PATH='',PKG_CONFIG_LIBDIR=str(prefix/'lib/pkgconfig'))
-    receipt=dict(version=1,predicate='installed-public-http3',tls=args.tls,prefix=str(prefix),source=str(source),build=str(build),
+    receipt=dict(version=1,run_id=args.run_id,predicate='installed-public-http3',tls=args.tls,prefix=str(prefix),source=str(source),build=str(build),
                  cells=[],command=sys.argv,environment={k:env.get(k) for k in ('ASAN_OPTIONS','UBSAN_OPTIONS','TSAN_OPTIONS','LD_LIBRARY_PATH')})
     try:
         audit=load(source/'scripts/audit-v3-installed-package.py','audit')
         client=load(source/'test/installed/v3_http3_aioquic.py','public_h3_client') if args.tls=='yes' else None
-        receipt['revision']=commands(['git','rev-parse','HEAD'],source,env).strip()
-        receipt['branch']=commands(['git','branch','--show-current'],source,env).strip()
+        receipt['revision']=receipt['branch']=None
         receipt['compiler']=commands(shlex.split(args.compiler)+['--version'],source,env)
         receipt['python']=dict(executable=sys.executable,version=sys.version,ssl=ssl.OPENSSL_VERSION,sha256=digest(Path(sys.executable)))
         if args.tls=='yes':
@@ -245,5 +250,7 @@ def main():
     except BaseException as error:
         receipt.update(status='failed',error=str(error));raise
     finally:(args.output/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    return receipt
+
 
 if __name__=='__main__':main()

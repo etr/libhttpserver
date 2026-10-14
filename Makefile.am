@@ -590,3 +590,12 @@ EXTRA_DIST += scripts/run-v3-native-benchmarks.py scripts/lib/v3_native_benchmar
  scripts/test-v3-native-benchmark.py test/installed/v3_benchmark_consumer.cpp \
  test/installed/v3_benchmark_client.py docs/native-v3-benchmarks.md \
  specs/architecture/v3/TASK-198-evidence.md specs/architecture/v3/TASK-198-receipt.json
+
+EXTRA_DIST += scripts/run-v3-packaged-adapters.py scripts/check-v3-public-http1.py \
+ scripts/test-v3-packaged-adapters.py scripts/lib/v3_release_package_adapters.py \
+ scripts/lib/v3_release_package_provenance.py test/installed/v3_websocket_consumer.cpp \
+ docs/v3-packaged-release-adapters.md
+
+EXTRA_DIST += test/installed/task199-capabilities.md \
+ specs/architecture/v3/TASK-199-implementation-evidence.md \
+ specs/architecture/v3/TASK-199-implementation-receipt.json

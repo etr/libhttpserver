@@ -1,0 +1,867 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-199",
+  "phase": "implement",
+  "status": "ready-for-validation",
+  "base_branch": "v3",
+  "worktree_path": "/home/etr/progs/libhttpserver/.worktrees/TASK-199",
+  "branch": "task/TASK-199",
+  "archive": {
+    "path": "/tmp/task199-dist-build4/libhttpserver-3.0.0.tar.gz",
+    "bytes": 2673908,
+    "sha256": "75cfe738dd0857f4be9c347d9db36c170007c67dc4dbcfb47c8ca9f25b5f50a1"
+  },
+  "extracted_source": "/tmp/task199-extract4/libhttpserver-3.0.0",
+  "archive_member_identity_sha256": "288d1a62381f23b0444b90e1d8e81c373409bde901d7012236c8e4db6bcadffd",
+  "package_inputs": {
+    "no": {
+      "build": "/tmp/task199-build-off4",
+      "prefix": "/tmp/task199-prefix-off4",
+      "configuration": {
+        "/tmp/task199-build-off4/config.status": "8b007b429801856bf6734ee90592abd0abe503d360bafc40d2bbfb4b012b735b",
+        "/tmp/task199-build-off4/config.log": "b2743bed7a1dc1881f151f838b6c56c0bef8bee6b7f8b0cf9f1fee405125ca17",
+        "/tmp/task199-build-off4/src/Makefile": "17336a797defaab5c05f4c8e48ef4ee8a173d3fb3992a40c18971940d9b410c9"
+      },
+      "package": {
+        "/tmp/task199-prefix-off4/lib/libhttpserver.so.3": "ade3efb07142b209d46518ec9f1d72eae8d3a39b285998101a6644107369cbf8",
+        "/tmp/task199-prefix-off4/lib/libhttpserver.la": "ece5c0b0bb0af9fb6f4f89c1ce5ae8f0c6005da463fabec33d48a26bdeb7812e",
+        "/tmp/task199-prefix-off4/lib/libhttpserver.so": "ade3efb07142b209d46518ec9f1d72eae8d3a39b285998101a6644107369cbf8",
+        "/tmp/task199-prefix-off4/lib/libhttpserver.so.3.0.0": "ade3efb07142b209d46518ec9f1d72eae8d3a39b285998101a6644107369cbf8",
+        "/tmp/task199-prefix-off4/lib/libhttpserver.a": "f0c6dae3dd44a4a7626e808c663f873340182c8d3f91e0fc2f3083f6f8640133",
+        "/tmp/task199-prefix-off4/include/httpserver.hpp": "b36f565bac0a5b4033c3e27f70922750dc1dfee1c5901fe887d075eea78c066a",
+        "/tmp/task199-prefix-off4/lib/pkgconfig/libhttpserver.pc": "22e4d9fcf5dc53abb64a8851d29ace22230b6282cfc87434097ac3d1d356fd9e",
+        "/tmp/task199-prefix-off4/include/httpserver/exchange.hpp": "82e8ac4bc7930be7c5710d9684cf31ead592387af0db0be7c3aea37f302b49d6",
+        "/tmp/task199-prefix-off4/include/httpserver/response_definition.hpp": "b3292187e31ae6280341336791c64b3d5b426d9e0660602262302c8ada667fd6",
+        "/tmp/task199-prefix-off4/include/httpserver/body_reader.hpp": "995bc62cf5bb8a1792d651c0d90a9a27b631e7aac184c60394903c481811e68d",
+        "/tmp/task199-prefix-off4/include/httpserver/response_writer.hpp": "564dbe35753616866c8610b85366218bd5e64b420a475148d2fd7e7b99221e3b",
+        "/tmp/task199-prefix-off4/include/httpserver/features.hpp": "9e0148ca7cc0676b3c805ea683b81cb2ef120f1e14ec9c0703bc023528dc0eb8",
+        "/tmp/task199-prefix-off4/include/httpserver/http.hpp": "1fdb106e53f084cdb14ba208b1d7bbc0c849ed73677e58e107b73524b4dc3520",
+        "/tmp/task199-prefix-off4/include/httpserver/response_sources.hpp": "d6e74debfb5fec18a6d50d3ceca6149df96dff7d116ce368ee600a1653d0fec7",
+        "/tmp/task199-prefix-off4/include/httpserver/auth/digest_auth.hpp": "4f4c60c31f65910849800de3a9321bab95f7a58ffce4ad39cf809ecf5332e4d5",
+        "/tmp/task199-prefix-off4/include/httpserver/auth/basic_auth.hpp": "bfc6f4bd6730fa1709271e6c17317066f6cc68d1fe45252a4340f57caa116124",
+        "/tmp/task199-prefix-off4/include/httpserver/forms/urlencoded.hpp": "a1d04458d624072d0fe65df3bd2dc7308c4283d0ba26d0fe2f3b1043bc9909e8",
+        "/tmp/task199-prefix-off4/include/httpserver/forms/multipart.hpp": "1c700ba3918a5c5dc5c47b9648e3586e63bb3f36ed17c2c1e6cbfbb28e4c62da",
+        "/tmp/task199-prefix-off4/include/httpserver/websocket/message.hpp": "78ad2b78b74bf7ae4a38dcffeefdfe41ba99a4b62aab381792361f130b0b7bc4",
+        "/tmp/task199-prefix-off4/include/httpserver/websocket/options.hpp": "cf6557b0044724aa5a8851fc946e698e1d96beba972eb2dbb06ee32f8874ad18",
+        "/tmp/task199-prefix-off4/include/httpserver/websocket/session.hpp": "33256c9cd686626ada1e6f0b96d00cf43c0a7e1b9c85570b579fba8302da4a43",
+        "/tmp/task199-prefix-off4/include/httpserver/http/request_head.hpp": "7b37b39e92d0f517a0d9c98c03b00b888d1928ac7c39b1ee293cd25b7362ba20",
+        "/tmp/task199-prefix-off4/include/httpserver/http/outcome.hpp": "33f43a7d65a893e58e84d3344aed2fd0cdaeb3aeace798f906300688e09baa2e",
+        "/tmp/task199-prefix-off4/include/httpserver/http/method.hpp": "3baaa814d86c1a3aa2a86a4ab50bbb521134cb606ae9d5380275a8fe43261abc",
+        "/tmp/task199-prefix-off4/include/httpserver/http/status.hpp": "095223f7c95e917212b0ee6cbf7253e1a7a806f864b0378b1161dfc2cc08b4a4",
+        "/tmp/task199-prefix-off4/include/httpserver/http/fields.hpp": "fe35114105c647646db2039da63108aafeb40b6b6596d4a8c100af780093a8ac",
+        "/tmp/task199-prefix-off4/include/httpserver/http/protocol.hpp": "d6e05ee59cbf054815425021bea223054da9f83995004591bd4a55dfa927cf64",
+        "/tmp/task199-prefix-off4/include/httpserver/http/cookie.hpp": "210a4dc3baedf97c0ee82a117cdf91d2e334a315b12cc2232c55dc08659b0347",
+        "/tmp/task199-prefix-off4/include/httpserver/server/configuration.hpp": "cae71cd6e05fc764cd65409d03f1e4476cb6af7ad9c8abc5ae584df62b649c54",
+        "/tmp/task199-prefix-off4/include/httpserver/server/readiness.hpp": "d93470d40d68057e46638db7af973cb2d737cfb831599bdf3a17b48002a5a66c",
+        "/tmp/task199-prefix-off4/include/httpserver/server/route_sync.hpp": "22515dc2adb5eca4ea114362f763a697f30e9c4a3522893c7cd24cd4b3fa162f",
+        "/tmp/task199-prefix-off4/include/httpserver/server/tls_peer_metadata.hpp": "e5db8c54e6576aaac2502bfe45a04bae0703846a2d3bb22af5fd6b8a9a703a57",
+        "/tmp/task199-prefix-off4/include/httpserver/server/options.hpp": "4a44a6a9d98d6975a328768d96d47d3f300882ccba52ed44677f899e9c36fd22",
+        "/tmp/task199-prefix-off4/include/httpserver/server/budgets.hpp": "020ba08646f3da8bb5e279ead61fda1910b7a3c901de8bd3821688d61ab982b0",
+        "/tmp/task199-prefix-off4/include/httpserver/server/diagnostics.hpp": "e9c63c0d90199c809f25c7398a05fe6007f5049778edc7c7907fe9a1230dbdef",
+        "/tmp/task199-prefix-off4/include/httpserver/server/tls_credentials.hpp": "a960a40c862d507ac7c42ab40a7ffd411cef2284d60f3d33188e76bc2cfe0f63",
+        "/tmp/task199-prefix-off4/include/httpserver/server/hooks.hpp": "2c08435d3d19ae845171e68c1b6dcf4f46861c839a8b7faff23bcbd922017871",
+        "/tmp/task199-prefix-off4/include/httpserver/server/routes.hpp": "10f9a90908597ffe4c1e3937c35c33976385164762bf3177fb8b22d70991e9ab",
+        "/tmp/task199-prefix-off4/include/httpserver/server/peer_policy.hpp": "173444217d10dd075009445f8579f8c12b0b7baa53580df444179f334e0cb785",
+        "/tmp/task199-prefix-off4/include/httpserver/server/server.hpp": "eb3c56610e839eb9868ec58c4865d4e34d2bff823d253233f5ab619d56c034d3",
+        "/tmp/task199-prefix-off4/include/httpserver/concurrency/resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+        "/tmp/task199-prefix-off4/include/httpserver/concurrency/task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+        "/tmp/task199-prefix-off4/include/httpserver/concurrency/cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+        "/tmp/task199-prefix-off4/include/httpserver/concurrency/concurrency.hpp": "6358d1429a64c887fc173a99e0772d1608e51c5498bc018de33a84e079ae6224",
+        "/tmp/task199-prefix-off4/include/httpserver/concurrency/executor.hpp": "0d3b841c43bbe4bad1fc4ff8ce59ee373773e84c3ee85ffbcc52111fe0b58bb5",
+        "/tmp/task199-prefix-off4/include/httpserver/net/address.hpp": "319daaab295a5302043a0e24b7768e6ea40f33075e323b2a2663d0f02fc62b0b"
+      }
+    },
+    "yes": {
+      "build": "/tmp/task199-build-on4",
+      "prefix": "/tmp/task199-prefix-on4",
+      "configuration": {
+        "/tmp/task199-build-on4/config.status": "310ca28fc012a08ebe5fcf9d60caf9718d3d6e137aa0cbff3dbbe11030fbd197",
+        "/tmp/task199-build-on4/config.log": "ce5c7d445b188111591da9a9c5aead9b59eef2e986a6651ae63ab30cc05694c2",
+        "/tmp/task199-build-on4/src/Makefile": "4ba20117b8874664e01443e5c9415263328e7070cfbe777f7b528ab5d33d3b14"
+      },
+      "package": {
+        "/tmp/task199-prefix-on4/lib/libhttpserver.so.3": "7ae527e61de69b48cbcaf30aae3074f6400b25c5e40e5b5ee4a25f758973f76b",
+        "/tmp/task199-prefix-on4/lib/libhttpserver.la": "8bc4add554ecdc1bec386944395b2d8411fe8a9dd0ad571b644b4343a39de777",
+        "/tmp/task199-prefix-on4/lib/libhttpserver.so": "7ae527e61de69b48cbcaf30aae3074f6400b25c5e40e5b5ee4a25f758973f76b",
+        "/tmp/task199-prefix-on4/lib/libhttpserver.so.3.0.0": "7ae527e61de69b48cbcaf30aae3074f6400b25c5e40e5b5ee4a25f758973f76b",
+        "/tmp/task199-prefix-on4/lib/libhttpserver.a": "5c13581dd31c7ee5721d167ee43d20d6725dba11a72fd12fbda6a3d272e7b5f3",
+        "/tmp/task199-prefix-on4/include/httpserver.hpp": "b36f565bac0a5b4033c3e27f70922750dc1dfee1c5901fe887d075eea78c066a",
+        "/tmp/task199-prefix-on4/lib/pkgconfig/libhttpserver.pc": "573e5a0766fcd49a2bf9d3a7fa2b88c8df91b58b23d21075fb3b914eb05a5d16",
+        "/tmp/task199-prefix-on4/include/httpserver/exchange.hpp": "82e8ac4bc7930be7c5710d9684cf31ead592387af0db0be7c3aea37f302b49d6",
+        "/tmp/task199-prefix-on4/include/httpserver/response_definition.hpp": "b3292187e31ae6280341336791c64b3d5b426d9e0660602262302c8ada667fd6",
+        "/tmp/task199-prefix-on4/include/httpserver/body_reader.hpp": "995bc62cf5bb8a1792d651c0d90a9a27b631e7aac184c60394903c481811e68d",
+        "/tmp/task199-prefix-on4/include/httpserver/response_writer.hpp": "564dbe35753616866c8610b85366218bd5e64b420a475148d2fd7e7b99221e3b",
+        "/tmp/task199-prefix-on4/include/httpserver/features.hpp": "9e0148ca7cc0676b3c805ea683b81cb2ef120f1e14ec9c0703bc023528dc0eb8",
+        "/tmp/task199-prefix-on4/include/httpserver/http.hpp": "1fdb106e53f084cdb14ba208b1d7bbc0c849ed73677e58e107b73524b4dc3520",
+        "/tmp/task199-prefix-on4/include/httpserver/response_sources.hpp": "d6e74debfb5fec18a6d50d3ceca6149df96dff7d116ce368ee600a1653d0fec7",
+        "/tmp/task199-prefix-on4/include/httpserver/auth/digest_auth.hpp": "4f4c60c31f65910849800de3a9321bab95f7a58ffce4ad39cf809ecf5332e4d5",
+        "/tmp/task199-prefix-on4/include/httpserver/auth/basic_auth.hpp": "bfc6f4bd6730fa1709271e6c17317066f6cc68d1fe45252a4340f57caa116124",
+        "/tmp/task199-prefix-on4/include/httpserver/forms/urlencoded.hpp": "a1d04458d624072d0fe65df3bd2dc7308c4283d0ba26d0fe2f3b1043bc9909e8",
+        "/tmp/task199-prefix-on4/include/httpserver/forms/multipart.hpp": "1c700ba3918a5c5dc5c47b9648e3586e63bb3f36ed17c2c1e6cbfbb28e4c62da",
+        "/tmp/task199-prefix-on4/include/httpserver/websocket/message.hpp": "78ad2b78b74bf7ae4a38dcffeefdfe41ba99a4b62aab381792361f130b0b7bc4",
+        "/tmp/task199-prefix-on4/include/httpserver/websocket/options.hpp": "cf6557b0044724aa5a8851fc946e698e1d96beba972eb2dbb06ee32f8874ad18",
+        "/tmp/task199-prefix-on4/include/httpserver/websocket/session.hpp": "33256c9cd686626ada1e6f0b96d00cf43c0a7e1b9c85570b579fba8302da4a43",
+        "/tmp/task199-prefix-on4/include/httpserver/http/request_head.hpp": "7b37b39e92d0f517a0d9c98c03b00b888d1928ac7c39b1ee293cd25b7362ba20",
+        "/tmp/task199-prefix-on4/include/httpserver/http/outcome.hpp": "33f43a7d65a893e58e84d3344aed2fd0cdaeb3aeace798f906300688e09baa2e",
+        "/tmp/task199-prefix-on4/include/httpserver/http/method.hpp": "3baaa814d86c1a3aa2a86a4ab50bbb521134cb606ae9d5380275a8fe43261abc",
+        "/tmp/task199-prefix-on4/include/httpserver/http/status.hpp": "095223f7c95e917212b0ee6cbf7253e1a7a806f864b0378b1161dfc2cc08b4a4",
+        "/tmp/task199-prefix-on4/include/httpserver/http/fields.hpp": "fe35114105c647646db2039da63108aafeb40b6b6596d4a8c100af780093a8ac",
+        "/tmp/task199-prefix-on4/include/httpserver/http/protocol.hpp": "d6e05ee59cbf054815425021bea223054da9f83995004591bd4a55dfa927cf64",
+        "/tmp/task199-prefix-on4/include/httpserver/http/cookie.hpp": "210a4dc3baedf97c0ee82a117cdf91d2e334a315b12cc2232c55dc08659b0347",
+        "/tmp/task199-prefix-on4/include/httpserver/server/configuration.hpp": "cae71cd6e05fc764cd65409d03f1e4476cb6af7ad9c8abc5ae584df62b649c54",
+        "/tmp/task199-prefix-on4/include/httpserver/server/readiness.hpp": "d93470d40d68057e46638db7af973cb2d737cfb831599bdf3a17b48002a5a66c",
+        "/tmp/task199-prefix-on4/include/httpserver/server/route_sync.hpp": "22515dc2adb5eca4ea114362f763a697f30e9c4a3522893c7cd24cd4b3fa162f",
+        "/tmp/task199-prefix-on4/include/httpserver/server/tls_peer_metadata.hpp": "e5db8c54e6576aaac2502bfe45a04bae0703846a2d3bb22af5fd6b8a9a703a57",
+        "/tmp/task199-prefix-on4/include/httpserver/server/options.hpp": "4a44a6a9d98d6975a328768d96d47d3f300882ccba52ed44677f899e9c36fd22",
+        "/tmp/task199-prefix-on4/include/httpserver/server/budgets.hpp": "020ba08646f3da8bb5e279ead61fda1910b7a3c901de8bd3821688d61ab982b0",
+        "/tmp/task199-prefix-on4/include/httpserver/server/diagnostics.hpp": "e9c63c0d90199c809f25c7398a05fe6007f5049778edc7c7907fe9a1230dbdef",
+        "/tmp/task199-prefix-on4/include/httpserver/server/tls_credentials.hpp": "a960a40c862d507ac7c42ab40a7ffd411cef2284d60f3d33188e76bc2cfe0f63",
+        "/tmp/task199-prefix-on4/include/httpserver/server/hooks.hpp": "2c08435d3d19ae845171e68c1b6dcf4f46861c839a8b7faff23bcbd922017871",
+        "/tmp/task199-prefix-on4/include/httpserver/server/routes.hpp": "10f9a90908597ffe4c1e3937c35c33976385164762bf3177fb8b22d70991e9ab",
+        "/tmp/task199-prefix-on4/include/httpserver/server/peer_policy.hpp": "173444217d10dd075009445f8579f8c12b0b7baa53580df444179f334e0cb785",
+        "/tmp/task199-prefix-on4/include/httpserver/server/server.hpp": "eb3c56610e839eb9868ec58c4865d4e34d2bff823d253233f5ab619d56c034d3",
+        "/tmp/task199-prefix-on4/include/httpserver/concurrency/resume_signal.hpp": "8cb1a9019027d950ad5b80a8c7f93d6ddbbbc07652169a7d5d6b87ef8678580b",
+        "/tmp/task199-prefix-on4/include/httpserver/concurrency/task.hpp": "494a0d7a55e0efab67868ae86380223a1a463fc222233d1f6b7209028786556e",
+        "/tmp/task199-prefix-on4/include/httpserver/concurrency/cancellation.hpp": "4e9ff791f53a102424385cb59c39c8af3d7a3402c067295134a81c84fa645f54",
+        "/tmp/task199-prefix-on4/include/httpserver/concurrency/concurrency.hpp": "6358d1429a64c887fc173a99e0772d1608e51c5498bc018de33a84e079ae6224",
+        "/tmp/task199-prefix-on4/include/httpserver/concurrency/executor.hpp": "0d3b841c43bbe4bad1fc4ff8ce59ee373773e84c3ee85ffbcc52111fe0b58bb5",
+        "/tmp/task199-prefix-on4/include/httpserver/net/address.hpp": "319daaab295a5302043a0e24b7768e6ea40f33075e323b2a2663d0f02fc62b0b"
+      }
+    }
+  },
+  "tools": {
+    "compiler": {
+      "path": "/usr/lib/llvm-18/bin/clang",
+      "sha256": "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45"
+    },
+    "client_python": {
+      "path": "/usr/bin/python3.12",
+      "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+    },
+    "node": {
+      "path": "/tmp/node-v24.15.0-linux-x64/bin/node",
+      "sha256": "d1de76d8edf2fededf6f8b30d244e2c0529ac607923a018283b77e9c74bd932c"
+    },
+    "quic_go": {
+      "path": "/tmp/task198-go-client",
+      "sha256": "5dcccf2bca79ebd8f01d6d03ea7101ff4e97b0e8a9479dbd6d225907935fb5d2"
+    },
+    "pkg_config": {
+      "path": "/home/etr/.local/bin/pkgconf",
+      "sha256": "0e9c5bdf5229dcf4a84e43a4306939c3270e0c5728267f48a08704b3e3e03f22"
+    }
+  },
+  "clients": {
+    "h2": {
+      "version": "4.4.1",
+      "files": 12
+    },
+    "hpack": {
+      "version": "4.2.0",
+      "files": 8
+    },
+    "hyperframe": {
+      "version": "6.1.0",
+      "files": 4
+    },
+    "aioquic": {
+      "version": "1.3.0",
+      "files": 31
+    },
+    "cryptography": {
+      "version": "50.0.2",
+      "files": 79
+    }
+  },
+  "provider_prefix": "/home/etr/progs/libhttpserver/build/tooling/provider",
+  "provider_sha256": "e8a49c562be7d292cafb41944e8181f3871063992aeb3b0ec0151fe1b9672cad",
+  "node_version": "v24.15.0",
+  "quic_go": {
+    "client": "quic-go",
+    "go": "go1.25.1",
+    "version": "v0.55.0"
+  },
+  "executions": [
+    {
+      "family": "public-capabilities",
+      "tls": "no",
+      "run_id": "19900000000000000000000000000031",
+      "status": "passed",
+      "receipt": {
+        "path": "/tmp/task199-evidence4/public-capabilities-no/receipt.json",
+        "bytes": 306412,
+        "sha256": "b02ccac80bd6d9e0c8074bfca98be843a30b42b55e7493921451716a917195f1"
+      },
+      "identity_sha256": "ee61d65de1d7364639099662b1d8e21c445537853ea179c9ee50cad512f1a598",
+      "inventory_sha256": "3c73381451e752c2518c00ca54765d8c1e81a08497f91154f5ef34ac73a00c71",
+      "artifacts": 453,
+      "argv": [
+        "/tmp/task197-validation-clients/bin/python",
+        "/tmp/task199-extract4/libhttpserver-3.0.0/scripts/run-v3-packaged-adapters.py",
+        "--family",
+        "public-capabilities",
+        "--archive",
+        "/tmp/task199-dist-build4/libhttpserver-3.0.0.tar.gz",
+        "--archive-sha256",
+        "75cfe738dd0857f4be9c347d9db36c170007c67dc4dbcfb47c8ca9f25b5f50a1",
+        "--source",
+        "/tmp/task199-extract4/libhttpserver-3.0.0",
+        "--build",
+        "/tmp/task199-build-off4",
+        "--prefix",
+        "/tmp/task199-prefix-off4",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--tls",
+        "no",
+        "--compiler",
+        "/usr/bin/clang++-18",
+        "--client-python",
+        "/tmp/task197-validation-clients/bin/python",
+        "--node",
+        "/tmp/node-v24.15.0-linux-x64/bin/node",
+        "--quic-go",
+        "/tmp/task198-go-client",
+        "--run-id",
+        "19900000000000000000000000000031",
+        "--output",
+        "/tmp/task199-evidence4/public-capabilities-no"
+      ],
+      "validation_log": {
+        "path": "/tmp/task199-evidence4/public-capabilities-no-validation.log",
+        "bytes": 63,
+        "sha256": "1dcf6f0f2a3c679ff9fe2fde0e36bb4e4923a1ececdf2a4813db6deec4678ce8"
+      },
+      "children": {
+        "h1": {
+          "cells": 4,
+          "consumer_directory": "/tmp/task199-installed-h1-xbq_q2sp",
+          "traffic_cases": 24,
+          "websocket_cases": 20,
+          "supported_configurations": 12
+        },
+        "tls": {
+          "cells": 4,
+          "consumer_directory": "/tmp/task193-public-tls-client-_p27z8al",
+          "scenario_cases": 4
+        },
+        "h2": {
+          "cells": 4,
+          "consumer_directory": "/tmp/task195-installed-swxygixn",
+          "families": 4,
+          "scenario_cases": 0
+        },
+        "h3": {
+          "cells": 4,
+          "consumer_directory": "/tmp/task196-installed-yc7_4yni",
+          "client_cases": 0,
+          "configuration_cases": 4,
+          "nested_cases": 0
+        }
+      }
+    },
+    {
+      "family": "public-capabilities",
+      "tls": "yes",
+      "run_id": "19900000000000000000000000000032",
+      "status": "passed",
+      "receipt": {
+        "path": "/tmp/task199-evidence4/public-capabilities-yes/receipt.json",
+        "bytes": 514868,
+        "sha256": "744c75ff8a5c89ad678831ba20aa35fd81e4126f1a2ae24875c13ed3d4d42f4a"
+      },
+      "identity_sha256": "26dc0740ce1f3f8f63583b87e4dd877b17e01348af9bf9079cdd8d2f730bd4eb",
+      "inventory_sha256": "ced7762dd6bd590beae2a0803b46fdd5b46347d6158c77347ef0dbcdaaefb7f8",
+      "artifacts": 1334,
+      "argv": [
+        "/tmp/task197-validation-clients/bin/python",
+        "/tmp/task199-extract4/libhttpserver-3.0.0/scripts/run-v3-packaged-adapters.py",
+        "--family",
+        "public-capabilities",
+        "--archive",
+        "/tmp/task199-dist-build4/libhttpserver-3.0.0.tar.gz",
+        "--archive-sha256",
+        "75cfe738dd0857f4be9c347d9db36c170007c67dc4dbcfb47c8ca9f25b5f50a1",
+        "--source",
+        "/tmp/task199-extract4/libhttpserver-3.0.0",
+        "--build",
+        "/tmp/task199-build-on4",
+        "--prefix",
+        "/tmp/task199-prefix-on4",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--tls",
+        "yes",
+        "--compiler",
+        "/usr/bin/clang++-18",
+        "--client-python",
+        "/tmp/task197-validation-clients/bin/python",
+        "--node",
+        "/tmp/node-v24.15.0-linux-x64/bin/node",
+        "--quic-go",
+        "/tmp/task198-go-client",
+        "--run-id",
+        "19900000000000000000000000000032",
+        "--output",
+        "/tmp/task199-evidence4/public-capabilities-yes"
+      ],
+      "validation_log": {
+        "path": "/tmp/task199-evidence4/public-capabilities-yes-validation.log",
+        "bytes": 63,
+        "sha256": "69232efe922f9cd86d47b24c8261834d7f6b1aec8d898b474cbfa82f0835e39d"
+      },
+      "children": {
+        "h1": {
+          "cells": 4,
+          "consumer_directory": "/tmp/task199-installed-h1-gfn5r77b",
+          "traffic_cases": 24,
+          "websocket_cases": 20,
+          "supported_configurations": 12
+        },
+        "tls": {
+          "cells": 4,
+          "consumer_directory": "/tmp/task193-public-tls-client-j7mc5uv5",
+          "scenario_cases": 328
+        },
+        "h2": {
+          "cells": 4,
+          "consumer_directory": "/tmp/task195-installed-yodurfq7",
+          "families": 204,
+          "scenario_cases": 548
+        },
+        "h3": {
+          "cells": 4,
+          "consumer_directory": "/tmp/task196-installed-_4xlz8wh",
+          "client_cases": 64,
+          "configuration_cases": 192,
+          "nested_cases": 204
+        }
+      }
+    },
+    {
+      "family": "native-throughput-latency",
+      "tls": "no",
+      "run_id": "19900000000000000000000000000033",
+      "status": "passed",
+      "receipt": {
+        "path": "/tmp/task199-evidence4/native-throughput-latency-no/receipt.json",
+        "bytes": 257510,
+        "sha256": "c69be94c232380c49caebea585783bb1f911f06875e9d9197213466d266316e0"
+      },
+      "identity_sha256": "5343756b9889d9d1d4f86c46eb07a55d535fafab775b24a2879f3fe6ace7c6f9",
+      "inventory_sha256": "74912c9c22f6251b813ea5f8061c3756a90ccfb326f212f391bae4e68645b5f6",
+      "artifacts": 207,
+      "argv": [
+        "/tmp/task197-validation-clients/bin/python",
+        "/tmp/task199-extract4/libhttpserver-3.0.0/scripts/run-v3-packaged-adapters.py",
+        "--family",
+        "native-throughput-latency",
+        "--archive",
+        "/tmp/task199-dist-build4/libhttpserver-3.0.0.tar.gz",
+        "--archive-sha256",
+        "75cfe738dd0857f4be9c347d9db36c170007c67dc4dbcfb47c8ca9f25b5f50a1",
+        "--source",
+        "/tmp/task199-extract4/libhttpserver-3.0.0",
+        "--build",
+        "/tmp/task199-build-off4",
+        "--prefix",
+        "/tmp/task199-prefix-off4",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--tls",
+        "no",
+        "--compiler",
+        "/usr/bin/clang++-18",
+        "--client-python",
+        "/tmp/task197-validation-clients/bin/python",
+        "--node",
+        "/tmp/node-v24.15.0-linux-x64/bin/node",
+        "--quic-go",
+        "/tmp/task198-go-client",
+        "--run-id",
+        "19900000000000000000000000000033",
+        "--output",
+        "/tmp/task199-evidence4/native-throughput-latency-no",
+        "--requests",
+        "16",
+        "--warmup",
+        "4"
+      ],
+      "validation_log": {
+        "path": "/tmp/task199-evidence4/native-throughput-latency-no-validation.log",
+        "bytes": 69,
+        "sha256": "b109d15a3e7ff44cf3004d3dfa04e6b96d121f60eefd2d3d549dfb3169bc2018"
+      },
+      "cells": 4,
+      "measured_requests": 64,
+      "full_workload": false,
+      "workload": {
+        "warmup": 4,
+        "requests": 16,
+        "concurrency": 8,
+        "payload": 1024,
+        "workers": 4,
+        "h3_concurrency": 4,
+        "deadline": 300
+      }
+    },
+    {
+      "family": "native-throughput-latency",
+      "tls": "yes",
+      "run_id": "19900000000000000000000000000034",
+      "status": "passed",
+      "receipt": {
+        "path": "/tmp/task199-evidence4/native-throughput-latency-yes/receipt.json",
+        "bytes": 264959,
+        "sha256": "01bacad0c0bfb4d84ad8fd3773126aec2286ef9539da454865f83a65c610b15d"
+      },
+      "identity_sha256": "0e7cab4b91703c5789ce42f30442597bf738541c248e3979394566ef5ec77e51",
+      "inventory_sha256": "d70b182aacdf0aa6de73a06fa6520b0ee298d8ffe97755cbe874da225498e71a",
+      "artifacts": 237,
+      "argv": [
+        "/tmp/task197-validation-clients/bin/python",
+        "/tmp/task199-extract4/libhttpserver-3.0.0/scripts/run-v3-packaged-adapters.py",
+        "--family",
+        "native-throughput-latency",
+        "--archive",
+        "/tmp/task199-dist-build4/libhttpserver-3.0.0.tar.gz",
+        "--archive-sha256",
+        "75cfe738dd0857f4be9c347d9db36c170007c67dc4dbcfb47c8ca9f25b5f50a1",
+        "--source",
+        "/tmp/task199-extract4/libhttpserver-3.0.0",
+        "--build",
+        "/tmp/task199-build-on4",
+        "--prefix",
+        "/tmp/task199-prefix-on4",
+        "--provider-prefix",
+        "/home/etr/progs/libhttpserver/build/tooling/provider",
+        "--tls",
+        "yes",
+        "--compiler",
+        "/usr/bin/clang++-18",
+        "--client-python",
+        "/tmp/task197-validation-clients/bin/python",
+        "--node",
+        "/tmp/node-v24.15.0-linux-x64/bin/node",
+        "--quic-go",
+        "/tmp/task198-go-client",
+        "--run-id",
+        "19900000000000000000000000000034",
+        "--output",
+        "/tmp/task199-evidence4/native-throughput-latency-yes",
+        "--requests",
+        "16",
+        "--warmup",
+        "4"
+      ],
+      "validation_log": {
+        "path": "/tmp/task199-evidence4/native-throughput-latency-yes-validation.log",
+        "bytes": 69,
+        "sha256": "682aed28afb630df741553c722650ffe276e4e23ef169d3b47ce63f7a2bc3536"
+      },
+      "cells": 16,
+      "measured_requests": 256,
+      "full_workload": false,
+      "workload": {
+        "warmup": 4,
+        "requests": 16,
+        "concurrency": 8,
+        "payload": 1024,
+        "workers": 4,
+        "h3_concurrency": 4,
+        "deadline": 300
+      }
+    }
+  ],
+  "header_agreement": {
+    "path": "/tmp/task199-evidence4/header-agreement.json",
+    "bytes": 5938,
+    "sha256": "c080962754dd77e70886a2e4313e168d2c68b58d8c6d43406e6cc244ad612449"
+  },
+  "audits": [
+    {
+      "path": "/tmp/task199-evidence4/audit-no.json",
+      "bytes": 6737877,
+      "sha256": "9161765760ae0b1b63e7410c651936b8a3d817e41964c37703605ae841b3f66c"
+    },
+    {
+      "path": "/tmp/task199-evidence4/audit-yes.json",
+      "bytes": 7887548,
+      "sha256": "b1cf379bd8276e779d59c7139dc000926c59174cfe3ab1ff6891cd6089d64b0c"
+    }
+  ],
+  "contract_tests": [
+    {
+      "argv": [
+        "python3",
+        "scripts/test-v3-installed-package.py"
+      ],
+      "exit": 0,
+      "log": "/tmp/task199-final-installed-package.log",
+      "artifact": {
+        "path": "/tmp/task199-final-installed-package.log",
+        "bytes": 134,
+        "sha256": "56d4296c1817c1a10be153fc4ad3caad27947477de08d9f52f77f845322aca48"
+      }
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/test-v3-installed-consumer.py"
+      ],
+      "exit": 0,
+      "log": "/tmp/task199-final-installed-consumer.log",
+      "artifact": {
+        "path": "/tmp/task199-final-installed-consumer.log",
+        "bytes": 127,
+        "sha256": "91f009ad12dd73b1b8ce330b67d9e9a3494bb95ce08fb0460adb463efc4d7623"
+      }
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/test-v3-package-workflow.py"
+      ],
+      "exit": 0,
+      "log": "/tmp/task199-final-package-workflow.log",
+      "artifact": {
+        "path": "/tmp/task199-final-package-workflow.log",
+        "bytes": 102,
+        "sha256": "0292b91377e3f5de5fc72b83a91ddacbecbc2c226b761793f9b4babe85f7ad63"
+      }
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/test-v3-public-http2.py"
+      ],
+      "exit": 0,
+      "log": "/tmp/task199-final-public-http2.log",
+      "artifact": {
+        "path": "/tmp/task199-final-public-http2.log",
+        "bytes": 104,
+        "sha256": "1e43b905e11ca028139fe5078016515111aaf7cebf8d6a3e224b7d03b9cb6ac9"
+      }
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/test-v3-public-http3.py"
+      ],
+      "exit": 0,
+      "log": "/tmp/task199-final-public-http3.log",
+      "artifact": {
+        "path": "/tmp/task199-final-public-http3.log",
+        "bytes": 112,
+        "sha256": "c248edf2081020305fc7b28e1af2256191c6e626c86e8c3a0f596cbe67d31ae6"
+      }
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/test-v3-native-benchmark.py"
+      ],
+      "exit": 0,
+      "log": "/tmp/task199-final-native-benchmark.log",
+      "artifact": {
+        "path": "/tmp/task199-final-native-benchmark.log",
+        "bytes": 117,
+        "sha256": "66f1dab649708ccf0ffd824e4c9ecab2e85b00e95205c04acad32ee711f5933e"
+      }
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/test-v3-packaged-adapters.py"
+      ],
+      "exit": 0,
+      "log": "/tmp/task199-final-packaged-adapters.log",
+      "artifact": {
+        "path": "/tmp/task199-final-packaged-adapters.log",
+        "bytes": 133,
+        "sha256": "5c898aa0416bd57635e7b38401e15aa945775960b276d9b913624c5b2115ffc6"
+      }
+    }
+  ],
+  "contract_count": 138,
+  "red_green_logs": [
+    {
+      "path": "/tmp/task199-red.log",
+      "bytes": 8341,
+      "sha256": "0e2eced104581fc3259bb3073504a1a9473030736bfb3b43bbe8e7691253409e"
+    },
+    {
+      "path": "/tmp/task199-red11.log",
+      "bytes": 1579,
+      "sha256": "dfbf7ca6a538fc61ebef91fb27f34b805d5351c3c3cb440ea695c8e42fad7a73"
+    },
+    {
+      "path": "/tmp/task199-red12.log",
+      "bytes": 868,
+      "sha256": "b2b833895549c17319f4565c68bca409b6b4936d52cd79ca2c18ea6cbaae5ab5"
+    },
+    {
+      "path": "/tmp/task199-red13.log",
+      "bytes": 770,
+      "sha256": "5468586c941f7a6eee4b43f9e54b974bdaf5cca2ed8efc8b794ba8c8109dee50"
+    },
+    {
+      "path": "/tmp/task199-red14.log",
+      "bytes": 852,
+      "sha256": "f37e3170768f89d5761cd4889cda509da98939b134b93ae4ab903419d60976e1"
+    },
+    {
+      "path": "/tmp/task199-red15.log",
+      "bytes": 1505,
+      "sha256": "3354db3f66c41aa027ed748cbc62451f809fda13d156a4708b818199ca917628"
+    },
+    {
+      "path": "/tmp/task199-red16-nonfinite.log",
+      "bytes": 605,
+      "sha256": "372117aca3837ba4e6fd516bee035b75327c11de6095a78b93fbeca8855c2925"
+    },
+    {
+      "path": "/tmp/task199-red16-ws.log",
+      "bytes": 1443,
+      "sha256": "ccde17a663c727cecdbb156a328727d4f0b4c28858914aa3eb08177a7188a91d"
+    },
+    {
+      "path": "/tmp/task199-red17.log",
+      "bytes": 1197,
+      "sha256": "f65833674ba017d7933f6f3c9c0b2d970152e055b3030dfebc111b7e65e8d5aa"
+    },
+    {
+      "path": "/tmp/task199-red18.log",
+      "bytes": 1562,
+      "sha256": "7d670716f0653b5f9c7475c15f0ef3e6079637f2cc2b9285032e5f97d6e1b31e"
+    },
+    {
+      "path": "/tmp/task199-red19.log",
+      "bytes": 943,
+      "sha256": "69a0b6c9ea334684bbdadf79ed55000746afa6fa71657e51b300ea409dd7f28e"
+    },
+    {
+      "path": "/tmp/task199-red2.log",
+      "bytes": 1476,
+      "sha256": "8b440b61c464e3c46d21e3445d23a99fd8380f303e95f3467bda54f68b2fae6d"
+    },
+    {
+      "path": "/tmp/task199-red3-config.log",
+      "bytes": 881,
+      "sha256": "0c38b327b4959f00369f2a0e05d5dd767479379fef9e3c69b6e1a046811b4088"
+    },
+    {
+      "path": "/tmp/task199-red3-h1.log",
+      "bytes": 788,
+      "sha256": "80bce93bdf1b9f755a7a1edcbd82bc96e6012a8196daf538ff690c104acb0a96"
+    },
+    {
+      "path": "/tmp/task199-red4.log",
+      "bytes": 834,
+      "sha256": "f56ef90663969490da044ab122516e28297e6950fce135e7d9893ebaafcd7a23"
+    },
+    {
+      "path": "/tmp/task199-red5.log",
+      "bytes": 2066,
+      "sha256": "56b2fd5bf7aa9485e46961d982bfbd9b5396f0e3015b65d71f5cf958ea408353"
+    },
+    {
+      "path": "/tmp/task199-red6.log",
+      "bytes": 958,
+      "sha256": "84b335266083474a0ca1623c95c0a96123c5648ec916140ac47800df4abfc80c"
+    },
+    {
+      "path": "/tmp/task199-red7.log",
+      "bytes": 912,
+      "sha256": "2b3881c31fdbecfa68523d91123767d75c3910a457d7186160b150afc794da64"
+    },
+    {
+      "path": "/tmp/task199-red8.log",
+      "bytes": 932,
+      "sha256": "9226a8e5b936c2079124e98750dcb954a2a6f49bc396d2cce7af1451e09a1c88"
+    },
+    {
+      "path": "/tmp/task199-red9.log",
+      "bytes": 889,
+      "sha256": "88ad47e6d41049cb56f8a5bb56eefda120c28a5a194e89370bda61069853ec81"
+    },
+    {
+      "path": "/tmp/task199-green1.log",
+      "bytes": 113,
+      "sha256": "a7b1750a9e2f65447c2d051fd23da9b426069e065e2c8f08e30801951c5f7b27"
+    },
+    {
+      "path": "/tmp/task199-green10.log",
+      "bytes": 124,
+      "sha256": "afaec02c9d7af42fecbab7922718945a0230e3ca27c4c45dc417d2d2236eede4"
+    },
+    {
+      "path": "/tmp/task199-green11.log",
+      "bytes": 125,
+      "sha256": "1f4b9f209a2617547df88282d3e9c7a805bd4742f5da0b9f0bdbf53c22e73a6d"
+    },
+    {
+      "path": "/tmp/task199-green12.log",
+      "bytes": 126,
+      "sha256": "5d6e722bead8de83641efb950dfbce4c34ef49f3a2657c1c1d572d3e81b5cd1e"
+    },
+    {
+      "path": "/tmp/task199-green13.log",
+      "bytes": 127,
+      "sha256": "347b18974f2448911f9b8036a6c0b88e5283d60351d3ca4d56d4bc36f8f55f81"
+    },
+    {
+      "path": "/tmp/task199-green14.log",
+      "bytes": 128,
+      "sha256": "91f5e86b1d2584af99d77ea3bcff29201929b3551add053c7dba727698ac32e3"
+    },
+    {
+      "path": "/tmp/task199-green15.log",
+      "bytes": 129,
+      "sha256": "17d268db9c1828d2d4a04a0b7c4ffeb94701f5820632a915aa1471f6c87a54f5"
+    },
+    {
+      "path": "/tmp/task199-green16-nonfinite.log",
+      "bytes": 117,
+      "sha256": "933319ce161139c85353029b090fac3d558429126d215a2763f7595a4d0d2a4b"
+    },
+    {
+      "path": "/tmp/task199-green16-ws.log",
+      "bytes": 129,
+      "sha256": "c84c4865b3cd44c1ddf9386b4a08957150a69f80aec7f58a37d3aa12d6222dca"
+    },
+    {
+      "path": "/tmp/task199-green17.log",
+      "bytes": 130,
+      "sha256": "c711585d666d9bf8be687e202da5be6197e2b2391064061af53fa8ec28087f16"
+    },
+    {
+      "path": "/tmp/task199-green18.log",
+      "bytes": 132,
+      "sha256": "a7000a026e15ba67b2664279ea07d8a26da4ad0d98146b57dd681cbdaba48575"
+    },
+    {
+      "path": "/tmp/task199-green19.log",
+      "bytes": 133,
+      "sha256": "0b636ad48c33bb62a040bae2314629279d5f7f63c51b4f41b77511ea76aed8de"
+    },
+    {
+      "path": "/tmp/task199-green2.log",
+      "bytes": 115,
+      "sha256": "697f688b19b870ef1458f3800a545ef51cd099541ad838a87a919f1080aacb9b"
+    },
+    {
+      "path": "/tmp/task199-green3-config.log",
+      "bytes": 127,
+      "sha256": "0e1309087b4e2b5e9701adbb93dcf28e5efb0350df71b4afed30361b7ca217d4"
+    },
+    {
+      "path": "/tmp/task199-green3-h1.log",
+      "bytes": 116,
+      "sha256": "3d668c73b60a56f5d81f91970d771ebec80792a80c6739ee72f27d80436c40ec"
+    },
+    {
+      "path": "/tmp/task199-green4.log",
+      "bytes": 119,
+      "sha256": "eba870ce58c3ffd58c9b6a10c7bf8a7e7737717d5796cb54068a00fdd5ec49f2"
+    },
+    {
+      "path": "/tmp/task199-green5.log",
+      "bytes": 120,
+      "sha256": "89ee3a9d3b0d777ddfde325210699c8fa0a0f0bc083345ff00905e1d473c5ef0"
+    },
+    {
+      "path": "/tmp/task199-green6.log",
+      "bytes": 121,
+      "sha256": "2220f5fc4a5c1f0057b2b195ba93b4b9b150b7997a4e1c6e01891b63ee88cfb5"
+    },
+    {
+      "path": "/tmp/task199-green7.log",
+      "bytes": 122,
+      "sha256": "4632222deece667479142a1ec755b34645fe99787b44e50ad97827a1efdc1df5"
+    },
+    {
+      "path": "/tmp/task199-green8.log",
+      "bytes": 123,
+      "sha256": "87541cce63885b7143523856f48bfe6da6c0568abcaa0f151dc43f549821dd45"
+    },
+    {
+      "path": "/tmp/task199-green9.log",
+      "bytes": 124,
+      "sha256": "d00a4d22b98a943971f2dab9e66d5589f2dcf3496ce1047696c027b14ecefe84"
+    }
+  ],
+  "tampering": [
+    {
+      "case": "altered-statistic",
+      "status": "rejected",
+      "reason": "statistics disagreement: p99_ms",
+      "receipt": "/tmp/task199-tampering-final/altered-statistic-receipt.json"
+    },
+    {
+      "case": "reduced-cannot-satisfy-full",
+      "status": "rejected",
+      "reason": "reduced evidence cannot satisfy full workload",
+      "receipt": "/tmp/task199-evidence4/native-throughput-latency-yes/receipt.json"
+    },
+    {
+      "case": "different-expected-archive",
+      "status": "rejected",
+      "reason": "stale archive/source/package/provider/tool/configuration identity",
+      "receipt": "/tmp/task199-evidence4/native-throughput-latency-yes/receipt.json"
+    },
+    {
+      "case": "different-expected-library",
+      "status": "rejected",
+      "reason": "stale archive/source/package/provider/tool/configuration identity",
+      "receipt": "/tmp/task199-evidence4/native-throughput-latency-yes/receipt.json"
+    },
+    {
+      "case": "removed-required-scenario",
+      "status": "rejected",
+      "reason": "missing, duplicate or unexpected public TLS scenario",
+      "receipt": "/tmp/task199-tampering-final/removed-required-scenario-receipt.json"
+    },
+    {
+      "case": "changed-process-observation",
+      "status": "rejected",
+      "reason": "missing bound readiness port",
+      "receipt": "/tmp/task199-tampering-final/changed-process-receipt.json"
+    }
+  ],
+  "package_check_logs": [
+    {
+      "path": "/tmp/task199-package-off4.log",
+      "bytes": 1168,
+      "sha256": "aeac068eccbfb3fb6ba099f5ff4b5a1310876accbf3ed1e0a842e743f48251a9"
+    },
+    {
+      "path": "/tmp/task199-package-on4.log",
+      "bytes": 1165,
+      "sha256": "833c2a330216dc402127897ce517f0badcd824e6cb83439d860da7d63fb4ef0e"
+    }
+  ],
+  "lint": [
+    {
+      "path": "/tmp/task199-cpplint-final.log",
+      "bytes": 112,
+      "sha256": "d852b3db4d90729f02209cd28db6f10af3bc7cce0c2b0584a73edf986cfa8929"
+    },
+    {
+      "path": "/tmp/task199-automake-contract-final.log",
+      "bytes": 157,
+      "sha256": "6576cd1931f02159b405471d27c7f95a2979052b8b20fb085341c25ee4fe81f9"
+    }
+  ],
+  "nonlocal_checks": {
+    "status": "unexecuted locally",
+    "platforms": [
+      "FreeBSD",
+      "Darwin",
+      "Windows"
+    ],
+    "owner": "CI / v3 PR"
+  },
+  "release_acceptance": "TASK-185 remains open; full release/performance/sanitizer gates unchanged",
+  "task_182_status": "Already Complete in both card and index; preserved without a fabricated transition"
+}

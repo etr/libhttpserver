@@ -135,7 +135,7 @@ and reevaluates live peer policy at discovery and activation. Recovery retains
 streams/information across path epochs while resetting RTT/congestion. H3 peer
 metadata snapshots at complete initial HEADERS; existing exchanges retain their
 copied peer. The bounded TLS network owner exercises this private production
-seam; public H3 listener enablement remains a later gate. See
+seam; TASK-196/197 now expose it through public H3 listeners. See
 [the rebinding evidence](../../../docs/task-164-quic-rebinding.md).
 
 TASK-166 adds private owner-serialized idle/terminal arbitration with bounded owned
@@ -176,6 +176,16 @@ Basic and Digest authentication, form/multipart parsing, route and hook policy, 
 ## 5. Build, observability, and validation
 
 Installed headers expose no MHD, OpenSSL, OS socket, or backend enum types. TLS-on/off builds expose the same declarations and a feature report; unavailable operations return typed libhttpserver errors. The v3 SOVERSION and migration guide make the complete API break explicit. No MHD headers, binaries, linker flags, or runtime probes remain. Build and package checks run on Linux, BSD, macOS, and Windows (including the project's supported Windows toolchain); a TLS-off package links only platform/C++ runtimes, and a TLS-on package links only OpenSSL's `libssl`/`libcrypto` project as its third-party runtime provider.
+
+TASK-199 packages the existing public and benchmark runners into exactly two
+archive/install-bound adapters. Their versioned receipts pin distributed source,
+installed headers/metadata/libraries, provider/tools/clients, complete scenario
+inventories and immutable execution artifacts. Independent validation rechecks
+actual compile/dependency/link provenance, runtime library selection and decoded
+protocol/measurement outcomes. Reduced benchmark integration cannot satisfy a
+full workload gate. See [the interface](../../../docs/v3-packaged-release-adapters.md)
+and [current evidence](TASK-199-implementation-evidence.md). Nonlocal checks
+remain CI/v3-PR owned; TASK-185 owns final runner wiring and release acceptance.
 
 The library emits structured diagnostic callbacks for accept/reject, protocol and TLS errors, stream cancellation, drain, and resource-limit events, without a logging runtime. Optional counters expose active connections/streams, queued bytes, flow-control stalls, handshake failures, and cancellation. Callbacks are bounded/nonblocking or dispatched outside I/O locks; sensitive fields, credentials, and body content are excluded by default.
 
@@ -368,8 +378,9 @@ immutable credential registry. Listeners retain explicit stores, accepted
 sessions acquire one complete generation, and replacement builds off-path then
 publishes atomically. No provider, private snapshot or runtime handle enters the
 installed API. Public certificate-only H1 credentials are available in TLS-on;
-TLS-off keeps the same declarations and typed unavailability. Later tasks own
-public mTLS/PSK/ACME and H2/H3 integration.
+TLS-off keeps the same declarations and typed unavailability. TASK-194 through
+TASK-197 subsequently provide public mTLS/PSK/ACME and H2/H3 integration;
+TASK-199 records their current packaged execution boundary.
 
 Native listeners bind transactionally before activating accepts. One existing
 connection engine reserves admission before TLS allocation, counts its handshake
@@ -387,7 +398,7 @@ Native certificate and initial mTLS listeners now select enabled `h2` through
 ALPN and compose the existing HTTP/2 protocol engine under the accepted TCP
 connection lifecycle. A serialized wire owner and independent stream affinities
 separate protocol state from application coroutine state. PSK stays HTTP/1-only;
-public H3 remains a later release repair. Ownership, bounded semantic handoff,
+TASK-196/197 provide public H3; TASK-199 composes the current installed evidence. Ownership, bounded semantic handoff,
 resource hierarchy and native timer/drain details are in
 [TASK-195-design.md](TASK-195-design.md); local verification is recorded in
 [TASK-195-implementation-evidence.md](TASK-195-implementation-evidence.md).
@@ -395,3 +406,15 @@ resource hierarchy and native timer/drain details are in
 ### TASK-196 native UDP / basic HTTP/3
 
 Explicit transport entries preserve TCP defaults and configuration-index actual ports. The native pimpl transactionally composes `quic_udp_listener`, per-connection `quic_network_connection` and independent native H3 stream affinities with owned bounded handoff. TLS compatibility now includes enabled H3 and transport applicability while PSK stays HTTP/1-only. Coordinated stop preserves backend/workers/services through real QUIC close expiry; an exclusive private external retirement drive replaces host dispatch only after quiescence. See [TASK-196-design.md](TASK-196-design.md) for alternatives, resource bounds and deferred TASK-197 scope.
+
+### TASK-199 packaged release execution adapters
+
+Public consumers are copied out of the archive extraction and compile only
+against identified installed C++20 headers/libraries. The public family composes
+H1/RFC6455, credentials/profiles, H2 and H3; private suites cannot supply its
+proof. The benchmark family retains raw samples and the existing epoch/statistics
+contracts. Source archives require no Git checkout. Artifact catalogs include
+child receipts, commands, processes, depfiles, link maps, executables, fixtures
+and selected client/tool inputs. Both adapters use exclusive outputs and
+caller-bound run IDs, preserving failed attempts. No general stage registry or
+TASK-185 runner import is introduced. Its exact integration remains TASK-185 owned.

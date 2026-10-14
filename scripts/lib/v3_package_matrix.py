@@ -224,3 +224,13 @@ def parity_observation_counts(output):
     if not seen['managed'] or seen['managed'] != seen['external'] or seen['managed'] != seen['poll-oracle']:
         raise ValueError('encrypted transcript cases diverged across drivers')
     return {driver: len(cases) for driver, cases in seen.items()}
+
+
+def supported_configuration_results(output, tls):
+    if tls not in ('yes', 'no'):
+        raise ValueError('invalid supported configuration lane')
+    rows = re.findall(r'^PACKAGE_SUPPORTED (\w+) (\w+) (bound|unbound)$', output, re.M)
+    expected = ('ok', 'bound') if tls == 'yes' else ('not_supported', 'unbound')
+    if len(rows) != 3 or {row[0] for row in rows} != {'tls', 'h2', 'h3'} or any(row[1:] != expected for row in rows):
+        raise ValueError('missing/duplicate or failed supported configuration')
+    return {name: dict(outcome=outcome, binding=binding) for name, outcome, binding in rows}

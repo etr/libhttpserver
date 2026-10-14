@@ -346,7 +346,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-196 | [Add production UDP QUIC ownership and public HTTP/3 routing](M14-v3-release-repairs/TASK-196.md) | M14 | Complete | TASK-191, TASK-193, TASK-195 |
 | TASK-197 | [Complete public HTTP/3 lifecycle, policy and WebSocket parity](M14-v3-release-repairs/TASK-197.md) | M14 | Complete | TASK-194, TASK-196 |
 | TASK-198 | [Provide native public throughput and latency benchmarks](M14-v3-release-repairs/TASK-198.md) | M14 | Complete | TASK-195, TASK-197 |
-| TASK-199 | [Deliver packaged public-capability and benchmark adapters for release execution](M14-v3-release-repairs/TASK-199.md) | M14 | Not Started | TASK-198 |
+| TASK-199 | [Deliver packaged public-capability and benchmark adapters for release execution](M14-v3-release-repairs/TASK-199.md) | M14 | In Progress | TASK-198 |
 | TASK-200 | [Repair intermittent timer and executor teardown race](M14-v3-release-repairs/TASK-200.md) | M14 | Not Started | TASK-199 |
 
 ## PRD requirement coverage

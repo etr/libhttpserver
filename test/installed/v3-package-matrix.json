@@ -310,5 +310,10 @@
     "psk_saturation_rotation_recovery",
     "acme_concurrent_writers",
     "psk_identity_key_bounds"
+  ],
+  "supported_configurations": [
+    "tls",
+    "h2",
+    "h3"
   ]
 }

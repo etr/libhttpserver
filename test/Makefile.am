@@ -1809,3 +1809,5 @@ EXTRA_DIST += installed/v3_http3_qpack.py installed/v3_http3_flow.py
 
 # Dependency-free measurements/contracts only; full workloads are opt-in.
 TESTS += ../scripts/test-v3-native-benchmark.py
+
+TESTS += ../scripts/test-v3-packaged-adapters.py

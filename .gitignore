@@ -155,3 +155,8 @@ __pycache__/
 !scripts/run-v3-native-benchmarks.py
 !scripts/test-v3-native-benchmark.py
 !test/installed/v3_benchmark_client.py
+
+# TASK-199 packaged release adapters.
+!scripts/run-v3-packaged-adapters.py
+!scripts/check-v3-public-http1.py
+!scripts/test-v3-packaged-adapters.py

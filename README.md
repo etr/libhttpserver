@@ -33,6 +33,10 @@ There is no v2 source or ABI compatibility shim. Include native headers such as
 | Certificate rotation | Public `tls_credentials::replace`; accepted sessions retain immutable selections |
 | TLS-off encrypted listeners | Same declarations; typed `not_supported` before binding |
 
+The [packaged release adapters](docs/v3-packaged-release-adapters.md) bind public
+capability and benchmark receipts to a distribution archive, staged installation
+and selected clients. See the [current capability report](test/installed/task199-capabilities.md).
+
 Build native examples with `./bootstrap`, an out-of-tree configure using
 `CXX=clang++ CXXFLAGS='-std=c++20 -O0 -g'`, `--enable-examples` and
 `--disable-v3-tls`, then `make -j2`. For the optional native provider use
