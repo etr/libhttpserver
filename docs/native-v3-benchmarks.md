@@ -113,3 +113,15 @@ observations >=0.99 seconds, CPU/wall <=0.2 of one core and warm RSS growth
 `resource_limits`, installed public H2/H3 drivers and 90-second resource probe
 separately; benchmark throughput does not replace their proof. Private resource
 fixtures remain supporting evidence. Nonlocal platform checks belong to CI/v3 PR.
+
+## Distribution-bound release adapter
+
+[`run-v3-packaged-adapters.py`](v3-packaged-release-adapters.md) exposes the
+`native-throughput-latency` family with explicit archive digest, extracted
+source, build/install/provider/tool identities and a caller-selected run ID.
+Independent validation rehashes its complete retained artifacts and invokes
+the existing measurement/provenance validators. `--require-full-workload`
+rejects reduced measurements. The [TASK-199 integration report](../test/installed/task199-capabilities.md)
+uses 16 measured requests per cell across the complete four TLS-off and sixteen
+TLS-on cells; it is reduced integration evidence. Full workload defaults and
+TASK-185 release performance gates remain unchanged.

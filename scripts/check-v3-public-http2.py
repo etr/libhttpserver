@@ -15,17 +15,18 @@ import sys
 import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/lib'))
+from v3_native_benchmark import require
 from v3_package_commands import Commands, runtime_environment
 from v3_package_integration import compile_probe
 from v3_package_matrix import check_linkage, check_scenarios
 from v3_package_process import Consumer
 from v3_public_http2_inventory import PYTHON, NODE, validate_client, validate_public, POLICY, ONESHOTS
-from v3_public_http2_h2 import Client, basic, timeouts, drain, flow_credit, running_reset, budget_limits, queued_reset, disconnect, idle_deadline, require
-from v3_public_http2_policy import policy, websocket
 
 
 
 def scenarios(executable, loop, tls, directory, env, fixtures, commands, node, source):
+    from v3_public_http2_h2 import Client, basic, timeouts, drain, flow_credit, running_reset, budget_limits, queued_reset, disconnect, idle_deadline, require
+    from v3_public_http2_policy import policy, websocket
     rows = []
     if tls == 'no':
         out = commands([executable, fixtures, loop, 'both'], directory, env)
@@ -84,21 +85,25 @@ def main():
     parser.add_argument('--compiler', default='/usr/bin/clang++-18')
     parser.add_argument('--node', default='node')
     parser.add_argument('--sanitize', default='')
-    args = parser.parse_args()
+    parser.add_argument('--run-id')
+    return run(parser.parse_args())
+
+
+def run(args):
+    from v3_public_http2_h2 import Client
     args.output = args.output.resolve(); args.output.mkdir(parents=True, exist_ok=False)
     prefix, source, build, provider = [p.resolve() for p in (args.prefix, args.source, args.build, args.provider_prefix)]
     command = Commands(args.output)
     env = runtime_environment(os.environ, prefix, provider, [])
     env.update(PKG_CONFIG_PATH='', PKG_CONFIG_LIBDIR=str(prefix / 'lib/pkgconfig'))
-    receipt = dict(version=1, predicate='installed-public-http2', tls=args.tls, prefix=str(prefix),
+    receipt = dict(version=1, run_id=args.run_id, predicate='installed-public-http2', tls=args.tls, prefix=str(prefix),
                    source=str(source), build=str(build), command=sys.argv, cells=[],
                    required_python=PYTHON, required_node=NODE, required_policy=POLICY,
                    environment={key: env.get(key) for key in ('ASAN_OPTIONS', 'UBSAN_OPTIONS', 'TSAN_OPTIONS', 'LD_LIBRARY_PATH')})
     try:
         spec = importlib.util.spec_from_file_location('audit', source / 'scripts/audit-v3-installed-package.py')
         audit = importlib.util.module_from_spec(spec); spec.loader.exec_module(audit)
-        receipt['revision'] = command(['git', 'rev-parse', 'HEAD'], source, env).strip()
-        receipt['branch'] = command(['git', 'branch', '--show-current'], source, env).strip()
+        receipt['revision'] = receipt['branch'] = None
         receipt['compiler'] = command(shlex.split(args.compiler) + ['--version'], source, env)
         receipt['client'] = dict(executable=sys.executable, version=sys.version, ssl=ssl.OPENSSL_VERSION,
                                 sha256=hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest())
@@ -180,6 +185,7 @@ def main():
         receipt.update(status='failed', error=str(error)); raise
     finally:
         (args.output / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    return receipt
 
 
 if __name__ == '__main__':

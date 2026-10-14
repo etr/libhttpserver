@@ -170,8 +170,9 @@ def basic(port, fixtures, command=None):
     h1_parity(port, fixtures)
     c = Client(port, fixtures)
     try:
-        require(c.get('/installed')['body'] == b'installed-v3-h2-ok\n', 'installed route body')
-        passed('alpn_route_parity', alpn='h2', h1_alpn='http/1.1')
+        installed = c.get('/installed')
+        require(installed['body'] == b'installed-v3-h2-ok\n', 'installed route body')
+        passed('alpn_route_parity', alpn='h2', h1_alpn='http/1.1', body=installed['body'].decode(), response_status=int(dict(installed['headers'])[':status']))
         if command:
             deadline = time.monotonic() + 3
             while True:

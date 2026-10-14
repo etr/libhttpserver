@@ -118,6 +118,14 @@ class MatrixTest(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         matrix.configuration_results(broken, self.inventory, loop, tls=tls)
 
+    def test_credentials_backed_supported_configuration_expectations(self):
+        for tls in ('yes', 'no'):
+            rows = '\n'.join('PACKAGE_SUPPORTED ' + name + (' ok bound' if tls == 'yes' else ' not_supported unbound')
+                             for name in ('tls', 'h2', 'h3'))
+            self.assertEqual(len(matrix.supported_configuration_results(rows, tls)), 3)
+            for bad in ('', rows + '\n' + rows, rows.replace('bound', 'invalid')):
+                with self.assertRaises(ValueError): matrix.supported_configuration_results(bad, tls)
+
     def test_private_external_probe_can_use_the_named_host_helper_only(self):
         matrix.check_dependencies(['/source/examples/v3_host_poll.hpp'], Path('/prefix'),
                                   Path('/source'), Path('/build'), private=True)

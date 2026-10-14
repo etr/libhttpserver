@@ -23,7 +23,11 @@ def parse_json(text):
         return result
     def invalid(value):
         raise ValueError('nonfinite JSON number: ' + value)
-    return json.loads(text, object_pairs_hook=pairs, parse_constant=invalid)
+    def finite_float(value):
+        parsed = float(value)
+        require(math.isfinite(parsed), 'nonfinite JSON number: ' + value)
+        return parsed
+    return json.loads(text, object_pairs_hook=pairs, parse_constant=invalid, parse_float=finite_float)
 
 
 def required_cells(tls):

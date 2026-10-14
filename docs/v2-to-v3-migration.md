@@ -185,7 +185,12 @@ TASK-193 adds public certificate TCP TLS through
 Associate a shared store with each TLS listener and publish PEM values with
 `replace`; accepted sessions retain immutable selections during replacement.
 Managed and external loops support the same HTTP/1 routes. TASK-194 extends
-installed witnesses to mTLS/PSK/ACME and live listener rotation. H2/H3 public
-listeners remain subsequent repair tasks; unsupported combinations retain typed
+installed witnesses to mTLS/PSK/ACME and live listener rotation. TASK-195 through
+TASK-197 provide public H2/H3 listeners and semantic/lifecycle integration; unsupported combinations retain typed
 pre-bind outcomes. TLS-off exposes the same declarations and typed unavailable
 credential/runtime operations.
+
+Current distribution/install-aware execution and independently validated
+receipts are documented by [TASK-199](../test/installed/task199-capabilities.md)
+and the [packaged adapter interface](v3-packaged-release-adapters.md). Historical
+release inventories remain unchanged; TASK-185 owns final release acceptance.
