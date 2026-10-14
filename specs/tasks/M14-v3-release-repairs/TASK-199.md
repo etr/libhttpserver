@@ -25,6 +25,6 @@
 - Blocks: TASK-200, TASK-185
 **Related Requirements:** PRD-V3N-REQ-001 through PRD-V3N-REQ-038 as applicable to the complete public-capability inventory; TASK-185 native-throughput-latency inventory.
 **Related Decisions:** DR-V3-001 through DR-V3-008; architecture §5 packaging and validation.
-**Status:** In Progress
+**Status:** Complete
 
 **Implementation evidence:** [TASK-199 implementation proof](../../architecture/v3/TASK-199-implementation-evidence.md) and [machine receipt](../../architecture/v3/TASK-199-implementation-receipt.json). Implementation is ready for caller-owned validation/finalization; status stays In Progress. TASK-182 was already Complete and TASK-185 remains open.
