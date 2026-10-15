@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import signal
 import socket
+import subprocess
+import time
 import sys
 import tempfile
 import unittest
@@ -282,6 +284,188 @@ class CommandsTest(unittest.TestCase):
                 self.assertEqual(status, record['exit'])
                 self.assertEqual(len(data), record['bytes'])
                 self.assertEqual(hashlib.sha256(data).hexdigest(), record['sha256'])
+
+    def assert_success_retires_socket_owner(self):
+        ready = self.root / 'descendant.json'
+        worker = ("import json,os,socket,time; from pathlib import Path; "
+                  "s=socket.socket(); s.bind(('127.0.0.1',0)); "
+                  "Path('descendant.json').write_text(json.dumps([os.getpid(),s.getsockname()[1]])); "
+                  "os.close(1); os.close(2); time.sleep(30)")
+        code = ("import subprocess,time; from pathlib import Path; "
+                f"subprocess.Popen({self.command(worker)!r}); "
+                "\nwhile not Path('descendant.json').exists(): time.sleep(.01)")
+        try:
+            self.runner(self.command(code), self.root, os.environ, timeout=2)
+            _, port = json.loads(ready.read_text())
+            with socket.socket() as probe:
+                probe.bind(('127.0.0.1', port))
+        finally:
+            if ready.exists():
+                pid, _ = json.loads(ready.read_text())
+                try: os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX process-group retirement')
+    def test_success_retires_socket_owner_after_leader_exit(self):
+        self.assert_success_retires_socket_owner()
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux observation boundaries')
+    def test_cleanup_discovery_failure_retains_original_error(self):
+        original = Path.read_text
+        def read(path, *args, **kwargs):
+            if str(path).startswith('/proc/') and path.name == 'stat':
+                raise PermissionError('denied process observation')
+            return original(path, *args, **kwargs)
+        with patch.object(Path, 'read_text', read):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup.*denied process observation'):
+                self.runner(self.command('import time; time.sleep(30)'), self.root,
+                            os.environ, timeout=.1)
+        receipt = self.runner.records[-1]
+        self.assertIn('deadline/output budget exceeded', receipt['error'])
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX ownership anchor')
+    def test_reaped_leader_never_signals_recycled_group(self):
+        tree = commands._CommandTree(self.command('pass'), self.root, os.environ)
+        self.addCleanup(tree.child.stdout.close)
+        tree.child.wait(timeout=2)
+        with patch.object(os, 'killpg') as kill:
+            with self.assertRaisesRegex(RuntimeError, 'ownership'):
+                tree.terminate()
+        kill.assert_not_called()
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux process state')
+    def test_new_live_member_delays_retirement_and_zombies_do_not(self):
+        tree = commands._CommandTree(self.command('import time; time.sleep(30)'), self.root, os.environ)
+        pid = tree.child.pid
+        self.addCleanup(tree.child.stdout.close)
+        original_read, original_list = Path.read_text, Path.iterdir
+        scans = 0
+        def entries(path):
+            nonlocal scans
+            result = list(original_list(path))
+            if str(path) == '/proc':
+                scans += 1
+                if scans >= 2:
+                    result.append(Path('/proc/999999'))
+            return iter(result)
+        def read(path, *args, **kwargs):
+            if str(path) == '/proc/999999/stat':
+                state = 'R' if scans == 2 else 'Z'
+                return f'999999 (late member) {state} 1 {pid} {pid} '
+            return original_read(path, *args, **kwargs)
+        try:
+            with patch.object(Path, 'read_text', read), patch.object(Path, 'iterdir', entries):
+                tree.terminate()
+            self.assertGreaterEqual(scans, 4, 'a new live member invalidates the retired scan')
+            self.assertIsNotNone(tree.child.returncode)
+        finally:
+            if tree.child.returncode is None:
+                tree.child.kill(); tree.child.wait(timeout=2)
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX cleanup deadline')
+    def test_cleanup_and_reader_join_share_one_deadline(self):
+        real_join = commands.threading.Thread.join
+        budgets = []
+        def join(reader, timeout=None):
+            budgets.append(timeout)
+            return real_join(reader, timeout)
+        with patch.object(commands.threading.Thread, 'join', join):
+            with self.assertRaisesRegex(RuntimeError, 'deadline/output budget exceeded'):
+                self.runner(self.command('import time; time.sleep(30)'), self.root,
+                            os.environ, timeout=.1)
+        self.assertTrue(budgets)
+        self.assertLess(budgets[-1], 5, 'joining must consume the remaining cleanup budget')
+
+    @unittest.skipUnless(os.name == 'posix', 'older Python exit observation')
+    def test_exit_observation_without_waitid_keeps_leader_until_cleanup(self):
+        if not hasattr(os, 'waitid'):
+            self.skipTest('waitid already absent on this host')
+        with patch.object(os, 'waitid', None):
+            self.assert_success_retires_socket_owner()
+
+    @unittest.skipUnless(os.name == 'posix', 'BSD/macOS snapshot fallback')
+    def test_ps_fallback_keeps_unreaped_leader_and_retires_descendants(self):
+        with patch.object(sys, 'platform', 'darwin', create=True), patch.object(os, 'waitid', None, create=True):
+            self.assert_success_retires_socket_owner()
+
+    @unittest.skipUnless(os.name == 'posix', 'BSD/macOS snapshot validation')
+    def test_malformed_ps_snapshot_cannot_claim_retirement(self):
+        popen = subprocess.Popen
+        def launch(argv, *args, **kwargs):
+            if argv[0] in ('/bin/ps', '/usr/bin/ps'):
+                argv = self.command("print('malformed snapshot')")
+            return popen(argv, *args, **kwargs)
+        with patch.object(sys, 'platform', 'darwin', create=True), patch.object(subprocess, 'Popen', launch):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup.*snapshot'):
+                self.runner(self.command('pass'), self.root, os.environ, timeout=2)
+
+    @unittest.skipUnless(os.name == 'posix', 'documented BSD/macOS state modifiers')
+    def test_ps_fallback_accepts_documented_state_modifiers(self):
+        popen = subprocess.Popen
+        def launch(argv, *args, **kwargs):
+            if argv[0] in ('/bin/ps', '/usr/bin/ps'):
+                code = ("import subprocess; "
+                        f"data=subprocess.check_output({argv!r}).decode('ascii'); "
+                        "print('\\n'.join(line + '>ACJ' for line in data.splitlines()))")
+                argv = self.command(code)
+            return popen(argv, *args, **kwargs)
+        with patch.object(sys, 'platform', 'darwin'), patch.object(os, 'waitid', None, create=True), patch.object(subprocess, 'Popen', launch):
+            self.assert_success_retires_socket_owner()
+
+    @unittest.skipUnless(hasattr(os, 'waitid'), 'bounded fallback snapshot parsing')
+    def test_ps_parsing_cannot_signal_after_cleanup_deadline(self):
+        tree = commands._CommandTree(self.command('pass'), self.root, os.environ)
+        self.addCleanup(tree.child.stdout.close)
+        deadline = time.monotonic() + 2
+        while not os.waitid(os.P_PID, tree.child.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT):
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(.01)
+        elapsed = 0
+        original_buffer = commands.io.BytesIO
+        class DelayedSnapshot(original_buffer):
+            def getvalue(buffer):
+                nonlocal elapsed
+                elapsed = 2
+                return super().getvalue()
+        try:
+            with patch.object(sys, 'platform', 'darwin'), patch.object(os, 'waitid', None), patch.object(commands.io, 'BytesIO', DelayedSnapshot), patch.object(commands.time, 'monotonic', lambda: elapsed), patch.object(os, 'killpg') as kill:
+                with self.assertRaisesRegex(RuntimeError, 'cleanup deadline exceeded'):
+                    tree.terminate(deadline=1)
+                kill.assert_not_called()
+        finally:
+            tree.child.wait(timeout=2)
+
+    @unittest.skipUnless(hasattr(os, 'waitid'), 'non-reaping exit observation')
+    def test_zombie_only_group_can_be_absent_from_signal_lookup(self):
+        tree = commands._CommandTree(self.command('pass'), self.root, os.environ)
+        self.addCleanup(tree.child.stdout.close)
+        deadline = time.monotonic() + 2
+        while not os.waitid(os.P_PID, tree.child.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT):
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(.01)
+        try:
+            with patch.object(os, 'killpg', side_effect=ProcessLookupError):
+                tree.terminate()
+            self.assertEqual(0, tree.child.returncode)
+        finally:
+            tree.child.wait(timeout=2)
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux cleanup clock boundary')
+    def test_discovery_consumes_cleanup_deadline_without_restarting_wait(self):
+        tree = commands._CommandTree(self.command('import time; time.sleep(30)'), self.root, os.environ)
+        self.addCleanup(tree.child.stdout.close)
+        original_list = Path.iterdir
+        elapsed = 0
+        def entries(path):
+            nonlocal elapsed
+            if str(path) == '/proc': elapsed += 2
+            return original_list(path)
+        try:
+            with patch.object(commands.time, 'monotonic', lambda: elapsed), patch.object(Path, 'iterdir', entries):
+                with self.assertRaisesRegex(RuntimeError, 'cleanup deadline exceeded'):
+                    tree.terminate(deadline=1)
+        finally:
+            tree.child.kill(); tree.child.wait(timeout=2)
 
     def test_nonzero_exit_retains_output_and_failure_receipt(self):
         with self.assertRaisesRegex(RuntimeError, 'matrix command failed:'):

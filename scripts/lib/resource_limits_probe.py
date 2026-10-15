@@ -32,7 +32,13 @@ def measure(pid):
     # comm may contain spaces or parentheses; fields after its final ')' are stable.
     fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
     cpu = (int(fields[11]) + int(fields[12])) / os.sysconf('SC_CLK_TCK')
-    rss = int(Path(f'/proc/{pid}/statm').read_text().split()[1]) * os.sysconf('SC_PAGE_SIZE')
+    # statm/status RSS counters are asynchronous; rollup walks the resident maps.
+    rows = [line.split() for line in Path(f'/proc/{pid}/smaps_rollup').read_text().splitlines()
+            if line.split() and line.split()[0] == 'Rss:']
+    if (len(rows) != 1 or len(rows[0]) != 3 or rows[0][2] != 'kB'
+            or not rows[0][1].isascii() or not rows[0][1].isdigit()):
+        raise ValueError(f'invalid precise RSS in /proc/{pid}/smaps_rollup')
+    rss = int(rows[0][1]) * 1024
     return cpu, rss
 
 
