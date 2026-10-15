@@ -31,6 +31,9 @@ struct http3_encoded_section {
 class http3_connection final {
  public:
     http3_connection(quic_storage_lease data, quic_storage_lease critical, http3_limits limits = {}, bool preadmitted = false);
+    static std::size_t descriptor_storage();
+    static std::size_t decoded_storage(const qpack_section_limits& headers);
+    static std::size_t output_section_storage(std::size_t fields);
     std::optional<http3_error> attach_stream(std::uint64_t opened_peer_id);
     // The exchange owner retires admission after application/retained output
     // ends. Terminal facts keep their separately charged storage tombstone.

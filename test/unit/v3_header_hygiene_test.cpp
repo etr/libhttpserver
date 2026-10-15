@@ -77,6 +77,7 @@ const std::vector<const char*>& header_files() {
         "/server/budgets.hpp",
         "/server/diagnostics.hpp",
         "/server/options.hpp",
+        "/server/protocol_limits.hpp",
         "/server/routes.hpp",
         "/server/configuration.hpp",
         // TASK-102: the exchange area joins the sentinel scan with the

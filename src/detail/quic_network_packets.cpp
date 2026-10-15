@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <utility>
 #include <httpserver/detail/quic_network_connection.hpp>
+#include <httpserver/detail/protocol_limits.hpp>
 #include <httpserver/detail/quic_datagram_sizing.hpp>
 namespace httpserver::detail {
 namespace {
@@ -188,7 +189,7 @@ void quic_network_connection::drive_tls() {
         identity_->set_peer_active_limit(peer.value.active_connection_id_limit);
         const auto peer_idle = std::min<std::uint64_t>(peer.value.max_idle_timeout, std::chrono::milliseconds::max().count());
         lifecycle_.negotiate(std::chrono::milliseconds(local_.max_idle_timeout), std::chrono::milliseconds(peer_idle));
-        flow_ = std::make_unique<quic_flow_control>(quic_endpoint_role::server, local_, peer.value, 64, pool_.data());
+        flow_ = std::make_unique<quic_flow_control>(quic_endpoint_role::server, local_, peer.value, config_.max_stream_records, pool_.data());
     }
     if (!connected_ && result.state == tls_session::progress::complete) {
         require(tls_->negotiated_protocol() == tls_negotiated_protocol::h3, "application ALPN");
@@ -199,16 +200,8 @@ void quic_network_connection::drive_tls() {
 }
 void quic_network_connection::admit_h3() {
     require(static_cast<bool>(flow_), "negotiated flow missing");
-    http3_request_limits limits;
-    limits.max_active_requests = config_.max_requests;
-    limits.framing.headers = {8192, 16384, 128};
-    limits.framing.qpack_capacity = std::min<std::size_t>(4096, root_.capacity(server::resource::qpack_table_bytes));
-    limits.framing.qpack_blocked_streams = std::min<std::size_t>(8, root_.capacity(server::resource::blocked_headers));
-    limits.framing.data_chunk = 4096;
-    limits.max_receipt_records = 16;
-    limits.max_pending_output_records = 32;
-    limits.framing.stream_records = config_.max_stream_records;
-    limits.timeouts = config_.timeouts;
+    const auto limits = config_.request_limits ? *config_.request_limits :
+        native_http3_limits(root_, config_.max_requests, config_.max_stream_records, config_.timeouts);
     native_.tls = tls_->peer_metadata();
     engine_ = std::make_unique<http3_request_engine>(pool_.data(), pool_.critical(), *flow_, recovery_, routes_, executor_, limits, id_,
                                                          facts_.initial->peer.peer, dispatch_, native_);

@@ -17,6 +17,8 @@
 #include <httpserver/detail/hpack_connection.hpp>
 namespace httpserver::detail {
 struct http2_limits {
+    // Unset preserves the legacy encoder choice; explicit ceilings select capacity after peer SETTINGS.
+    std::optional<std::size_t> encoder_table_bytes;
     std::size_t control_frames = 64, control_bytes = 4096, pending_settings = 16, frames_per_turn = 64;
     std::chrono::steady_clock::duration settings_timeout = std::chrono::seconds(10);
     // All non-DATA frames consume control work, including ignored headers.

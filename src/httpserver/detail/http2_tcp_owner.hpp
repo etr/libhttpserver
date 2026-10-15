@@ -22,6 +22,7 @@ class http2_tcp_owner final : public std::enable_shared_from_this<http2_tcp_owne
                     std::uint64_t id, net::peer_address peer, const server::peer_policy* peers,
                     const server::hook_bus& hooks, std::shared_ptr<const server::tls_peer_metadata> tls,
                     executor::handler stopped);
+    static std::size_t storage_capacity();
     void start();
     void stop(http::outcome_code reason);
     void drain(http2_connection::time_point deadline);

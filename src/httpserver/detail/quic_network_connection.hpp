@@ -22,6 +22,7 @@ struct quic_network_config {
     std::size_t data_bytes = 393216, critical_bytes = 393216;
     std::size_t max_requests = 16, max_stream_records = 64;
     std::uint16_t port = 0;
+    std::optional<http3_request_limits> request_limits;
 };
 struct quic_transmission { std::vector<std::byte> bytes; datagram_endpoint peer; };
 // Protocol state belongs to the serialized UDP owner. Pending preparations
@@ -107,6 +108,7 @@ class quic_network_connection final : public datagram_sink, public std::enable_s
     quic_admission_facts facts_;
     server::resource_budget root_;
     quic_storage_pool pool_;
+    server::reservation stream_descriptors_;
     quic_key_state keys_;
     quic_recovery recovery_;
     std::unique_ptr<quic_connection_identity> identity_;

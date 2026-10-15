@@ -4,22 +4,12 @@
 #include <memory>
 #include <stdexcept>
 #include <utility>
+#include <httpserver/detail/protocol_limits.hpp>
 #include <httpserver/detail/quic_network_connection.hpp>
 #include <httpserver/detail/quic_datagram_sizing.hpp>
 namespace httpserver::detail {
 namespace {
 void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
-quic_recovery_config recovery_config(const quic_network_config& config) {
-    quic_recovery_config value;
-    value.max_datagram_size = 1200;
-    value.max_information = 64;
-    value.max_sent_packets = 64;
-    value.max_retained_bytes = config.data_bytes / 4 + config.critical_bytes / 8;
-    value.critical_information = 16;
-    value.critical_retained_bytes = config.critical_bytes / 8;
-    value.critical_sent_packets = 16;
-    return value;
-}
 class weak_sink final : public datagram_sink {
  public:
     explicit weak_sink(std::weak_ptr<quic_network_connection> target) : target_(std::move(target)) {}
@@ -34,9 +24,11 @@ quic_network_connection::quic_network_connection(tls_credentials_selection crede
     const server::route_registry& routes, executor& wire, std::uint64_t id, const server::peer_policy& policy,
     server::resource_budget budget, quic_network_config config, request_dispatch_context dispatch, http3_native_context native)
     : config_(config), lifecycle_(config.timeouts.body_idle, {}, clock_type::now()), facts_(std::move(facts)), root_(std::move(budget)),
-      pool_(config.data_bytes, config.critical_bytes, root_), recovery_(recovery_config(config), pool_.data(), pool_.critical()),
+      pool_(config.data_bytes, config.critical_bytes, root_), recovery_(native_recovery_limits(config.data_bytes, config.critical_bytes), pool_.data(), pool_.critical()),
       routes_(routes), executor_(wire), dispatch_(std::move(dispatch)), native_(std::move(native)), id_(id),
       handshake_deadline_(clock_type::now() + config.timeouts.handshake) {
+    require(pool_.critical().budget.reserve(server::resource::quic_reassembly_bytes,
+        quic_transport_descriptor_storage(config.max_stream_records), stream_descriptors_).ok(), "native stream descriptor storage exhausted");
     const auto envelope = parse_quic_envelope(facts_.initial->bytes);
     require(envelope.code == quic_codec_code::ok, "Invalid admitted Initial");
     client_cid_.assign(envelope.value.source.begin(), envelope.value.source.end());

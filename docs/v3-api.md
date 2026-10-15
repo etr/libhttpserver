@@ -138,3 +138,15 @@ live application charges return to baseline.
 
 See `examples/v3_http3.cpp` for one route registry serving TCP H1/H2 and UDP H3,
 with an RFC9220 echo route and either loop mode.
+
+## Protocol capacity policy
+
+`server_options::http2()`, `http3()` and `quic()` expose independent optional
+value profiles from `<httpserver/server/protocol_limits.hpp>`.
+`resolve_limits(effective_protocol_limits&) const` is pure and build-aware;
+`validate()` remains semantic-only. `native_server::effective_limits(...) const`
+returns the immutable local startup policy before listen and after stop. Both
+output methods preserve output on failure. Shared budgets remain authoritative.
+See [native protocol capacities](v3-protocol-limits.md) for defaults, bounds,
+compression/retention envelopes and the distinction between enforcement, initial
+advertisement and peer-bounded encoder use.

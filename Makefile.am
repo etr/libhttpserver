@@ -618,3 +618,5 @@ check-v3-compiled-operations: $(top_builddir)/src/libhttpserver.la
 	python3 $(top_srcdir)/scripts/check-v3-compiled-operations.py $(top_builddir)/src/.libs/libhttpserver.a
 
 .PHONY: check-v3-compiled-operations
+
+EXTRA_DIST += docs/v3-protocol-limits.md scripts/check-v3-protocol-limits.py test/installed/v3_protocol_limits_consumer.cpp

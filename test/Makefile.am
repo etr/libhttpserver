@@ -1639,3 +1639,11 @@ check_PROGRAMS += v3_compiled_operations
 v3_compiled_operations_SOURCES = installed/v3_compiled_operations.cpp installed/v3_compiled_operations_worker.cpp
 v3_compiled_operations_CPPFLAGS = -I$(top_srcdir)/src
 v3_compiled_operations_LDADD = $(top_builddir)/src/libhttpserver.la
+
+check_PROGRAMS += protocol_limits
+TESTS += protocol_limits
+protocol_limits_SOURCES = unit/protocol_limits_test.cpp
+
+check_PROGRAMS += protocol_compression
+TESTS += protocol_compression
+protocol_compression_SOURCES = unit/protocol_compression_test.cpp

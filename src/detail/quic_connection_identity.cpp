@@ -77,7 +77,7 @@ struct quic_connection_identity::state {
     state(quic_cid local_cid, quic_cid peer_cid, std::shared_ptr<quic_amplification_budget> admitted, quic_recovery& r, const server::peer_policy& p, random_fill rng, quic_storage_lease lease)
         : recovery(r), policy(p), random(std::move(rng)), storage(std::move(lease)) {
         if (!local_cid.size || local_cid.size > 20 || peer_cid.size > 20 || !admitted || !random) throw std::invalid_argument("Invalid QUIC identity seed");
-        if (!storage.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(state) + max_paths * 2048 + max_cid_history * 256, metadata).ok()) throw std::bad_alloc();
+        if (!storage.budget.reserve(server::resource::quic_reassembly_bytes, quic_connection_identity::storage_capacity(), metadata).ok()) throw std::bad_alloc();
         local[0].cid = local_cid;
         local[0].active = true;
         peer[0].cid = peer_cid;
@@ -229,6 +229,7 @@ struct quic_connection_identity::state {
     }
     std::chrono::steady_clock::duration retry_interval() const { return recovery.path_probe_interval(); }
 };
+std::size_t quic_connection_identity::storage_capacity() { return sizeof(state) + max_paths * 2048 + max_cid_history * 256; }
 quic_connection_identity::quic_connection_identity(quic_cid local, quic_cid peer, std::shared_ptr<quic_amplification_budget> admitted, quic_recovery& recovery, const server::peer_policy& policy,
                                                    random_fill random, quic_storage_lease storage)
     : state_(std::make_unique<state>(local, peer, std::move(admitted), recovery, policy, std::move(random), std::move(storage))) {}

@@ -354,6 +354,11 @@ Windows execution belongs to CI/the v3 PR.
 |---|---|---|
 | `src/detail/connection_engine_config.cpp` | `src/httpserver/detail/connection_engine.hpp` | Compiled operations extracted without algorithm changes |
 | `src/detail/io_poll_backend_timers.cpp` | `src/httpserver/detail/io_poll_backend.hpp`, `src/httpserver/detail/io_timer_sweep.hpp` | Compiled operations extracted without algorithm changes |
+| `src/httpserver/server/protocol_limits.hpp` | `src/httpserver/server/protocol_limits.hpp` | Installed capacity option/report value types; implementation in public options/server units |
+| `src/httpserver/detail/protocol_limits.hpp` | `src/httpserver/detail/protocol_limits.hpp` | Private immutable plan and planning declarations |
+| `src/detail/protocol_limits.cpp` | `src/httpserver/detail/protocol_limits.hpp` | Common semantic capacity resolution and compiled availability |
+| `src/detail/http3_capacity.cpp` | `src/httpserver/detail/protocol_limits.hpp` | Pure prepaid H3/QUIC envelope using owner accounting helpers |
+| `src/httpserver/detail/capacity_math.hpp` | `src/httpserver/detail/capacity_math.hpp` | Private checked arithmetic primitives |
 
 ## Retained inline definitions
 
@@ -1033,3 +1038,8 @@ operation, including true templates and constant evaluation operations.
 | `src/httpserver/detail/websocket_session_state.hpp` | `httpserver::websocket::detail::session_wait::bind_frame(httpserver::detail::task_frame_base *)` | trivial accessor/value operation |
 | `src/httpserver/detail/websocket_session_state.hpp` | `httpserver::websocket::detail::session_wait::await_ready()` | trivial accessor/value operation |
 | `src/httpserver/detail/websocket_session_state.hpp` | `httpserver::websocket::detail::session_wait::await_resume()` | trivial accessor/value operation |
+| `src/httpserver/server/options.hpp` | `httpserver::server::server_options::http2()` (mutable/const) | trivial accessor/value operation |
+| `src/httpserver/server/options.hpp` | `httpserver::server::server_options::http3()` (mutable/const) | trivial accessor/value operation |
+| `src/httpserver/server/options.hpp` | `httpserver::server::server_options::quic()` (mutable/const) | trivial accessor/value operation |
+| `src/httpserver/detail/capacity_math.hpp` | `httpserver::detail::capacity_add()` | small checked byte/arithmetic primitive |
+| `src/httpserver/detail/capacity_math.hpp` | `httpserver::detail::capacity_multiply()` | small checked byte/arithmetic primitive |

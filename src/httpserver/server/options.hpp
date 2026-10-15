@@ -39,8 +39,11 @@
 #include <httpserver/server/diagnostics.hpp>
 #include <httpserver/server/hooks.hpp>
 #include <httpserver/server/peer_policy.hpp>
+#include <httpserver/server/protocol_limits.hpp>
 
 namespace httpserver {
+
+namespace detail { struct resolved_protocol_plan; struct protocol_plan_access; }
 
 namespace server {
 
@@ -517,6 +520,15 @@ class server_options {
     // bound. Pure, idempotent, and callable on a const object.
     http::outcome validate() const;
 
+    // Pure build-aware startup policy; leaves out unchanged on failure.
+    http::outcome resolve_limits(effective_protocol_limits& out) const;
+    std::optional<http2_capacity_options>& http2() noexcept { return http2_; }
+    const std::optional<http2_capacity_options>& http2() const noexcept { return http2_; }
+    std::optional<http3_capacity_options>& http3() noexcept { return http3_; }
+    const std::optional<http3_capacity_options>& http3() const noexcept { return http3_; }
+    std::optional<quic_capacity_options>& quic() noexcept { return quic_; }
+    const std::optional<quic_capacity_options>& quic() const noexcept { return quic_; }
+
     // TASK-119: the peer policy stance, seeded into the live policy
     // at listen().
     peer_policy_options& peer_policy() noexcept { return peers_; }
@@ -525,6 +537,8 @@ class server_options {
     }
 
  private:
+    friend struct ::httpserver::detail::protocol_plan_access;
+    http::outcome resolve_configuration(::httpserver::detail::resolved_protocol_plan& plan) const;
     std::vector<listener_options> listeners_;
     loop_mode loop_ = loop_mode::managed;
     concurrency_options concurrency_;
@@ -532,6 +546,9 @@ class server_options {
     tls_options tls_;
     protocol_set protocols_;
     budget_limits budgets_;
+    std::optional<http2_capacity_options> http2_;
+    std::optional<http3_capacity_options> http3_;
+    std::optional<quic_capacity_options> quic_;
     peer_policy_options peers_;
     diagnostics diagnostics_;
     std::shared_ptr<const response_factory> not_found_response_;

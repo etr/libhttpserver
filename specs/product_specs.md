@@ -400,6 +400,12 @@ continues to describe v2, including its deprecated integration shapes.
 - `PRD-V3N-REQ-036` When an application supplies an ACME TLS-ALPN challenge certificate for a domain, the system shall present it for matching challenge handshakes and allow its removal.
 - `PRD-V3N-REQ-037` When an operation fails or a feature is unavailable, the public API shall report it using libhttpserver-defined outcomes rather than libmicrohttpd values.
 - `PRD-V3N-REQ-038` When a documented v2.0 capability is exercised through its v3.0 equivalent, the system shall preserve its externally observable behavior unless a v3.0 migration note explicitly records the change. The parity review shall cover routing, hooks, Basic and Digest authentication, forms and multipart uploads, file responses, IP controls, TLS features, and SHOUTcast.
+- `PRD-V3N-REQ-039` When configuring multiplexed protocols, the application shall be able to set independent typed HTTP/2, HTTP/3 and QUIC capacity profiles without backend flags.
+- `PRD-V3N-REQ-040` When explicit protocol capacities satisfy documented resource, storage and wire bounds, native owners shall enforce those exact capacities, including supported growth above unset defaults.
+- `PRD-V3N-REQ-041` If an explicit profile is invalid, unsupported, disabled or inapplicable to configured transports, startup shall report a typed failure before any endpoint is bound.
+- `PRD-V3N-REQ-042` When resolving options or inspecting a native server, the application shall receive the same immutable local startup policy through a pure build-aware resolver and lifecycle-stable inspection, with output unchanged on failure.
+- `PRD-V3N-REQ-043` While protocol capacity policy is in effect, shared aggregate budgets shall remain authoritative, and inspection shall distinguish local enforcement, initial advertisements, peer-bounded encoder ceilings and fixed native datagram sizes.
+
 
 **Acceptance criteria**
 - Independent clients complete HTTP/1.1, HTTP/2, HTTP/3, and WebSocket interoperability tests, including concurrent streams and cancellation.

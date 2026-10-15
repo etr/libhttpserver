@@ -22,7 +22,8 @@ bool valid_rates(const http2_limits& l) {
 }
 bool valid_limits(http2_limits l) {
     return l.control_frames > 0 && l.control_frames <= 64 && l.control_bytes >= 62 && l.control_bytes <= 4096 &&
-        l.pending_settings > 0 && l.pending_settings <= 16 && l.frames_per_turn > 0 && l.frames_per_turn <= 64 && l.settings_timeout > l.settings_timeout.zero() && valid_rates(l);
+        l.pending_settings > 0 && l.pending_settings <= 16 && l.frames_per_turn > 0 && l.frames_per_turn <= 64 && l.settings_timeout > l.settings_timeout.zero() && valid_rates(l) &&
+        (!l.encoder_table_bytes || *l.encoder_table_bytes <= server::max_capacity(server::resource::hpack_table_bytes));
 }
 bool valid_settings(const http2_settings& s) {
     return s.enable_push == 1 && s.enable_connect_protocol <= 1 && s.initial_window_size <= 0x7fffffff && s.max_frame_size >= 16384 && s.max_frame_size <= 0xffffff;
@@ -71,6 +72,7 @@ http2_connection::http2_connection(server::resource_budget budget, http2_limits 
     if (reserve_frames && !parser_.reserve_frame_storage(initial.max_frame_size)) {
         fail(overload()); return;
     }
+    if (limits_.encoder_table_bytes) compression_.encoder().choose_capacity(std::min<std::size_t>(4096, *limits_.encoder_table_bytes));
     queue_settings(initial);
 }
 bool http2_connection::enqueue(slot value) {
@@ -264,6 +266,7 @@ std::optional<http2_error> http2_connection::control() {
         peer_ = parser_.settings();
         if (auto minimum = parser_.table_minimum()) compression_.encoder().set_peer_maximum(*minimum);
         compression_.encoder().set_peer_maximum(peer_.header_table_size);
+        if (limits_.encoder_table_bytes) compression_.encoder().choose_capacity(std::min<std::size_t>(*limits_.encoder_table_bytes, peer_.header_table_size));
         parser_.peer_settings(peer_);
         return {};
     }

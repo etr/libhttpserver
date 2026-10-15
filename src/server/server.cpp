@@ -45,6 +45,7 @@
 #endif
 
 #include <httpserver/detail/connection_engine.hpp>
+#include <httpserver/detail/protocol_limits.hpp>
 #include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/drain_ticket_state.hpp>
@@ -64,9 +65,16 @@ namespace engine = httpserver::detail;
 
 class native_server::impl {
  public:
+    static std::shared_ptr<const engine::resolved_protocol_plan> resolve_policy(const server_options& options, http::outcome& status) {
+        engine::resolved_protocol_plan plan;
+        status = engine::protocol_plan_access::resolve(options, plan);
+        if (!status.ok()) return {};
+        return std::make_shared<const engine::resolved_protocol_plan>(std::move(plan));
+    }
     explicit impl(server_options options)
         : scope_(std::make_shared<engine::drain_scope>(options.diagnostic_channel())),
           options_(std::move(options)),
+          policy_(resolve_policy(options_, policy_state_)),
           budget_(resource_budget::root(options_.budgets())),
           pool_(options_.concurrency().workers),
           backend_(engine::make_socket_backend(options_.loop())) {
@@ -115,6 +123,12 @@ class native_server::impl {
         return registry_.route(method, pattern, make_sync_route(std::move(handler), body_cap));
     }
 
+    http::outcome effective_limits(effective_protocol_limits& out) const {
+        if (!policy_state_.ok()) return policy_state_;
+        out = policy_->report;
+        return {};
+    }
+
     bool disabled_protocol(std::string_view token) const {
         if (token == "http/1.1") return !options_.protocols().contains(http::protocol::http_1_1);
         if (token == "h2") return !options_.protocols().contains(http::protocol::http_2);
@@ -122,16 +136,7 @@ class native_server::impl {
         return false;
     }
     http::outcome prelisten_ready() const {
-        if (const auto valid = options_.validate(); !valid.ok()) {
-            return valid;
-        }
-        // Build-time provider availability does not imply an implemented
-        // transport. Refuse the whole configuration before binding any endpoint.
-#ifndef NATIVE_V3_TLS
-        if (options_.protocols().contains(http::protocol::http_3) || options_.protocols().contains(http::protocol::http_2)) {
-            return {http::outcome_code::not_supported, "native_server: requested TLS/protocol transport is unavailable"};
-        }
-#endif
+        if (!policy_state_.ok()) return policy_state_;
         for (std::size_t i = 0; i < options_.listener_count(); ++i) {
             if (options_.listener(i).tls) {
 #ifdef NATIVE_V3_TLS
@@ -232,6 +237,7 @@ class native_server::impl {
         engine::connection_engine_config config = engine::connection_engine_config::from_budget_limits(options_.budgets());
         config.diagnostics = options_.diagnostic_channel();
         config.protocols = options_.protocols();
+        config.protocol_limits = policy_;
         config.drain_owner = scope_;
         config.timeouts = options_.timeouts();
         auto pages = std::make_shared<engine::error_page_factories>();
@@ -423,6 +429,8 @@ class native_server::impl {
     // this).
     std::shared_ptr<engine::drain_scope> scope_;
     server_options options_;
+    http::outcome policy_state_;
+    const std::shared_ptr<const engine::resolved_protocol_plan> policy_;
     resource_budget budget_;
     route_registry registry_;
     http::outcome registry_state_;
@@ -508,3 +516,7 @@ peer_policy& native_server::peer_policy() const noexcept { return impl_->peers()
 }  // namespace server
 
 }  // namespace httpserver
+
+namespace httpserver::server {
+http::outcome native_server::effective_limits(effective_protocol_limits& out) const { return impl_->effective_limits(out); }
+}  // namespace httpserver::server

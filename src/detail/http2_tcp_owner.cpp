@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <memory>
 #include <utility>
+#include <httpserver/detail/protocol_limits.hpp>
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/http2_tcp_owner.hpp>
 namespace httpserver::detail {
@@ -24,10 +25,7 @@ http2_tcp_owner::http2_tcp_owner(io_socket_backend& backend, executor& workers, 
     : backend_(backend), workers_(workers), routes_(routes), budget_(budget), wire_(std::make_shared<http2_dispatch>(workers)),
       io_(*wire_), id_(id), peer_(peer), stopped_(std::move(stopped)) {
     limits_.timeouts = config.timeouts;
-    limits_.headers.max_expanded_bytes = std::min<std::size_t>(65536, budget.capacity(server::resource::header_bytes) / 3);
-    limits_.headers.max_fields = std::min<std::size_t>(256, budget.capacity(server::resource::header_fields));
-    limits_.headers.max_compressed_bytes = std::min<std::size_t>(65536, budget.capacity(server::resource::body_buffer_bytes) / 16);
-    limits_.max_streams = std::min<std::size_t>(128, budget.capacity(server::resource::streams));
+    if (config.protocol_limits) limits_ = config.protocol_limits->http2;
     limits_.body_buffer_bytes = std::min<std::size_t>(16384, budget.capacity(server::resource::body_buffer_bytes) / 4);
     limits_.response_buffer_bytes = std::min<std::size_t>(16384, budget.capacity(server::resource::response_queue_bytes) / 4);
     limits_.websocket = config.websocket_limits;
@@ -43,11 +41,12 @@ http2_tcp_owner::http2_tcp_owner(io_socket_backend& backend, executor& workers, 
     dispatch_.hooks = &hooks; dispatch_.peers = peers; dispatch_.diagnostics = config.diagnostics;
     if (config.pages) dispatch_.pages = *config.pages;
 }
+std::size_t http2_tcp_owner::storage_capacity() { return sizeof(http2_tcp_owner) + 4096; }
 void http2_tcp_owner::start() {
     wire_->on_overflow([weak = weak_from_this()] { if (auto self = weak.lock()) self->close(http::outcome_code::limit_exceeded); });
     native_.progress = std::make_shared<executor::handler>([weak = weak_from_this()] { if (auto self = weak.lock()) self->notify(); });
     wire_->post([self = shared_from_this()] {
-        if (!self->budget_.reserve(server::resource::body_buffer_bytes, sizeof(http2_tcp_owner) + 4096, self->storage_).ok() ||
+        if (!self->budget_.reserve(server::resource::body_buffer_bytes, storage_capacity(), self->storage_).ok() ||
             !self->budget_.reserve(server::resource::timers, 1, self->timer_charge_).ok()) {
             self->close(http::outcome_code::limit_exceeded); self->finalize_if_retired(); return;
         }
