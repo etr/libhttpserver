@@ -27,7 +27,10 @@ generations, wakeups and deadlines. See the [external loop contract](https://git
 \section native_v3_routes Routes, exchanges and bodies
 
 Register routes before listen. \ref httpserver::server::route_registry has a
-single registration-order full-match class; register literal siblings first.
+full-match tier in registration order, followed by a deepest-prefix tier
+(\ref httpserver::server::native_server::route_prefix); ties follow registration
+order. Register literal full-match siblings first. Extension methods normalize
+to uppercase; HEAD requires explicit registration; regex routes are absent.
 \ref httpserver::server::make_sync_route adapts bounded value handlers.
 \ref httpserver::exchange is the coroutine decision surface; admit before
 reading with \ref httpserver::body_reader, commit before writing with
@@ -37,6 +40,13 @@ provide owned/reopened/leased body sources and per-send producers.
 
 \include v3_routes.cpp
 \include v3_route_handlers.hpp
+
+See the [complete runnable example index](../examples/README.md#native-v3-examples)
+for request fields/cookies/query decoding, body admission/trailers, Basic/Digest,
+URL-encoded/multipart adapters and sinks, all six response sources/overlays,
+hooks/diagnostics/peer policy/budgets, and cancellation/resume/drain. The body
+reader must reach EOF before start_response closes it; source leases own the
+actual immutable bytes and one-shot handle claims are not refundable.
 
 \section native_v3_cookies Owned cookie values
 

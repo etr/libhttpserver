@@ -251,8 +251,9 @@ make
 sudo make install
 ```
 
-`make check` runs the test suite (unit + integration). `make examples`
-builds every program under [`examples/`](examples/). `make dist` produces
+`make check` runs the test suite (unit + integration). `make -C examples`
+builds the fifteen [native v3 demonstrations](examples/README.md#native-v3-examples);
+the 38 historical v2 sources are unsupported on `v3`. `make dist` produces
 a portable source tarball.
 
 **ABI / packaging.** SOVERSION is 2. Distributions package
