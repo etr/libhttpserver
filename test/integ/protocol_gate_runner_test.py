@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the task-local runner's fail-closed contract."""
+import os
 import pathlib
 import subprocess
 import tempfile
@@ -48,8 +49,11 @@ class GateRunnerTest(unittest.TestCase):
             program = build / 'test/failing'
             program.write_text('#!/bin/sh\nexit 7\n')
             program.chmod(0o755)
+            env = os.environ.copy()
+            # This miniature source fixture is independent of the enclosing release archive.
+            env.pop('V3_RELEASE_IDENTITY', None)
             result = subprocess.run(['bash', str(runner), '--build-dir', str(build),
-                                     '--tests', 'failing'], capture_output=True, timeout=15)
+                                     '--tests', 'failing'], capture_output=True, timeout=15, env=env)
             self.assertEqual(result.returncode, 7)
 
     def test_whitespace_suite_cannot_pass(self):

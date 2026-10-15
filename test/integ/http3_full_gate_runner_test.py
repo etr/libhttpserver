@@ -307,6 +307,26 @@ class FullGateContracts(unittest.TestCase):
             result = self.gate.run_native_suites(build, ['http3_frame'], Path(tmp) / 'evidence')
             self.assertEqual(result['suites'][0]['binary'], self.gate.artifact(suite))
 
+    def test_cxx20_configuration_accepts_configure_compiler_standard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            build = Path(tmp)
+            (build / 'src').mkdir()
+            (build / 'test').mkdir()
+            for name in ('config.h', 'config.log', 'test/Makefile'):
+                (build / name).write_text('/* TLS disabled */')
+            makefile = build / 'src/Makefile'
+            prefix = 'abs_top_srcdir = ' + str(ROOT) + '\n'
+            makefile.write_text(prefix + 'CXX = clang++ -std=c++20\nAM_CXXFLAGS = -Wall\nCXXFLAGS = -O0 -g\n')
+            result = self.gate.build_configuration(build, False, False)
+            self.assertEqual(result['cxx'], 'clang++ -std=c++20')
+            self.assertEqual(result['am_cxxflags'], '-Wall')
+            self.assertEqual(result['cxxflags'], '-O0 -g')
+            with self.assertRaisesRegex(self.gate.GateFailure, 'uninstrumented'):
+                self.gate.build_configuration(build, False, True)
+            makefile.write_text(prefix + 'CXX = clang++\nCXXFLAGS = -O0 -g\n')
+            with self.assertRaisesRegex(self.gate.GateFailure, r'C\+\+20'):
+                self.gate.build_configuration(build, False, False)
+
     def test_reusing_configured_build_preserves_prior_build_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             build = Path(tmp) / 'build'

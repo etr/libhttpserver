@@ -137,6 +137,12 @@ __pycache__/
 !scripts/test-v3-cutover.py
 !scripts/check-v3-runtime-coexistence.py
 
+# TASK-185 release runner and dependency-free receipt contracts.
+!scripts/run-v3-release-gates.py
+!scripts/lib/v3_release_*.py
+!test/integ/release_gate_runner_test.py
+!test/integ/release_artifact_test.py
+
 .debug/
 
 !test/integ/native_websocket_regression.py

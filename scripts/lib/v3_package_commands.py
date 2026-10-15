@@ -164,12 +164,14 @@ class Commands:
         self.records = []
 
     def __call__(self, argv, cwd, env, timeout=1200, allow_failure=False):
+        started = time.monotonic()
         argv = [str(arg) for arg in argv]
         log = self.directory / ('command-%04d.log' % len(self.records))
         record = dict(argv=argv, cwd=str(cwd), log=str(log),
                       environment={key: env.get(key) for key in ('CXX', 'CPPFLAGS', 'LDFLAGS', 'CXXFLAGS',
                         'V3_TLS_CFLAGS', 'V3_TLS_LIBS', 'PKG_CONFIG_LIBDIR', 'PKG_CONFIG_PATH',
-                        'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'V3_PACKAGE_DLL_DIRS', 'V3_PACKAGE_TOOLCHAIN')})
+                        'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'V3_PACKAGE_DLL_DIRS', 'V3_PACKAGE_TOOLCHAIN', 'CC', 'PATH',
+                        'V3_RELEASE_IDENTITY', 'ASAN_OPTIONS', 'UBSAN_OPTIONS', 'TSAN_OPTIONS')})
         self.records.append(record)
         try:
             with log.open('wb') as output:
@@ -192,6 +194,7 @@ class Commands:
                     record['exit'] = child.returncode
                 except BaseException:
                     tree.terminate()
+                    record['exit'] = child.returncode
                     raise
                 finally:
                     if reader.ident is not None:
@@ -213,6 +216,7 @@ class Commands:
             record['error'] = str(error)
             raise
         finally:
+            record['duration_seconds'] = round(time.monotonic() - started, 6)
             (self.directory / 'commands.json').write_text(json.dumps(self.records, indent=2) + '\n')
 
 

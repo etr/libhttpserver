@@ -67,8 +67,24 @@ LT_BEGIN_AUTO_TEST(entropy_suite, zero_length_fill_succeeds)
     LT_CHECK(detail::entropy::fill(none).ok());
 LT_END_AUTO_TEST(zero_length_fill_succeeds)
 
+LT_BEGIN_AUTO_TEST(entropy_suite, single_byte_draw_preserves_bounds_and_reports_zero_rejection)
+    std::vector<std::byte> blob(3, std::byte{0x5a});
+    blob[1] = std::byte{0};
+    const auto filled = detail::entropy::fill(std::span(blob).subspan(1, 1));
+    LT_CHECK(blob.front() == std::byte{0x5a});
+    LT_CHECK(blob.back() == std::byte{0x5a});
+    // A valid single-byte OS draw is zero with probability 1/256; fill's
+    // documented all-zero rejection applies even to that small request.
+    if (blob[1] == std::byte{0}) {
+        LT_CHECK(filled.code() == http::outcome_code::protocol_error);
+        LT_CHECK(filled.message() == "entropy: OS randomness source returned zeros");
+    } else {
+        LT_CHECK(filled.ok());
+    }
+LT_END_AUTO_TEST(single_byte_draw_preserves_bounds_and_reports_zero_rejection)
+
 LT_BEGIN_AUTO_TEST(entropy_suite, fill_honors_length_and_reports_ok)
-    for (const std::size_t length : {std::size_t{1}, std::size_t{16},
+    for (const std::size_t length : {std::size_t{16},
                                      std::size_t{32}, std::size_t{64},
                                      std::size_t{257}, std::size_t{4096}}) {
         const std::vector<std::byte> blob = drawn(length);

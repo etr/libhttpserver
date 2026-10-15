@@ -9,9 +9,9 @@
 Provide final dependency, conformance, sanitizer and performance release gates for libhttpserver v3.0.
 
 **Action Items:**
-- [ ] Run all protocol, TLS, dependency, sanitizer and performance release suites on packaged artifacts.
-- [ ] Record release tool versions, exclusions and exact pass/fail receipts.
-- [ ] Require every v3.0 in-scope gate to pass before tagging.
+- [x] Run all protocol, TLS, dependency, sanitizer and performance release suites on packaged artifacts.
+- [x] Record release tool versions, exclusions and exact pass/fail receipts.
+- [x] Require every v3.0 in-scope gate to pass before tagging.
 
 **Dependencies:**
 - Blocked by: TASK-180, TASK-181, TASK-182, TASK-183, TASK-184, TASK-200
@@ -25,6 +25,20 @@ Provide final dependency, conformance, sanitizer and performance release gates f
 **Related Decisions:** DR-V3-001
 
 **Status:** In Progress
+
+**Implementation evidence:** [Packaged release gates](../../../docs/task-185-release-gates.md).
+The complete fresh `build/task185-final-19` inventory passes all 18 mandatory
+local gates on one selected archive; its launcher exits zero and retained
+receipts independently re-verify after the final stage. Local C++20, protocol,
+TLS, dependency, ASan/UBSan (including leak and stack checks), TSan, parity,
+resource, fuzz, public capability and full-workload benchmark acceptance passes.
+The H3 body-completion ordering repair and deterministic entropy zero-byte
+regression are included. The 20 optimized benchmark cells each complete 4,096
+measured requests. Exact hashes, counts, tools and unsuccessful historical
+attempts remain retained and documented. `local_passed=true`, `tag_ready=false`;
+FreeBSD, macOS and Windows remain CI/v3-PR owned and the pre-tag verifier rejects
+their missing evidence. The task stays In Progress for runner-owned validation,
+commits and finalization.
 
 **Authorized repair continuation (2026-10-10):** The user instructed that all
 remaining failures and missing capabilities be fixed. TASK-186–TASK-200 deliver

@@ -274,14 +274,15 @@ check-hygiene:
 # The README / release-notes / doxygen gates validate source-tree
 # documentation: README.md links into specs/ and docs/architecture/, which are
 # dev-facing and intentionally NOT shipped in the distributed tarball. Gate them
-# on the presence of specs/ so that `make check` from an unpacked release tarball
+# on a Git checkout with specs/ so that `make check` from an unpacked release tarball
 # still runs the full test suite plus the header / example / lint gates, but
-# skips the source-only doc gates whose inputs it cannot satisfy.
+# skips the source-only doc gates whose inputs it cannot satisfy. Release runners
+# may provide a verified specs/ tooling bundle; it is not a source checkout.
 check-local: check-headers check-examples lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage
-	@if test -d "$(top_srcdir)/specs"; then \
+	@if test -d "$(top_srcdir)/specs" && test -e "$(top_srcdir)/.git"; then \
 		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen ; \
 	else \
-		echo "check-local: skipping README/release-notes/doxygen gates (source-only; specs/ absent in distributed tarball)"; \
+		echo "check-local: skipping README/release-notes/doxygen gates (source checkout documentation; distributed tarball)"; \
 	fi
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
@@ -557,6 +558,15 @@ EXTRA_DIST += scripts/test-v3-installed-consumer.py scripts/test-v3-package-work
 EXTRA_DIST += docs/v2-to-v3-migration.md docs/v3-api.md docs/task-183-migration-evidence.md examples/README.md
 
 EXTRA_DIST += scripts/audit-v3-native-linkage.sh scripts/test-v3-cutover.py scripts/check-v3-runtime-coexistence.py docs/task-184-cutover-evidence.md
+
+# Pre-tag gates are explicit; ordinary check runs only receipt contracts.
+EXTRA_DIST += scripts/run-v3-release-gates.py scripts/lib/v3_release_artifact.py \
+ scripts/lib/v3_release_checks.py scripts/lib/v3_release_execution.py docs/task-185-release-gates.md
+check-v3-release-gates:
+	@python3 $(top_srcdir)/scripts/run-v3-release-gates.py $(RELEASE_GATE_ARGS)
+check-v3-tag-ready:
+	@python3 $(top_srcdir)/scripts/run-v3-release-gates.py --check-tag-ready $(RELEASE_GATE_MANIFEST)
+.PHONY: check-v3-release-gates check-v3-tag-ready
 
 EXTRA_DIST += scripts/check-v3-public-tls.py test/installed/v3_tls_consumer.cpp
 

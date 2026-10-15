@@ -110,6 +110,27 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 interop.simulator_clock_configuration(path)
 
+    def test_retained_clock_receipt_revalidates_selected_path_after_worktree_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "retained-receipt.json"
+            core = Path(temp) / "core.so"
+            core.write_bytes(b"retained simulator core")
+            checksum = interop.hashlib.sha256(core.read_bytes()).hexdigest()
+            receipt = {"status": "passed", "upstream_image": interop.SIMULATOR,
+                       "clock": "steady_clock", "receipt_path": "/removed/task196/receipt.json",
+                       "image_id": "sha256:" + "1" * 64, "core_binary_sha256": checksum,
+                       "artifacts": [{"path": str(core), "sha256": checksum}]}
+            path.write_text(json.dumps(receipt))
+            with mock.patch.object(interop.subprocess, "check_output",
+                                   return_value=checksum + "  /ns3/out/lib/libns3.46.1-core.so\n"):
+                selected = interop.simulator_clock_configuration(path)
+                self.assertEqual(selected["receipt_path"], str(path.resolve()))
+                self.assertEqual(interop.simulator_clock_configuration(selected["receipt_path"]), selected)
+                self.assertEqual(json.loads(path.read_text()), receipt)
+                core.write_bytes(b"modified simulator core")
+                with self.assertRaisesRegex(ValueError, "artifact changed"):
+                    interop.simulator_clock_configuration(selected["receipt_path"])
+
     def test_simulator_selects_realtime_before_scenario_initialization(self):
         compose = ("services:\n  sim:\n    environment:\n"
                    "      - SCENARIO=$SCENARIO\n  client:\n    environment:\n"
@@ -162,6 +183,32 @@ class RunnerTests(unittest.TestCase):
             manifest = json.loads((output / "manifest.json").read_text())
             self.assertFalse(manifest["passed"])
             self.assertTrue((output / "stdout.log").exists())
+
+    def test_task173_copied_observation_imports_without_source_checkout(self):
+        with tempfile.TemporaryDirectory() as temp:
+            runner = Path(temp) / "runner"
+            runner.mkdir()
+            (runner / "run.py").write_text("import json,sys\nfrom pathlib import Path\n"
+                "sys.path.insert(0, str(Path.cwd()))\n"
+                "from task196_observation import validate_terminal_challenges\n"
+                "assert callable(validate_terminal_challenges)\n"
+                "Path(sys.argv[sys.argv.index('-j')+1]).write_text(json.dumps({'results':[[]]}))\n"
+                "print('observation import ready')\n")
+            (runner / "implementations_quic.json").write_text("{}")
+            (runner / "testcases_quic.py").write_text("        unresponded = [c for c in challenges if c not in responses]\n")
+            (runner / "docker-compose.yml").write_text("image: martenseemann/quic-network-simulator\n")
+            output = Path(temp) / "evidence"
+            def identity(command, **kwargs):
+                return '[{"Id":"sha256:test-fixture"}]' if command[0] == "docker" else "source-head"
+            original = interop.run_bounded
+            def isolated(command, *args):
+                return original([command[0], '-I', *command[1:]], *args)
+            with mock.patch.object(interop, "preflight"), mock.patch.object(interop.subprocess, "check_output", side_effect=identity), mock.patch.object(interop.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"", b"")), mock.patch.object(interop, "run_bounded", side_effect=isolated):
+                with self.assertRaises(ValueError):
+                    interop.main(["--runner-dir", str(runner), "--output", str(output),
+                                  "--server-image", "test-endpoint", "--matrix", "task173"])
+            self.assertIn('observation import ready', (output / "stdout.log").read_text(),
+                          (output / "stderr.log").read_text())
 
 class Task173MatrixTests(unittest.TestCase):
     cases = ("handshake", "transfer", "transferloss", "rebind-port", "amplificationlimit", "keyupdate")

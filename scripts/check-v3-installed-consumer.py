@@ -12,6 +12,7 @@ import shutil
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
+import v3_release_artifact as release_identity
 import v3_package_matrix as matrix
 from v3_package_commands import Commands, runtime_environment
 from v3_package_integration import compile_probe, run_suites
@@ -39,7 +40,7 @@ def package_lane(args, source, output, mode, inventory):
     env['LDFLAGS'] = shlex.join(['-L' + (root / 'lib').as_posix() for root in args.prerequisite_prefix])
     if os.name != 'nt':
         env['LDFLAGS'] += ' ' + shlex.join(['-Wl,-rpath,' + (root / 'lib').as_posix() for root in args.prerequisite_prefix + [args.provider_prefix]])
-    env['CXXFLAGS'] = '-O0 -g'
+    env['CXXFLAGS'] = '-O3 -g' if args.optimized else '-O0 -g'
     if mode == 'yes':
         env['V3_TLS_CFLAGS'] = '-I' + (args.provider_prefix / 'include').as_posix()
         env['V3_TLS_LIBS'] = '-L' + (args.provider_prefix / 'lib').as_posix() + ' -lssl -lcrypto'
@@ -128,6 +129,7 @@ def main():
     parser.add_argument('--client-python', default=sys.executable)
     parser.add_argument('--node', default='node')
     parser.add_argument('--make', default='make')
+    parser.add_argument('--optimized', action='store_true', help='Build optimized production libraries for release performance gates')
     args = parser.parse_args()
     source = Path(__file__).resolve().parent.parent
     for key in ('output', 'provider_prefix', 'toolchain_prefix'):
@@ -146,8 +148,10 @@ def main():
         inventory = matrix.load()
         matrix.cells(inventory, platform.system())
         identity = Commands(output)
-        summary['revision'] = identity(['git', 'rev-parse', 'HEAD'], source, audit.clean_environment()).strip()
-        summary['branch'] = identity(['git', 'branch', '--show-current'], source, audit.clean_environment()).strip()
+        summary['revision'] = release_identity.revision(source)
+        summary['branch'] = ('source-archive' if os.environ.get('V3_RELEASE_IDENTITY') else
+                             identity(['git', 'branch', '--show-current'], source, audit.clean_environment()).strip())
+        summary['release_artifact'] = release_identity.source_identity(source)
         summary['compiler_version'] = identity(shlex.split(args.compiler) + ['--version'], source, audit.clean_environment())
         summary['python_version'] = sys.version
         summary['tool_versions'] = {tool: identity([tool, '--version'], source, audit.clean_environment())

@@ -16,6 +16,9 @@ import sys
 
 UPLOAD = b'first\x00second\xffthird\x00'
 PINS = {'aioquic': '1.3.0', 'quic-go': 'v0.55.0'}
+sys.path.insert(0, str(Path(__file__).parent / 'lib'))
+import v3_release_artifact as release_identity
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -516,7 +519,7 @@ def main():
     parser.add_argument('--go-client',type=Path,required=True)
     args=parser.parse_args()
     logs_owned=False
-    manifest={'source_head':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'pins':PINS,'status':'failed','matrix':args.matrix,'command':sys.argv,'capture_kind':'application-boundary datagrams with synthesized IPv4/UDP envelopes','nonlocal_checks':'BSD, Windows and other platforms deferred to CI/v3 PR per repository policy'}
+    manifest={'source_head':release_identity.revision(ROOT),'pins':PINS,'status':'failed','matrix':args.matrix,'command':sys.argv,'capture_kind':'application-boundary datagrams with synthesized IPv4/UDP envelopes','nonlocal_checks':'BSD, Windows and other platforms deferred to CI/v3 PR per repository policy'}
     try:
         fixture=(args.build_dir/'test/http3_udp_fixture').resolve()
         need(fixture.is_file() and os.access(fixture,os.X_OK),'fixture binary missing')
@@ -563,8 +566,8 @@ def main():
             manifest['go_client_sha256']=hashlib.sha256(args.go_client.read_bytes()).hexdigest() if args.go_client.is_file() else None
             parity=args.build_dir/'test/http3_semantic_parity_fixture'
             if args.matrix=='task174' and parity.is_file():manifest['parity_fixture_sha256']=hashlib.sha256(parity.read_bytes()).hexdigest()
-            patch=subprocess.check_output(['git','diff','--binary','HEAD'],cwd=ROOT)
-            for name in subprocess.check_output(['git','ls-files','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines():
+            patch=release_identity.working_diff(ROOT)
+            for name in ([] if os.environ.get('V3_RELEASE_IDENTITY') else subprocess.check_output(['git','ls-files','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()):
                 result=subprocess.run(['git','diff','--no-index','--binary','--','/dev/null',name],cwd=ROOT,capture_output=True)
                 need(result.returncode in (0,1),'working diff capture failed')
                 patch+=result.stdout

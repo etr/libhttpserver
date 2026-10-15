@@ -1,7 +1,7 @@
 # libhttpserver — Task Plans
 
 **Status:** v2 historical plan; v3.0 task plan approved for implementation
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-14
 **Owner:** Sebastiano Merlino
 **Inputs:** [product specs](../product_specs.md), [architecture](../architecture/)
 
@@ -10,6 +10,11 @@
 ## v3.0 plan
 
 105 tasks, TASK-096–TASK-200, across M8–M14. The 15 M14 repairs implement the 2026-10-10 instruction to fix all remaining local release failures and missing public capabilities; TASK-185 runs after those dependencies. See the [repair roadmap](v3-release-repair-roadmap.md). M1–M7 and TASK-001–TASK-095 remain the v2 plan. Current task states appear in the status table and task cards. Estimates are S ≈ 1 day, M ≈ 2 days, L ≈ 3 days of focused implementation and tests; interoperability work may take longer.
+
+TASK-185 remains In Progress for runner-owned validation and finalization. Its
+fresh `task185-final-19` package passes all 18 mandatory local release gates;
+FreeBSD, macOS and Windows evidence remains CI/v3-PR owned and blocks tag
+readiness. See the [release evidence](../../docs/task-185-release-gates.md).
 
 ### v3 integration branch
 
