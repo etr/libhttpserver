@@ -15,6 +15,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, str(Path(__file__).parent / 'lib'))
+import v3_release_artifact as release_identity
+
 ROOT = Path(__file__).resolve().parents[1]
 INVENTORY = ROOT / 'test/conformance/http3/full-gates.json'
 OFF_SUITES = '''http3_frame http3_settings http3_connection http3_headers http3_exchange
@@ -290,7 +293,7 @@ def run_native_suites(build, suites, directory):
     return {'suites': results, 'artifacts': evidence_tree(directory)}
 
 
-def validate_fuzz(directory, targets):
+def validate_fuzz(directory, targets, header_only=()):
     evidence_tree(directory)
     capability = (directory / 'capability.log').read_text()
     probe_runs = re.findall(r'Done (\d+) runs in \d+ second\(s\)', capability)
@@ -304,7 +307,9 @@ def validate_fuzz(directory, targets):
         need(all((path / name).is_file() for name in ('compile.sh', 'reproduce.sh', 'run.log', 'build.log', 'fuzz')), 'incomplete fuzz evidence: ' + target)
         recipe = shlex.split((path / 'compile.sh').read_text())
         need(all(flag in recipe for flag in ('-std=c++20', '-fsanitize=fuzzer,address,undefined', '-fno-sanitize-recover=undefined'))
-             and any(str(ROOT / 'src/detail') + '/' in argument and argument.endswith('.cpp') for argument in recipe)
+             and (any(str(ROOT / 'src/detail') + '/' in argument and argument.endswith('.cpp') for argument in recipe)
+                  or (target in header_only and target in ('http1_body', 'hpack')
+                      and str(ROOT / 'test/fuzz' / (target + '_fuzz.cpp')) in recipe))
              and not any(argument.endswith('.a') for argument in recipe), 'fuzz sources are not instrumented')
         replay = shlex.split((path / 'reproduce.sh').read_text())
         need(all(flag in replay for flag in ('-runs=2000', '-max_total_time=30', '-timeout=5', '-rss_limit_mb=512', '-seed=128')), 'wrong fuzz bounds')
@@ -346,11 +351,7 @@ def checked(command, cwd, output, timeout=1800):
 
 
 def source_identity():
-    names = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=ROOT).decode().split('\0')
-    hashes = {name: digest(ROOT / name) for name in sorted(set(names)) if name and (ROOT / name).is_file()}
-    return {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-            'files_sha256': hashes, 'snapshot_sha256': hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest(),
-            'working_diff_sha256': hashlib.sha256(subprocess.check_output(['git', 'diff', '--binary', 'HEAD'], cwd=ROOT)).hexdigest()}
+    return release_identity.source_identity(ROOT)
 
 
 def build_configuration(build, tls, sanitized):
@@ -359,12 +360,16 @@ def build_configuration(build, tls, sanitized):
     makefile = (build / 'src/Makefile').read_text()
     srcdir = re.search(r'^abs_top_srcdir = (.+)$', makefile, re.M)
     need(srcdir and Path(srcdir[1]).resolve() == ROOT, 'build configured for another source tree')
-    flags = re.search(r'^CXXFLAGS = (.+)$', makefile, re.M)
-    need(flags and '-std=c++20' in flags[1], 'missing C++20 configuration')
+    values = {}
+    for name in ('CXX', 'AM_CXXFLAGS', 'CXXFLAGS'):
+        match = re.search(r'^' + name + r' = (.*)$', makefile, re.M)
+        values[name] = match[1] if match else ''
+    need('-std=c++20' in ' '.join(values.values()).split(), 'missing C++20 configuration')
     if sanitized:
-        need('-fsanitize=address,undefined' in flags[1] and '-fno-sanitize-recover=undefined' in flags[1], 'uninstrumented sanitizer configuration')
+        need('-fsanitize=address,undefined' in values['CXXFLAGS'] and '-fno-sanitize-recover=undefined' in values['CXXFLAGS'], 'uninstrumented sanitizer configuration')
     return {'path': str(build), 'tls': tls, 'sanitized': sanitized,
-            'cxxflags': flags[1], 'configuration': [artifact(build / p) for p in ('config.h', 'config.log', 'src/Makefile', 'test/Makefile')]}
+            'cxx': values['CXX'], 'am_cxxflags': values['AM_CXXFLAGS'], 'cxxflags': values['CXXFLAGS'],
+            'configuration': [artifact(build / p) for p in ('config.h', 'config.log', 'src/Makefile', 'test/Makefile')]}
 
 
 def native_stage(build, suites, directory, fixtures=False):

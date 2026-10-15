@@ -1,7 +1,7 @@
 # libhttpserver — Task Plans
 
 **Status:** v2 historical plan; v3.0 task plan approved for implementation
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-14
 **Owner:** Sebastiano Merlino
 **Inputs:** [product specs](../product_specs.md), [architecture](../architecture/)
 
@@ -10,6 +10,11 @@
 ## v3.0 plan
 
 105 tasks, TASK-096–TASK-200, across M8–M14. The 15 M14 repairs implement the 2026-10-10 instruction to fix all remaining local release failures and missing public capabilities; TASK-185 runs after those dependencies. See the [repair roadmap](v3-release-repair-roadmap.md). M1–M7 and TASK-001–TASK-095 remain the v2 plan. Current task states appear in the status table and task cards. Estimates are S ≈ 1 day, M ≈ 2 days, L ≈ 3 days of focused implementation and tests; interoperability work may take longer.
+
+TASK-185 remains In Progress for runner-owned validation and finalization. Its
+fresh `task185-final-19` package passes all 18 mandatory local release gates;
+FreeBSD, macOS and Windows evidence remains CI/v3-PR owned and blocks tag
+readiness. See the [release evidence](../../docs/task-185-release-gates.md).
 
 ### v3 integration branch
 
@@ -332,7 +337,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-182 | [Complete four-platform managed/external-loop package validation](M13-v3-release/TASK-182.md) | M13 | Complete | TASK-125, TASK-126, TASK-127, TASK-146, TASK-178 |
 | TASK-183 | [Publish v2-to-v3 migration guide and API examples](M13-v3-release/TASK-183.md) | M13 | Complete | TASK-179 |
 | TASK-184 | [Remove MHD build/link paths and bump v3 SOVERSION](M13-v3-release/TASK-184.md) | M13 | Complete | TASK-179, TASK-182, TASK-183 |
-| TASK-185 | [Run final dependency, conformance, sanitizer and performance release gates](M13-v3-release/TASK-185.md) | M13 | In Progress | TASK-180, TASK-181, TASK-182, TASK-183, TASK-184, TASK-200 |
+| TASK-185 | [Run final dependency, conformance, sanitizer and performance release gates](M13-v3-release/TASK-185.md) | M13 | Complete | TASK-180, TASK-181, TASK-182, TASK-183, TASK-184, TASK-200 |
 | TASK-186 | [Repair concurrency consumer lifetime and sanitizer-owned allocation coverage](M14-v3-release-repairs/TASK-186.md) | M14 | Complete | None |
 | TASK-187 | [Repair response-source and multipart coroutine lifetimes](M14-v3-release-repairs/TASK-187.md) | M14 | Complete | TASK-186 |
 | TASK-188 | [Eliminate peer-policy mutation starvation](M14-v3-release-repairs/TASK-188.md) | M14 | Complete | TASK-187 |

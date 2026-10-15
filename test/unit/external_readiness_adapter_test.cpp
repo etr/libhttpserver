@@ -47,18 +47,38 @@ struct allocation_failure {
     explicit allocation_failure(int allocation) { allocations_until_failure = allocation; }
     ~allocation_failure() { allocations_until_failure = -1; }
 };
-}  // namespace
-
-void* operator new(std::size_t size) {
+void fail_requested_allocation() {
     if (allocations_until_failure > 0 && --allocations_until_failure == 0) {
         allocations_until_failure = -1;
         throw std::bad_alloc();
     }
+}
+}  // namespace
+
+#ifdef LHS_TEST_WRAP_OPERATOR_NEW
+// Delegate successful allocations to the real allocator, including TSan's.
+#if __SIZEOF_SIZE_T__ == 8
+extern "C" void* __real__Znwm(std::size_t size);
+extern "C" void* __wrap__Znwm(std::size_t size) {
+    fail_requested_allocation();
+    return __real__Znwm(size);
+}
+#else
+extern "C" void* __real__Znwj(std::size_t size);
+extern "C" void* __wrap__Znwj(std::size_t size) {
+    fail_requested_allocation();
+    return __real__Znwj(size);
+}
+#endif
+#else
+void* operator new(std::size_t size) {
+    fail_requested_allocation();
     if (void* memory = std::malloc(size == 0 ? 1 : size)) return memory;
     throw std::bad_alloc();
 }
 void operator delete(void* memory) noexcept { std::free(memory); }
 void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
+#endif
 
 namespace srv = httpserver::server;
 namespace {

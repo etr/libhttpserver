@@ -11,7 +11,7 @@ text = (root / 'examples/Makefile.am').read_text()
 programs = set()
 for targets in re.findall(r'^noinst_PROGRAMS[ \t]*\+?=[ \t]*(.*)$', text, re.M):
     programs.update(targets.split())
-expected = {'v3_external_event_loop', 'v3_routes', 'v3_protocol_options', 'v3_websocket_echo'}
+expected = {'v3_external_event_loop', 'v3_routes', 'v3_protocol_options', 'v3_websocket_echo', 'v3_http3'}
 if programs != expected:
     raise SystemExit('FAIL: native public example manifest differs: ' + str(programs))
 for program in programs:

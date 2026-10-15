@@ -12,6 +12,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, str(Path(__file__).parent / 'lib'))
+import v3_release_artifact as release_identity
+
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('h3_gate_support', ROOT/'scripts/run-v3-http3-gates.py')
 support = importlib.util.module_from_spec(spec)
@@ -266,8 +269,8 @@ def record_sources(directory, manifest, fixture):
     sources.extend(str(p.relative_to(ROOT)) for p in (ROOT/'test/integ').glob('http3_websocket*.py'))
     manifest['source_files_sha256']={name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in sources if (ROOT/name).is_file()}
     manifest['fixture_sha256']=hashlib.sha256(fixture.read_bytes()).hexdigest() if fixture.is_file() else None
-    patch=subprocess.check_output(['git','diff','--binary','HEAD'],cwd=ROOT)
-    for name in subprocess.check_output(['git','ls-files','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines():
+    patch=release_identity.working_diff(ROOT)
+    for name in ([] if os.environ.get('V3_RELEASE_IDENTITY') else subprocess.check_output(['git','ls-files','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()):
         result=subprocess.run(['git','diff','--no-index','--binary','--','/dev/null',name],cwd=ROOT,capture_output=True)
         need(result.returncode in (0,1),'diff capture failed');patch+=result.stdout
     (directory/'working.diff').write_bytes(patch)
@@ -282,7 +285,7 @@ def main():
     parser.add_argument('--python',required=True)
     args=parser.parse_args()
     owned=False;fixture=(args.build_dir/'test/http3_udp_fixture').resolve()
-    manifest={'status':'failed','matrix':'websocket','command':sys.argv,'source_head':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'nonlocal_checks':'BSD, Windows and other nonlocal checks deferred to CI/v3 PR','capture_kind':'actual application-boundary datagrams with synthesized IPv4/UDP envelopes'}
+    manifest={'status':'failed','matrix':'websocket','command':sys.argv,'source_head':release_identity.revision(ROOT),'nonlocal_checks':'BSD, Windows and other nonlocal checks deferred to CI/v3 PR','capture_kind':'actual application-boundary datagrams with synthesized IPv4/UDP envelopes'}
     try:
         need(not args.log_dir.exists(),'evidence directory already exists; preserve prior evidence')
         need(fixture.is_file() and os.access(fixture,os.X_OK),'fixture binary missing')

@@ -65,7 +65,7 @@ printf '%s\n' '#include <cstddef>' '#include <cstdint>' 'extern "C" int LLVMFuzz
 flags=(-std=c++20 -pthread -g -O1 -fno-omit-frame-pointer -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined -DHTTPSERVER_COMPILATION -DPROTOCOL_LIBFUZZER -I"$root/src")
 "$compiler" "${flags[@]}" "$build/probe.cpp" -o "$build/probe" > "$build/capability.log" 2>&1 || { echo "libFuzzer instrumentation unavailable; see $build/capability.log" >&2; exit 1; }
 "$build/probe" -runs=1 -seed=128 -artifact_prefix="$build/probe-" >> "$build/capability.log" 2>&1 || exit 1
-{ git -C "$root" rev-parse HEAD; "$compiler" --version; printf '%s ' "${flags[@]}"; printf '\n'; } > "$build/environment.log"
+{ python3 "$root/scripts/lib/v3_release_artifact.py" --root "$root"; "$compiler" --version; printf '%s ' "${flags[@]}"; printf '\n'; } > "$build/environment.log"
 for target in $targets; do
     mkdir -p "$build/$target/seeds" "$build/$target/artifacts"
     # Only copies are writable by libFuzzer; source fixtures remain immutable.

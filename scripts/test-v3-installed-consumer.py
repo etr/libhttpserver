@@ -24,6 +24,26 @@ class MatrixTest(unittest.TestCase):
     def setUp(self):
         self.inventory = matrix.load()
 
+    def test_optimized_package_configure_selects_release_flags_without_changing_default(self):
+        from types import SimpleNamespace
+        spec = importlib.util.spec_from_file_location('installed_runner', Path(__file__).with_name('check-v3-installed-consumer.py'))
+        runner = importlib.util.module_from_spec(spec); spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'configure').write_text('printf "%s\\n" "$CXXFLAGS" > selected-flags\nexit 23\n')
+            for optimized, flags in ((False, '-O0 -g'), (True, '-O3 -g')):
+                with self.subTest(optimized=optimized):
+                    output = root / str(optimized); output.mkdir()
+                    args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc',
+                        prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=root,
+                        optimized=optimized)
+                    with self.assertRaises(RuntimeError):
+                        runner.package_lane(args, root, output, 'no', self.inventory)
+                    self.assertEqual((output / 'tls-no/build/selected-flags').read_text().strip(), flags)
+                    records = json.loads((output / 'tls-no/commands.json').read_text())
+                    self.assertEqual(records[0]['exit'], 23)
+                    self.assertEqual(records[0]['environment']['CXXFLAGS'], flags)
+
     def test_complete_matrix_and_identical_cases(self):
         cells = matrix.cells(self.inventory, 'Linux')
         self.assertEqual(8, len(cells))

@@ -159,8 +159,12 @@ void http3_request_engine::state::respond(record& r, std::uint16_t status, const
 bool http3_request_engine::state::stream_output(record& r) {
     if (!r.semantic || !r.semantic->streaming) return false;
     auto& body = r.semantic->body;
-    if (body.queued()) {
-        const auto n = std::min(body.queued(), limits.response_buffer_bytes);
+    // Observe completion first: once published, the producer cannot add bytes.
+    // An earlier empty-queue observation can become stale before finish arrives.
+    const bool finished = body.finished();
+    const auto queued = body.queued();
+    if (queued) {
+        const auto n = std::min(queued, limits.response_buffer_bytes);
         integer(r.output, 0);
         integer(r.output, n);
         r.output_body_begin = r.output.size();
@@ -168,7 +172,7 @@ bool http3_request_engine::state::stream_output(record& r) {
         r.output.insert(r.output.end(), payload.begin(), payload.end());
         return true;
     }
-    if (!body.finished()) return false;
+    if (!finished) return false;
     if (!r.output_trailers && !body.sent_trailers().empty()) {
         if (!section(r, 0, body.sent_trailers(), true, true)) {
             reset(r, 0x102);

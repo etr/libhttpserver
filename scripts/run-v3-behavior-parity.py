@@ -14,6 +14,9 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).parent / 'lib'))
+import v3_release_artifact as release_identity
+
 MODES = ('h1.0-tcp', 'h1.1-tcp', 'h1.0-tls', 'h1.1-tls', 'h2-tls', 'h3-quic')
 KINDS = {'h1.0-tcp': 'tcp', 'h1.1-tcp': 'tcp', 'h1.0-tls': 'tls',
          'h1.1-tls': 'tls', 'h2-tls': 'tls', 'h3-quic': 'quic'}
@@ -408,11 +411,21 @@ def suite_command(binary):
     return [binary]
 
 
+def receipt_directory(root, directory):
+    root, directory = root.resolve(), directory.resolve()
+    if directory.exists():
+        raise ValueError('require a fresh receipt directory')
+    if not directory.is_relative_to(root):
+        if not os.environ.get('V3_RELEASE_IDENTITY'):
+            raise ValueError('require a receipt directory inside the task worktree')
+        release_identity.verified(root)
+    return directory
+
+
 def run_audit(root, inventory, tls_on, tls_off, python, openssl, directory):
     """Execute this fixed corpus and its named capability checks; retain failures."""
-    root, directory = root.resolve(), directory.resolve()
-    if directory.exists() or not directory.is_relative_to(root):
-        raise ValueError('require a fresh receipt directory inside the task worktree')
+    root = root.resolve()
+    directory = receipt_directory(root, directory)
     directory.mkdir(parents=True)
     receipt = {'v': 1, 'task': 'TASK-179', 'inputs': input_hashes(root, inventory),
                'commands': [], 'observations': [], 'supporting': [], 'outcomes': []}
@@ -430,7 +443,7 @@ def run_audit(root, inventory, tls_on, tls_off, python, openssl, directory):
                 output.write(str(error) + '\n')
             code = 124
         command = {'id': identity, 'argv': [str(arg) for arg in argv], 'cwd': str(cwd), 'exit': code,
-                   'log': str(log.relative_to(root)), 'tool': tool or 'task-local executable'}
+                   'log': str(log.relative_to(root)) if log.is_relative_to(root) else str(log), 'tool': tool or 'task-local executable'}
         receipt['commands'].append(command)
         if code:
             raise RuntimeError(identity + ' failed; see ' + command['log'])

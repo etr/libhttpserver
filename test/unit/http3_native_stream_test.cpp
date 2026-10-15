@@ -4,6 +4,9 @@
 #include <memory>
 #include <string>
 #include <thread>
+#if defined(LHS_TEST_H3_STREAM_RACE)
+#include <pthread.h>
+#endif
 #include "./http3_request_fixture.hpp"
 #include "./http3_websocket_fixture.hpp"
 #include "./littletest.hpp"
@@ -12,6 +15,25 @@ namespace hs = httpserver::server;
 namespace http = httpserver::http;
 using httpserver::exchange;
 using httpserver::task;
+
+#if defined(LHS_TEST_H3_STREAM_RACE)
+namespace publication_probe {
+thread_local int remaining = -1;
+thread_local httpserver::manual_executor* workers = nullptr;
+thread_local httpserver::resume_signal* ready = nullptr;
+}
+extern "C" int __real_pthread_mutex_unlock(pthread_mutex_t* mutex);
+extern "C" int __wrap_pthread_mutex_unlock(pthread_mutex_t* mutex) {
+    const auto result = __real_pthread_mutex_unlock(mutex);
+    if (publication_probe::remaining >= 0 && publication_probe::remaining-- == 0) {
+        // One shot: worker execution itself unlocks mutexes. The real owner
+        // unlock has completed, so the worker can publish at this exact seam.
+        publication_probe::ready->signal();
+        publication_probe::workers->run_pending();
+    }
+    return result;
+}
+#endif
 namespace {
 struct fixture : h3test::request_fixture {
     httpserver::manual_executor workers;
@@ -60,6 +82,47 @@ LT_BEGIN_AUTO_TEST(native_h3_suite, destroyed_engine_retires_stream_before_affin
     hold.signal(); workers.run_pending();
     LT_CHECK_EQ(completions, 1u);
 LT_END_AUTO_TEST(destroyed_engine_retires_stream_before_affinity_closure_releases_last_reference)
+#if defined(LHS_TEST_H3_STREAM_RACE)
+LT_BEGIN_AUTO_TEST(native_h3_suite, completion_between_owner_observations_never_overtakes_body_or_trailers)
+    for (bool trailers : {false, true}) {
+        for (int seam = 0; seam < 16; ++seam) {
+            fixture f;
+            httpserver::resume_signal ready;
+            const std::string payload(1024, 'x');
+            LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [&](exchange& x) -> task<void> {
+                http::fields fields; fields.append("content-length", std::to_string(payload.size()));
+                x.start_response(http::status::from_code(200), fields);
+                co_await ready.wait();
+                co_await x.writer().write(std::as_bytes(std::span(payload)));
+                http::fields tail;
+                if (trailers) tail.append("x-finished", "yes");
+                co_await x.writer().finish(tail);
+            }).ok());
+            f.open(0); LT_ASSERT(f.feed(0, h3test::headers(h3test::get()), true));
+            f.workers.run_pending(); f.drain();
+            LT_CHECK_EQ(f.fins[0], 0u);
+            // Enumerate owner mutex-release seams, including the empty-queue
+            // observation. Complete the suspended producer before it resumes.
+            publication_probe::workers = &f.workers;
+            publication_probe::ready = &ready;
+            publication_probe::remaining = seam;
+            f.engine->pump_output();
+            publication_probe::remaining = -1;
+            publication_probe::workers = nullptr;
+            publication_probe::ready = nullptr;
+            ready.signal(); f.workers.run_pending(); f.drain();
+            const auto response = h3test::decode_response(f.output[0]);
+            LT_CHECK_EQ(response.body, payload);
+            LT_CHECK_EQ(f.fins[0], 1u);
+            LT_CHECK_EQ(response.heads.size(), trailers ? 2u : 1u);
+            if (trailers && response.heads.size() == 2) {
+                LT_CHECK_EQ(response.heads.back().front().name, std::string("x-finished"));
+                LT_CHECK_EQ(response.heads.back().front().value, std::string("yes"));
+            }
+        }
+    }
+LT_END_AUTO_TEST(completion_between_owner_observations_never_overtakes_body_or_trailers)
+#endif
 LT_BEGIN_AUTO_TEST(native_h3_suite, response_command_owns_cached_field_storage_after_handler_returns)
     fixture f;
     LT_ASSERT(f.routes.route(http::method::known(http::method_id::get), "/hello", [](exchange& x) -> task<void> {

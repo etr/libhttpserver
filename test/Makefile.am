@@ -302,6 +302,7 @@ EXTRA_DIST = libhttpserver.supp \
              valgrind-helgrind.supp \
              valgrind-drd.supp \
              tsan.supp \
+             data/normalize_body_fixture \
              $(PARITY_TRANSCRIPTS) \
              PERFORMANCE.md \
              bench_harness.hpp \
@@ -783,6 +784,7 @@ readiness_contract_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test
 readiness_contract_LDADD =
 
 external_readiness_adapter_SOURCES = unit/external_readiness_adapter_test.cpp
+external_readiness_adapter_CPPFLAGS = $(AM_CPPFLAGS) $(EXTERNAL_READINESS_WRAP_CPPFLAGS)
 external_readiness_adapter_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 external_http1_e2e_SOURCES = integ/external_http1_e2e_test.cpp parity/response_frame.cpp parity/normalize.cpp
@@ -924,7 +926,7 @@ exchange_routing_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 external_http1_e2e_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
-external_readiness_adapter_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+external_readiness_adapter_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS) $(EXTERNAL_READINESS_WRAP_LDFLAGS)
 
 forms_multipart_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
@@ -1759,6 +1761,10 @@ endif
 # Native fixture dependencies must accompany their translation units in distributions.
 noinst_HEADERS += integ/raw_http_client.hpp parity/case_wire.hpp parity/v3_dispatch_replay.hpp unit/response_source_rig.hpp
 
+# TASK-185 contracts do not need providers, compilers, Docker or network clients.
+TESTS += integ/release_gate_runner_test.py integ/release_artifact_test.py
+EXTRA_DIST += integ/release_gate_runner_test.py integ/release_artifact_test.py release/task185-gates.json
+
 check_PROGRAMS += consumer_v3_peer_policy_runtime
 consumer_v3_peer_policy_runtime_SOURCES = integ/consumer_v3_peer_policy_runtime.cpp
 consumer_v3_peer_policy_runtime_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/examples
@@ -1800,9 +1806,9 @@ TESTS += ../scripts/test-v3-public-http3.py
 
 check_PROGRAMS += http3_native_stream
 http3_native_stream_SOURCES = unit/http3_native_stream_test.cpp
-http3_native_stream_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -I$(top_srcdir) -DHTTPSERVER_COMPILATION
+http3_native_stream_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -I$(top_srcdir) -DHTTPSERVER_COMPILATION $(H3_STREAM_RACE_CPPFLAGS)
 http3_native_stream_LDADD = $(top_builddir)/src/libhttpserver_v3core.la $(V3_TLS_LIBS)
-http3_native_stream_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+http3_native_stream_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS) $(H3_STREAM_RACE_LDFLAGS)
 
 EXTRA_DIST += installed/v3_http3_semantics.hpp installed/v3_http3_semantics.py
 EXTRA_DIST += installed/v3_http3_credentials.py

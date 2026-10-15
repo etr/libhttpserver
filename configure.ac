@@ -308,6 +308,30 @@ esac
 AC_SUBST([TASK_RACE_WRAP_CPPFLAGS])
 AC_SUBST([TASK_RACE_WRAP_LDFLAGS])
 
+# Force body publication between owner observations in the native H3 test only.
+H3_STREAM_RACE_CPPFLAGS=""
+H3_STREAM_RACE_LDFLAGS=""
+case $host_os in
+    linux* | freebsd* )
+        H3_STREAM_RACE_CPPFLAGS="-DLHS_TEST_H3_STREAM_RACE"
+        H3_STREAM_RACE_LDFLAGS="-Wl,--wrap=pthread_mutex_unlock"
+        ;;
+esac
+AC_SUBST([H3_STREAM_RACE_CPPFLAGS])
+AC_SUBST([H3_STREAM_RACE_LDFLAGS])
+
+# Preserve allocation-failure coverage without replacing sanitizer-owned new.
+EXTERNAL_READINESS_WRAP_CPPFLAGS=""
+EXTERNAL_READINESS_WRAP_LDFLAGS=""
+case $host_os in
+    linux* | freebsd* )
+        EXTERNAL_READINESS_WRAP_CPPFLAGS="-DLHS_TEST_WRAP_OPERATOR_NEW"
+        EXTERNAL_READINESS_WRAP_LDFLAGS="-Wl,--wrap=_Znwm -Wl,--wrap=_Znwj"
+        ;;
+esac
+AC_SUBST([EXTERNAL_READINESS_WRAP_CPPFLAGS])
+AC_SUBST([EXTERNAL_READINESS_WRAP_LDFLAGS])
+
 case $host_os in
     darwin* )
         AM_CXXFLAGS="$AM_CXXFLAGS -DDARWIN"

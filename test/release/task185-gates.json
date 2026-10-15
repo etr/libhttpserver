@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "gates": [
+    {
+      "id": "package",
+      "runner": "scripts/check-v3-installed-consumer.py",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "cxx20-off",
+      "runner": "make check",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "cxx20-on",
+      "runner": "make check",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "http1-websocket",
+      "runner": "scripts/run-v3-http1-websocket-gates.sh",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "http2",
+      "runner": "scripts/run-v3-http2-gates.py",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "http3-full",
+      "runner": "scripts/run-v3-http3-full-gates.py",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "tls",
+      "runner": "test/Makefile.am TLS suites",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "parity",
+      "runner": "scripts/run-v3-behavior-parity.py",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "resource-plateaus",
+      "runner": "native_protocol_memory resource_limits",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "resource-slow-peers",
+      "runner": "scripts/lib/resource_limits_probe.py",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "asan-ubsan-off",
+      "runner": "make check",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "asan-ubsan-on",
+      "runner": "make check",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "tsan-off",
+      "runner": "test/Makefile.am owner suites",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "tsan-on",
+      "runner": "test/Makefile.am TLS owner suites",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "fuzz-off",
+      "runner": "scripts/run-v3-protocol-fuzz.sh",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "fuzz-on",
+      "runner": "scripts/run-v3-protocol-fuzz.sh",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "public-capabilities",
+      "runner": "installed public TLS/H2/H3/credential witnesses",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    },
+    {
+      "id": "native-throughput-latency",
+      "runner": "native v3 benchmark receipts",
+      "requirements": [
+        "PRD-V3N-REQ-001",
+        "PRD-V3N-REQ-002",
+        "PRD-V3N-REQ-003",
+        "PRD-V3N-REQ-004",
+        "PRD-V3N-REQ-005",
+        "PRD-V3N-REQ-006",
+        "PRD-V3N-REQ-007",
+        "PRD-V3N-REQ-008",
+        "PRD-V3N-REQ-038"
+      ]
+    }
+  ],
+  "platforms": [
+    "FreeBSD",
+    "Darwin",
+    "Windows"
+  ],
+  "exclusions": [
+    {
+      "id": "tsan-allocation-injection",
+      "reason": "TSan owns operator new; only websocket_drain_race fault injection and task_resume_signal_lifetime timer-allocation reclaim interposition are omitted; normal and ASan coverage remain required."
+    },
+    {
+      "id": "h2spec-rfc9113",
+      "reason": "Only the pinned test/conformance/http2/h2spec-exclusions.tsv rows; independent clients remain required."
+    },
+    {
+      "id": "quic-optional",
+      "reason": "Only test/interop/quic/task173-matrix.json exclusions; mandatory authenticated closure and path predicates remain required."
+    }
+  ]
+}
