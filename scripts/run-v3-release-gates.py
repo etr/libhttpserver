@@ -11,8 +11,8 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-from v3_package_commands import Commands
-from v3_release_checks import (automake_counts, extract_archive, load_runner, verify_library_files)
+from package_commands import Commands
+from release_checks import (automake_counts, extract_archive, load_runner, verify_library_files)
 
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORMS = ('FreeBSD', 'Darwin', 'Windows')
@@ -200,7 +200,7 @@ def verify_local_receipts(manifest):
     verify_files(manifest.get('artifacts', []))
     for tool in manifest.get('tools', {}).values():
         if 'binary' in tool: verify_files([tool['binary']])
-    import v3_release_artifact as release_identity
+    import release_artifact as release_identity
     previous = os.environ.get('V3_RELEASE_IDENTITY')
     try:
         os.environ['V3_RELEASE_IDENTITY'] = str(manifest['artifact_identity_path'])
@@ -289,7 +289,7 @@ def main(argv=None):
     save(args.output / 'manifest.json', manifest)
     try:
         validate_inventory(manifest['inventory'])
-        from v3_release_execution import ReleaseAttempt
+        from release_execution import ReleaseAttempt
         ReleaseAttempt(args, sys.modules[__name__], manifest).execute()
         manifest['artifact_identity_path'] = str(args.output / 'artifact-identity.json')
         import_platform_receipts(manifest, args.platform_receipt)

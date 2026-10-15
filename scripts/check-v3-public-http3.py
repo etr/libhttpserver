@@ -5,11 +5,11 @@ import argparse, asyncio, hashlib, importlib.metadata, importlib.util, json, os,
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts/lib'))
-from v3_package_commands import Commands, runtime_environment
-from v3_package_integration import compile_probe
-from v3_package_matrix import check_linkage
-from v3_package_process import Consumer
-from v3_public_http3_inventory import CLIENTS, ONESHOTS, validate_client, validate_matrix, validate_stop_observation
+from package_commands import Commands, runtime_environment
+from package_integration import compile_probe
+from package_matrix import check_linkage
+from package_process import Consumer
+from public_http3_inventory import CLIENTS, ONESHOTS, validate_client, validate_matrix, validate_stop_observation
 
 def require(value,message):
     if not value: raise ValueError(message)
@@ -26,7 +26,7 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client,exampl
         require(output.strip()=='TLS_OFF_H3_REJECTED','same-source TLS-off typed H3 rejection')
         require(commands([example],directory,env).strip()=='replace=not_supported runtime=not_supported publish=not_supported remove=not_supported listen=not_supported port=0','installed example TLS-off rejection')
         return [],[dict(case='tls_off_h3_rejected',status='passed')]
-    from v3_public_http2_h2 import Client as H2Client
+    from public_http2_h2 import Client as H2Client
     for name in CLIENTS:
         process_receipt=directory/(name+'-basic-process.json')
         with Consumer([str(executable),str(fixtures),loop],directory,env,process_receipt) as child:
@@ -100,13 +100,13 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client,exampl
                 validate_client(result)
             child.stop()
         checks.append(dict(case=name+'_mixed_tcp_udp_same_port',status='passed'))
-    credentials=load(args.source/'test/installed/v3_http3_credentials.py','public_h3_credentials')
-    lifecycle=load(args.source/'test/installed/v3_http3_lifecycle.py','public_h3_lifecycle')
-    qpack=load(args.source/'test/installed/v3_http3_qpack.py','public_h3_qpack')
+    credentials=load(args.source/'test/installed/http3_credentials.py','public_h3_credentials')
+    lifecycle=load(args.source/'test/installed/http3_lifecycle.py','public_h3_lifecycle')
+    qpack=load(args.source/'test/installed/http3_qpack.py','public_h3_qpack')
     for family in ('migration','qpack'):
         with Consumer([str(executable),str(fixtures),loop],directory,env,directory/(family+'-process.json')) as child:
             port=child.port(); checks.append(asyncio.run(lifecycle.migrated_policy(child,port,fixtures,client) if family=='migration' else qpack.unblock(child,port,fixtures,client)));child.stop()
-    flow=load(args.source/'test/installed/v3_http3_flow.py','public_h3_flow')
+    flow=load(args.source/'test/installed/http3_flow.py','public_h3_flow')
     with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'impairment-process.json') as child:
         checks.append(asyncio.run(flow.loss_reordering(child,child.port(),fixtures,client,lifecycle,bool(args.sanitize))));child.stop()
     with Consumer([str(executable),str(fixtures),loop],directory,env,directory/'ws-writable-process.json') as child:
@@ -140,7 +140,7 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client,exampl
             observed=asyncio.run(credentials.mtls(child.port(),fixtures,client,required));checks.append(dict(case=mode,status='passed',scenarios=observed));child.stop()
     with Consumer([str(executable),str(fixtures),loop,'mixed'],directory,env,directory/'semantic-process.json') as child:
         port=child.port()
-        semantics=load(args.source/'test/installed/v3_http3_semantics.py','public_h3_semantics')
+        semantics=load(args.source/'test/installed/http3_semantics.py','public_h3_semantics')
         for protocol in ('h1','h2','h3'):
             observed=asyncio.run(semantics.h3_cases(port,fixtures,client) if protocol=='h3' else semantics.tcp_cases(port,fixtures,protocol,H2Client))
             require({row['case'] for row in observed}==set(semantics.CASES),'semantic scenario omissions')
@@ -149,7 +149,7 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client,exampl
     return rows,checks
 
 def mixed_tcp(port,fixtures):
-    from v3_public_http2_h2 import Client as H2Client
+    from public_http2_h2 import Client as H2Client
     context=ssl.create_default_context(cafile=str(fixtures/'root.pem'))
     context.set_alpn_protocols(['http/1.1'])
     with context.wrap_socket(socket.create_connection(('127.0.0.1',port),timeout=3),server_hostname='a.example') as peer:
@@ -186,7 +186,7 @@ def run(args):
                  cells=[],command=sys.argv,environment={k:env.get(k) for k in ('ASAN_OPTIONS','UBSAN_OPTIONS','TSAN_OPTIONS','LD_LIBRARY_PATH')})
     try:
         audit=load(source/'scripts/audit-v3-installed-package.py','audit')
-        client=load(source/'test/installed/v3_http3_aioquic.py','public_h3_client') if args.tls=='yes' else None
+        client=load(source/'test/installed/http3_aioquic.py','public_h3_client') if args.tls=='yes' else None
         receipt['revision']=receipt['branch']=None
         receipt['compiler']=commands(shlex.split(args.compiler)+['--version'],source,env)
         receipt['python']=dict(executable=sys.executable,version=sys.version,ssl=ssl.OPENSSL_VERSION,sha256=digest(Path(sys.executable)))
@@ -197,10 +197,10 @@ def run(args):
             receipt['clients']['aioquic']['source_hashes']={str(p):digest(p) for p in Path(aioquic.__file__).parent.rglob('*') if p.is_file() and p.suffix in ('.py','.so')}
             receipt['provider']={str(p):digest(p) for pattern in ('libssl.so*','libcrypto.so*','libssl.a','libcrypto.a') for p in (provider/'lib').glob(pattern) if p.is_file()}
         inputs=sorted(p for p in (source/'src').rglob('*') if p.suffix in ('.cpp','.hpp'))
-        inputs += [source/p for p in ('src/Makefile.am','test/Makefile.am','configure.ac','test/installed/v3_http3_consumer.cpp','test/installed/v3_http3_aioquic.py','test/installed/v3_http3_semantics.hpp','test/installed/v3_http3_semantics.py','test/installed/v3_http3_credentials.py','test/installed/v3_tls_client.cpp','test/integ/http3-client-go/public.go','scripts/check-v3-public-http3.py','scripts/lib/v3_public_http3_inventory.py','test/integ/http3_websocket_wire.py','scripts/test-v3-public-http3.py')]
-        inputs += [source/'scripts/lib/resource_limits_probe.py',source/'test/installed/v3_http3_flow.py',source/'test/installed/v3_http3_lifecycle.py',source/'test/installed/v3_http3_qpack.py']
-        inputs += [source/'examples/v3_http3.cpp',source/'examples/v3_example_ws.hpp',source/'examples/v3_tls_unavailable.hpp',source/'examples/v3_host_poll.hpp',source/'examples/v3_protocol_options.cpp',source/'examples/Makefile.am']
-        inputs += [source/'scripts/lib/v3_public_http2_h2.py']
+        inputs += [source/p for p in ('src/Makefile.am','test/Makefile.am','configure.ac','test/installed/http3_consumer.cpp','test/installed/http3_aioquic.py','test/installed/http3_semantics.hpp','test/installed/http3_semantics.py','test/installed/http3_credentials.py','test/installed/tls_client.cpp','test/integ/http3-client-go/public.go','scripts/check-v3-public-http3.py','scripts/lib/public_http3_inventory.py','test/integ/http3_websocket_wire.py','scripts/test-v3-public-http3.py')]
+        inputs += [source/'scripts/lib/resource_limits_probe.py',source/'test/installed/http3_flow.py',source/'test/installed/http3_lifecycle.py',source/'test/installed/http3_qpack.py']
+        inputs += [source/'examples/http3.cpp',source/'examples/example_ws.hpp',source/'examples/tls_unavailable.hpp',source/'examples/host_poll.hpp',source/'examples/protocol_options.cpp',source/'examples/Makefile.am']
+        inputs += [source/'scripts/lib/public_http2_h2.py']
         inputs += sorted((source/'test/integ/http3-client-go').glob('*.go')) + [source/'test/integ/http3-client-go/go.mod',source/'test/integ/http3-client-go/go.sum']
         receipt['source_hashes']={str(p.relative_to(source)):digest(p) for p in inputs}
         receipt['source_identity']=hashlib.sha256(json.dumps(receipt['source_hashes'],sort_keys=True).encode()).hexdigest()
@@ -209,11 +209,11 @@ def run(args):
         cflags=shlex.split(commands(['pkg-config','--cflags','libhttpserver'],args.output,env))
         require(not audit.consumer_flag_violations(cflags,(source,build)),'compile flag contamination')
         directory=Path(tempfile.mkdtemp(prefix='task196-installed-')); receipt['consumer_directory']=str(directory)
-        for name in ('test/installed/v3_http3_consumer.cpp','test/installed/v3_http3_semantics.hpp','examples/v3_host_poll.hpp','examples/v3_http3.cpp','examples/v3_example_ws.hpp','examples/v3_tls_unavailable.hpp','examples/v3_protocol_options.cpp'): shutil.copyfile(source/name,directory/Path(name).name)
+        for name in ('test/installed/http3_consumer.cpp','test/installed/http3_semantics.hpp','examples/host_poll.hpp','examples/http3.cpp','examples/example_ws.hpp','examples/tls_unavailable.hpp','examples/protocol_options.cpp'): shutil.copyfile(source/name,directory/Path(name).name)
         fixtures=directory/'fixtures';shutil.copytree(source/'test/data/tls_credentials',fixtures)
         if args.tls=='yes':
             independent=directory/'credential-fixtures'
-            commands([args.compiler,'-std=c++20','-I'+str(provider/'include'),source/'test/installed/v3_tls_client.cpp','-L'+str(provider/'lib'),'-Wl,-rpath,'+str(provider/'lib'),'-lssl','-lcrypto','-o',independent],directory,env)
+            commands([args.compiler,'-std=c++20','-I'+str(provider/'include'),source/'test/installed/tls_client.cpp','-L'+str(provider/'lib'),'-Wl,-rpath,'+str(provider/'lib'),'-lssl','-lcrypto','-o',independent],directory,env)
             require('libhttpserver' not in json.dumps(audit.dependency_graph([str(independent)])),'credential fixture tool links server')
             commands([independent,'fixtures',fixtures],directory,env)
             for identity in ('client-valid','client-other'):
@@ -228,14 +228,14 @@ def run(args):
             if linkage=='static':libraries=[str(prefix/'lib/libhttpserver.a') if f=='-lhttpserver' else f for f in libraries]
             libraries += ['-pthread','-Wl,-rpath,'+str(prefix/'lib'),'-Wl,-rpath,'+str(provider/'lib')]+shlex.split(args.sanitize)
             executable=directory/linkage
-            provenance=compile_probe(args.compiler,[directory/'v3_http3_consumer.cpp'],cflags+['-Wall','-Werror=return-type']+shlex.split(args.sanitize),libraries,executable,commands,env,source,build,prefix,False)
+            provenance=compile_probe(args.compiler,[directory/'http3_consumer.cpp'],cflags+['-Wall','-Werror=return-type']+shlex.split(args.sanitize),libraries,executable,commands,env,source,build,prefix,False)
             graph=audit.dependency_graph([str(executable)]);check_linkage(graph,linkage,prefix)
             require(not audit.graph_violations(graph,'strict',args.tls,'aggregate',audit.load_policy(),provider),'dependency graph violations')
             example=directory/(linkage+'-example')
-            example_provenance=compile_probe(args.compiler,[directory/'v3_http3.cpp'],cflags+shlex.split(args.sanitize),libraries,example,commands,env,source,build,prefix,False)
+            example_provenance=compile_probe(args.compiler,[directory/'http3.cpp'],cflags+shlex.split(args.sanitize),libraries,example,commands,env,source,build,prefix,False)
             check_linkage(audit.dependency_graph([str(example)]),linkage,prefix)
             protocol_example=directory/(linkage+'-protocol-example')
-            compile_probe(args.compiler,[directory/'v3_protocol_options.cpp'],cflags+shlex.split(args.sanitize),libraries,protocol_example,commands,env,source,build,prefix,False)
+            compile_probe(args.compiler,[directory/'protocol_options.cpp'],cflags+shlex.split(args.sanitize),libraries,protocol_example,commands,env,source,build,prefix,False)
             report=commands([protocol_example]+([fixtures/'example-chain.pem',fixtures/'a-key.pem'] if args.tls=='yes' else []),directory,env)
             require('HTTP/1.1 validate=ok listen=ok port=' in report,'protocol example plaintext bind')
             for label in ('TLS','HTTP/2','HTTP/3'):

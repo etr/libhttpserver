@@ -15,11 +15,11 @@ import sys
 import tempfile
 import time
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_native_benchmark as bench
-import v3_package_matrix as matrix
-from v3_package_commands import Commands, runtime_environment
-from v3_package_process import Consumer
-from v3_package_integration import compile_probe
+import native_benchmark as bench
+import package_matrix as matrix
+from package_commands import Commands, runtime_environment
+from package_process import Consumer
+from package_integration import compile_probe
 spec = importlib.util.spec_from_file_location('audit', Path(__file__).with_name('audit-v3-installed-package.py'))
 audit = importlib.util.module_from_spec(spec); spec.loader.exec_module(audit)
 
@@ -39,9 +39,9 @@ def normal_build(makefile, env):
 def identity(args):
     source, prefix, build, provider = args.source, args.prefix, args.build, args.provider_prefix
     files = sorted(p for p in (source / 'src').rglob('*') if p.suffix in ('.cpp', '.hpp'))
-    files += [source / name for name in ('configure.ac', 'src/Makefile.am', 'libhttpserver.pc.in', 'examples/v3_host_poll.hpp',
-        'test/installed/v3_benchmark_consumer.cpp', 'test/installed/v3_benchmark_client.py',
-        'scripts/run-v3-native-benchmarks.py', 'scripts/lib/v3_native_benchmark.py', 'scripts/lib/v3_package_integration.py')]
+    files += [source / name for name in ('configure.ac', 'src/Makefile.am', 'libhttpserver.pc.in', 'examples/host_poll.hpp',
+        'test/installed/benchmark_consumer.cpp', 'test/installed/benchmark_client.py',
+        'scripts/run-v3-native-benchmarks.py', 'scripts/lib/native_benchmark.py', 'scripts/lib/package_integration.py')]
     package = sorted(p for p in prefix.rglob('*') if p.is_file() and (p.suffix in ('.hpp', '.h', '.pc', '.a') or '.so' in p.name or '.dylib' in p.name or '.dll' in p.name))
     bench.require(package and (prefix / 'lib/libhttpserver.a').is_file(), 'missing installed package')
     normal_build((build / 'src/Makefile').read_text(), os.environ)
@@ -91,9 +91,9 @@ def run(args):
         # Source/header dependency audits reject compilation anywhere under source.
         directory = Path(tempfile.mkdtemp(prefix='task198-installed-'))
         receipt['consumer_directory'] = str(directory)
-        shutil.copyfile(args.source / 'test/installed/v3_benchmark_consumer.cpp', directory / 'consumer.cpp')
-        shutil.copyfile(args.source / 'examples/v3_host_poll.hpp', directory / 'v3_host_poll.hpp')
-        shutil.copyfile(args.source / 'test/installed/v3_benchmark_client.py', directory / 'client.py')
+        shutil.copyfile(args.source / 'test/installed/benchmark_consumer.cpp', directory / 'consumer.cpp')
+        shutil.copyfile(args.source / 'examples/host_poll.hpp', directory / 'host_poll.hpp')
+        shutil.copyfile(args.source / 'test/installed/benchmark_client.py', directory / 'client.py')
         fixtures = directory / 'fixtures'; shutil.copytree(args.source / 'test/data/tls_credentials', fixtures)
         receipt['consumers'] = {}
         for linkage in ('shared', 'static'):

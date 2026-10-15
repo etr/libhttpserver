@@ -258,7 +258,7 @@ installed witness holds a usable connection across rotation and validates the
 new certificate plus rejected-publication preservation.
 
 Public HTTP/2 uses the same native server, route table, hooks, peer policy and
-exchange API as HTTP/1. See [the public example](../examples/v3_http2.cpp) and
+exchange API as HTTP/1. See [the public example](../examples/http2.cpp) and
 [TASK-195 design](../specs/architecture/v3/TASK-195-design.md). TLS-off
 configuration rejects HTTP/2 before binding. TLS 1.2 HTTP/2 rejects forbidden
 ciphers before publishing request hooks.

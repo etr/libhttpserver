@@ -27,7 +27,7 @@
 #include "../support/http3_semantic_routes.hpp"
 #include "../support/http3_websocket_routes.hpp"
 #include "../unit/io_udp_backend_contract.hpp"
-#include <parity/v3_behavior_profiles.hpp>
+#include <parity/behavior_profiles.hpp>
 namespace {
 namespace h = httpserver;
 namespace hd = h::detail;

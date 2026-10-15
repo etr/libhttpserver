@@ -15,18 +15,18 @@ import sys
 import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/lib'))
-from v3_native_benchmark import require
-from v3_package_commands import Commands, runtime_environment
-from v3_package_integration import compile_probe
-from v3_package_matrix import check_linkage, check_scenarios
-from v3_package_process import Consumer
-from v3_public_http2_inventory import PYTHON, NODE, validate_client, validate_public, POLICY, ONESHOTS
+from native_benchmark import require
+from package_commands import Commands, runtime_environment
+from package_integration import compile_probe
+from package_matrix import check_linkage, check_scenarios
+from package_process import Consumer
+from public_http2_inventory import PYTHON, NODE, validate_client, validate_public, POLICY, ONESHOTS
 
 
 
 def scenarios(executable, loop, tls, directory, env, fixtures, commands, node, source):
-    from v3_public_http2_h2 import Client, basic, timeouts, drain, flow_credit, running_reset, budget_limits, queued_reset, disconnect, idle_deadline, require
-    from v3_public_http2_policy import policy, websocket
+    from public_http2_h2 import Client, basic, timeouts, drain, flow_credit, running_reset, budget_limits, queued_reset, disconnect, idle_deadline, require
+    from public_http2_policy import policy, websocket
     rows = []
     if tls == 'no':
         out = commands([executable, fixtures, loop, 'both'], directory, env)
@@ -67,7 +67,7 @@ def scenarios(executable, loop, tls, directory, env, fixtures, commands, node, s
         require(out.strip() == expected, 'H2 configuration predicate: ' + mode)
         rows.append(dict(family=mode, scenarios=[dict(case=case, status='passed')]))
     for family in NODE:
-        output = commands([node, source / 'test/installed/v3_http2_node.mjs', executable, fixtures, family, loop], directory, env, timeout=25)
+        output = commands([node, source / 'test/installed/http2_node.mjs', executable, fixtures, family, loop], directory, env, timeout=25)
         result = json.loads(output.strip().splitlines()[-1])
         validate_client(result, 'node', family)
         require(result['server']['executable'] == str(executable) and result['server']['exit'] == 0, 'Node public server identity')
@@ -90,7 +90,7 @@ def main():
 
 
 def run(args):
-    from v3_public_http2_h2 import Client
+    from public_http2_h2 import Client
     args.output = args.output.resolve(); args.output.mkdir(parents=True, exist_ok=False)
     prefix, source, build, provider = [p.resolve() for p in (args.prefix, args.source, args.build, args.provider_prefix)]
     command = Commands(args.output)
@@ -123,9 +123,10 @@ def run(args):
             require(receipt['node']['version'] == 'v24.15.0', 'Node pin differs')
         else: node = args.node
         inputs = sorted(p for p in (source / 'src').rglob('*') if p.suffix in ('.cpp', '.hpp'))
-        inputs += [source / p for p in ('src/Makefile.am', 'configure.ac', 'test/installed/v3_http2_consumer.cpp',
-                   'test/installed/v3_http2_node.mjs', 'test/installed/v3_http2_raw.mjs', 'examples/v3_http2.cpp', 'examples/v3_example_ws.hpp', 'examples/v3_tls_unavailable.hpp', 'scripts/check-v3-public-http2.py')]
-        inputs += sorted((source / 'scripts/lib').glob('v3_public_http2*.py'))
+        inputs += [source / p for p in ('src/Makefile.am', 'configure.ac', 'test/installed/http2_consumer.cpp',
+                   'test/installed/http2_node.mjs', 'test/installed/http2_raw.mjs', 'examples/http2.cpp', 'examples/example_ws.hpp', 'examples/tls_unavailable.hpp', 'scripts/check-v3-public-http2.py')]
+        inputs += [source / 'scripts/lib' / name for name in
+                   ('public_http2_h2.py', 'public_http2_inventory.py', 'public_http2_policy.py')]
         receipt['source_hashes'] = {str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
         receipt['source_identity'] = hashlib.sha256(json.dumps(receipt['source_hashes'], sort_keys=True).encode()).hexdigest()
         receipt['library_hashes'] = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in (prefix / 'lib').glob('libhttpserver.*') if p.is_file()}
@@ -135,7 +136,7 @@ def run(args):
         require(not audit.consumer_flag_violations(cflags, (source, build)), 'source/provider contaminated compile flags')
         consumer = Path(tempfile.mkdtemp(prefix='task195-installed-'))
         receipt['consumer_directory'] = str(consumer)
-        for p in ('test/installed/v3_http2_consumer.cpp', 'examples/v3_host_poll.hpp', 'examples/v3_http2.cpp', 'examples/v3_example_ws.hpp', 'examples/v3_tls_unavailable.hpp'):
+        for p in ('test/installed/http2_consumer.cpp', 'examples/host_poll.hpp', 'examples/http2.cpp', 'examples/example_ws.hpp', 'examples/tls_unavailable.hpp'):
             shutil.copyfile(source / p, consumer / Path(p).name)
         fixtures = consumer / 'fixtures'; shutil.copytree(source / 'test/data/tls_credentials', fixtures)
         (fixtures / 'client-valid-chain.pem').write_bytes((fixtures / 'client-valid.pem').read_bytes() + (fixtures / 'client-intermediate.pem').read_bytes())
@@ -147,7 +148,7 @@ def run(args):
             if linkage == 'static': libraries = [str(prefix / 'lib/libhttpserver.a') if f == '-lhttpserver' else f for f in libraries]
             libraries += ['-pthread', '-Wl,-rpath,' + str(prefix / 'lib'), '-Wl,-rpath,' + str(provider / 'lib')] + shlex.split(args.sanitize)
             executable = consumer / linkage
-            provenance = compile_probe(args.compiler, [consumer / 'v3_http2_consumer.cpp'], cflags + shlex.split(args.sanitize),
+            provenance = compile_probe(args.compiler, [consumer / 'http2_consumer.cpp'], cflags + shlex.split(args.sanitize),
                                        libraries, executable, command, env, source, build, prefix, False)
             validate_public(True, provenance['dependencies'], prefix, source, build)
             graph = audit.dependency_graph([str(executable)]); check_linkage(graph, linkage, prefix)
@@ -155,7 +156,7 @@ def run(args):
             require(not violations, 'dependency audit: ' + repr(violations))
             if args.tls == 'yes':
                 example = consumer / (linkage + '-example')
-                example_compile = compile_probe(args.compiler, [consumer / 'v3_http2.cpp'], cflags + shlex.split(args.sanitize),
+                example_compile = compile_probe(args.compiler, [consumer / 'http2.cpp'], cflags + shlex.split(args.sanitize),
                                                 libraries, example, command, env, source, build, prefix, False)
                 example_graph = audit.dependency_graph([str(example)]); check_linkage(example_graph, linkage, prefix)
                 with Consumer([str(example), str(fixtures / 'a-chain.pem'), str(fixtures / 'a-key.pem')], consumer, env,

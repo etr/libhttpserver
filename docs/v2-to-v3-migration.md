@@ -20,13 +20,13 @@ TCP/TLS/QUIC transport evidence; these are different kinds of proof.
 
 | Capability | Public native API status | Example or evidence |
 | --- | --- | --- |
-| Plaintext HTTP/1.0 and HTTP/1.1 | Managed and external listeners available | `v3_routes`, `v3_external_event_loop` |
-| HTTP/1.1 WebSocket Upgrade | Coroutine API available without legacy WS build flags | `v3_websocket_echo` |
-| Certificate TCP TLS HTTP/1 listeners | Public credential store, managed/external listeners in TLS-on builds | `test/installed/v3_tls_consumer.cpp` |
-| HTTP/2 and HTTP/3 listeners | TLS-on: TCP ALPN `h2`; explicit UDP QUICv1/TLS1.3 ALPN `h3`, managed/external | `v3_protocol_options`, `v3_http3` |
+| Plaintext HTTP/1.0 and HTTP/1.1 | Managed and external listeners available | `routes`, `external_event_loop` |
+| HTTP/1.1 WebSocket Upgrade | Coroutine API available without legacy WS build flags | `websocket_echo` |
+| Certificate TCP TLS HTTP/1 listeners | Public credential store, managed/external listeners in TLS-on builds | `test/installed/tls_consumer.cpp` |
+| HTTP/2 and HTTP/3 listeners | TLS-on: TCP ALPN `h2`; explicit UDP QUICv1/TLS1.3 ALPN `h3`, managed/external | `protocol_options`, `http3` |
 | HTTP/2 and HTTP/3 WebSocket | RFC8441/RFC9220 Extended CONNECT shares the bounded session API | Installed independent wire corpora |
-| Common HTTP/1.1, HTTP/2, HTTP/3 handlers | Semantic exchange contract exercised for each version | `test/unit/v3_examples_test.cpp` |
-| Certificate rotation | Public `tls_credentials::replace`, immutable accepted selections | `examples/v3_tls_rotation` (canonical source in `test/examples`), installed TLS runner |
+| Common HTTP/1.1, HTTP/2, HTTP/3 handlers | Semantic exchange contract exercised for each version | `test/unit/example_handlers_test.cpp` |
+| Certificate rotation | Public `tls_credentials::replace`, immutable accepted selections | `examples/tls_rotation` (canonical source in `test/examples`), installed TLS runner |
 
 `server_options::validate()` checks configuration semantics. TLS-on encrypted
 listeners also require compatible published credentials. HTTP/3 requires a UDP
@@ -49,7 +49,7 @@ evidence supplements the retained private transport and Extended CONNECT gates.
 | Regex route and `{name\|regex}` constraints | Removed from the native route table | Match in application handlers or a prefix wrapper; reject an invalid capture there |
 | Route registration after start | Register before `listen()` | Native registrations return `invalid_state` after listen |
 
-The [route example](../examples/v3_routes.cpp) registers GET and HEAD explicitly:
+The [route example](../examples/routes.cpp) registers GET and HEAD explicitly:
 HEAD is not an implicit promise that every GET route also accepts HEAD.
 Synchronous adapters have no streaming, upgrade, or suspension control. Use a
 coroutine exchange for those operations. They run on worker threads, so blocking
@@ -139,7 +139,7 @@ when an exchange has already committed or disconnected.
 | `stop()` called inside handler | `request_stop()` | Nonblocking initiation safe in handlers; cancels active exchanges, including the caller; no reply is guaranteed |
 | Controlling-thread shutdown | `stop()` | Joins workers; call outside counted handler work |
 | Graceful drain | `begin_drain(milliseconds, drain_ticket&)`, controlling-thread `ticket.wait(result)` | Deadline-bound completed/expired result; counted handler waits return `would_deadlock` |
-| `get_fdset`, `run`, `run_wait`, `add_connection` | External `readiness_driver::interests()` / `dispatch()` | Preserve generation tokens, host deadlines and worker wakeups; see `v3_external_event_loop` and the external-loop contract |
+| `get_fdset`, `run`, `run_wait`, `add_connection` | External `readiness_driver::interests()` / `dispatch()` | Preserve generation tokens, host deadlines and worker wakeups; see `external_event_loop` and the external-loop contract |
 
 ## Protocol framing and TLS migration
 
@@ -168,7 +168,7 @@ cancellation without joining application code. Public ACME publication/removal
 uses application-supplied material and exact SNI/sole `acme-tls/1` on TCP443.
 Post-handshake auth remains unavailable; see the [public TLS lifetime contract](native-tls-build.md).
 
-The [public listener rotation example](../test/examples/v3_tls_rotation.cpp)
+The [public listener rotation example](../test/examples/tls_rotation.cpp)
 uses `server::tls_credentials::replace()`: successful publication replaces the
 active generation, accepted sessions retain their contexts, and failed
 replacement leaves the active publication unchanged. It uses only installed
@@ -176,7 +176,7 @@ public headers. `check-v3-public-tls.py` verifies selected certificates and held
 handshakes/connections across replacement through installed shared/static
 libraries. The private rotation suite remains supporting lifetime evidence. Build the public
 demonstration with `--enable-examples` and run
-`./examples/v3_tls_rotation CERTIFICATE_DIRECTORY managed 0`;
+`./examples/tls_rotation CERTIFICATE_DIRECTORY managed 0`;
 see the [complete example commands](../examples/README.md).
 
 BSD, Windows and other nonlocal runs belong to CI and the v3 PR; the

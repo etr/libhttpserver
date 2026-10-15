@@ -12,11 +12,11 @@ import shutil
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_release_artifact as release_identity
-import v3_package_matrix as matrix
-from v3_package_commands import Commands, runtime_environment
-from v3_package_integration import compile_probe, run_suites
-from v3_package_traffic import traffic
+import release_artifact as release_identity
+import package_matrix as matrix
+from package_commands import Commands, runtime_environment
+from package_integration import compile_probe, run_suites
+from package_traffic import traffic
 
 spec = importlib.util.spec_from_file_location('audit', Path(__file__).with_name('audit-v3-installed-package.py'))
 audit = importlib.util.module_from_spec(spec)
@@ -70,12 +70,12 @@ def package_lane(args, source, output, mode, inventory):
         raise ValueError('\n'.join(violations))
     metadata['file'] = (prefix / 'lib/pkgconfig/libhttpserver.pc').read_text()
     (lane / 'metadata.json').write_text(json.dumps(metadata, indent=2))
-    shutil.copyfile(source / 'test/installed/v3_package_consumer.cpp', consumer_dir / 'consumer.cpp')
-    shutil.copyfile(source / 'examples/v3_host_poll.hpp', consumer_dir / 'v3_host_poll.hpp')
+    shutil.copyfile(source / 'test/installed/package_consumer.cpp', consumer_dir / 'consumer.cpp')
+    shutil.copyfile(source / 'examples/host_poll.hpp', consumer_dir / 'host_poll.hpp')
     public, integrations = {}, {}
     suffix = '.exe' if os.name == 'nt' else ''
     for linkage in inventory['linkages']:
-        executable = consumer_dir / (('v3_package_consumer' if linkage == 'shared' else 'static_consumer') + suffix)
+        executable = consumer_dir / (('package_consumer' if linkage == 'shared' else 'static_consumer') + suffix)
         libraries = shlex.split(metadata['libs' if linkage == 'shared' else 'static'])
         libraries += ['-L' + (root / 'lib').as_posix() for root in args.prerequisite_prefix]
         if linkage == 'static':
@@ -96,7 +96,7 @@ def package_lane(args, source, output, mode, inventory):
                 public[linkage]['cells'].append(traffic(executable, cell, consumer_dir, runtime_env, inventory))
                 (lane / 'public.json').write_text(json.dumps(public, indent=2))
         compiled_sources = []
-        for name in ('v3_compiled_operations.cpp', 'v3_compiled_operations_worker.cpp'):
+        for name in ('compiled_operations.cpp', 'compiled_operations_worker.cpp'):
             copied = consumer_dir / name
             if not copied.exists():
                 shutil.copyfile(source / 'test/installed' / name, copied)
@@ -121,7 +121,7 @@ def package_lane(args, source, output, mode, inventory):
     command([args.client_python, str(source / 'scripts/check-v3-public-http2.py'), '--prefix', str(prefix),
              '--provider-prefix', str(args.provider_prefix), '--build', str(build), '--tls', mode,
              '--compiler', args.compiler, '--node', args.node, '--output', str(lane / 'public-http2')], source, runtime_env)
-    receipt = audit.audit(prefix, build, consumer_dir / ('v3_package_consumer' + suffix), mode,
+    receipt = audit.audit(prefix, build, consumer_dir / ('package_consumer' + suffix), mode,
                           'strict', args.provider_prefix, args.compiler)
     receipt.update(consumer_metadata=metadata, public=public, integrations=integrations)
     (lane / 'audit.json').write_text(json.dumps(receipt, indent=2))
@@ -175,7 +175,7 @@ def main():
         summary['provider_header_sha256'] = hashlib.sha256(provider_header.read_bytes()).hexdigest()
         summary['provider_header'] = provider_header.read_text()
         summary['source_hashes'] = {name: hashlib.sha256((source / name).read_bytes()).hexdigest() for name in
-                                   ('configure.ac', 'src/Makefile.am', 'libhttpserver.pc.in', 'examples/v3_host_poll.hpp')}
+                                   ('configure.ac', 'src/Makefile.am', 'libhttpserver.pc.in', 'examples/host_poll.hpp')}
         receipts = [package_lane(args, source, output, mode, inventory) for mode in inventory['tls']]
         headers = [receipt['headers'] for receipt in receipts]
         if any(headers[0][key] != headers[1][key] for key in ('files', 'declaration_sha256')):

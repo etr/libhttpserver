@@ -51,7 +51,7 @@ def family(path):
     if name.endswith('.exe'):
         name = name[:-4]
     match = re.match(r'lib(.+?)(?:\.[0-9]|\.dylib|\.so|\.a|-[0-9])', name)
-    return match[1] if match else 'consumer' if name in ('consumer', 'v3_package_consumer', 'v3_native_linkage') else name
+    return match[1] if match else 'consumer' if name in ('consumer', 'package_consumer', 'native_linkage') else name
 
 
 RUNTIME = ('libSystem.*', 'libc++.*', 'libc++abi.*', 'libstdc++.*', 'libgcc_s.*',
@@ -355,9 +355,9 @@ def audit(prefix, build, consumer, tls, mode, provider_prefix, compiler='c++'):
     aggregate = dependency_graph([str(p) for p in consumers + shared])
     violations += graph_violations(aggregate, mode, tls, 'aggregate', policy, provider_prefix)
     suffix = '.exe' if platform.system() == 'Windows' else ''
-    native_bin = build / ('test/.libs/v3_native_linkage' + suffix)
+    native_bin = build / ('test/.libs/native_linkage' + suffix)
     if not native_bin.exists():
-        native_bin = build / ('test/v3_native_linkage' + suffix)
+        native_bin = build / ('test/native_linkage' + suffix)
     native_archive = build / 'src/.libs/libhttpserver_v3core.a'
     native = dependency_graph([str(native_bin)])
     violations += graph_violations(native, mode, tls, 'native', policy, provider_prefix)

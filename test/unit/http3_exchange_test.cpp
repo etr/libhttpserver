@@ -8,7 +8,7 @@
 #include "./http3_route_parity_fixture.hpp"
 #include "./http3_request_fixture.hpp"
 #include "./littletest.hpp"
-#include <parity/v3_dispatch_replay.hpp>
+#include <parity/dispatch_replay.hpp>
 namespace http = httpserver::http;
 using httpserver::exchange;
 using httpserver::task;

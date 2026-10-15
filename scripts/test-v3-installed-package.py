@@ -60,7 +60,7 @@ class AuditTest(unittest.TestCase):
         (prefix / 'include/httpserverpp').write_text('#include <httpserver.hpp>\n')
         shared = prefix / 'lib/libhttpserver.dylib'
         archive = prefix / 'lib/libhttpserver.a'
-        native = build / 'test/v3_native_linkage'
+        native = build / 'test/native_linkage'
         native_archive = build / 'src/.libs/libhttpserver_v3core.a'
         consumer = root / 'consumer'
         legacy = root / 'libmicrohttpd.dylib'

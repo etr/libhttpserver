@@ -12,7 +12,7 @@ programs = set()
 for targets in re.findall(r'^noinst_PROGRAMS[ \t]*\+?=[ \t]*(.*)$', text, re.M):
     programs.update(targets.split())
 sys.path.insert(0, str(root / 'scripts/lib'))
-from v3_examples import SOURCES
+from example_inventory import SOURCES
 if programs != set(SOURCES):
     raise SystemExit('FAIL: native public example manifest differs: ' + str(programs))
 for program, source in SOURCES.items():

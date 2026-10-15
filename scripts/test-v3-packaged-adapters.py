@@ -12,10 +12,10 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_native_benchmark as bench
-import v3_package_matrix as matrix
+import native_benchmark as bench
+import package_matrix as matrix
 
-SPEC = importlib.util.find_spec('v3_release_package_adapters')
+SPEC = importlib.util.find_spec('release_package_adapters')
 adapter = importlib.util.module_from_spec(SPEC) if SPEC else None
 if SPEC:
     SPEC.loader.exec_module(adapter)
@@ -155,7 +155,7 @@ class AdapterContracts(unittest.TestCase):
         with self.assertRaises(ValueError): adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
 
     def test_artifact_catalog_rejects_pruning_and_command_tampering(self):
-        from v3_release_package_provenance import catalog, validate_catalog
+        from release_package_provenance import catalog, validate_catalog
         output = self.root / 'evidence'; output.mkdir()
         log = output / 'command.log'; log.write_text('live output')
         command = dict(argv=['client'], exit=0, log=str(log), sha256=bench.artifact(log)['sha256'], bytes=log.stat().st_size)
@@ -206,7 +206,7 @@ class AdapterContracts(unittest.TestCase):
         self.assertEqual(wire, [dict(protocol='1.1', head='HTTP/1.1 200 OK', body='installed-v3-tls-ok\n')])
 
     def test_h2_route_name_alone_cannot_supply_wire_proof(self):
-        from v3_release_package_adapters import validate_h2_wire
+        from release_package_adapters import validate_h2_wire
         valid = dict(case='alpn_route_parity', alpn='h2', h1_alpn='http/1.1', body='installed-v3-h2-ok\n', response_status=200)
         validate_h2_wire(valid)
         for key, value in [('body', ''), ('response_status', 500), ('alpn', 'http/1.1')]:
@@ -214,15 +214,15 @@ class AdapterContracts(unittest.TestCase):
         with self.assertRaises(ValueError): validate_h2_wire(dict(case='alpn_route_parity'))
 
     def test_provider_only_fixture_client_can_compile_from_identified_archive(self):
-        from v3_release_package_provenance import validate_fixture_client
-        unit = self.source / 'test/installed/v3_tls_client.cpp'; unit.parent.mkdir(parents=True); unit.write_text('provider-only client')
+        from release_package_provenance import validate_fixture_client
+        unit = self.source / 'test/installed/tls_client.cpp'; unit.parent.mkdir(parents=True); unit.write_text('provider-only client')
         executable = self.root / 'credential-fixtures'; executable.write_text('compiled client')
-        identity = dict(source=str(self.source), compiler='c++', archive={'members': {'test/installed/v3_tls_client.cpp': bench.artifact(unit)['sha256']}})
+        identity = dict(source=str(self.source), compiler='c++', archive={'members': {'test/installed/tls_client.cpp': bench.artifact(unit)['sha256']}})
         artifacts = {str(p): bench.artifact(p) for p in (unit, executable)}
         command = dict(argv=['c++', '-std=c++20', str(unit), '-o', str(executable)])
         client = dict(path=str(executable), sha256=bench.artifact(executable)['sha256'])
         validate_fixture_client(client, identity, artifacts, [command])
-        broken = copy.deepcopy(identity); broken['archive']['members']['test/installed/v3_tls_client.cpp'] = '0' * 64
+        broken = copy.deepcopy(identity); broken['archive']['members']['test/installed/tls_client.cpp'] = '0' * 64
         with self.assertRaises(ValueError): validate_fixture_client(client, broken, artifacts, [command])
 
     def test_selected_process_tools_are_included_in_execution_artifacts(self):
@@ -231,7 +231,7 @@ class AdapterContracts(unittest.TestCase):
         self.assertEqual(set(adapter.identity_artifacts(identity)), {'/selected/quic-go', '/selected/node', '/client/module.py'})
 
     def test_catalog_rejects_exit_zero_without_server_readiness(self):
-        from v3_release_package_provenance import catalog, validate_catalog
+        from release_package_provenance import catalog, validate_catalog
         output = self.root / 'evidence'; output.mkdir()
         server = output / 'server'; server.write_text('identified executable')
         log = output / 'command.log'; log.write_text('compiled')
@@ -243,7 +243,7 @@ class AdapterContracts(unittest.TestCase):
         with self.assertRaises(ValueError): validate_catalog(receipt, output / 'receipt.json')
 
     def test_readonly_receipt_copy_keeps_original_artifact_catalog_binding(self):
-        from v3_release_package_provenance import catalog, validate_catalog
+        from release_package_provenance import catalog, validate_catalog
         output = self.root / 'evidence'; output.mkdir()
         original = output / 'receipt.json'; original.write_text('{"original":true}')
         log = output / 'command.log'; log.write_text('actual command output')
@@ -262,7 +262,7 @@ class AdapterContracts(unittest.TestCase):
 
     def test_tls_configuration_commands_do_not_overwrite_profile_logs(self):
         import os
-        from v3_package_commands import Commands
+        from package_commands import Commands
         runner = adapter.load_runner(Path(__file__).parent.parent, 'check-v3-public-tls.py')
         executable = self.root / 'tls-off-probe'
         executable.write_text('#!/bin/sh\necho PUBLIC_TLS_CONFIGURATION 14\n'); executable.chmod(0o755)
@@ -280,7 +280,7 @@ class AdapterContracts(unittest.TestCase):
         with self.assertRaises(ValueError): adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
 
     def test_ws_http_status_is_distinct_from_execution_status(self):
-        from v3_release_package_adapters import validate_ws_rows
+        from release_package_adapters import validate_ws_rows
         rows = [dict(case='upgrade', status=101, port=1234),
                 dict(case='text_binary_fragmented', text='public text', binary_hex='00ff62696e617279', fragmented_hex='667261676d656e7420e282ac20646f6e65', pong='ping'),
                 dict(case='refusal', status=426), dict(case='close_cancel', clean_close_code=1000, close_callbacks=2, receive_entered=1, receive_completed=1, receive_retired=1, cancelled_receive=1, receive_outcome='connection_closed'),
@@ -304,7 +304,7 @@ class AdapterContracts(unittest.TestCase):
         self.assertEqual(set(adapter.package_identity(prefix)), {str(archive), str(metadata), str(link)})
 
     def test_tls_negative_controls_require_decoded_rejection_and_exact_client(self):
-        from v3_release_package_provenance import tls_rejection
+        from release_package_provenance import tls_rejection
         record = dict(command=['/consumer/independent-client', '1234', '13', 'psk', 'a.example', 'http/1.1', 'wrong-key', 'once', '/consumer/fixtures'],
                       exit=2, stdout='{"connected":false,"early_sent":0}\n')
         self.assertTrue(tls_rejection(record, record['stdout']))
@@ -313,7 +313,7 @@ class AdapterContracts(unittest.TestCase):
             self.assertFalse(tls_rejection(bad, bad['stdout']))
 
     def test_runtime_inspection_rejects_unrelated_executable_as_shared_consumer(self):
-        from v3_release_package_provenance import validate_runtime
+        from release_package_provenance import validate_runtime
         identity = dict(source=str(Path(__file__).parent.parent), prefix=str(self.root / 'prefix'), tls='no')
         with self.assertRaises(ValueError): validate_runtime(sys.executable, 'shared', identity)
 
@@ -322,10 +322,10 @@ class AdapterContracts(unittest.TestCase):
         self.assertTrue(runner_path.is_file(), 'installed H1/WS runner missing')
         runner = adapter.load_runner(Path(__file__).parent.parent, 'check-v3-public-http1.py')
         self.assertTrue(callable(runner.run))
-        self.assertTrue((Path(__file__).parent.parent / 'test/installed/v3_websocket_consumer.cpp').is_file())
+        self.assertTrue((Path(__file__).parent.parent / 'test/installed/websocket_consumer.cpp').is_file())
 
     def test_missing_public_cell_provenance_cannot_skip_checks(self):
-        from v3_release_package_provenance import validate_child_provenance
+        from release_package_provenance import validate_child_provenance
         child = dict(status='passed', run_id='a' * 32, library_hashes={'library': 'digest'},
                      cells=[dict(linkage=linkage, loop=loop) for linkage in ('shared', 'static')
                             for loop in ('managed', 'external')])
@@ -334,7 +334,7 @@ class AdapterContracts(unittest.TestCase):
 
     def test_each_public_family_requires_its_compile_and_dependency_records(self):
         from unittest.mock import patch
-        import v3_release_package_provenance as provenance
+        import release_package_provenance as provenance
         common = ['compile', 'dependencies']
         for tls in ('no', 'yes'):
             for family, keys in [('h1', common + ['websocket_compile']),

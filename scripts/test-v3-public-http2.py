@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_public_http2_inventory as inventory
+import public_http2_inventory as inventory
 
 
 class InventoryTests(unittest.TestCase):

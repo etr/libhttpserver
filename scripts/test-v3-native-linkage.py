@@ -18,7 +18,7 @@ class AuditFixtures(unittest.TestCase):
             (root / 'src/.libs').mkdir(parents=True)
             (root / 'tools').mkdir()
             if binary:
-                for name in ['test/v3_native_linkage', 'test/.libs/v3_native_linkage']:
+                for name in ['test/native_linkage', 'test/.libs/native_linkage']:
                     name += '.exe' if windows else ''
                     (root / name).write_text('#!/bin/sh\nexit 0\n')
                     (root / name).chmod(0o755)

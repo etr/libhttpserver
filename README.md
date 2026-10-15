@@ -1500,7 +1500,7 @@ libmicrohttpd was built without WebSocket support — `register_ws_resource`
 throws `feature_unavailable`. See [Feature
 availability](#feature-availability) for how to detect this at runtime
 without preprocessor gates, and
-[`examples/websocket_echo.cpp`](examples/websocket_echo.cpp) for a
+[`examples/websocket_echo.cpp`](examples/legacy/websocket_echo.cpp) for a
 worked example.
 
 [Back to TOC](#table-of-contents)
@@ -1569,7 +1569,7 @@ ws.stop_and_wait();
 ```
 
 See [`examples/daemon_info.cpp`](examples/daemon_info.cpp) and
-[`examples/external_event_loop.cpp`](examples/external_event_loop.cpp)
+[`examples/external_event_loop.cpp`](examples/legacy/external_event_loop.cpp)
 for runnable demonstrations.
 
 [Back to TOC](#table-of-contents)
@@ -1930,7 +1930,7 @@ to the canonical example for each topic covered in this manual.
 
 * [`examples/daemon_info.cpp`](examples/daemon_info.cpp) — introspect
   the running daemon (bound port, listen FD, active connections).
-* [`examples/external_event_loop.cpp`](examples/external_event_loop.cpp) —
+* [`examples/external_event_loop.cpp`](examples/legacy/external_event_loop.cpp) —
   drive `EXTERNAL_SELECT` from the application's loop via `run_wait`.
 * [`examples/custom_access_log.cpp`](examples/custom_access_log.cpp) —
   server-wide access-log callback.
@@ -1950,7 +1950,7 @@ to the canonical example for each topic covered in this manual.
 
 ### WebSockets
 
-* [`examples/websocket_echo.cpp`](examples/websocket_echo.cpp) —
+* [`examples/websocket_echo.cpp`](examples/legacy/websocket_echo.cpp) —
   `websocket_handler` subclass registered via `register_ws_resource`.
 
 ### Benchmarks

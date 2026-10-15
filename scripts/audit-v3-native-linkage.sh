@@ -13,14 +13,14 @@
 #       engine-only vocabulary; any backend include here is a leak.
 #
 #       The designated private provider unit is a separate scoped target.
-#   A2. Binary probe: the built v3_native_linkage program (which links
+#   A2. Binary probe: the built native_linkage program (which links
 #       libhttpserver_v3core.la and nothing else) permits libssl/libcrypto
 #       only in the enabled native lane. Other providers are rejected. Inspected with otool -L on Darwin
 #       and ldd elsewhere. Missing artifacts or inspectors fail closed.
 #       The native archive is checked independently for static leakage.
 #
 # Inputs (via env, all optional):
-#   BUILD_DIR — build directory holding test/v3_native_linkage;
+#   BUILD_DIR — build directory holding test/native_linkage;
 #               defaults to $REPO_ROOT/build.
 #   SRC_DIR   — source root; defaults to the script's parent.
 #   V3_TLS_MODE — yes/no; default no. The Make target supplies its configured mode.
@@ -324,9 +324,9 @@ case "$MODE" in yes|no) ;; *) fail "invalid native TLS mode: $MODE" ;; esac
 # Libtool programs can be shell wrappers. Inspect their real executable.
 SUFFIX=""
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) SUFFIX=".exe" ;; esac
-BIN="$BUILD_DIR/test/v3_native_linkage$SUFFIX"
-if [[ -x "$BUILD_DIR/test/.libs/v3_native_linkage$SUFFIX" ]]; then
-    BIN="$BUILD_DIR/test/.libs/v3_native_linkage$SUFFIX"
+BIN="$BUILD_DIR/test/native_linkage$SUFFIX"
+if [[ -x "$BUILD_DIR/test/.libs/native_linkage$SUFFIX" ]]; then
+    BIN="$BUILD_DIR/test/.libs/native_linkage$SUFFIX"
 fi
 [[ -x "$BIN" ]] || fail "native audit executable missing: $BIN"
 ARCHIVE="$BUILD_DIR/src/.libs/libhttpserver_v3core.a"

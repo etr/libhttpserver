@@ -21,61 +21,61 @@ AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
 noinst_PROGRAMS =
 
-noinst_PROGRAMS += v3_external_event_loop
-v3_external_event_loop_SOURCES = v3_external_event_loop.cpp v3_host_poll.hpp
-v3_external_event_loop_LDADD = $(top_builddir)/src/libhttpserver.la
+noinst_PROGRAMS += external_event_loop
+external_event_loop_SOURCES = external_event_loop.cpp host_poll.hpp
+external_event_loop_LDADD = $(top_builddir)/src/libhttpserver.la
 
-noinst_PROGRAMS += v3_routes v3_protocol_options v3_websocket_echo v3_http3
-v3_http3_SOURCES = v3_http3.cpp v3_host_poll.hpp v3_tls_unavailable.hpp v3_example_ws.hpp
-v3_http3_LDADD = $(top_builddir)/src/libhttpserver.la
-v3_http3_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
-v3_routes_SOURCES = v3_routes.cpp v3_route_handlers.hpp v3_example_host.hpp v3_example_reply.hpp
-v3_protocol_options_SOURCES = v3_protocol_options.cpp
-v3_websocket_echo_SOURCES = v3_websocket_echo.cpp v3_example_host.hpp v3_example_ws.hpp
-v3_routes_LDADD = $(top_builddir)/src/libhttpserver.la
-v3_protocol_options_LDADD = $(v3_routes_LDADD)
-v3_websocket_echo_LDADD = $(v3_routes_LDADD)
-v3_routes_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
-v3_protocol_options_LDFLAGS = $(v3_routes_LDFLAGS)
-v3_websocket_echo_LDFLAGS = $(v3_routes_LDFLAGS)
-v3_external_event_loop_LDFLAGS = $(v3_routes_LDFLAGS)
+noinst_PROGRAMS += routes protocol_options websocket_echo http3
+http3_SOURCES = http3.cpp host_poll.hpp tls_unavailable.hpp example_ws.hpp
+http3_LDADD = $(top_builddir)/src/libhttpserver.la
+http3_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+routes_SOURCES = routes.cpp route_handlers.hpp example_host.hpp example_reply.hpp
+protocol_options_SOURCES = protocol_options.cpp
+websocket_echo_SOURCES = websocket_echo.cpp example_host.hpp example_ws.hpp
+routes_LDADD = $(top_builddir)/src/libhttpserver.la
+protocol_options_LDADD = $(routes_LDADD)
+websocket_echo_LDADD = $(routes_LDADD)
+routes_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+protocol_options_LDFLAGS = $(routes_LDFLAGS)
+websocket_echo_LDFLAGS = $(routes_LDFLAGS)
+external_event_loop_LDFLAGS = $(routes_LDFLAGS)
 
-noinst_PROGRAMS += v3_request_data
-v3_request_data_SOURCES = v3_request_data.cpp v3_example_host.hpp v3_example_reply.hpp
-v3_request_data_LDFLAGS = $(v3_routes_LDFLAGS)
+noinst_PROGRAMS += request_data
+request_data_SOURCES = request_data.cpp example_host.hpp example_reply.hpp
+request_data_LDFLAGS = $(routes_LDFLAGS)
 
-noinst_PROGRAMS += v3_body_streaming
-v3_body_streaming_SOURCES = v3_body_streaming.cpp v3_example_host.hpp v3_example_reply.hpp
-v3_body_streaming_LDFLAGS = $(v3_routes_LDFLAGS)
+noinst_PROGRAMS += body_streaming
+body_streaming_SOURCES = body_streaming.cpp example_host.hpp example_reply.hpp
+body_streaming_LDFLAGS = $(routes_LDFLAGS)
 
-noinst_PROGRAMS += v3_auth
-v3_auth_SOURCES = v3_auth.cpp v3_example_host.hpp v3_example_reply.hpp
-v3_auth_LDFLAGS = $(v3_routes_LDFLAGS)
+noinst_PROGRAMS += auth
+auth_SOURCES = auth.cpp example_host.hpp example_reply.hpp
+auth_LDFLAGS = $(routes_LDFLAGS)
 
-noinst_PROGRAMS += v3_forms
-v3_forms_SOURCES = v3_forms.cpp v3_example_host.hpp v3_example_reply.hpp
-v3_forms_LDFLAGS = $(v3_routes_LDFLAGS)
+noinst_PROGRAMS += forms
+forms_SOURCES = forms.cpp example_host.hpp example_reply.hpp
+forms_LDFLAGS = $(routes_LDFLAGS)
 
-noinst_PROGRAMS += v3_response_sources
-v3_response_sources_SOURCES = v3_response_sources.cpp v3_example_host.hpp v3_example_reply.hpp
-v3_response_sources_LDFLAGS = $(v3_routes_LDFLAGS)
+noinst_PROGRAMS += response_sources
+response_sources_SOURCES = response_sources.cpp example_host.hpp example_reply.hpp
+response_sources_LDFLAGS = $(routes_LDFLAGS)
 
-noinst_PROGRAMS += v3_operations v3_lifecycle
-v3_operations_SOURCES = v3_operations.cpp v3_example_host.hpp v3_example_reply.hpp
-v3_lifecycle_SOURCES = v3_lifecycle.cpp v3_example_host.hpp v3_example_reply.hpp
-v3_operations_LDFLAGS = $(v3_routes_LDFLAGS)
-v3_lifecycle_LDFLAGS = $(v3_routes_LDFLAGS)
+noinst_PROGRAMS += operations lifecycle
+operations_SOURCES = operations.cpp example_host.hpp example_reply.hpp
+lifecycle_SOURCES = lifecycle.cpp example_host.hpp example_reply.hpp
+operations_LDFLAGS = $(routes_LDFLAGS)
+lifecycle_LDFLAGS = $(routes_LDFLAGS)
 
-noinst_PROGRAMS += v3_tls_profiles v3_http2 v3_tls_rotation
-v3_tls_profiles_SOURCES = v3_tls_profiles.cpp v3_example_reply.hpp v3_tls_unavailable.hpp
-v3_http2_SOURCES = v3_http2.cpp v3_tls_unavailable.hpp v3_example_ws.hpp
-v3_tls_rotation_SOURCES = $(top_srcdir)/test/examples/v3_tls_rotation.cpp v3_host_poll.hpp v3_tls_unavailable.hpp
+noinst_PROGRAMS += tls_profiles http2 tls_rotation
+tls_profiles_SOURCES = tls_profiles.cpp example_reply.hpp tls_unavailable.hpp
+http2_SOURCES = http2.cpp tls_unavailable.hpp example_ws.hpp
+tls_rotation_SOURCES = $(top_srcdir)/test/examples/tls_rotation.cpp host_poll.hpp tls_unavailable.hpp
 # Distinct object prefix avoids colliding with the retained test target.
-v3_tls_rotation_SHORTNAME = rotation_demo
-v3_tls_rotation_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/examples
-v3_tls_profiles_LDFLAGS = $(v3_routes_LDFLAGS)
-v3_http2_LDFLAGS = $(v3_routes_LDFLAGS)
-v3_tls_rotation_LDFLAGS = $(v3_routes_LDFLAGS)
+tls_rotation_SHORTNAME = rotation_demo
+tls_rotation_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/examples
+tls_profiles_LDFLAGS = $(routes_LDFLAGS)
+http2_LDFLAGS = $(routes_LDFLAGS)
+tls_rotation_LDFLAGS = $(routes_LDFLAGS)
 
 # Historical v2 sources are documentation artifacts, never native build targets.
 EXTRA_DIST = allowing_disallowing_methods.cpp \
@@ -96,7 +96,7 @@ EXTRA_DIST = allowing_disallowing_methods.cpp \
     digest_authentication.cpp \
     early_413.cpp \
     empty_response_example.cpp \
-    external_event_loop.cpp \
+    legacy/external_event_loop.cpp \
     file_upload.cpp \
     file_upload_with_callback.cpp \
     handlers.cpp \
@@ -115,4 +115,4 @@ EXTRA_DIST = allowing_disallowing_methods.cpp \
     shared_state.cpp \
     turbo_mode.cpp \
     url_registration.cpp \
-    websocket_echo.cpp
+    legacy/websocket_echo.cpp

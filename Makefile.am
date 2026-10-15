@@ -299,14 +299,14 @@ check-local: check-v3-compiled-operations check-headers check-examples lint-warn
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 
 # TASK-108 (PRD-V3N-REQ-001/002): the native TLS-off linkage audit.
-# Builds the v3_native_linkage program (v3core archive only) and runs
+# Builds the native_linkage program (v3core archive only) and runs
 # scripts/audit-v3-native-linkage.sh over it: a banned include in the
 # v3 surface or a third-party runtime library in the binary fails check.
 check-v3-native-linkage:
 	@$(MAKE) -n -C src -W libhttpserver_v3core.la libhttpserver.la AM_LDFLAGS= >check-v3-cxx-link.log
 	@grep -E -- '--tag=CXX.*--mode=link.*-o libhttpserver.la ' check-v3-cxx-link.log >/dev/null || { cat check-v3-cxx-link.log; echo "FAIL: aggregate must use the C++ linker"; exit 1; }
 	@echo "=== check-v3-native-linkage: native provider surface audit ==="
-	@$(MAKE) $(AM_MAKEFLAGS) -C "$(top_builddir)/test" v3_native_linkage >/dev/null
+	@$(MAKE) $(AM_MAKEFLAGS) -C "$(top_builddir)/test" native_linkage >/dev/null
 	@BUILD_DIR="$(abs_top_builddir)" SRC_DIR="$(top_srcdir)" V3_TLS_MODE="$(enable_v3_tls)" $(top_srcdir)/scripts/audit-v3-native-linkage.sh
 
 # Enforce the explicit native v3 example source/build inventory.
@@ -550,8 +550,8 @@ EXTRA_DIST += docs/task-180-resource-limits.md
 EXTRA_DIST += docs/task-181-diagnostics.md
 
 EXTRA_DIST += scripts/test-v3-installed-consumer.py scripts/test-v3-package-workflow.py scripts/prepare-v3-package-ci.py \
- scripts/lib/v3_package_matrix.py scripts/lib/v3_package_process.py scripts/lib/v3_package_commands.py \
- scripts/lib/v3_package_traffic.py scripts/lib/v3_package_integration.py docs/task-182-package-validation-evidence.md \
+ scripts/lib/package_matrix.py scripts/lib/package_process.py scripts/lib/package_commands.py \
+ scripts/lib/package_traffic.py scripts/lib/package_integration.py docs/task-182-package-validation-evidence.md \
  .github/workflows/v3-package-validation.yml
 
 EXTRA_DIST += docs/v2-to-v3-migration.md docs/v3-api.md docs/task-183-migration-evidence.md examples/README.md
@@ -559,26 +559,26 @@ EXTRA_DIST += docs/v2-to-v3-migration.md docs/v3-api.md docs/task-183-migration-
 EXTRA_DIST += scripts/audit-v3-native-linkage.sh scripts/test-v3-cutover.py scripts/check-v3-runtime-coexistence.py docs/task-184-cutover-evidence.md
 
 # Pre-tag gates are explicit; ordinary check runs only receipt contracts.
-EXTRA_DIST += scripts/run-v3-release-gates.py scripts/lib/v3_release_artifact.py \
- scripts/lib/v3_release_checks.py scripts/lib/v3_release_execution.py docs/task-185-release-gates.md
+EXTRA_DIST += scripts/run-v3-release-gates.py scripts/lib/release_artifact.py \
+ scripts/lib/release_checks.py scripts/lib/release_execution.py docs/task-185-release-gates.md
 check-v3-release-gates:
 	@python3 $(top_srcdir)/scripts/run-v3-release-gates.py $(RELEASE_GATE_ARGS)
 check-v3-tag-ready:
 	@python3 $(top_srcdir)/scripts/run-v3-release-gates.py --check-tag-ready $(RELEASE_GATE_MANIFEST)
 .PHONY: check-v3-release-gates check-v3-tag-ready
 
-EXTRA_DIST += scripts/check-v3-public-tls.py test/installed/v3_tls_consumer.cpp
+EXTRA_DIST += scripts/check-v3-public-tls.py test/installed/tls_consumer.cpp
 
-EXTRA_DIST += scripts/lib/v3_public_tls_profiles.py test/installed/v3_tls_profiles.cpp test/installed/v3_tls_client.cpp
+EXTRA_DIST += scripts/lib/public_tls_profiles.py test/installed/tls_profiles.cpp test/installed/tls_client.cpp
 EXTRA_DIST += scripts/check-v3-public-http2.py scripts/test-v3-public-http2.py \
-    scripts/lib/v3_public_http2_inventory.py scripts/lib/v3_public_http2_h2.py scripts/lib/v3_public_http2_policy.py \
-    test/installed/v3_http2_consumer.cpp test/installed/v3_http2_node.mjs test/installed/v3_http2_raw.mjs \
-    examples/v3_http2.cpp specs/architecture/v3/TASK-195-design.md \
+    scripts/lib/public_http2_inventory.py scripts/lib/public_http2_h2.py scripts/lib/public_http2_policy.py \
+    test/installed/http2_consumer.cpp test/installed/http2_node.mjs test/installed/http2_raw.mjs \
+    examples/http2.cpp specs/architecture/v3/TASK-195-design.md \
     specs/architecture/v3/TASK-195-implementation-evidence.md specs/architecture/v3/TASK-195-receipt.json
 
 EXTRA_DIST += scripts/test-v3-http3-full-gates.py scripts/check-v3-public-http3.py scripts/test-v3-public-http3.py \
-    scripts/lib/v3_public_http3_inventory.py test/installed/v3_http3_consumer.cpp \
-    test/installed/v3_http3_aioquic.py test/integ/http3-client-go/public.go
+    scripts/lib/public_http3_inventory.py test/installed/http3_consumer.cpp \
+    test/installed/http3_aioquic.py test/integ/http3-client-go/public.go
 EXTRA_DIST += specs/architecture/v3/TASK-196-design.md \
     specs/architecture/v3/TASK-196-implementation-evidence.md specs/architecture/v3/TASK-196-receipt.json
 
@@ -595,21 +595,21 @@ bench:
 	  --output "$(BENCH_OUTPUT)" --tls "$(BENCH_TLS)" --compiler "$(CXX)" \
 	  --client-python "$(BENCH_PYTHON_COMMAND)" $(BENCH_ARGS)
 BENCH_PYTHON_COMMAND = python3
-EXTRA_DIST += scripts/run-v3-native-benchmarks.py scripts/lib/v3_native_benchmark.py \
- scripts/test-v3-native-benchmark.py test/installed/v3_benchmark_consumer.cpp \
- test/installed/v3_benchmark_client.py docs/native-v3-benchmarks.md \
+EXTRA_DIST += scripts/run-v3-native-benchmarks.py scripts/lib/native_benchmark.py \
+ scripts/test-v3-native-benchmark.py test/installed/benchmark_consumer.cpp \
+ test/installed/benchmark_client.py docs/native-v3-benchmarks.md \
  specs/architecture/v3/TASK-198-evidence.md specs/architecture/v3/TASK-198-receipt.json
 
 EXTRA_DIST += scripts/run-v3-packaged-adapters.py scripts/check-v3-public-http1.py \
- scripts/test-v3-packaged-adapters.py scripts/lib/v3_release_package_adapters.py \
- scripts/lib/v3_release_package_provenance.py test/installed/v3_websocket_consumer.cpp \
+ scripts/test-v3-packaged-adapters.py scripts/lib/release_package_adapters.py \
+ scripts/lib/release_package_provenance.py test/installed/websocket_consumer.cpp \
  docs/v3-packaged-release-adapters.md
 
 EXTRA_DIST += test/installed/task199-capabilities.md \
  specs/architecture/v3/TASK-199-implementation-evidence.md \
  specs/architecture/v3/TASK-199-implementation-receipt.json
 
-EXTRA_DIST += scripts/lib/v3_examples.py scripts/lib/v3_example_consumers.py \
+EXTRA_DIST += scripts/lib/example_inventory.py scripts/lib/example_consumers.py \
     specs/architecture/v3/v2-parity-inventory.md
 
 EXTRA_DIST += docs/v3-source-layout.md scripts/check-v3-compiled-operations.py
@@ -619,4 +619,4 @@ check-v3-compiled-operations: $(top_builddir)/src/libhttpserver.la
 
 .PHONY: check-v3-compiled-operations
 
-EXTRA_DIST += docs/v3-protocol-limits.md scripts/check-v3-protocol-limits.py test/installed/v3_protocol_limits_consumer.cpp
+EXTRA_DIST += docs/v3-protocol-limits.md scripts/check-v3-protocol-limits.py test/installed/protocol_limits_consumer.cpp

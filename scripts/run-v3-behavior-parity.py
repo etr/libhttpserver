@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_release_artifact as release_identity
+import release_artifact as release_identity
 
 MODES = ('h1.0-tcp', 'h1.1-tcp', 'h1.0-tls', 'h1.1-tls', 'h2-tls', 'h3-quic')
 KINDS = {'h1.0-tcp': 'tcp', 'h1.1-tcp': 'tcp', 'h1.0-tls': 'tls',
@@ -394,7 +394,7 @@ def executed_tests(log):
     return set(names)
 
 
-REGRESSIONS = ('behavior_replay', 'v3_behavior_parity', 'routing_corpus', 'hooks_corpus', 'basic_auth_corpus',
+REGRESSIONS = ('behavior_replay', 'behavior_parity', 'routing_corpus', 'hooks_corpus', 'basic_auth_corpus',
     'digest_auth_corpus', 'forms_urlencoded_corpus', 'forms_multipart_corpus', 'ip_controls_corpus',
     'native_http1_parity', 'native_http1_e2e', 'native_server', 'route_sync', 'request_lifecycle',
     'response_sources', 'response_definition', 'http2_exchange', 'http2_streaming', 'http2_websocket',

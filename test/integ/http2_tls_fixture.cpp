@@ -25,7 +25,7 @@
 #include <httpserver/exchange.hpp>
 #include "../unit/http2_request_fixture.hpp"
 #include "../unit/tls_credentials_fixture.hpp"
-#include <parity/v3_behavior_profiles.hpp>
+#include <parity/behavior_profiles.hpp>
 namespace {
 namespace h = httpserver;
 namespace hd = h::detail;

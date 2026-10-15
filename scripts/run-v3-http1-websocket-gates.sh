@@ -30,7 +30,7 @@ logs=${logs:-$build/protocol-gate-logs}
 mkdir -p "$logs"
 logs=$(cd "$logs" && pwd)
 { if [ -n "${V3_RELEASE_IDENTITY:-}" ]; then
-      python3 "$root/scripts/lib/v3_release_artifact.py" --root "$root" || exit 1
+      python3 "$root/scripts/lib/release_artifact.py" --root "$root" || exit 1
   elif git -C "$root" rev-parse HEAD 2>/dev/null; then
       git -C "$root" status --short;
   else
