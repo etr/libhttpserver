@@ -155,14 +155,7 @@ struct connection_engine_config {
     std::shared_ptr<const error_page_factories> pages;
 
     static connection_engine_config from_budget_limits(
-        const server::budget_limits& limits) noexcept {
-        connection_engine_config config;
-        config.head = http1_head_budget::from_budget_limits(limits);
-        config.body = http1_body_budget::from_budget_limits(limits);
-        config.outbox = http1_outbox_budget::from_budget_limits(limits);
-        config.websocket_limits = websocket::options::from_budgets(limits);
-        return config;
-    }
+        const server::budget_limits& limits) noexcept;
 };
 
 // The per-connection engine. Created through make_shared (the task

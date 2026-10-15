@@ -29,44 +29,12 @@ namespace httpserver::detail {
 // to reject overlong encodings, surrogate scalars, and values > U+10FFFF.
 class websocket_utf8 {
  public:
-    bool push(unsigned byte) noexcept {
-        if (remaining_) {
-            if (byte < lower_ || byte > upper_) return false;
-            --remaining_; lower_ = 0x80; upper_ = 0xbf;
-            return true;
-        }
-        if (byte <= 0x7f) return true;
-        return lead(byte);
-    }
+    bool push(unsigned byte) noexcept;
     bool complete() const noexcept { return remaining_ == 0; }
-    static bool valid(std::span<const std::byte> data) noexcept {
-        websocket_utf8 v;
-        for (auto b : data) if (!v.push(std::to_integer<unsigned>(b))) return false;
-        return v.complete();
-    }
+    static bool valid(std::span<const std::byte> data) noexcept;
 
  private:
-    bool lead(unsigned b) noexcept {
-        lower_ = 0x80; upper_ = 0xbf;
-        if (b < 0xc2) return false;
-        if (b <= 0xdf) {
-            remaining_ = 1;
-            return true;
-        }
-        if (b <= 0xef) {
-            remaining_ = 2;
-            if (b == 0xe0) lower_ = 0xa0;
-            if (b == 0xed) upper_ = 0x9f;
-            return true;
-        }
-        if (b <= 0xf4) {
-            remaining_ = 3;
-            if (b == 0xf0) lower_ = 0x90;
-            if (b == 0xf4) upper_ = 0x8f;
-            return true;
-        }
-        return false;
-    }
+    bool lead(unsigned b) noexcept;
     unsigned remaining_ = 0;
     unsigned lower_ = 0x80;
     unsigned upper_ = 0xbf;

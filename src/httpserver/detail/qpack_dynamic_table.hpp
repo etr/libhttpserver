@@ -55,18 +55,9 @@ class qpack_reference_hold {
     qpack_reference_hold(const qpack_reference_hold&) = delete;
     qpack_reference_hold& operator=(const qpack_reference_hold&) = delete;
     qpack_reference_hold(qpack_reference_hold&& other) noexcept { entries_.swap(other.entries_); }
-    qpack_reference_hold& operator=(qpack_reference_hold&& other) noexcept {
-        if (this != &other) {
-            release();
-            entries_.swap(other.entries_);
-        }
-        return *this;
-    }
+    qpack_reference_hold& operator=(qpack_reference_hold&& other) noexcept;
     ~qpack_reference_hold() { release(); }
-    void release() noexcept {
-        for (auto* entry : entries_) --entry->references;
-        entries_.clear();
-    }
+    void release() noexcept;
     std::size_t size() const noexcept { return entries_.size(); }
  private:
     friend class qpack_dynamic_table;
@@ -82,30 +73,9 @@ class qpack_dynamic_table {
     qpack_dynamic_table& operator=(const qpack_dynamic_table&) = delete;
     qpack_dynamic_table(qpack_dynamic_table&&) = delete;
     qpack_dynamic_table& operator=(qpack_dynamic_table&&) = delete;
-    qpack_status initialize(const server::resource_budget& budget, std::size_t maximum) {
-        if (initialized_ || maximum > qpack_integer_maximum) return {qpack_state::invalid_argument};
-        try {
-            server::reservation charge;
-            if (maximum != 0 && !budget.reserve(server::resource::qpack_table_bytes, maximum, charge).ok()) {
-                return {qpack_state::limit_exceeded};
-            }
-            charge_ = std::move(charge);
-            maximum_ = maximum;
-            initialized_ = true;
-            return {};
-        } catch (const std::bad_alloc&) {
-            return {qpack_state::limit_exceeded};
-        } catch (const std::length_error&) {
-            return {qpack_state::limit_exceeded};
-        }
-    }
+    qpack_status initialize(const server::resource_budget& budget, std::size_t maximum);
     // Connection teardown calls this after destroying every reference hold.
-    void clear() noexcept {
-        entries_.clear(); charge_.release();
-        bytes_ = capacity_ = maximum_ = 0;
-        inserts_ = received_ = 0;
-        initialized_ = false;
-    }
+    void clear() noexcept;
     bool initialized() const noexcept { return initialized_; }
     qpack_table_role role() const noexcept { return role_; }
     std::size_t capacity() const noexcept { return capacity_; }
@@ -115,23 +85,9 @@ class qpack_dynamic_table {
     std::uint64_t insert_count() const noexcept { return inserts_; }
     std::uint64_t known_received_count() const noexcept { return received_; }
     // Returned views survive until eviction or table destruction.
-    const qpack_dynamic_entry* lookup(std::uint64_t absolute) const noexcept {
-        if (entries_.empty() || absolute < entries_.front().absolute || absolute >= inserts_) return nullptr;
-        for (const auto& entry : entries_) if (entry.absolute == absolute) return &entry;
-        return nullptr;
-    }
-    std::optional<std::uint64_t> find(std::string_view name, std::string_view value) const noexcept {
-        for (auto i = entries_.rbegin(); i != entries_.rend(); ++i) {
-            if (i->name == name && i->value == value) return i->absolute;
-        }
-        return std::nullopt;
-    }
-    std::optional<std::uint64_t> find_name(std::string_view name) const noexcept {
-        for (auto i = entries_.rbegin(); i != entries_.rend(); ++i) {
-            if (i->name == name) return i->absolute;
-        }
-        return std::nullopt;
-    }
+    const qpack_dynamic_entry* lookup(std::uint64_t absolute) const noexcept;
+    std::optional<std::uint64_t> find(std::string_view name, std::string_view value) const noexcept;
+    std::optional<std::uint64_t> find_name(std::string_view name) const noexcept;
     const qpack_dynamic_entry* encoder_relative(std::uint64_t index) const noexcept { return section_relative(inserts_, index); }
     const qpack_dynamic_entry* section_relative(std::uint64_t base, std::uint64_t index) const noexcept {
         return base <= qpack_integer_maximum && index < base ? lookup(base - index - 1) : nullptr;
@@ -139,102 +95,18 @@ class qpack_dynamic_table {
     const qpack_dynamic_entry* post_base(std::uint64_t base, std::uint64_t index) const noexcept {
         return base <= qpack_integer_maximum && index <= qpack_integer_maximum - base ? lookup(base + index) : nullptr;
     }
-    qpack_status set_capacity(std::size_t capacity) noexcept {
-        if (!initialized_) return {qpack_state::invalid_argument};
-        if (capacity > maximum_) return {qpack_state::malformed};
-        const auto status = can_evict_to(capacity);
-        if (!status.ok()) return status;
-        evict_to(capacity);
-        capacity_ = capacity;
-        return {};
-    }
-    qpack_status insert(std::string_view name, std::string_view value) {
-        try {
-            return insert_allocated(name, value);
-        } catch (const std::bad_alloc&) { return {qpack_state::limit_exceeded};
-        } catch (const std::length_error&) { return {qpack_state::limit_exceeded}; }
-    }
-    qpack_status insert_allocated(std::string_view name, std::string_view value) {
-        if (!initialized_) return {qpack_state::invalid_argument};
-        if (name.size() > SIZE_MAX - 32 || value.size() > SIZE_MAX - 32 - name.size() || inserts_ == qpack_integer_maximum) {
-            return {qpack_state::limit_exceeded};
-        }
-        const auto size = name.size() + value.size() + 32;
-        if (size > capacity_) return {qpack_state::malformed};
-        const auto status = can_evict_to(capacity_ - size);
-        if (!status.ok()) return status;
-        // A prepared node owns borrowed input before its source is evicted;
-        // list splice and FIFO removal cannot throw during commit.
-        std::list<qpack_dynamic_entry> prepared;
-        prepared.push_back({std::string(name), std::string(value), inserts_, size, 0});
-        evict_to(capacity_ - size);
-        entries_.splice(entries_.end(), prepared);
-        bytes_ += size;
-        ++inserts_;
-        return {};
-    }
-    qpack_status duplicate(std::uint64_t relative) {
-        const auto* source = encoder_relative(relative);
-        return source ? insert(source->name, source->value) : qpack_status{qpack_state::malformed};
-    }
+    qpack_status set_capacity(std::size_t capacity) noexcept;
+    qpack_status insert(std::string_view name, std::string_view value);
+    qpack_status insert_allocated(std::string_view name, std::string_view value);
+    qpack_status duplicate(std::uint64_t relative);
 
-    qpack_status advance_known_received(std::uint64_t count) noexcept {
-        if (!initialized_ || role_ != qpack_table_role::encoder) return {qpack_state::invalid_argument};
-        if (count < received_ || count > inserts_) return {qpack_state::malformed};
-        received_ = count;
-        return {};
-    }
-    qpack_status increment_known_received(std::uint64_t count) noexcept {
-        if (count == 0 || count > inserts_ - received_) return {qpack_state::malformed};
-        return advance_known_received(received_ + count);
-    }
-    qpack_status acquire(std::span<const std::uint64_t> indexes, std::size_t maximum, qpack_reference_hold& out) {
-        if (!initialized_ || role_ != qpack_table_role::encoder || out.size() != 0) return {qpack_state::invalid_argument};
-        if (indexes.size() > maximum) return {qpack_state::limit_exceeded};
-        try {
-            std::vector<std::uint64_t> unique(indexes.begin(), indexes.end());
-            std::sort(unique.begin(), unique.end());
-            unique.erase(std::unique(unique.begin(), unique.end()), unique.end());
-            qpack_reference_hold prepared;
-            prepared.entries_.reserve(unique.size());
-            for (auto index : unique) {
-                auto* entry = const_cast<qpack_dynamic_entry*>(lookup(index));
-                if (!entry) return {qpack_state::malformed};
-                if (entry->references == SIZE_MAX) return {qpack_state::limit_exceeded};
-            }
-            // No pin is acquired until every index and allocation is admitted.
-            for (auto index : unique) {
-                auto* entry = const_cast<qpack_dynamic_entry*>(lookup(index));
-                prepared.entries_.push_back(entry);
-                ++entry->references;
-            }
-            out = std::move(prepared);
-            return {};
-        } catch (const std::bad_alloc&) {
-            return {qpack_state::limit_exceeded};
-        } catch (const std::length_error&) {
-            return {qpack_state::limit_exceeded};
-        }
-    }
+    qpack_status advance_known_received(std::uint64_t count) noexcept;
+    qpack_status increment_known_received(std::uint64_t count) noexcept;
+    qpack_status acquire(std::span<const std::uint64_t> indexes, std::size_t maximum, qpack_reference_hold& out);
 
  private:
-    qpack_status can_evict_to(std::size_t limit) const noexcept {
-        auto retained = bytes_;
-        for (const auto& entry : entries_) {
-            if (retained <= limit) break;
-            if (role_ == qpack_table_role::encoder && (entry.absolute >= received_ || entry.references != 0)) {
-                return {qpack_state::eviction_prohibited};
-            }
-            retained -= entry.bytes;
-        }
-        return {};
-    }
-    void evict_to(std::size_t limit) noexcept {
-        while (bytes_ > limit) {
-            bytes_ -= entries_.front().bytes;
-            entries_.pop_front();
-        }
-    }
+    qpack_status can_evict_to(std::size_t limit) const noexcept;
+    void evict_to(std::size_t limit) noexcept;
     const qpack_table_role role_;
     bool initialized_ = false;
     server::reservation charge_;

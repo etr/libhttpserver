@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <utility>
 #include <vector>
-#include "./quic_recovery_internal.hpp"
+#include <httpserver/detail/quic_recovery_internal.hpp>
 namespace httpserver::detail {
 namespace {
 bool can_split_payload(quic_codec_code code) {

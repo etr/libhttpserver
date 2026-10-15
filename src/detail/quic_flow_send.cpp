@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
-#include "./quic_flow_internal.hpp"
+#include <httpserver/detail/quic_flow_internal.hpp>
 namespace httpserver::detail {
 quic_flow_result quic_flow_control::reserve_critical(std::uint64_t id, std::uint64_t offset, std::size_t length) {
     if (offset > k_quic_max_integer || length > k_quic_max_integer - offset) return {quic_flow_code::frame_encoding_error};

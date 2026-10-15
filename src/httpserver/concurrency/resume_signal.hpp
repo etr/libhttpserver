@@ -75,75 +75,22 @@ struct resume_node {
     executor* target = nullptr;              // null resumes inline
     std::shared_ptr<resume_node> next;       // guarded by resume_state::mu
 
-    bool claim() noexcept {
-        bool expected = false;
-        return delivered.compare_exchange_strong(expected, true,
-                                                 std::memory_order_acq_rel,
-                                                 std::memory_order_acquire);
-    }
+    bool claim() noexcept;
 
-    void resume_posted() noexcept {
-        if (target != nullptr) {
-            try {
-                target->post([witness = witness, frame = awaiting] {
-                    if (witness) {
-                        guarded_resume(witness, frame);
-                    } else {
-                        frame.resume();
-                    }
-                });
-            } catch (...) {
-            }
-        } else if (witness) {
-            guarded_resume(witness, awaiting);
-        } else {
-            awaiting.resume();
-        }
-    }
+    void resume_posted() noexcept;
 };
 
-inline void deliver(const std::shared_ptr<resume_node>& node,
-                    resume_outcome outcome) noexcept {
-    if (!node->claim()) return;  // exactly-once: the CAS loser is a no-op
-    node->result = outcome;
-    node->resume_posted();
-}
+void deliver(const std::shared_ptr<resume_node>& node,
+                    resume_outcome outcome) noexcept;
 
-inline void fire_trigger(const std::shared_ptr<resume_state>& state,
-                         int code, resume_outcome outcome) noexcept {
-    int expected = 0;
-    // CAS, not exchange: the first of {signal, cancel} wins and the value
-    // stays resolved; later calls must remain no-ops.
-    if (!state->trigger.compare_exchange_strong(expected, code,
-                                                std::memory_order_acq_rel,
-                                                std::memory_order_acquire)) {
-        return;
-    }
-    std::shared_ptr<resume_node> chain;
-    {
-        std::lock_guard<std::mutex> lock(state->mu);
-        chain = std::move(state->head);
-    }
-    try {
-        std::vector<std::shared_ptr<resume_node>> popped;
-        for (std::shared_ptr<resume_node> node = chain; node;
-             node = node->next) {
-            popped.push_back(node);
-        }
-        for (const auto& node : popped) deliver(node, outcome);
-    } catch (...) {
-        // Allocation failure: pending waiters are dropped, never double
-        // delivered. chain destruction frees them.
-    }
-}
+void fire_trigger(const std::shared_ptr<resume_state>& state,
+                         int code, resume_outcome outcome) noexcept;
 
 // Minimal steady-clock timeout service used by wait_for(). One background
 // thread; entries are a multimap of deadline -> entry with a cancellable
 // flag, so a cancelled deadline costs one erase-free skip at pop time.
 // (Real I/O timers arrive with TASK-099; this service only needs to make
-// wait_for real.) Header-only by design: the public resume_signal ABI
-// stays linkable without the library, matching the TASK-097 consumer
-// sentinel pattern.
+// wait_for real.) Its implementation and shared queue live in the library.
 struct timer_entry {
     std::mutex mu;
     bool cancelled = false;
@@ -160,14 +107,7 @@ class timer_queue {
 
         // Thread-safe, idempotent. The deadline entry becomes a no-op;
         // if it already fired, cancel() does nothing.
-        void cancel() {
-            if (!entry_) return;
-            std::lock_guard<std::mutex> lock(entry_->mu);
-            if (!entry_->cancelled) {
-                entry_->cancelled = true;
-                entry_->fn = nullptr;
-            }
-        }
+        void cancel();
 
         explicit operator bool() const noexcept { return entry_ != nullptr; }
 
@@ -178,58 +118,13 @@ class timer_queue {
 
     timer_queue() : thread_([this] { run(); }) { }
 
-    ~timer_queue() {
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            stop_ = true;
-        }
-        cv_.notify_all();
-        thread_.join();
-    }
+    ~timer_queue();
 
     ticket schedule(clock::time_point when,
-                    concurrency::unique_function<void()> fn) {
-        auto entry = std::make_shared<timer_entry>();
-        entry->fn = std::move(fn);
-        ticket t;
-        t.entry_ = entry;
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            items_.emplace(when, std::move(entry));
-        }
-        cv_.notify_all();
-        return t;
-    }
+                    concurrency::unique_function<void()> fn);
 
  private:
-    void run() {
-        std::unique_lock<std::mutex> lock(mu_);
-        for (;;) {
-            if (stop_) return;
-            if (items_.empty()) {
-                cv_.wait(lock);
-                continue;
-            }
-            const auto when = items_.begin()->first;
-            if (clock::now() < when) {
-                cv_.wait_until(lock, when);
-                continue;
-            }
-            std::shared_ptr<timer_entry> entry = std::move(items_.begin()->second);
-            items_.erase(items_.begin());
-            concurrency::unique_function<void()> fn;
-            {
-                std::lock_guard<std::mutex> entry_lock(entry->mu);
-                if (!entry->cancelled) {
-                    fn = std::move(entry->fn);
-                    entry->cancelled = true;
-                }
-            }
-            lock.unlock();
-            if (fn) fn();  // callbacks post waiter resumptions; never block
-            lock.lock();
-        }
-    }
+    void run();
 
     std::mutex mu_;
     std::condition_variable cv_;
@@ -238,10 +133,7 @@ class timer_queue {
     std::thread thread_;
 };
 
-inline timer_queue& default_timer_queue() {
-    static timer_queue queue;
-    return queue;
-}
+timer_queue& default_timer_queue();
 
 }  // namespace detail
 
@@ -256,8 +148,7 @@ class resume_waiter;
 // hands copies to application code while retaining its own handle.
 class resume_signal {
  public:
-    resume_signal()
-        : state_(std::make_shared<detail::resume_state>()) { }
+    resume_signal();
 
     // The first of {signal, cancel} wins; every later call is a no-op.
     // Never blocks and never resumes a waiter synchronously on the
@@ -292,89 +183,22 @@ class resume_signal {
 // any in-flight posted resumption a no-op.
 class resume_waiter final {
  public:
-    explicit resume_waiter(std::shared_ptr<detail::resume_state> state)
-        : state_(std::move(state)),
-          node_(std::make_shared<detail::resume_node>()) { }
+    explicit resume_waiter(std::shared_ptr<detail::resume_state> state);
 
     resume_waiter(std::shared_ptr<detail::resume_state> state,
-                  std::chrono::steady_clock::time_point deadline)
-        : state_(std::move(state)),
-          node_(std::make_shared<detail::resume_node>()),
-          ticket_(std::make_shared<detail::timer_queue::ticket>()),
-          deadline_(deadline) { }
+                  std::chrono::steady_clock::time_point deadline);
 
-    resume_waiter& bind_frame(detail::task_frame_base* frame) noexcept {
-        frame_ = frame;
-        return *this;
-    }
+    resume_waiter& bind_frame(detail::task_frame_base* frame) noexcept;
 
     // Already-fired signal: complete inline on the awaiting frame's own
     // thread (still exactly once — a fresh node has no other claimant).
-    bool await_ready() noexcept {
-        const int trigger = state_->trigger.load(std::memory_order_acquire);
-        if (trigger == 0) return false;
-        node_->delivered.store(true, std::memory_order_relaxed);
-        node_->result = trigger == 1 ? resume_outcome::resumed
-                                     : resume_outcome::cancelled;
-        return true;
-    }
+    bool await_ready() noexcept;
 
-    std::coroutine_handle<> await_suspend(std::coroutine_handle<> awaiting) {
-        // Publishing the node can resume and destroy this awaiter on
-        // another worker. Retain everything needed before publication;
-        // only these shared/local values are used afterwards.
-        auto state = state_;
-        auto node = node_;
-        auto ticket_slot = ticket_;
-        const auto deadline = deadline_;
-        node->awaiting = awaiting;
-        node->witness = frame_ ? frame_->frame_witness_ptr() : nullptr;
-        node->target = frame_ ? frame_->frame_executor() : current_executor();
-
-        int trigger;
-        {
-            std::lock_guard<std::mutex> lock(state->mu);
-            trigger = state->trigger.load(std::memory_order_seq_cst);
-            if (trigger == 0) {
-                node->next = state->head;
-                state->head = node;
-            }
-        }
-        if (trigger != 0) {
-            // The trigger raced registration: symmetric transfer stays
-            // on the awaiting frame's own thread.
-            node->delivered.store(true, std::memory_order_relaxed);
-            node->result = trigger == 1 ? resume_outcome::resumed
-                                        : resume_outcome::cancelled;
-            return awaiting;
-        }
-        if (ticket_slot) {
-            auto ticket = detail::default_timer_queue().schedule(
-                deadline, [node] { detail::deliver(node, resume_outcome::timeout); });
-            std::lock_guard<std::mutex> lock(state->mu);
-            // The waiter may already have died before schedule returned.
-            // Serialize installation with destructor cancellation.
-            if (node->delivered.load(std::memory_order_acquire)) ticket.cancel();
-            else *ticket_slot = std::move(ticket);
-        }
-        return std::noop_coroutine();
-    }
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<> awaiting);
 
     resume_outcome await_resume() const noexcept { return node_->result; }
 
-    ~resume_waiter() {
-        std::lock_guard<std::mutex> lock(state_->mu);
-        node_->delivered.store(true, std::memory_order_release);
-        if (ticket_) ticket_->cancel();
-        std::shared_ptr<detail::resume_node>* link = &state_->head;
-        while (*link) {
-            if (link->get() == node_.get()) {
-                *link = (*link)->next;
-                return;
-            }
-            link = &(*link)->next;
-        }
-    }
+    ~resume_waiter();
 
     resume_waiter(const resume_waiter&) = delete;
     resume_waiter& operator=(const resume_waiter&) = delete;

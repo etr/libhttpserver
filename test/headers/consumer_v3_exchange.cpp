@@ -19,14 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-102 Step 4: a consumer including the v3 exchange area —
-// <httpserver/exchange.hpp>, <httpserver/http/status.hpp> and
-// <httpserver/server/routes.hpp> — without HTTPSERVER_COMPILATION (or
-// any other build/TLS configuration macro) must compile and link
-// cleanly. The v3 exchange area is header-only, so the empty LDADD of
-// this target is itself part of the contract. Every public exchange
-// member is named through an exchange& (the shape route handlers
-// receive); the test passes by virtue of compiling and linking.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <cstdint>
 #include <string>

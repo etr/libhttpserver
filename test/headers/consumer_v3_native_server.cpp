@@ -19,15 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-108 step 8 (Check A): a consumer including
-// <httpserver/server/server.hpp> without HTTPSERVER_COMPILATION (or
-// any other build/TLS configuration macro) must compile and link
-// cleanly. The header must stay free of engine vocabulary: the pimpl
-// keeps every detail/ type out, so the empty LDADD of this target
-// links (the definitions live in the library, which step 10's
-// v3_native_linkage audit exercises). No server is constructed or
-// listened here: this sentinel never needs a thread. The test passes
-// by virtue of compiling and linking; main() asserts nothing.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <chrono>
 #include <cstddef>

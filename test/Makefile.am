@@ -58,56 +58,39 @@ PARITY_TRANSCRIPTS = parity/transcripts/routing.tseq \
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
-# TASK-076 Cycle 1: pin LT_SKIP / LT_SKIP_IF runtime semantics. Pure-host
-# CPU test of the littletest framework itself — no library linkage
-# needed beyond the default.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 littletest_skip_semantics_SOURCES = unit/littletest_skip_semantics_test.cpp
-littletest_skip_semantics_LDADD =
-
+littletest_skip_semantics_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-079: pure-CPU self-test for the test-side digest-client helper
 # (test/integ/digest_client.hpp). Pins the FIPS MD5/SHA-256 vectors, the
 # RFC 7616 §3.3 parser shape, and the RFC 7616 §3.9.1 worked-example
 # response value so the helper's behaviour is trusted before any integ
 # test consumes it.
 digest_client_self_test_SOURCES = unit/digest_client_self_test.cpp
-digest_client_self_test_LDADD =
-
-# TASK-096 -- v2 observable-behavior parity harness (test/parity/).
-# Four unit binaries test the harness pieces themselves (parser, response
-# framer, normalizer, v2 profile registry); transcript_runner executes the
-# committed *.tseq corpus against the running v2 server through raw
-# segmented sockets. The parser/framer/normalizer binaries are pure-host
-# code with zero libhttpserver dependency (empty LDADD).
+digest_client_self_test_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 transcript_parser_SOURCES = unit/transcript_parser_test.cpp parity/transcript.cpp
-transcript_parser_LDADD =
-
+transcript_parser_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-096 Cycle 2: response framer (byte stream -> observed_response).
 response_frame_SOURCES = unit/response_frame_test.cpp parity/response_frame.cpp
-response_frame_LDADD =
-
+response_frame_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-096 Cycle 3: normalizer (expectation-vs-observation comparison).
 normalize_SOURCES = unit/normalize_test.cpp parity/normalize.cpp parity/response_frame.cpp parity/transcript.cpp
-normalize_LDADD =
+normalize_LDADD = $(top_builddir)/src/libhttpserver.la
 normalize_CPPFLAGS = $(AM_CPPFLAGS) -DNORMALIZE_FIXTURE_DIR='"$(top_srcdir)/test/data"'
 
-# TASK-097 -- v3 public semantic types (PRD-V3N-REQ-017/018/019/020/037,
-# DR-V3-001). Header-only value types under httpserver::http; the unit
-# tests need no library linkage.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 http_semantic_outcome_SOURCES = unit/http_semantic_outcome_test.cpp
-http_semantic_outcome_LDADD =
-
+http_semantic_outcome_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-097 step 2: v3 method type with extension round-trip (PRD-V3N-REQ-020).
 http_semantic_method_SOURCES = unit/http_semantic_method_test.cpp
-http_semantic_method_LDADD =
-
+http_semantic_method_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-097 step 3: insertion-ordered multivalue fields (REQ-017/018).
 http_semantic_fields_SOURCES = unit/http_semantic_fields_test.cpp
-http_semantic_fields_LDADD =
-
+http_semantic_fields_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-097 step 4: request_head seed — raw target vs route path (REQ-019).
 http_semantic_request_head_SOURCES = unit/http_semantic_request_head_test.cpp
-http_semantic_request_head_LDADD =
-
+http_semantic_request_head_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-097 step 5: TLS-on/off header identity. consumer_v3_semantic is
 # a compile-and-link gate: it includes <httpserver/http.hpp> and each
 # sub-header directly WITHOUT HTTPSERVER_COMPILATION, so its per-target
@@ -119,92 +102,57 @@ http_semantic_request_head_LDADD =
 # library linkage either, only the header directory define.
 consumer_v3_semantic_SOURCES = headers/consumer_v3_semantic.cpp
 consumer_v3_semantic_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_semantic_LDADD =
+consumer_v3_semantic_LDADD = $(top_builddir)/src/libhttpserver.la
 v3_header_hygiene_SOURCES = unit/v3_header_hygiene_test.cpp
 v3_header_hygiene_CPPFLAGS = $(AM_CPPFLAGS) -DV3_SEMANTIC_HEADER_DIR='"$(top_srcdir)/src/httpserver"'
-v3_header_hygiene_LDADD =
-# TASK-098 step 6: TLS-on/off header identity for the concurrency core.
-# consumer_v3_concurrency includes <httpserver/concurrency/concurrency.hpp>
-# and each sub-header WITHOUT HTTPSERVER_COMPILATION (per-target CPPFLAGS
-# drop it, mirroring consumer_v3_semantic); empty LDADD proves the v3
-# concurrency headers need no library linkage.
-# Standalone executor surface must provide its own standard declarations.
+v3_header_hygiene_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_executor_SOURCES = headers/consumer_v3_executor.cpp
 consumer_v3_executor_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_executor_LDADD =
-
+consumer_v3_executor_LDADD = $(top_builddir)/src/libhttpserver.la
 consumer_v3_concurrency_SOURCES = headers/consumer_v3_concurrency.cpp
 consumer_v3_concurrency_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_concurrency_LDADD =
-
-# TASK-098 -- v3 concurrency core (PRD-V3N-REQ-024/025/031, DR-V3-003).
-# Header-only public types under httpserver::concurrency; the unit tests
-# need no library linkage.
+consumer_v3_concurrency_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 task_executor_SOURCES = unit/task_executor_test.cpp
-task_executor_LDADD =
-
-# TASK-098 step 2: move-only single-consumer lazy task<T> with an owned
-# coroutine frame. Header-only; no library linkage.
+task_executor_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 task_core_SOURCES = unit/task_core_test.cpp
-task_core_LDADD =
-
-# TASK-098 step 3: stop source/token fan-out with executor-posted
-# cancellation. Header-only; no library linkage.
+task_core_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 task_cancellation_SOURCES = unit/task_cancellation_test.cpp
-task_cancellation_LDADD =
-
-# TASK-098 step 4: idempotent one-shot resume signal with timeout.
-# Header-only (background timeout thread included); no library linkage.
+task_cancellation_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 task_resume_signal_SOURCES = unit/task_resume_signal_test.cpp
-task_resume_signal_LDADD =
-
+task_resume_signal_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-098 step 5: completion, timeout, disconnect and stop race suite.
 task_race_SOURCES = unit/task_race_test.cpp unit/manual_executor_post_probe.hpp
 task_race_CPPFLAGS = $(AM_CPPFLAGS) $(TASK_RACE_WRAP_CPPFLAGS)
-task_race_LDFLAGS = $(AM_LDFLAGS) $(TASK_RACE_WRAP_LDFLAGS)
-task_race_LDADD =
-
+# Link the real archive so GNU --wrap reaches extracted executor operations.
+task_race_LDFLAGS = $(AM_LDFLAGS) $(TASK_RACE_WRAP_LDFLAGS) -static-libtool-libs
+task_race_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-098 step 5: request_stop-returns-inside-a-handler acceptance
 # (PRD-V3N-REQ-031, DR-V3-008).
 task_stop_inside_handler_SOURCES = unit/task_stop_inside_handler_test.cpp
-task_stop_inside_handler_LDADD =
-
-# TASK-101 -- v3 server configuration and resource budgets
-# (PRD-V3N-REQ-009/014/016, DR-V3-001). Header-only public types under
-# httpserver::server; the unit tests need no library linkage.
+task_stop_inside_handler_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 server_options_validate_SOURCES = unit/server_options_validate_test.cpp
-server_options_validate_LDADD =
-
-# TASK-101 step 3: hierarchical budgets. RAII reservations must release
-# on every terminal path; header-only, no library linkage.
+server_options_validate_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 server_budgets_SOURCES = unit/server_budgets_test.cpp
-server_budgets_LDADD =
-
-# TASK-101 step 4: budget-bounded route registration with validated
-# patterns (REQ-009). Header-only, no library linkage.
+server_budgets_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 server_routes_SOURCES = unit/server_routes_test.cpp
-server_routes_LDADD =
-
-# TASK-101 step 5: TLS-on/off header identity for the server
-# configuration area. consumer_v3_server includes
-# <httpserver/server/configuration.hpp> and each sub-header WITHOUT
-# HTTPSERVER_COMPILATION (per-target CPPFLAGS drop it, mirroring
-# consumer_v3_semantic / consumer_v3_concurrency); empty LDADD proves
-# the v3 server headers need no library linkage.
+server_routes_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_server_SOURCES = headers/consumer_v3_server.cpp
 consumer_v3_server_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_server_LDADD =
-
-# TASK-102 -- header-time exchange decisions and route execution
-# (PRD-V3N-REQ-009/023/024/025, DR-V3-003). The exchange area is
-# header-only public surface plus a private seam under detail/; the
-# unit tests include the seam under the AM_CPPFLAGS
-# -DHTTPSERVER_COMPILATION define and need no library linkage.
+consumer_v3_server_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 
 # TASK-102 step 1: validated numeric status type (response seed).
 http_status_SOURCES = unit/http_status_test.cpp
-http_status_LDADD =
-
+http_status_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-102 step 2: exchange decision state machine (respond / admit /
 # suspend / upgrade, double-terminal rejection, disconnect fan-out).
 exchange_decisions_SOURCES = unit/exchange_decisions_test.cpp
@@ -224,33 +172,18 @@ consumer_v3_exchange_SOURCES = headers/consumer_v3_exchange.cpp
 consumer_v3_exchange_CPPFLAGS = -I$(top_srcdir)/src
 consumer_v3_exchange_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
-# TASK-103 -- bounded body reader and collect (PRD-V3N-REQ-021/022/025).
-# Like the exchange area: header-only public surface (body_reader.hpp)
-# plus an engine seam (detail::body_source) declared in the public
-# header; the unit tests include the seam-free public headers under the
-# AM_CPPFLAGS -DHTTPSERVER_COMPILATION define and need no library
-# linkage.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 
 # TASK-103 steps 1-4: one bounded incremental read (credit on
 # consumption), EOF with trailers, collect(max) exactness, cancellation.
 body_reader_SOURCES = unit/body_reader_test.cpp
 body_reader_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
-# TASK-103 step 5: TLS-on/off header identity for the body area.
-# consumer_v3_body_reader includes <httpserver/body_reader.hpp> and
-# <httpserver/exchange.hpp> WITHOUT HTTPSERVER_COMPILATION (per-target
-# CPPFLAGS drop it); empty LDADD proves the headers need no library
-# linkage.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_body_reader_SOURCES = headers/consumer_v3_body_reader.cpp
 consumer_v3_body_reader_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_body_reader_LDADD =
-
-# TASK-104 -- response writer, body source and backpressure
-# (PRD-V3N-REQ-025/026/027/037). Like the exchange and body areas:
-# header-only public surface (response_writer.hpp) plus an engine seam
-# (detail::body_sink) declared in the public header; the unit tests
-# include the public headers under the AM_CPPFLAGS
-# -DHTTPSERVER_COMPILATION define and need no library linkage.
+consumer_v3_body_reader_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 
 # TASK-104 steps 1-4: one bounded write, park on a full queue, finish
 # with trailers, typed sticky failures, disconnect cancellation,
@@ -258,22 +191,13 @@ consumer_v3_body_reader_LDADD =
 response_writer_SOURCES = unit/response_writer_test.cpp
 response_writer_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
-# TASK-104 step 5: TLS-on/off header identity for the writer area.
-# consumer_v3_response_writer includes <httpserver/response_writer.hpp>
-# and <httpserver/exchange.hpp> WITHOUT HTTPSERVER_COMPILATION
-# (per-target CPPFLAGS drop it); empty LDADD proves the headers need no
-# library linkage.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_response_writer_SOURCES = headers/consumer_v3_response_writer.cpp
 consumer_v3_response_writer_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_response_writer_LDADD =
-
-# TASK-105 -- strict HTTP/1 start-line/header parser (PRD-V3N-REQ-004/
-# 017/019, DR-V3-006). The parser lives in private HTTPSERVER_COMPILATION-
-# gated headers under src/httpserver/detail/, reachable through the
-# AM_CPPFLAGS -I src path; header-only, so no library linkage is needed.
+consumer_v3_response_writer_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 http1_parser_SOURCES = unit/http1_parser_test.cpp
-http1_parser_LDADD =
-
+http1_parser_LDADD = $(top_builddir)/src/libhttpserver.la
 noinst_HEADERS = littletest.hpp parity/transcript.hpp parity/response_frame.hpp parity/normalize.hpp parity/server_fixture.hpp parity/v2_fixture.hpp parity/socket_io.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp integ/digest_client.hpp integ/stream_capture_helpers.hpp integ/log_capture.hpp unit/throw_probe.hpp unit/io_backend_contract.hpp unit/io_loopback.hpp unit/body_source_fake.hpp unit/body_sink_fake.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
 
@@ -312,41 +236,23 @@ EXTRA_DIST = libhttpserver.supp \
              v1_baseline/measure_v1_sizes.cpp \
              v1_baseline/measure_v1_get_headers.cpp
 
-# TASK-106 -- authoritative HTTP/1 body framing and trailers
-# (PRD-V3N-REQ-004/017/021/023, DR-V3-006). Like the head parser: the
-# body mode, decoder, and adapter live in private
-# HTTPSERVER_COMPILATION-gated headers under src/httpserver/detail/,
-# reachable through the AM_CPPFLAGS -I src path; header-only, so no
-# library linkage is needed.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 http1_body_mode_SOURCES = unit/http1_body_mode_test.cpp
-http1_body_mode_LDADD =
-
+http1_body_mode_LDADD = $(top_builddir)/src/libhttpserver.la
 http1_body_decoder_SOURCES = unit/http1_body_decoder_test.cpp
-http1_body_decoder_LDADD =
-
+http1_body_decoder_LDADD = $(top_builddir)/src/libhttpserver.la
 http1_body_source_SOURCES = unit/http1_body_source_test.cpp
 http1_body_source_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
-# TASK-107 -- HTTP/1 response framing and ordered persistence
-# (PRD-V3N-REQ-004/026/027, DR-V3-006). Like the request-side framing:
-# the response mode, framer, and outbox live in private
-# HTTPSERVER_COMPILATION-gated headers under src/httpserver/detail/,
-# reachable through the AM_CPPFLAGS -I src path; header-only, so no
-# library linkage is needed. The framer and outbox tests compile the
-# parity corpus parsers (response_frame/normalize/transcript) directly
-# and read the live transcript corpus at runtime through
-# PARITY_TRANSCRIPT_DIR.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 http1_response_mode_SOURCES = unit/http1_response_mode_test.cpp
-http1_response_mode_LDADD =
-
+http1_response_mode_LDADD = $(top_builddir)/src/libhttpserver.la
 http1_response_framer_SOURCES = unit/http1_response_framer_test.cpp \
 	parity/response_frame.cpp parity/normalize.cpp parity/transcript.cpp
-http1_response_framer_LDADD =
+http1_response_framer_LDADD = $(top_builddir)/src/libhttpserver.la
 http1_response_framer_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"'
 
-# write_front exercises the real io_operation + fake backend seam, so
-# this program links libhttpserver.la (the TASK-099 convention) instead
-# of relying on the header-only default.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 http1_response_outbox_SOURCES = unit/http1_response_outbox_test.cpp \
 	parity/response_frame.cpp
 http1_response_outbox_LDADD = $(LDADD)
@@ -371,12 +277,10 @@ worker_pool_SOURCES = unit/worker_pool_test.cpp
 connection_engine_SOURCES = unit/connection_engine_test.cpp \
 	parity/response_frame.cpp
 
-# TASK-108 step 6: the bare error response serializer. Header-only
-# surface; wire observations parsed through the parity frame parser.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 http1_error_synth_SOURCES = unit/http1_error_synth_test.cpp \
 	parity/response_frame.cpp
-http1_error_synth_LDADD =
-
+http1_error_synth_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-108 step 8: the native_server lifecycle over the real listener
 # engines (bind, stop join, REQ-016 validate gate, route-after-listen,
 # destructor stop). Links libhttpserver.la for the engine .cpp files.
@@ -387,14 +291,10 @@ native_server_SOURCES = unit/native_server_test.cpp
 # rejection). Links libhttpserver.la for detail/drain_scope.cpp.
 drain_scope_SOURCES = unit/drain_scope_test.cpp
 
-# TASK-108 step 8: a consumer including <httpserver/server/server.hpp>
-# without HTTPSERVER_COMPILATION must compile and link; the pimpl keeps
-# the engine types out of the header, so the empty LDADD proves the
-# surface needs no library linkage.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_native_server_SOURCES = headers/consumer_v3_native_server.cpp
 consumer_v3_native_server_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_native_server_LDADD =
-
+consumer_v3_native_server_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-108 step 9: the native HTTP/1 end-to-end suite over raw loopback
 # clients (pollsys shims; no curl): keep-alive, version-conditional
 # framing and close, pipelining, error synthesis, watchdog timeouts,
@@ -406,101 +306,55 @@ native_http1_e2e_SOURCES = integ/native_http1_e2e_test.cpp \
 v3_native_linkage_SOURCES = integ/v3_native_linkage_test.cpp
 v3_native_linkage_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
-# TASK-111 step 1: the bounded synchronous value-returning route
-# adapter (PRD-V3N-REQ-021/022, DR-V3-003). Header-only surface
-# (server/route_sync.hpp), so the unit suite needs no library linkage;
-# the rig reuses the scripted body fakes and the detail::run_route
-# runner.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 route_sync_SOURCES = unit/route_sync_test.cpp
 route_sync_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
-# TASK-112 step 1: immutable reusable response definitions and
-# overlays (PRD-V3N-REQ-026/028/029/030, DR-V3-005). Header-only surface
-# (response_definition.hpp); the rig also constructs native sessions.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 response_definition_SOURCES = unit/response_definition_test.cpp
 response_definition_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
-# TASK-113: file, pipe and borrowed-buffer response ownership
-# (PRD-V3N-REQ-028/029, DR-V3-005). Header-only surface
-# (response_sources.hpp / response_definition.hpp); the rig constructs
-# native sessions as part of the exchange sink.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 response_sources_SOURCES = unit/response_sources_test.cpp
 response_sources_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
-# TASK-112 step 5: a consumer including
-# <httpserver/response_definition.hpp> WITHOUT HTTPSERVER_COMPILATION
-# must compile and link; the surface is header-only, so the empty
-# LDADD proves it needs no library linkage.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_response_definition_SOURCES = headers/consumer_v3_response_definition.cpp
 consumer_v3_response_definition_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_response_definition_LDADD =
-
-# TASK-113: a consumer including
-# <httpserver/response_sources.hpp> WITHOUT HTTPSERVER_COMPILATION
-# must compile and link; the vocabulary is header-only, so the empty
-# LDADD proves it needs no library linkage.
+consumer_v3_response_definition_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_response_sources_SOURCES = headers/consumer_v3_response_sources.cpp
 consumer_v3_response_sources_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_response_sources_LDADD =
-
-# TASK-111 step 2: a consumer including
-# <httpserver/server/route_sync.hpp> WITHOUT HTTPSERVER_COMPILATION
-# must compile and link; the adapter is header-only, so the empty LDADD
-# proves the surface needs no library linkage.
+consumer_v3_response_sources_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_route_sync_SOURCES = headers/consumer_v3_route_sync.cpp
 consumer_v3_route_sync_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_route_sync_LDADD =
-
-# TASK-114 step 1: the in-tree Base64 codec (RFC 4648). Header-only
-# surface (detail/base64.hpp), so the unit suite needs no library
-# linkage.
+consumer_v3_route_sync_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 base64_vector_SOURCES = unit/base64_vector_test.cpp
-base64_vector_LDADD =
-
-# TASK-114 step 2: the in-tree SHA-1 (FIPS 180-4 / RFC 6234) used by
-# the RFC 6455 upgrade-handshake accept computation. Header-only
-# surface (detail/sha1.hpp), so the unit suite needs no library
-# linkage.
+base64_vector_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 sha1_vector_SOURCES = unit/sha1_vector_test.cpp
-sha1_vector_LDADD =
-
-# TASK-114 step 3: the in-tree MD5 (RFC 1321, required by RFC 7616
-# Digest) and SHA-256 (the documented SHA-256 Digest variant). Both
-# header-only surfaces (detail/md5.hpp, detail/sha256.hpp), so the
-# unit suites need no library linkage.
+sha1_vector_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 md5_vector_SOURCES = unit/md5_vector_test.cpp
-md5_vector_LDADD =
-
+md5_vector_LDADD = $(top_builddir)/src/libhttpserver.la
 sha256_vector_SOURCES = unit/sha256_vector_test.cpp
-sha256_vector_LDADD =
-
-# TASK-114 step 4: the constant-time comparison (secure_compare.hpp)
-# and the OS randomness seam (entropy_sys.hpp). Both header-only
-# surfaces, so the unit suites need no library linkage.
+sha256_vector_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 secure_compare_SOURCES = unit/secure_compare_test.cpp
-secure_compare_LDADD =
-
+secure_compare_LDADD = $(top_builddir)/src/libhttpserver.la
 entropy_sys_SOURCES = unit/entropy_sys_test.cpp
-entropy_sys_LDADD =
-
-# TASK-115 step 1: the Digest nonce (keyed tag, mint, classification)
-# and its bounded nc ledger. Header-only private surfaces
-# (detail/digest_hex.hpp, digest_nonce.hpp, digest_ledger.hpp), so the
-# unit suite needs no library linkage.
+entropy_sys_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 digest_nonce_ledger_SOURCES = unit/digest_nonce_ledger_test.cpp
-digest_nonce_ledger_LDADD =
-
-# TASK-115 step 2: the bounded Authorization: Digest field parser
-# (detail/digest_params.hpp), header-only, no library linkage.
+digest_nonce_ledger_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 digest_params_SOURCES = unit/digest_params_test.cpp
-digest_params_LDADD =
-
-# TASK-115 step 3: the RFC 7616 response computation, pinned against
-# the RFC's own worked examples plus the independent test-side MD5 for
-# the legacy no-qop chain. Header-only, no library linkage.
+digest_params_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 digest_response_vector_SOURCES = unit/digest_response_vector_test.cpp
-digest_response_vector_LDADD =
-
+digest_response_vector_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-114 step 5: the Basic authentication policy above semantic
 # request heads. The members live in the library (detail/auth_basic.cpp
 # in v3core), so the unit suite links libhttpserver.la (default LDADD).
@@ -512,14 +366,10 @@ basic_auth_policy_SOURCES = unit/basic_auth_policy_test.cpp
 # Black-box through the independent integ/digest_client.hpp client.
 digest_auth_policy_SOURCES = unit/digest_auth_policy_test.cpp
 
-# TASK-114: a consumer including <httpserver/auth/basic_auth.hpp>
-# WITHOUT HTTPSERVER_COMPILATION must compile and link; the empty LDADD
-# proves the vocabulary surface needs no library linkage (every check
-# is a static_assert over unevaluated expressions).
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_auth_SOURCES = headers/consumer_v3_auth.cpp
 consumer_v3_auth_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_auth_LDADD =
-
+consumer_v3_auth_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-114 step 6: parity replay of all three auth_basic.tseq cases
 # through the REAL policy and the REAL response framer -- no
 # hand-synthesized challenge fields. The policy members live in the
@@ -540,20 +390,12 @@ digest_auth_corpus_SOURCES = unit/digest_auth_corpus_test.cpp \
 	parity/response_frame.cpp parity/normalize.cpp parity/transcript.cpp
 digest_auth_corpus_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"'
 
-# TASK-116 step 1: the strict incremental urlencoded body decoder
-# (detail/forms_urlencoded.hpp). Header-only, no library linkage;
-# AM_CPPFLAGS carries -DHTTPSERVER_COMPILATION so the gated detail
-# header is includable from the test tree.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 urlencoded_decoder_SOURCES = unit/urlencoded_decoder_test.cpp
-urlencoded_decoder_LDADD =
-
-# TASK-117 step 1: the strict incremental multipart wire decoder
-# (detail/forms_multipart.hpp). Header-only, no library linkage;
-# AM_CPPFLAGS carries -DHTTPSERVER_COMPILATION so the gated detail
-# header is includable from the test tree.
+urlencoded_decoder_LDADD = $(top_builddir)/src/libhttpserver.la
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 multipart_decoder_SOURCES = unit/multipart_decoder_test.cpp
-multipart_decoder_LDADD =
-
+multipart_decoder_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-117 step 2: the multipart form vocabulary, one-shot decode,
 # and multipart_read rejection verdicts (forms/multipart.hpp). The
 # members live in the library (detail/forms_multipart.cpp in v3core),
@@ -574,14 +416,10 @@ forms_multipart_route_SOURCES = unit/forms_multipart_route_test.cpp
 # libhttpserver.la (default LDADD).
 forms_multipart_files_SOURCES = unit/forms_multipart_files_test.cpp
 
-# TASK-117: a consumer including <httpserver/forms/multipart.hpp>
-# WITHOUT HTTPSERVER_COMPILATION must compile and link; the empty
-# LDADD proves the vocabulary surface needs no library linkage (every
-# check is a static_assert over unevaluated expressions).
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_multipart_SOURCES = headers/consumer_v3_multipart.cpp
 consumer_v3_multipart_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_multipart_LDADD =
-
+consumer_v3_multipart_LDADD = $(top_builddir)/src/libhttpserver.la
 consumer_v3_multipart_runtime_SOURCES = headers/consumer_v3_multipart_runtime.cpp
 consumer_v3_multipart_runtime_CPPFLAGS = -I$(top_srcdir)/src
 consumer_v3_multipart_runtime_LDADD = $(top_builddir)/src/libhttpserver.la
@@ -600,14 +438,10 @@ forms_urlencoded_SOURCES = unit/forms_urlencoded_test.cpp
 # libhttpserver.la (default LDADD).
 forms_urlencoded_route_SOURCES = unit/forms_urlencoded_route_test.cpp
 
-# TASK-116: a consumer including <httpserver/forms/urlencoded.hpp>
-# WITHOUT HTTPSERVER_COMPILATION must compile and link; the empty
-# LDADD proves the vocabulary surface needs no library linkage (every
-# check is a static_assert over unevaluated expressions).
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_forms_SOURCES = headers/consumer_v3_forms.cpp
 consumer_v3_forms_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_forms_LDADD =
-
+consumer_v3_forms_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-116 step 5: parity replay of the forms.tseq urlencoded_echo
 # case through the REAL decode and the REAL response framer (the
 # TASK-114 corpus convention). The decode members live in the library,
@@ -630,10 +464,7 @@ forms_multipart_corpus_SOURCES = unit/forms_multipart_corpus_test.cpp \
 	parity/response_frame.cpp parity/normalize.cpp parity/transcript.cpp parity/case_wire.cpp
 forms_multipart_corpus_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"'
 
-# TASK-118 step 1: the ported route families -- method sets, the prefix
-# family, and resolve() with the v2 precedence shape (plan D1). The
-# registry stays header-only and self-contained, so the unit suite
-# links libhttpserver.la (default LDADD, the server_routes convention).
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 server_routes_families_SOURCES = unit/server_routes_families_test.cpp
 
 # TASK-118 step 2: the lifecycle hook vocabulary and bus (plan D4).
@@ -647,15 +478,10 @@ server_hooks_SOURCES = unit/server_hooks_test.cpp
 # (default LDADD).
 request_lifecycle_SOURCES = unit/request_lifecycle_test.cpp
 
-# TASK-118 step 5: a consumer including
-# <httpserver/server/hooks.hpp> WITHOUT HTTPSERVER_COMPILATION must
-# compile and link; the vocabulary surface is header-only (every check
-# an unevaluated static_assert), so the empty LDADD proves it needs no
-# library linkage (the bus storage itself lives in v3core).
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_hooks_SOURCES = headers/consumer_v3_hooks.cpp
 consumer_v3_hooks_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_hooks_LDADD =
-
+consumer_v3_hooks_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-118 step 6: parity replay of the routing and hooks corpora
 # through the REAL registry + hook bus + dispatcher + response framer
 # (plan D6, the TASK-114 corpus convention; the shared driver lives in
@@ -678,30 +504,20 @@ hooks_corpus_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/t
 # unit suite links libhttpserver.la (default LDADD).
 net_address_SOURCES = unit/net_address_test.cpp
 
-# TASK-119 step 1: a consumer including
-# <httpserver/net/address.hpp> WITHOUT HTTPSERVER_COMPILATION must
-# compile and link; every check is an unevaluated static_assert, so
-# the empty LDADD proves the vocabulary surface needs no library
-# linkage (parsing and text conversion live in v3core).
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_net_address_SOURCES = headers/consumer_v3_net_address.cpp
 consumer_v3_net_address_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_net_address_LDADD =
-
+consumer_v3_net_address_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-119 step 2: the thread-safe peer policy store (the v2
 # deny_ip/allow_ip semantics over the prefix-bits vocabulary). The
 # storage lives in v3core (detail/peer_policy.cpp), so the unit suite
 # links libhttpserver.la (default LDADD).
 peer_policy_SOURCES = unit/peer_policy_test.cpp
 
-# TASK-119 step 2: a consumer including
-# <httpserver/server/peer_policy.hpp> WITHOUT HTTPSERVER_COMPILATION
-# must compile and link; every check is an unevaluated static_assert,
-# so the empty LDADD proves the vocabulary surface needs no library
-# linkage (the store itself lives in v3core).
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_peer_policy_SOURCES = headers/consumer_v3_peer_policy.cpp
 consumer_v3_peer_policy_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_peer_policy_LDADD =
-
+consumer_v3_peer_policy_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-119 step 6: parity replay of the ip_controls corpus (the pinned
 # allow_listed_loopback case byte-for-byte through the REAL registry +
 # dispatcher + framer with the peer policy in the loop) plus the
@@ -767,8 +583,7 @@ TESTS += integ/native_websocket_e2e.sh
 EXTRA_DIST += integ/native_websocket_e2e.sh
 
 task_resume_signal_lifetime_SOURCES = unit/task_resume_signal_lifetime_test.cpp
-task_resume_signal_lifetime_LDADD =
-
+task_resume_signal_lifetime_LDADD = $(top_builddir)/src/libhttpserver.la
 websocket_drain_SOURCES = unit/websocket_drain_test.cpp
 websocket_drain_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 websocket_drain_race_SOURCES = unit/websocket_drain_race_test.cpp
@@ -778,11 +593,10 @@ EXTRA_DIST += unit/websocket_engine_helpers.hpp
 # Portable external-loop contract: source-only public includes, no backend link.
 consumer_v3_readiness_SOURCES = headers/consumer_v3_readiness.cpp
 consumer_v3_readiness_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_readiness_LDADD =
+consumer_v3_readiness_LDADD = $(top_builddir)/src/libhttpserver.la
 readiness_contract_SOURCES = unit/readiness_contract_test.cpp
 readiness_contract_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test
-readiness_contract_LDADD =
-
+readiness_contract_LDADD = $(top_builddir)/src/libhttpserver.la
 external_readiness_adapter_SOURCES = unit/external_readiness_adapter_test.cpp
 external_readiness_adapter_CPPFLAGS = $(AM_CPPFLAGS) $(EXTERNAL_READINESS_WRAP_CPPFLAGS)
 external_readiness_adapter_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
@@ -1078,22 +892,21 @@ EXTRA_DIST += data/tls_credentials/client-expired-key.pem data/tls_credentials/c
 
 check_PROGRAMS += hpack_primitives hpack_static_table hpack_corpus
 hpack_primitives_SOURCES = unit/hpack_primitives_test.cpp
-hpack_primitives_LDADD =
+hpack_primitives_LDADD = $(top_builddir)/src/libhttpserver.la
 hpack_static_table_SOURCES = unit/hpack_static_table_test.cpp
-hpack_static_table_LDADD =
+hpack_static_table_LDADD = $(top_builddir)/src/libhttpserver.la
 hpack_corpus_SOURCES = unit/hpack_corpus_test.cpp fuzz/hpack_fuzz.cpp
 hpack_corpus_CPPFLAGS = $(AM_CPPFLAGS) -DHPACK_SEED_DIR='"$(top_srcdir)/test/data/hpack/seeds"'
-hpack_corpus_LDADD =
+hpack_corpus_LDADD = $(top_builddir)/src/libhttpserver.la
 EXTRA_DIST += data/hpack/rfc7541.hpp fuzz/hpack_fuzz.hpp fuzz/README-hpack.md
 
 check_PROGRAMS += hpack_dynamic_table hpack_field_section hpack_connection
 hpack_dynamic_table_SOURCES = unit/hpack_dynamic_table_test.cpp
-hpack_dynamic_table_LDADD =
+hpack_dynamic_table_LDADD = $(top_builddir)/src/libhttpserver.la
 hpack_field_section_SOURCES = unit/hpack_field_section_test.cpp
-hpack_field_section_LDADD =
+hpack_field_section_LDADD = $(top_builddir)/src/libhttpserver.la
 hpack_connection_SOURCES = unit/hpack_connection_test.cpp
-hpack_connection_LDADD =
-
+hpack_connection_LDADD = $(top_builddir)/src/libhttpserver.la
 check_PROGRAMS += http2_frame http2_settings http2_connection
 http2_frame_SOURCES = unit/http2_frame_test.cpp
 http2_settings_SOURCES = unit/http2_settings_test.cpp
@@ -1434,11 +1247,11 @@ quic_send_schedule_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 check_PROGRAMS += qpack_static_table qpack_primitives qpack_field_section
 qpack_static_table_SOURCES = unit/qpack_static_table_test.cpp
-qpack_static_table_LDADD =
+qpack_static_table_LDADD = $(top_builddir)/src/libhttpserver.la
 qpack_primitives_SOURCES = unit/qpack_primitives_test.cpp
-qpack_primitives_LDADD =
+qpack_primitives_LDADD = $(top_builddir)/src/libhttpserver.la
 qpack_field_section_SOURCES = unit/qpack_field_section_test.cpp
-qpack_field_section_LDADD =
+qpack_field_section_LDADD = $(top_builddir)/src/libhttpserver.la
 EXTRA_DIST += data/qpack/rfc9204.hpp
 
 check_PROGRAMS += http3_frame http3_settings http3_connection
@@ -1547,12 +1360,11 @@ quic_connection_lifecycle_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 check_PROGRAMS += qpack_dynamic_table qpack_instructions qpack_dynamic_corpus
 qpack_dynamic_table_SOURCES = unit/qpack_dynamic_table_test.cpp
-qpack_dynamic_table_LDADD =
+qpack_dynamic_table_LDADD = $(top_builddir)/src/libhttpserver.la
 qpack_instructions_SOURCES = unit/qpack_instructions_test.cpp
-qpack_instructions_LDADD =
+qpack_instructions_LDADD = $(top_builddir)/src/libhttpserver.la
 qpack_dynamic_corpus_SOURCES = unit/qpack_dynamic_corpus_test.cpp
-qpack_dynamic_corpus_LDADD =
-
+qpack_dynamic_corpus_LDADD = $(top_builddir)/src/libhttpserver.la
 check_PROGRAMS += http3_qpack
 http3_qpack_SOURCES = unit/http3_qpack_test.cpp
 http3_qpack_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
@@ -1604,7 +1416,7 @@ EXTRA_DIST += support/http3_semantic_routes.hpp integ/http3_semantic_aioquic.py 
 
 check_PROGRAMS += http3_semantic_h1
 http3_semantic_h1_SOURCES = unit/http3_semantic_h1_test.cpp parity/response_frame.cpp
-http3_semantic_h1_LDADD =
+http3_semantic_h1_LDADD = $(top_builddir)/src/libhttpserver.la
 EXTRA_DIST += support/http3_semantic_h1.hpp
 
 check_PROGRAMS += http3_websocket_harness
@@ -1739,8 +1551,7 @@ EXTRA_DIST += unit/package_backend_witness.hpp
 check_PROGRAMS += nonce_expiry_wait
 nonce_expiry_wait_SOURCES = unit/nonce_expiry_wait_test.cpp integ/nonce_expiry_wait.hpp
 nonce_expiry_wait_CPPFLAGS = -I$(top_srcdir)/test
-nonce_expiry_wait_LDADD =
-
+nonce_expiry_wait_LDADD = $(top_builddir)/src/libhttpserver.la
 check_PROGRAMS += v3_examples
 v3_examples_SOURCES = unit/v3_examples_test.cpp
 v3_examples_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
@@ -1820,7 +1631,11 @@ TESTS += ../scripts/test-v3-native-benchmark.py
 
 TESTS += ../scripts/test-v3-packaged-adapters.py
 
-# Public timed wait and immediate borrowed executor teardown, header-only.
+# Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_timed_resume_SOURCES = headers/consumer_v3_timed_resume.cpp
 consumer_v3_timed_resume_CPPFLAGS = -I$(top_srcdir)/src
-consumer_v3_timed_resume_LDADD =
+consumer_v3_timed_resume_LDADD = $(top_builddir)/src/libhttpserver.la
+check_PROGRAMS += v3_compiled_operations
+v3_compiled_operations_SOURCES = installed/v3_compiled_operations.cpp installed/v3_compiled_operations_worker.cpp
+v3_compiled_operations_CPPFLAGS = -I$(top_srcdir)/src
+v3_compiled_operations_LDADD = $(top_builddir)/src/libhttpserver.la

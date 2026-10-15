@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include "./quic_recovery_internal.hpp"
+#include <httpserver/detail/quic_recovery_internal.hpp>
 namespace httpserver::detail {
 namespace {
 bool valid_capacities(const quic_recovery_config& c) {

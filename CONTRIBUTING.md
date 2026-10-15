@@ -243,3 +243,18 @@ Please open an issue on `etr/libhttpserver` if you have suggestions for new labe
 
 [beginner]:https://github.com/search?utf8=%E2%9C%93&q=is%3Aopen+is%3Aissue+label%3Abeginner+label%3Ahelp-wanted+user%3Aetr+sort%3Acomments-desc
 [help-wanted]:https://github.com/search?q=is%3Aopen+is%3Aissue+label%3Ahelp-wanted+user%3Aetr+sort%3Acomments-desc+-label%3Abeginner
+
+## v3 source ownership
+
+On the `v3` branch, public compiled operations live in `src/<logical>.cpp`,
+owned by installed `src/httpserver/<logical>.hpp`. Private implementations and
+shared headers live in `src/detail/` and noninstalled `src/httpserver/detail/`.
+Cohesive split translation units share the actual owning header; do not create
+dummy headers or recombine engines just to match filenames.
+
+Normal library linkage supplies non-template behavior. Keep templates and
+constexpr definitions visible to consumers, along with trivial accessors/value
+operations and justified small byte/arithmetic primitives. Preserve complete
+public representation and required template support in installed headers; an
+installed header must never include a noninstalled private/provider/platform
+header. Record ownership and inline exceptions in `docs/v3-source-layout.md`.

@@ -45,14 +45,8 @@ inline char lowered(char c) noexcept {
                                   : c;
 }
 
-inline bool ascii_iequal(std::string_view left,
-                         std::string_view right) noexcept {
-    if (left.size() != right.size()) return false;
-    for (std::size_t i = 0; i < left.size(); ++i) {
-        if (lowered(left[i]) != lowered(right[i])) return false;
-    }
-    return true;
-}
+bool ascii_iequal(std::string_view left,
+                         std::string_view right) noexcept;
 
 }  // namespace auth_text
 

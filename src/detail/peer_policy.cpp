@@ -30,7 +30,7 @@
 #include <utility>
 #include <vector>
 
-#include <httpserver/server/peer_policy.hpp>
+#include <httpserver/detail/peer_policy.hpp>
 
 namespace httpserver {
 

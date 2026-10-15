@@ -74,9 +74,7 @@ class lifecycle_sink final : public exchange_sink {
     lifecycle_sink(exchange_sink& inner, const server::hook_bus& bus,
                    const http::request_head& head,
                    const bool* engine_refusal = nullptr,
-                   std::shared_ptr<const server::tls_peer_metadata> tls = {}) noexcept
-        : inner_(inner), bus_(bus), head_(head),
-          engine_refusal_(engine_refusal), tls_(std::move(tls)) { }
+                   std::shared_ptr<const server::tls_peer_metadata> tls = {}) noexcept;
 
     // Tags the next commit's provenance; the dispatcher sets it before
     // every commit path.
@@ -94,11 +92,7 @@ class lifecycle_sink final : public exchange_sink {
     // True after a post-commit abort was forwarded.
     bool aborted() const noexcept { return aborted_; }
 
-    bool begin_completion() noexcept {
-        if (completed_) return false;
-        completed_ = true;
-        return true;
-    }
+    bool begin_completion() noexcept;
 
     void on_admit(const body_policy& policy) override {
         inner_.on_admit(policy);
@@ -112,31 +106,12 @@ class lifecycle_sink final : public exchange_sink {
         commit(s, f, true);
     }
 
-    websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override {
-        // No response head is queued on the upgrade path: neither
-        // after_handler nor response_sent fires here (the ws milestone
-        // owns the session lifecycle).
-        return inner_.on_upgrade(options);
-    }
+    websocket_upgrade_result on_upgrade(const ws_upgrade_options& options) override;
 
-    void on_abort() override {
-        aborted_ = true;
-        inner_.on_abort();
-    }
+    void on_abort() override;
 
  private:
-    void commit(const http::status& s, const http::fields& f, bool streaming) {
-        // Mutable copies exist only when after_handler can run.
-        if (next_ != provenance::pre_handler
-                && bus_.any_hooks(server::hook_phase::after_handler)) {
-            http::status final_status = s;
-            http::fields final_fields = f;
-            fire_after(final_status, final_fields);
-            forward(final_status, final_fields, streaming);
-        } else {
-            forward(s, f, streaming);
-        }
-    }
+    void commit(const http::status& s, const http::fields& f, bool streaming);
 
     // The commit tail shared by both branches: forwards the head and,
     // only when the engine accepted it (a refused head -- the framer
@@ -145,36 +120,15 @@ class lifecycle_sink final : public exchange_sink {
     // accepted the committed head"). A refusal suppresses
     // response_sent and is recorded so the request_completed tail can
     // report the failure verdict.
-    void forward(const http::status& s, const http::fields& f, bool streaming) {
-        if (streaming) inner_.on_start_response(s, f);
-        else inner_.on_respond(s, f);
-        if (engine_refusal_ != nullptr && *engine_refusal_) {
-            refused_ = true;
-            return;
-        }
-        responded_ = true;
-        status_ = s.code();
-        fire_sent();
-    }
+    void forward(const http::status& s, const http::fields& f, bool streaming);
 
     // The mutating phase over copies of the about-to-be-committed
     // head; the mutated values are what get forwarded. Called only
     // from on_respond's gated branch (the copies exist exactly when
     // the hooks do).
-    void fire_after(http::status& s, http::fields& f) const {
-        server::after_handler_ctx ctx{head_, s, std::move(f), tls_};
-        // The action is ignored by contract: after_handler mutates,
-        // full replacement is not offered (the v2 delta).
-        (void)bus_.fire<server::hook_phase::after_handler>(ctx);
-        s = ctx.status;
-        f = std::move(ctx.fields);
-    }
+    void fire_after(http::status& s, http::fields& f) const;
 
-    void fire_sent() const {
-        if (!bus_.any_hooks(server::hook_phase::response_sent)) return;
-        server::response_sent_ctx ctx{head_, status_, tls_};
-        (void)bus_.fire<server::hook_phase::response_sent>(ctx);
-    }
+    void fire_sent() const;
 
     exchange_sink& inner_;
     const server::hook_bus& bus_;

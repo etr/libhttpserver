@@ -120,28 +120,11 @@ class form_fields {
     // The FIRST value @p name mapped to (the v2 flat-lookup rule);
     // a name that never appeared has no value.
     std::optional<std::string_view> value(
-        std::string_view name) const noexcept {
-        for (const std::pair<std::string, std::string>& entry :
-             entries_) {
-            if (std::string_view(entry.first) == name) {
-                return std::string_view(entry.second);
-            }
-        }
-        return std::nullopt;
-    }
+        std::string_view name) const noexcept;
 
     // Every value @p name mapped to, in arrival order; empty for a
     // name that never appeared.
-    std::vector<std::string_view> all(std::string_view name) const {
-        std::vector<std::string_view> values;
-        for (const std::pair<std::string, std::string>& entry :
-             entries_) {
-            if (std::string_view(entry.first) == name) {
-                values.emplace_back(entry.second);
-            }
-        }
-        return values;
-    }
+    std::vector<std::string_view> all(std::string_view name) const;
 
     std::size_t size() const noexcept {
         return entries_.size();

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
-#include "detail/quic_tls_callbacks.hpp"
+#include <httpserver/detail/quic_tls_callbacks.hpp>
 #include <httpserver/detail/quic_connection_lifecycle.hpp>
 #include <httpserver/detail/quic_recovery.hpp>
 namespace {

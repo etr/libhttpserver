@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 #include <httpserver/detail/quic_address_token.hpp>
-#include "./quic_crypto_provider.hpp"
+#include <httpserver/detail/quic_crypto_provider.hpp>
 namespace httpserver::detail {
 namespace {
 void append_integer(std::vector<std::byte>& bytes, std::uint64_t value, std::size_t width) {

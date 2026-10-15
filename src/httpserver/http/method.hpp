@@ -117,14 +117,7 @@ class method {
     // Extension method from an RFC 9110 token; the name is uppercased.
     // Precondition: name is a valid token (checked by parse(); the
     // factory itself assumes a pre-validated token).
-    static method extension(std::string name) {
-        std::string upper;
-        upper.reserve(name.size());
-        for (const char c : name) {
-            upper.push_back(static_cast<char>(detail::ascii_upper(c)));
-        }
-        return method{method_id::extension, std::move(upper)};
-    }
+    static method extension(std::string name);
 
     // Parse a wire token. Normalizes case, resolves known methods
     // without allocating, and returns an extension method for any other
@@ -259,18 +252,7 @@ class method_set {
 // The Allow wire form: every set slot's wire token in method_id order
 // (GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH),
 // comma-space separated; empty for the empty set.
-inline std::string to_string(const method_set& set) {
-    std::string out;
-    for (std::size_t id = 0; id < static_cast<std::size_t>(method_id::extension);
-            ++id) {
-        if (!set.contains(method::known(static_cast<method_id>(id)))) {
-            continue;
-        }
-        if (!out.empty()) out.append(", ");
-        out.append(detail::method_tokens[id]);
-    }
-    return out;
-}
+std::string to_string(const method_set& set);
 
 }  // namespace http
 

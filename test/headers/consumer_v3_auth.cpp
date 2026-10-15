@@ -18,20 +18,7 @@
      Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 */
 
-// TASK-114: a consumer including
-// <httpserver/auth/basic_auth.hpp> WITHOUT HTTPSERVER_COMPILATION
-// (or any other build/TLS configuration macro) must compile and link
-// cleanly. The policy's special members live in the library, so the
-// empty LDADD of this target proves the header surface needs no
-// library linkage to consume; every check is a static_assert over
-// unevaluated expressions only -- no object whose members live in
-// the library is ever constructed.
-//
-// TASK-115: the same consumer contract for
-// <httpserver/auth/digest_auth.hpp>: the Digest policy vocabulary is
-// header-only to consume (the parser, nonce, ledger, and response
-// computation live in the library's private detail/), so the digest
-// surface joins this sentinel with the same static_assert-only shape.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <chrono>
 #include <cstdint>

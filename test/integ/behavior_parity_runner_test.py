@@ -285,7 +285,7 @@ class Receipts(unittest.TestCase):
             binary = self.root / 'http_cookie'
             subprocess.run([os.environ.get('CXX', 'c++'), '-std=c++20', '-I' + str(ROOT / 'src'),
                 '-I' + str(ROOT / 'test'), str(ROOT / 'test/unit/http_cookie_test.cpp'),
-                str(ROOT / 'src/cookie.cpp'), '-o', str(binary)], check=True, capture_output=True, timeout=120)
+                str(ROOT / 'src/http/cookie.cpp'), '-o', str(binary)], check=True, capture_output=True, timeout=120)
         result = subprocess.run([str(binary)], capture_output=True, text=True, check=True, cwd=binary.parent, timeout=30)
         names = ('parse_multi_semicolon_separated', 'render_full_attribute_ordering',
                  'render_guard_rejects_cr_in_parsed_value')

@@ -159,36 +159,12 @@ struct wait_node {
     std::shared_ptr<frame_witness> witness;  // null for foreign coroutines
     executor* target = nullptr;              // null resumes witness-guarded
 
-    bool claim() noexcept {
-        bool expected = false;
-        return delivered.compare_exchange_strong(expected, true,
-                                                  std::memory_order_acq_rel,
-                                                  std::memory_order_acquire);
-    }
+    bool claim() noexcept;
 
     // Posts the resumption to the waiter's executor. Only when no
     // executor is known does the resumption run inline, still guarded
     // by the frame witness.
-    void resume_posted() noexcept {
-        if (target != nullptr) {
-            try {
-                target->post([witness = witness, frame = awaiting] {
-                    if (witness) {
-                        guarded_resume(witness, frame);
-                    } else {
-                        frame.resume();
-                    }
-                });
-            } catch (...) {
-            }
-            return;
-        }
-        if (witness) {
-            guarded_resume(witness, awaiting);
-        } else {
-            awaiting.resume();
-        }
-    }
+    void resume_posted() noexcept;
 };
 
 // One parked body read (frame-resident awaitable, shaped after the
@@ -198,31 +174,18 @@ struct wait_node {
 // dangling waiter registered with the engine.
 class body_wait final {
  public:
-    body_wait(body_source* source, stop_token cancel)
-        : source_(source), node_(std::make_shared<wait_node>()),
-          cancel_(std::move(cancel)) { }
+    body_wait(body_source* source, stop_token cancel);
 
     body_wait(const body_wait&) = delete;
     body_wait& operator=(const body_wait&) = delete;
     body_wait(body_wait&&) = delete;
     body_wait& operator=(body_wait&&) = delete;
 
-    body_wait& bind_frame(task_frame_base* frame) noexcept {
-        frame_ = frame;
-        return *this;
-    }
+    body_wait& bind_frame(task_frame_base* frame) noexcept;
 
     bool await_ready() const noexcept { return false; }
 
-    std::coroutine_handle<> await_suspend(std::coroutine_handle<> awaiting) {
-        node_->awaiting = awaiting;
-        node_->witness = frame_ ? frame_->frame_witness_ptr() : nullptr;
-        node_->target = frame_ ? frame_->frame_executor() : current_executor();
-        source_->park(*this);
-        // Seam contract: completion is posted to this executor, never
-        // resumed inline on the parking (or completing) thread.
-        return std::noop_coroutine();
-    }
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<> awaiting);
 
     body_wake await_resume() const noexcept { return node_->result; }
 
@@ -230,21 +193,13 @@ class body_wait final {
     // Exactly-once via the claim; a losing later completion is a
     // no-op. The posted job owns the node, so it stays safe across
     // waiter destruction.
-    void complete(body_wake wake) noexcept {
-        if (!node_->claim()) return;
-        node_->result = wake;
-        node_->resume_posted();
-    }
+    void complete(body_wake wake) noexcept;
 
     // The exchange's disconnect token: the seam completes a parked
     // wait as cancelled when it fires.
     const stop_token& cancel_token() const noexcept { return cancel_; }
 
-    ~body_wait() {
-        if (!node_->delivered.load(std::memory_order_acquire)) {
-            source_->unpark(*this);
-        }
-    }
+    ~body_wait();
 
  private:
     friend class http2_body_stream;
@@ -274,120 +229,18 @@ class body_reader {
     // Bounded incremental read: resolves with at least one byte (and
     // at most destination.size()) unless the body ends first. An empty
     // destination fails invalid_argument without touching the engine.
-    task<body_read> read_some(std::span<std::byte> destination) {
-        const http::outcome gate = enter(destination.empty());
-        if (!gate.ok()) {
-            co_return body_read{gate, {}, false};
-        }
-        if (bodyless()) {
-            // Admitted with no engine source: the request is bodyless,
-            // so the body is empty and already complete.
-            at_end_ = true;
-            co_return body_read{http::outcome::okay(), {}, true};
-        }
-        pending_ = true;
-        for (;;) {
-            const detail::body_pull_result pulled = source_->pull(destination);
-            if (pulled.kind == detail::body_pull::data) {
-                if (pulled.copied == 0) {
-                    // Forbidden zero-byte data pull (engine misuse):
-                    // never surface an empty data span; re-pull.
-                    continue;
-                }
-                pending_ = false;
-                co_return body_read{http::outcome::okay(),
-                                    destination.first(pulled.copied), false};
-            }
-            if (pulled.kind == detail::body_pull::end) {
-                at_end_ = true;
-                pending_ = false;
-                co_return body_read{http::outcome::okay(), {}, true};
-            }
-            if (pulled.kind == detail::body_pull::failed) {
-                fail_sticky(source_->failure());
-                pending_ = false;
-                co_return body_read{failure_, {}, false};
-            }
-            // Nothing staged: park until the first of bytes staged,
-            // end, failure, or exchange disconnect.
-            detail::body_wait wait(source_, cancel_token_);
-            if (co_await wait == detail::body_wake::cancelled) {
-                pending_ = false;
-                co_return body_read{
-                    http::outcome(http::outcome_code::cancelled,
-                                  "body_reader: read cancelled by disconnect"),
-                    {}, false};
-            }
-        }
-    }
+    task<body_read> read_some(std::span<std::byte> destination);
 
     // The received trailers; final once a read returned end_of_body
     // (or a collect succeeded). Empty when none were received.
-    const http::fields& trailers() const noexcept {
-        if (source_ != nullptr) return source_->trailers();
-        static const http::fields none;
-        return none;
-    }
+    const http::fields& trailers() const noexcept;
 
     // Fully buffers the remaining body, at most `maximum` bytes. Fails
     // limit_exceeded (diagnostic naming the cap) exactly when the body
     // exceeds it; exactly-at-cap succeeds. On success the reader is at
     // end of body and trailers() is final. A bodyless request (admitted
     // with no engine source) collects to zero bytes successfully.
-    task<body_collect> collect(std::uint64_t maximum) {
-        const http::outcome gate = enter(false);
-        if (!gate.ok()) {
-            co_return body_collect{gate, {}};
-        }
-        if (bodyless()) {
-            at_end_ = true;
-            co_return body_collect{http::outcome::okay(), {}};
-        }
-        pending_ = true;
-        std::vector<std::byte> out;
-        std::byte scratch[COLLECT_CHUNK_BYTES];
-        for (;;) {
-            const std::uint64_t room =
-                maximum - static_cast<std::uint64_t>(out.size());
-            const detail::body_pull_result pulled = source_->pull(
-                std::span<std::byte>(scratch, collect_want(room)));
-            if (pulled.kind == detail::body_pull::data && pulled.copied > 0) {
-                if (pulled.copied > room) {
-                    // Exact outcome: the bytes beyond the cap prove the
-                    // over-limit body; the tripping pull is discarded,
-                    // never appended.
-                    fail_sticky(http::outcome(
-                        http::outcome_code::limit_exceeded,
-                        "body_reader: body exceeds the collect() cap of "
-                        + std::to_string(maximum) + " bytes"));
-                    pending_ = false;
-                    co_return body_collect{failure_, {}};
-                }
-                out.insert(out.end(), scratch, scratch + pulled.copied);
-                continue;
-            }
-            if (pulled.kind == detail::body_pull::end) {
-                at_end_ = true;
-                pending_ = false;
-                co_return body_collect{http::outcome::okay(), std::move(out)};
-            }
-            if (pulled.kind == detail::body_pull::failed) {
-                fail_sticky(source_->failure());
-                pending_ = false;
-                co_return body_collect{failure_, {}};
-            }
-            // Nothing staged: park until the first of bytes staged,
-            // end, failure, or exchange disconnect.
-            detail::body_wait wait(source_, cancel_token_);
-            if (co_await wait == detail::body_wake::cancelled) {
-                pending_ = false;
-                co_return body_collect{
-                    http::outcome(http::outcome_code::cancelled,
-                                  "body_reader: read cancelled by disconnect"),
-                    {}};
-            }
-        }
-    }
+    task<body_collect> collect(std::uint64_t maximum);
 
     body_reader(body_reader&& other) noexcept = default;
     body_reader& operator=(body_reader&& other) noexcept = default;
@@ -403,10 +256,7 @@ class body_reader {
     // exchange::admit_body, after the engine accepted the admission. A
     // null source is the bodyless-request shape: the engine accepted the
     // admission but has no body to deliver (see bodyless()).
-    void activate(detail::body_source* source) noexcept {
-        source_ = source;
-        admitted_ = true;
-    }
+    void activate(detail::body_source* source) noexcept;
 
     // exchange::respond/upgrade, before committing: the exchange is
     // terminal and the body is over.
@@ -421,43 +271,11 @@ class body_reader {
 
     // Shared entry gate of the read operations: fails typed and
     // touches nothing when a pull may not start.
-    http::outcome enter(bool empty_destination) const {
-        if (pending_) {
-            return http::outcome(http::outcome_code::invalid_state,
-                                 "body_reader: a read is already outstanding");
-        }
-        if (cancel_token_.stop_requested()) {
-            return http::outcome(http::outcome_code::connection_closed,
-                                 disconnect_reason_.message());
-        }
-        if (closed_) {
-            return http::outcome(http::outcome_code::invalid_state,
-                                 "body_reader: exchange is terminal");
-        }
-        if (!admitted_) {
-            return http::outcome(http::outcome_code::invalid_state,
-                                 "body_reader: body not admitted");
-        }
-        if (empty_destination) {
-            return http::outcome(http::outcome_code::invalid_argument,
-                                 "body_reader: destination buffer is empty");
-        }
-        if (at_end_) {
-            return http::outcome(http::outcome_code::invalid_state,
-                                 "body_reader: body already at end");
-        }
-        if (failed_) {
-            return failure_;
-        }
-        return http::outcome::okay();
-    }
+    http::outcome enter(bool empty_destination) const;
 
     // Sticky failure: the body is unusable after this point; later
     // reads return the same outcome without touching the engine.
-    void fail_sticky(const http::outcome& reason) noexcept {
-        failed_ = true;
-        failure_ = reason;
-    }
+    void fail_sticky(const http::outcome& reason) noexcept;
 
     // An admission the engine accepted without a delivery source: the
     // request carries no body (the engine's bodyless construction), so

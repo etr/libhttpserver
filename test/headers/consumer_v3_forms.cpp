@@ -19,16 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-116: a consumer including
-// <httpserver/forms/urlencoded.hpp> WITHOUT HTTPSERVER_COMPILATION
-// (or any other build/TLS configuration macro) must compile and link
-// cleanly. The decoder and the adapters live in the library
-// (detail/forms_urlencoded.cpp in v3core), so the empty LDADD of this
-// target proves the vocabulary surface needs no library linkage to
-// consume; every check is a static_assert over unevaluated
-// expressions only -- no object whose members live in the library is
-// ever constructed (make_urlencoded_route would run library code, so
-// it is only name-checked through decltype).
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <cstddef>
 #include <cstdint>

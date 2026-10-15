@@ -18,31 +18,12 @@ class resource_charge final {
         : node_(budget.node_), kind_(kind) {}
     resource_charge(const resource_charge&) = delete;
     resource_charge& operator=(const resource_charge&) = delete;
-    resource_charge(resource_charge&& other) noexcept
-        : node_(std::move(other.node_)), kind_(other.kind_), units_(std::exchange(other.units_, 0)) {}
-    resource_charge& operator=(resource_charge&& other) noexcept {
-        if (this != &other) {
-            shrink(units_); node_ = std::move(other.node_);
-            kind_ = other.kind_; units_ = std::exchange(other.units_, 0);
-        }
-        return *this;
-    }
+    resource_charge(resource_charge&& other) noexcept;
+    resource_charge& operator=(resource_charge&& other) noexcept;
     ~resource_charge() { shrink(units_); }
-    bool grow(std::size_t units) {
-        if (units && node_ && !server::detail::charge_chain(*node_, kind_, units)) return false;
-        units_ += units; return true;
-    }
-    void shrink(std::size_t units) noexcept {
-        units = std::min(units, units_);
-        if (units && node_) server::detail::release_chain(*node_, kind_, units);
-        units_ -= units;
-    }
-    resource_charge take(std::size_t units) {
-        resource_charge result;
-        result.node_ = node_; result.kind_ = kind_;
-        result.units_ = std::min(units, units_); units_ -= result.units_;
-        return result;
-    }
+    bool grow(std::size_t units);
+    void shrink(std::size_t units) noexcept;
+    resource_charge take(std::size_t units);
     std::size_t units() const { return units_; }
 
  private:

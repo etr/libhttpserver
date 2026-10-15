@@ -19,14 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-103 step 5: a consumer including the v3 body reader —
-// <httpserver/body_reader.hpp> and <httpserver/exchange.hpp> — without
-// HTTPSERVER_COMPILATION (or any other build/TLS configuration macro)
-// must compile and link cleanly. The body area is header-only, so the
-// empty LDADD of this target is itself part of the contract. Every
-// public body_reader member is named through the exchange's body()
-// accessor (the shape route handlers receive); the test passes by
-// virtue of compiling and linking.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <cstddef>
 #include <cstdint>

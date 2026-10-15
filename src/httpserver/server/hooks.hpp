@@ -175,22 +175,14 @@ class hook_action {
         return hook_action{};
     }
 
-    [[nodiscard]] static hook_action respond_with(hook_response r) noexcept {
-        hook_action a;
-        a.response_.emplace(std::move(r));
-        return a;
-    }
+    [[nodiscard]] static hook_action respond_with(hook_response r) noexcept;
 
     [[nodiscard]] bool is_pass() const noexcept {
         return !response_.has_value();
     }
 
     // Consumes the wrapped response. Precondition: !is_pass().
-    [[nodiscard]] hook_response&& take_response() && noexcept {
-        assert(response_.has_value()
-               && "take_response() called on a pass-action");
-        return std::move(*response_);
-    }
+    [[nodiscard]] hook_response&& take_response() && noexcept;
 
  private:
     std::optional<hook_response> response_{};

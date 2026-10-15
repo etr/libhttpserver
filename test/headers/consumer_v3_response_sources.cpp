@@ -19,14 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-113: a consumer including
-// <httpserver/response_sources.hpp> without
-// HTTPSERVER_COMPILATION (or any other build/TLS configuration
-// macro) must compile and link cleanly. The surface is header-only,
-// so the empty LDADD of this target is itself part of the contract.
-// Everything is pinned through static_asserts over unevaluated
-// expressions only: no object whose special members live in the
-// library is ever constructed.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <cstddef>
 #include <cstdint>

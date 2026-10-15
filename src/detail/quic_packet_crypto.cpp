@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
-#include "./quic_crypto_provider.hpp"
+#include <httpserver/detail/quic_crypto_provider.hpp>
 namespace httpserver::detail {
 namespace {
 constexpr std::size_t maximum_packet = 65535;

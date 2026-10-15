@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
-#include "./quic_flow_internal.hpp"
+#include <httpserver/detail/quic_flow_internal.hpp>
 namespace httpserver::detail {
 quic_flow_result quic_flow_control::implementation::receive_admission(const quic_stream_state& stream, std::uint64_t id, std::uint64_t end, record*& value) {
     if (id != stream.id() || !ids.opened(id) || !quic_stream_sender_allowed(id, false, ids.local_role())) return {quic_flow_code::stream_state_error};

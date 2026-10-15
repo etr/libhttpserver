@@ -170,11 +170,7 @@ class exchange {
              detail::body_source* body_source = nullptr,
              detail::body_sink* response_sink = nullptr,
              net::peer_address peer = net::peer_address{},
-             std::shared_ptr<const server::tls_peer_metadata> tls = {}) noexcept
-        : head_(head), sink_(sink), connection_id_(connection_id),
-          body_source_(body_source), body_(stop_.get_token()),
-          response_sink_(response_sink), writer_(stop_.get_token()),
-          peer_(peer), tls_(std::move(tls)) { }
+             std::shared_ptr<const server::tls_peer_metadata> tls = {}) noexcept;
 
     exchange(exchange&& other) noexcept = default;
     exchange& operator=(exchange&& other) noexcept = default;
@@ -242,20 +238,7 @@ class exchange {
     // Terminal response decision; doubles as the reject decision when
     // called with an error status straight from the head. Commits via
     // the engine sink and clears any suspension.
-    http::outcome respond(const http::status& s, const http::fields& f) {
-        if (disconnected_) return closed_failure();
-        if (state_ != exchange_state::head
-                && state_ != exchange_state::admitted) {
-            return http::outcome(
-                http::outcome_code::invalid_state,
-                "exchange: respond() after a terminal decision");
-        }
-        state_ = exchange_state::responded;
-        suspended_ = false;
-        body_.close();
-        if (sink_ != nullptr) sink_->on_respond(s, f);
-        return http::outcome::okay();
-    }
+    http::outcome respond(const http::status& s, const http::fields& f);
 
     // Streaming response decision (head-time or after admission):
     // commits the response head exactly like respond(), then activates
@@ -263,83 +246,23 @@ class exchange {
     // with backpressure (architecture §3.1). The engine's on_start_response
     // fires exactly once: afterwards the state is responded, so
     // any second terminal decision fails invalid_state.
-    http::outcome start_response(const http::status& s, const http::fields& f) {
-        if (disconnected_) return closed_failure();
-        if (state_ != exchange_state::head
-                && state_ != exchange_state::admitted) {
-            return http::outcome(
-                http::outcome_code::invalid_state,
-                "exchange: start_response() after a terminal decision");
-        }
-        state_ = exchange_state::responded;
-        suspended_ = false;
-        body_.close();
-        if (sink_ != nullptr) sink_->on_start_response(s, f);
-        writer_.activate(response_sink_);
-        return http::outcome::okay();
-    }
+    http::outcome start_response(const http::status& s, const http::fields& f);
 
     // Body admission decision (head-time). Hands the policy to the
     // engine, which owns bounded delivery of the body.
-    http::outcome admit_body(const body_policy& policy) {
-        if (disconnected_) return closed_failure();
-        if (state_ != exchange_state::head) {
-            return http::outcome(
-                http::outcome_code::invalid_state,
-                "exchange: admit_body() is a head-time decision");
-        }
-        state_ = exchange_state::admitted;
-        if (sink_ != nullptr) sink_->on_admit(policy);
-        body_.activate(body_source_);
-        return http::outcome::okay();
-    }
+    http::outcome admit_body(const body_policy& policy);
 
     // Suspension decision: stores a fresh resume signal, hands a copy
     // to the caller, and marks the exchange suspended. The engine
     // applies its configured suspension timeout while suspended().
     // The state does not change; the handler still owns the decision.
-    http::outcome suspend(resume_signal& out) {
-        if (disconnected_) return closed_failure();
-        if (state_ != exchange_state::head
-                && state_ != exchange_state::admitted) {
-            return http::outcome(
-                http::outcome_code::invalid_state,
-                "exchange: suspend() requires an open exchange");
-        }
-        resume_signal fresh;
-        out = fresh;
-        resume_signals_.push_back(std::move(fresh));
-        suspended_ = true;
-        return http::outcome::okay();
-    }
+    http::outcome suspend(resume_signal& out);
 
     // Upgrade decision: the protocol sink transfers the ordered stream to
     // the session (one connection for HTTP/1.1, one stream for HTTP/2 or HTTP/3, accepted with 2xx).
     // Lazy like other tasks: options are owned before first suspension.
     // Await immediately while the engine-owned exchange is alive.
-    task<websocket_upgrade_result> upgrade(ws_upgrade_options options) {
-        websocket_upgrade_result result;
-        if (disconnected_) {
-            result.status = closed_failure(); co_return result;
-        }
-        if (state_ != exchange_state::head) {
-            result.status = {http::outcome_code::invalid_state,
-                "exchange: upgrade() is a head-time decision"};
-            co_return result;
-        }
-        if ((head_.request_protocol != http::protocol::http_1_1 && head_.request_protocol != http::protocol::http_2 && head_.request_protocol != http::protocol::http_3) || sink_ == nullptr) {
-            result.status = {http::outcome_code::not_supported,
-                "exchange: upgrade protocol unsupported"};
-            co_return result;
-        }
-        result = sink_->on_upgrade(options);
-        if (result.status.ok()) {
-            state_ = exchange_state::upgraded;
-            suspended_ = false;
-            body_.close();
-        }
-        co_return result;
-    }
+    task<websocket_upgrade_result> upgrade(ws_upgrade_options options);
 
     // Engine-facing disconnect notification (PRD-V3N-REQ-025). Reasons
     // mirror http::outcome_code; `ok` is not one. Idempotent: later
@@ -347,40 +270,14 @@ class exchange {
     // waking stop-token and resume-signal waiters. Stop initiation is
     // handler-safe per DR-V3-008; a posted waiter may run concurrently
     // before request_stop returns. Terminal states stay terminal.
-    http::outcome disconnect(http::outcome_code reason, std::string detail) {
-        if (reason == http::outcome_code::ok) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "exchange: disconnect() requires a failure reason");
-        }
-        if (disconnected_) return http::outcome::okay();
-        disconnect_reason_ = http::outcome(reason, std::move(detail));
-        if (!terminal()) state_ = exchange_state::cancelled;
-        body_.note_disconnect(disconnect_reason_);
-        writer_.note_disconnect(disconnect_reason_);
-        // Publish the immutable reason only after its dependent state is ready.
-        // Completion may observe the flag while stop fan-out is still running.
-        disconnected_ = true;
-        stop_.request_stop();
-        for (resume_signal& sig : resume_signals_) {
-            sig.cancel();
-        }
-        return http::outcome::okay();
-    }
+    http::outcome disconnect(http::outcome_code reason, std::string detail);
 
     // Engine-facing post-commit failure notification (architecture
     // §3.1): the response was already committed but the exchange failed
     // afterwards (e.g. a handler threw), so the engine resets or closes
     // the connection per protocol rules instead of committing another
     // response. No state change: a terminal exchange stays terminal.
-    http::outcome abort() {
-        // A streaming handler may have thrown mid-body; shut the
-        // writer down (idempotent) so no further write passes its
-        // gate, then let the engine reset per protocol rules.
-        writer_.close();
-        if (sink_ != nullptr) sink_->on_abort();
-        return http::outcome::okay();
-    }
+    http::outcome abort();
 
  private:
     // Watchdog and completion reads cross threads; copies retain value semantics
@@ -390,14 +287,8 @@ class exchange {
         concurrent_flag() noexcept = default;
         concurrent_flag(const concurrent_flag& other) noexcept
             : value_(other.value_.load()) { }
-        concurrent_flag& operator=(const concurrent_flag& other) noexcept {
-            value_.store(other.value_.load());
-            return *this;
-        }
-        concurrent_flag& operator=(bool value) noexcept {
-            value_.store(value);
-            return *this;
-        }
+        concurrent_flag& operator=(const concurrent_flag& other) noexcept;
+        concurrent_flag& operator=(bool value) noexcept;
         operator bool() const noexcept { return value_.load(); }  // NOLINT(runtime/explicit)
 
      private:

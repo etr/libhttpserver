@@ -73,93 +73,36 @@ class http1_body_source final : public body_source {
     // waiter when the decoder failed, staged new bytes, or completed
     // the message. Returns the consumed count; the engine re-feeds the
     // rest (nothing was consumed when backpressure blocks the decode).
-    std::size_t feed(std::string_view wire) {
-        body_wait* waiter = nullptr;
-        body_wake wake = body_wake::data;
-        std::size_t consumed = 0;
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            const std::size_t staged_before = decoder_.staged_bytes();
-            const http1_body_progress p = decoder_.decode(wire);
-            consumed = p.consumed;
-            if (waiter_ != nullptr) {
-                if (p.kind == http1_body_decode::failed) {
-                    waiter = take_waiter_locked();
-                    wake = body_wake::failed;
-                } else if (decoder_.staged_bytes() > staged_before) {
-                    waiter = take_waiter_locked();
-                    wake = body_wake::data;
-                } else if (p.kind == http1_body_decode::complete) {
-                    waiter = take_waiter_locked();
-                    wake = body_wake::end;
-                }
-            }
-        }
-        if (waiter != nullptr) waiter->complete(wake);
-        return consumed;
-    }
+    std::size_t feed(std::string_view wire);
 
     // Engine-side disconnect arm: wakes the parked waiter (if any) as
     // cancelled. Call AFTER the exchange's disconnect made the stop
     // sticky — park() checks-and-registers in one critical section, so
     // the pairing cannot miss a read (one parked earlier is taken here;
     // one parking later completes inline at park's own table).
-    void cancel_parked() {
-        body_wait* waiter = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            waiter = take_waiter_locked();
-        }
-        if (waiter != nullptr) waiter->complete(body_wake::cancelled);
-    }
+    void cancel_parked();
 
-    bool failed() const noexcept {
-        std::lock_guard<std::mutex> lock(mu_);
-        return !decoder_.failure().ok();
-    }
+    bool failed() const noexcept;
 
-    bool message_complete() const noexcept {
-        std::lock_guard<std::mutex> lock(mu_);
-        return decoder_.message_complete();
-    }
+    bool message_complete() const noexcept;
 
-    std::size_t staged_bytes() const noexcept {
-        std::lock_guard<std::mutex> lock(mu_);
-        return decoder_.staged_bytes();
-    }
+    std::size_t staged_bytes() const noexcept;
 
     // Body octets still expected under the current framing expectation
     // (the exact socket-side remainder for length framing); 0 once the
     // boundary was framed. TASK-109's rejection drain counts from here.
-    std::uint64_t length_remaining() const noexcept {
-        std::lock_guard<std::mutex> lock(mu_);
-        return decoder_.length_remaining();
-    }
+    std::uint64_t length_remaining() const noexcept;
 
     // Close posture of the recorded failure (rejected body mode or a
     // framing failure); none while the body is healthy.
-    http1_close_policy close_policy() const noexcept {
-        std::lock_guard<std::mutex> lock(mu_);
-        return decoder_.close_policy();
-    }
+    http1_close_policy close_policy() const noexcept;
 
     // True iff a read is parked right now (test/engine observability).
-    bool parked() const noexcept {
-        std::lock_guard<std::mutex> lock(mu_);
-        return waiter_ != nullptr;
-    }
+    bool parked() const noexcept;
 
     // -- detail::body_source seam ----------------------------------------
 
-    body_pull_result pull(std::span<std::byte> into) override {
-        body_pull_result result;
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            result = decoder_.pull(into);
-        }
-        if (result.kind == body_pull::data && room_released_) room_released_();
-        return result;
-    }
+    body_pull_result pull(std::span<std::byte> into) override;
 
     // Trailers are final once a pull returned end; after that no feed
     // can mutate them (the decoder is complete), so the unlocked
@@ -173,40 +116,14 @@ class http1_body_source final : public body_source {
         return decoder_.failure();
     }
 
-    void park(body_wait& wait) override {
-        std::lock_guard<std::mutex> lock(mu_);
-        if (!decoder_.failure().ok()) {
-            wait.complete(body_wake::failed);
-            return;
-        }
-        if (decoder_.staged_bytes() > 0) {
-            wait.complete(body_wake::data);
-            return;
-        }
-        if (decoder_.message_complete()) {
-            wait.complete(body_wake::end);
-            return;
-        }
-        if (wait.cancel_token().stop_requested()) {
-            wait.complete(body_wake::cancelled);
-            return;
-        }
-        waiter_ = &wait;  // at most one waiter per source
-    }
+    void park(body_wait& wait) override;
 
-    void unpark(body_wait& wait) override {
-        std::lock_guard<std::mutex> lock(mu_);
-        if (waiter_ == &wait) waiter_ = nullptr;
-    }
+    void unpark(body_wait& wait) override;
 
  private:
     // Forgets the registered waiter under the lock; the caller
     // completes it after unlocking.
-    body_wait* take_waiter_locked() noexcept {
-        body_wait* waiter = waiter_;
-        waiter_ = nullptr;
-        return waiter;
-    }
+    body_wait* take_waiter_locked() noexcept;
 
     mutable std::mutex mu_;
     http1_body_decoder decoder_;

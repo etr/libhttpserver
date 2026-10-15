@@ -36,24 +36,8 @@ struct options {
     // Counts bound empty-message traffic and queue metadata independently
     // of byte limits. Control output has a separate fixed reservation:
     // one active control, one pending Pong and one pending Close.
-    static options from_budgets(const server::budget_limits& limits) {
-        options out;
-        out.max_message_bytes = limits.get(server::resource::ws_message_bytes);
-        out.incoming_bytes = limits.get(server::resource::body_buffer_bytes);
-        out.output_bytes = limits.get(server::resource::response_queue_bytes);
-        return out;
-    }
-    http::outcome validate() const {
-        const auto ceiling = server::max_capacity(server::resource::ws_message_bytes);
-        if (max_message_bytes > ceiling || incoming_bytes < max_message_bytes)
-            return {http::outcome_code::invalid_argument, "invalid incoming message limits"};
-        const std::size_t overhead = max_message_bytes < 126 ? 2 : max_message_bytes <= 65535 ? 4 : 10;
-        if (output_bytes < max_message_bytes + overhead)
-            return {http::outcome_code::invalid_argument, "output must fit one maximum message"};
-        if (incoming_messages == 0 || outgoing_messages == 0)
-            return {http::outcome_code::invalid_argument, "message counts must be positive"};
-        return http::outcome::okay();
-    }
+    static options from_budgets(const server::budget_limits& limits);
+    http::outcome validate() const;
 };
 }  // namespace httpserver::websocket
 #endif  // SRC_HTTPSERVER_WEBSOCKET_OPTIONS_HPP_

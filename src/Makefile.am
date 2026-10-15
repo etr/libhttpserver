@@ -21,12 +21,12 @@ METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver.la
 # Native objects form both the shipped library and the private linkage gate.
 noinst_LTLIBRARIES = libhttpserver_v3core.la
-libhttpserver_v3core_la_SOURCES = detail/tls_psk.cpp detail/server_tls_psk.cpp detail/server_tls_credentials.cpp detail/features.cpp detail/io_operation.cpp detail/io_udp_backend.cpp detail/quic_invariant_header.cpp detail/quic_datagram_dispatch.cpp detail/io_connection_owner.cpp detail/fake_io_backend.cpp detail/io_poll_backend.cpp detail/io_epoll_backend.cpp detail/io_kqueue_backend.cpp detail/io_iocp_backend.cpp detail/io_managed_backend.cpp detail/io_managed_socket_backend.cpp detail/io_external_adapter.cpp detail/io_wake_source.cpp detail/worker_pool.cpp detail/connection_engine.cpp detail/connection_engine_request.cpp detail/listener_engine.cpp detail/drain_scope.cpp detail/server.cpp detail/auth_basic.cpp detail/auth_digest.cpp detail/forms_urlencoded.cpp detail/forms_multipart.cpp detail/forms_multipart_files.cpp detail/server_hooks.cpp detail/request_lifecycle.cpp detail/net_address.cpp detail/peer_policy.cpp detail/websocket_codec.cpp detail/websocket_driver.cpp detail/websocket_session_state.cpp detail/websocket_session.cpp detail/http1_websocket_handshake.cpp detail/connection_engine_websocket.cpp
+libhttpserver_v3core_la_SOURCES = detail/tls_psk.cpp server/tls_psk.cpp server/tls_credentials.cpp features.cpp detail/io_operation.cpp detail/io_udp_backend.cpp detail/quic_invariant_header.cpp detail/quic_datagram_dispatch.cpp detail/io_connection_owner.cpp detail/fake_io_backend.cpp detail/io_poll_backend.cpp detail/io_epoll_backend.cpp detail/io_kqueue_backend.cpp detail/io_iocp_backend.cpp detail/io_managed_backend.cpp detail/io_managed_socket_backend.cpp detail/io_external_adapter.cpp detail/io_wake_source.cpp detail/worker_pool.cpp detail/connection_engine.cpp detail/connection_engine_request.cpp detail/listener_engine.cpp detail/drain_scope.cpp server/server.cpp auth/basic_auth.cpp auth/digest_auth.cpp forms/urlencoded.cpp forms/multipart.cpp forms/multipart_files.cpp server/hooks.cpp detail/request_lifecycle.cpp net/address.cpp detail/peer_policy.cpp detail/websocket_codec.cpp detail/websocket_driver.cpp detail/websocket_session_state.cpp websocket/session.cpp detail/http1_websocket_handshake.cpp detail/connection_engine_websocket.cpp
 
 libhttpserver_la_SOURCES =
 # Select the C++ driver for this object-only aggregate, including platforms
 # where AM_LDFLAGS supplies no language runtime. EXTRA sources are not compiled.
-EXTRA_libhttpserver_la_SOURCES = detail/features.cpp
+EXTRA_libhttpserver_la_SOURCES = features.cpp
 # noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
 # Detail headers (httpserver/detail/*.hpp) live here so they cannot leak to
 # downstream consumers — the public surface comes in through <httpserver.hpp>.
@@ -81,7 +81,7 @@ nobase_include_HEADERS += httpserver/features.hpp
 
 noinst_HEADERS += httpserver/detail/tls_socket_backend.hpp httpserver/detail/tls_io_backend.hpp httpserver/detail/tls_session.hpp httpserver/detail/tls_credentials.hpp httpserver/detail/tls_psk.hpp httpserver/detail/tls_psk_runtime.hpp httpserver/detail/tls_psk_attempt.hpp
 
-# TASK-137: HPACK primitives are private, header-only native helpers.
+# HPACK primitives and their compiled operations remain private.
 noinst_HEADERS += httpserver/detail/hpack_primitives.hpp httpserver/detail/hpack_static_table.hpp httpserver/detail/hpack_huffman_table.hpp
 
 noinst_HEADERS += httpserver/detail/hpack_dynamic_table.hpp httpserver/detail/hpack_field_section.hpp \
@@ -114,7 +114,7 @@ libhttpserver_v3core_la_SOURCES += detail/quic_packet.cpp detail/quic_frame.cpp 
 noinst_HEADERS += httpserver/detail/quic_packet.hpp httpserver/detail/quic_frame.hpp httpserver/detail/quic_transport_parameters.hpp
 
 noinst_HEADERS += httpserver/detail/quic_crypto.hpp
-noinst_HEADERS += detail/quic_crypto_provider.hpp
+noinst_HEADERS += httpserver/detail/quic_crypto_provider.hpp
 noinst_HEADERS += httpserver/detail/quic_key_state.hpp
 
 libhttpserver_v3core_la_SOURCES += detail/quic_amplification.cpp
@@ -132,14 +132,14 @@ noinst_HEADERS += httpserver/detail/quic_stream_state.hpp httpserver/detail/quic
 if NATIVE_V3_TLS
 libhttpserver_v3tls_la_SOURCES += detail/quic_tls_buffers.cpp detail/quic_tls_callbacks.cpp detail/quic_tls_session.cpp
 endif
-noinst_HEADERS += httpserver/detail/quic_tls_session.hpp detail/quic_tls_callbacks.hpp
+noinst_HEADERS += httpserver/detail/quic_tls_session.hpp httpserver/detail/quic_tls_callbacks.hpp
 
 libhttpserver_v3core_la_SOURCES += detail/quic_ack_state.cpp detail/quic_recovery.cpp detail/quic_recovery_timer.cpp detail/quic_repacketize.cpp
-noinst_HEADERS += httpserver/detail/quic_recovery.hpp detail/quic_recovery_internal.hpp
+noinst_HEADERS += httpserver/detail/quic_recovery.hpp httpserver/detail/quic_recovery_internal.hpp
 
 # Connection-owned QUIC flow ledger and protected storage envelope.
 libhttpserver_v3core_la_SOURCES += detail/quic_flow_control.cpp detail/quic_flow_receive.cpp detail/quic_flow_send.cpp detail/quic_storage.cpp detail/quic_recovery_flow.cpp
-noinst_HEADERS += httpserver/detail/quic_flow_control.hpp httpserver/detail/quic_storage.hpp detail/quic_flow_internal.hpp
+noinst_HEADERS += httpserver/detail/quic_flow_control.hpp httpserver/detail/quic_storage.hpp httpserver/detail/quic_flow_internal.hpp
 
 libhttpserver_v3core_la_SOURCES += detail/quic_congestion.cpp detail/quic_pacing.cpp detail/quic_send_schedule.cpp detail/quic_persistent_congestion.cpp detail/quic_recovery_emission.cpp
 noinst_HEADERS += httpserver/detail/quic_congestion.hpp httpserver/detail/quic_pacing.hpp
@@ -183,7 +183,7 @@ libhttpserver_v3core_la_SOURCES += detail/http3_websocket_stream.cpp
 
 noinst_HEADERS += httpserver/detail/resource_charge.hpp
 
-libhttpserver_v3core_la_SOURCES += detail/server_diagnostics.cpp
+libhttpserver_v3core_la_SOURCES += server/diagnostics.cpp
 nobase_include_HEADERS += httpserver/server/diagnostics.hpp
 noinst_HEADERS += httpserver/detail/diagnostics_access.hpp
 
@@ -194,7 +194,7 @@ noinst_HEADERS += httpserver/detail/base64.hpp httpserver/detail/entropy_sys.hpp
     httpserver/detail/http1_response_outbox.hpp httpserver/detail/http1_target.hpp httpserver/detail/md5.hpp \
     httpserver/detail/secure_compare.hpp httpserver/detail/sha1.hpp httpserver/detail/sha256.hpp
 
-libhttpserver_v3core_la_SOURCES += cookie.cpp
+libhttpserver_v3core_la_SOURCES += http/cookie.cpp
 nobase_include_HEADERS += httpserver/http/cookie.hpp
 
 nobase_include_HEADERS += httpserver/server/tls_credentials.hpp
@@ -206,3 +206,14 @@ if NATIVE_V3_TLS
 libhttpserver_v3tls_la_SOURCES += detail/quic_network_connection.cpp detail/quic_network_packets.cpp detail/quic_network_emission.cpp detail/quic_udp_listener.cpp
 endif
 noinst_HEADERS += httpserver/detail/quic_network_connection.hpp httpserver/detail/quic_udp_listener.hpp
+
+# Compiled non-template operations, partitioned by their owning headers.
+libhttpserver_v3core_la_SOURCES += http/method.cpp http/fields.cpp server/budgets.cpp server/route_sync.cpp server/routes.cpp server/options.cpp detail/net_address.cpp detail/diagnostics_access.cpp detail/tls_credentials_access.cpp detail/tls_psk_access.cpp detail/hook_bus.cpp
+noinst_HEADERS += httpserver/detail/tls_psk_state.hpp httpserver/detail/net_address.hpp httpserver/detail/hook_bus.hpp httpserver/detail/tls_credentials_state.hpp httpserver/detail/diagnostics_state.hpp
+
+# Compiled non-template operations, partitioned by their owning headers.
+libhttpserver_v3core_la_SOURCES += response_definition.cpp body_reader.cpp exchange.cpp response_sources.cpp response_writer.cpp server/peer_policy.cpp detail/io_poll_sys.cpp detail/hpack_primitives.cpp detail/qpack_encoder.cpp detail/lifecycle_sink.cpp detail/hpack_decoder.cpp detail/qpack_decoder.cpp detail/qpack_instructions.cpp detail/sha1.cpp detail/secure_compare.cpp detail/http1_response_mode.cpp detail/digest_response.cpp detail/forms_verdict.cpp detail/resource_charge.cpp detail/hpack_encoder.cpp detail/websocket_utf8.cpp detail/quic_recovery_internal.cpp detail/request_handler_frames.cpp detail/http1_error_synth.cpp detail/md5.cpp detail/base64.cpp detail/sha256.cpp detail/http1_body_decoder.cpp detail/http1_body_mode.cpp detail/http1_response_outbox.cpp detail/exchange_runner.cpp detail/http1_response_framer.cpp detail/qpack_field_section.cpp detail/digest_ledger.cpp detail/entropy_sys.cpp detail/digest_nonce.cpp detail/http1_head_parser.cpp detail/http1_body_source.cpp detail/qpack_primitives.cpp detail/qpack_dynamic_table.cpp detail/forms_multipart.cpp detail/digest_hex.cpp detail/http2_request_state.cpp detail/io_timer_sweep.cpp detail/hpack_field_section.cpp detail/forms_urlencoded.cpp detail/auth_text.cpp detail/http1_target.cpp detail/hpack_dynamic_table.cpp detail/digest_params.cpp detail/http3_request_state.cpp detail/quic_flow_internal.cpp detail/multiplexed_request_head.cpp concurrency/cancellation.cpp concurrency/executor.cpp concurrency/task.cpp concurrency/resume_signal.cpp
+noinst_HEADERS += httpserver/detail/drain_ticket_state.hpp httpserver/detail/peer_policy.hpp
+
+# Compiled non-template operations, partitioned by their owning headers.
+libhttpserver_v3core_la_SOURCES += websocket/options.cpp detail/unescape_helpers.cpp detail/http1_host.cpp detail/io_poll_backend_timers.cpp detail/http2_dispatch.cpp detail/connection_engine_config.cpp detail/io_completion_storage.cpp

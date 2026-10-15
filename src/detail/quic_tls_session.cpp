@@ -3,7 +3,7 @@
 #include <utility>
 #include <httpserver/detail/quic_tls_session.hpp>
 #include <httpserver/detail/diagnostics_access.hpp>
-#include "detail/quic_tls_callbacks.hpp"
+#include <httpserver/detail/quic_tls_callbacks.hpp>
 namespace httpserver::detail {
 struct quic_tls_session::impl {
     quic_tls_callbacks callbacks;

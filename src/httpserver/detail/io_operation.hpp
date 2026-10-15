@@ -172,12 +172,7 @@ class op_state final : public std::enable_shared_from_this<op_state> {
     }
 
     // The single enforcement point: first terminal claimant wins.
-    bool claim_terminal() noexcept {
-        bool expected = false;
-        return terminal_.compare_exchange_strong(expected, true,
-                                                 std::memory_order_acq_rel,
-                                                 std::memory_order_acquire);
-    }
+    bool claim_terminal() noexcept;
     bool is_terminal() const noexcept {
         return terminal_.load(std::memory_order_acquire);
     }
@@ -200,18 +195,10 @@ class op_state final : public std::enable_shared_from_this<op_state> {
     }
 
     // Precondition: applied().
-    io_result stored_result() const {
-        std::lock_guard<std::mutex> lock(mu_);
-        return result_;
-    }
+    io_result stored_result() const;
 
  private:
-    static bool try_flag(std::atomic<bool>& flag) noexcept {
-        bool expected = false;
-        return flag.compare_exchange_strong(expected, true,
-                                            std::memory_order_acq_rel,
-                                            std::memory_order_acquire);
-    }
+    static bool try_flag(std::atomic<bool>& flag) noexcept;
 
     const io_op_kind kind_;
     io_connection_owner* const owner_;
@@ -270,23 +257,14 @@ class op_awaiter final {
     // op_handle::bind_frame). The op's waiter then arms with the
     // frame's witness and executor.
     op_awaiter(std::shared_ptr<op_state> state,
-               task_frame_base* frame) noexcept
-        : state_(std::move(state)) {
-        if (frame != nullptr) bind_frame(frame);
-    }
+               task_frame_base* frame) noexcept;
 
     op_awaiter(const op_awaiter&) = delete;
     op_awaiter& operator=(const op_awaiter&) = delete;
     op_awaiter(op_awaiter&&) = delete;
     op_awaiter& operator=(op_awaiter&&) = delete;
 
-    op_awaiter& bind_frame(task_frame_base* frame) noexcept {
-        if (frame != nullptr) {
-            witness_ = frame->frame_witness_ptr();
-            resume_ex_ = frame->frame_executor();
-        }
-        return *this;
-    }
+    op_awaiter& bind_frame(task_frame_base* frame) noexcept;
 
     // A terminal-and-applied operation completes inline on the awaiting
     // frame's own thread. A claimed-but-not-yet-applied operation
@@ -302,9 +280,7 @@ class op_awaiter final {
         return state_->stored_result();
     }
 
-    ~op_awaiter() {
-        if (state_) state_->disarm_waiter();
-    }
+    ~op_awaiter();
 
  private:
     std::shared_ptr<op_state> state_;
@@ -323,21 +299,11 @@ class op_handle {
     // produced awaiter then arms the waiter with this frame's witness
     // and executor, so a late posted resumption of a finished frame is
     // a guarded no-op instead of a raw resume.
-    op_handle& bind_frame(task_frame_base* frame) noexcept {
-        frame_ = frame;
-        return *this;
-    }
+    op_handle& bind_frame(task_frame_base* frame) noexcept;
 
     // One-shot: binds the backend and hands the op state over. A second
     // submit is a std::logic_error (task's single-consumer discipline).
-    void submit(io_backend& backend) {
-        if (state_ == nullptr || !state_->mark_submitted()) {
-            throw std::logic_error(
-                "httpserver::io operation submitted twice");
-        }
-        backend_ = &backend;
-        backend.submit(*state_);
-    }
+    void submit(io_backend& backend);
 
     // Arms cancellation: registers a std::stop_callback that calls
     // backend.request_cancel(*state). The terminal claim CAS resolves
@@ -352,14 +318,7 @@ class op_handle {
     // the frame and returns the handle as an lvalue, so the awaiter
     // extraction must accept it (the one-shot mark still enforces the
     // single consumer at runtime).
-    op_awaiter operator co_await() {
-        if (state_ == nullptr || !state_->mark_awaited()) {
-            throw std::logic_error(
-                "httpserver::io operation awaited twice");
-        }
-        return frame_ != nullptr ? op_awaiter(state_, frame_)
-                                 : op_awaiter(state_);
-    }
+    op_awaiter operator co_await();
 
     io_op_kind kind() const noexcept { return state_->kind(); }
     std::uint64_t connection() const noexcept { return state_->connection(); }
@@ -395,20 +354,14 @@ class op_handle {
 // The six typed, owned operations (DR-V3-004).
 class accept_operation final : public op_handle {
  public:
-    accept_operation(io_connection_owner& owner, std::uint64_t connection)
-        : op_handle(std::make_shared<op_state>(
-              io_op_kind::accept, &owner, connection,
-              op_payload{accept_payload{}})) { }
+    accept_operation(io_connection_owner& owner, std::uint64_t connection);
 };
 
 class read_operation final : public op_handle {
  public:
     read_operation(io_connection_owner& owner, std::uint64_t connection,
                    std::span<std::byte> buffer,
-                   std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max())
-        : op_handle(std::make_shared<op_state>(
-              io_op_kind::read, &owner, connection,
-              op_payload{read_payload{buffer, deadline}})) { }
+                   std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max());
 
     std::span<std::byte> buffer() const noexcept {
         return std::get<read_payload>(state()->payload()).buffer;
@@ -419,10 +372,7 @@ class write_operation final : public op_handle {
  public:
     write_operation(io_connection_owner& owner, std::uint64_t connection,
                     std::span<const std::byte> bytes,
-                    std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max())
-        : op_handle(std::make_shared<op_state>(
-              io_op_kind::write, &owner, connection,
-              op_payload{write_payload{bytes, deadline}})) { }
+                    std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max());
 
     std::span<const std::byte> bytes() const noexcept {
         return std::get<write_payload>(state()->payload()).bytes;
@@ -434,40 +384,22 @@ class write_operation final : public op_handle {
 class udp_receive_operation final : public op_handle {
  public:
     udp_receive_operation(io_connection_owner& owner, std::uint64_t socket,
-                          std::size_t capacity = k_max_datagram_bytes)
-        : op_handle(std::make_shared<op_state>(io_op_kind::udp_receive, &owner,
-            socket, make_payload(capacity))) { }
+                          std::size_t capacity = k_max_datagram_bytes);
  private:
-    static op_payload make_payload(std::size_t capacity) {
-        auto packet = std::make_shared<io_datagram>();
-        const bool valid = capacity <= k_max_datagram_bytes;
-        if (valid) packet->bytes.resize(capacity);
-        return udp_payload{std::move(packet), valid, valid ? capacity : 0};
-    }
+    static op_payload make_payload(std::size_t capacity);
 };
 class udp_send_operation final : public op_handle {
  public:
     udp_send_operation(io_connection_owner& owner, std::uint64_t socket,
-                       std::span<const std::byte> bytes, datagram_endpoint peer)
-        : op_handle(std::make_shared<op_state>(io_op_kind::udp_send, &owner,
-            socket, make_payload(bytes, peer))) { }
+                       std::span<const std::byte> bytes, datagram_endpoint peer);
  private:
-    static op_payload make_payload(std::span<const std::byte> bytes, datagram_endpoint peer) {
-        auto packet = std::make_shared<io_datagram>();
-        const bool valid = bytes.size() <= k_max_datagram_bytes;
-        if (valid) packet->bytes.assign(bytes.begin(), bytes.end());
-        packet->peer = peer;
-        return udp_payload{std::move(packet), valid, valid ? bytes.size() : 0};
-    }
+    static op_payload make_payload(std::span<const std::byte> bytes, datagram_endpoint peer);
 };
 
 class timer_operation final : public op_handle {
  public:
     timer_operation(io_connection_owner& owner, std::uint64_t connection,
-                    std::chrono::steady_clock::time_point deadline)
-        : op_handle(std::make_shared<op_state>(
-              io_op_kind::timer, &owner, connection,
-              op_payload{timer_payload{deadline}})) { }
+                    std::chrono::steady_clock::time_point deadline);
 
     std::chrono::steady_clock::time_point deadline() const noexcept {
         return std::get<timer_payload>(state()->payload()).deadline;
@@ -476,19 +408,13 @@ class timer_operation final : public op_handle {
 
 class wake_operation final : public op_handle {
  public:
-    wake_operation(io_connection_owner& owner, std::uint64_t connection)
-        : op_handle(std::make_shared<op_state>(
-              io_op_kind::wake, &owner, connection,
-              op_payload{wake_payload{}})) { }
+    wake_operation(io_connection_owner& owner, std::uint64_t connection);
 };
 
 class cancel_operation final : public op_handle {
  public:
     cancel_operation(io_connection_owner& owner, std::uint64_t connection,
-                     const op_handle& target)
-        : op_handle(std::make_shared<op_state>(
-              io_op_kind::cancel, &owner, connection,
-              op_payload{cancel_payload{target.state_}})) { }
+                     const op_handle& target);
 
     std::shared_ptr<op_state> target() const noexcept {
         return std::get<cancel_payload>(state()->payload()).target;

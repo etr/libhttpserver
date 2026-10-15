@@ -19,13 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-118 step 5: a consumer including
-// <httpserver/server/hooks.hpp> WITHOUT HTTPSERVER_COMPILATION (or any
-// other build/TLS configuration macro) must compile and link cleanly.
-// The bus storage lives in the library, so every check here is a
-// static_assert over unevaluated expressions (the consumer_v3_auth
-// convention): the empty LDADD of this target proves the vocabulary
-// surface itself needs no linkage.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <cstddef>
 #include <cstdint>

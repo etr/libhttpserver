@@ -5,7 +5,7 @@
 #include <memory>
 #include <string_view>
 #include <utility>
-#include "./quic_crypto_provider.hpp"
+#include <httpserver/detail/quic_crypto_provider.hpp>
 namespace httpserver::detail {
 namespace {
 bool hkdf(const char* digest, int mode, std::span<const std::byte> key, std::span<const std::byte> salt,

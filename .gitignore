@@ -166,3 +166,6 @@ __pycache__/
 !scripts/run-v3-packaged-adapters.py
 !scripts/check-v3-public-http1.py
 !scripts/test-v3-packaged-adapters.py
+
+# v3 source-layout compiled implementation contract checker.
+!scripts/check-v3-compiled-operations.py

@@ -131,10 +131,7 @@ class executor {
 // inside spawned coroutine bodies driven by them).
 namespace detail {
 
-inline executor*& current_executor_slot() noexcept {
-    thread_local executor* current = nullptr;
-    return current;
-}
+executor*& current_executor_slot() noexcept;
 
 }  // namespace detail
 
@@ -149,12 +146,7 @@ class inline_executor final : public executor {
  public:
     inline_executor() = default;
 
-    void post(handler work) override {
-        executor* const previous = detail::current_executor_slot();
-        detail::current_executor_slot() = this;
-        work();
-        detail::current_executor_slot() = previous;
-    }
+    void post(handler work) override;
 
     bool is_current() const noexcept override {
         return current_executor() == this;
@@ -170,15 +162,7 @@ class manual_executor final : public executor {
  public:
     manual_executor() = default;
 
-    void post(handler work) override {
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            queue_.push_back(std::move(work));
-            // Draining may complete and retire the owner as soon as mu_
-            // is released. Finish all executor accesses before publication.
-            cv_.notify_one();
-        }
-    }
+    void post(handler work) override;
 
     bool is_current() const noexcept override {
         return running_id_.load(std::memory_order_relaxed)
@@ -186,44 +170,19 @@ class manual_executor final : public executor {
     }
 
     // Number of work items waiting to run.
-    std::size_t pending() const {
-        std::lock_guard<std::mutex> lock(mu_);
-        return queue_.size();
-    }
+    std::size_t pending() const;
 
     // Runs every pending work item, including items posted while draining.
     // Returns the number of items executed.
-    std::size_t run_pending() {
-        std::size_t executed = 0;
-        while (run_one()) ++executed;
-        return executed;
-    }
+    std::size_t run_pending();
 
     // Executes one pending work item (FIFO). Returns false when the queue
     // was empty. The current thread is marked as running this executor for
     // the duration of the work item.
-    bool run_one() {
-        handler work;
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            if (queue_.empty()) return false;
-            work = std::move(queue_.front());
-            queue_.pop_front();
-        }
-        run_work(std::move(work));
-        return true;
-    }
+    bool run_one();
 
  private:
-    void run_work(handler&& work) {
-        const std::thread::id self = std::this_thread::get_id();
-        running_id_.store(self, std::memory_order_relaxed);
-        executor* const previous = detail::current_executor_slot();
-        detail::current_executor_slot() = this;
-        work();
-        detail::current_executor_slot() = previous;
-        running_id_.store(std::thread::id{}, std::memory_order_relaxed);
-    }
+    void run_work(handler&& work);
 
     mutable std::mutex mu_;
     std::deque<handler> queue_;
