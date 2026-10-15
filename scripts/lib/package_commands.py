@@ -1,11 +1,13 @@
 """Task-local command logs, runtime loader selection and compiler dependencies."""
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import shlex
 import signal
 import subprocess
+import sys
 import threading
 import time
 
@@ -123,28 +125,147 @@ class _CommandTree:
                 self.close()
             raise
 
-    def terminate(self):
+    def exited(self, deadline=None):
+        if self.job:
+            return self.child.poll() is not None
+        return self._anchor(deadline)
+
+    def _anchor(self, deadline=None):
+        # Never reap the session leader before retirement: its kernel lifetime
+        # reserves the numeric PID/PGID for every group signal and observation.
+        if self.child.returncode is not None:
+            raise RuntimeError('command process-group ownership lost: leader reaped')
+        if callable(getattr(os, 'waitid', None)) and hasattr(os, 'WNOWAIT'):
+            try:
+                return os.waitid(os.P_PID, self.child.pid,
+                                 os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+            except ChildProcessError as error:
+                raise RuntimeError('command process-group ownership lost') from error
+        members = _process_snapshot(time.monotonic() + 5 if deadline is None else deadline)
+        leader = members.get(self.child.pid)
+        self._check_leader(leader)
+        return leader[2] == 'Z'
+
+    def _check_leader(self, leader):
+        if leader is None or leader[:2] != (os.getpid(), self.child.pid):
+            raise RuntimeError('command process-group ownership lost: leader absent or changed')
+
+    def _kill_group(self, deadline):
+        _remaining(deadline)
+        self._anchor(deadline)
+        _remaining(deadline)
+        try:
+            os.killpg(self.child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # The snapshot must still prove that no live member remains.
+
+    def terminate(self, deadline=None):
         if self.job:
             self.job.terminate()
             if self.child is not None and self.child.poll() is None:
                 self.child.kill()  # Also covers a failure before job assignment.
-        elif self.child is not None:
-            try:
-                os.killpg(self.child.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        if self.child is not None:
-            self.child.wait(timeout=5)
-        if self.job:
+            if self.child is not None:
+                self.child.wait(timeout=5)
             self.job.wait_empty()
+            return
+        if self.child is None:
+            return
+        deadline = deadline if deadline is not None else time.monotonic() + 5
+        retired = False
+        try:
+            self._kill_group(deadline)
+            while True:
+                _remaining(deadline)
+                self._anchor(deadline)
+                members = _process_snapshot(deadline)
+                self._check_leader(members.get(self.child.pid))
+                live = any(group == self.child.pid and state != 'Z'
+                           for _, group, state in members.values())
+                if not live and retired:
+                    break
+                retired = not live
+                if live:
+                    self._kill_group(deadline)
+                time.sleep(min(.01, _remaining(deadline)))
+        finally:
+            # Failure remains a failure; still reap our direct child if possible.
+            self.child.wait(timeout=_remaining(deadline))
 
     def close(self):
         if self.job:
             self.job.close()
 
 
-def _capture(pipe, output, done, errors):
-    remaining = OUTPUT_LIMIT
+def _remaining(deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise RuntimeError('command cleanup deadline exceeded')
+    return remaining
+
+
+def _process_snapshot(deadline):
+    members = {}
+    if sys.platform.startswith('linux'):
+        for entry in Path('/proc').iterdir():
+            _remaining(deadline)
+            if not entry.name.isascii() or not entry.name.isdigit():
+                continue
+            try:
+                data = (entry / 'stat').read_text()
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            fields = data.rsplit(')', 1)[-1].split()
+            if (len(fields) < 4 or len(fields[0]) != 1 or fields[0] not in 'RSDZTWtXxKIP'
+                    or not fields[1].isascii() or not fields[1].isdigit()
+                    or not fields[2].isascii() or not fields[2].isdigit()
+                    or data.split(' ', 1)[0] != entry.name or ')' not in data):
+                raise RuntimeError('malformed command process snapshot')
+            members[int(entry.name)] = (int(fields[1]), int(fields[2]), fields[0])
+        return members
+    # macOS Python <3.13 has no waitid. Numeric state/parent/group fields keep
+    # observation non-reaping without relying on coarse ps start-time strings.
+    executable = next((path for path in ('/bin/ps', '/usr/bin/ps') if Path(path).is_file()), None)
+    if executable is None:
+        raise RuntimeError('command process snapshot unavailable: system ps missing')
+    output, done, errors = io.BytesIO(), threading.Event(), []
+    probe = subprocess.Popen([executable, '-A', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'state='],
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    reader = threading.Thread(target=_capture, args=(probe.stdout, output, done, errors, 4 * 1024 * 1024), daemon=True)
+    reader.start()
+    try:
+        if not done.wait(_remaining(deadline)):
+            raise RuntimeError('command process snapshot deadline exceeded')
+        if errors:
+            raise RuntimeError('command process snapshot failed: ' + str(errors[0]))
+        if probe.wait(timeout=_remaining(deadline)):
+            raise RuntimeError('command process snapshot ps failed')
+    finally:
+        if probe.poll() is None:
+            probe.kill()
+        try:
+            probe.wait(timeout=max(0, deadline - time.monotonic()))
+        finally:
+            reader.join(timeout=max(0, deadline - time.monotonic()))
+    if reader.is_alive():
+        raise RuntimeError('command process snapshot reader deadline exceeded')
+    for line in output.getvalue().decode('ascii').splitlines():
+        _remaining(deadline)
+        fields = line.split()
+        if (len(fields) != 4 or any(not item.isdigit() for item in fields[:3])
+                or not fields[3] or fields[3][0] not in 'RSDZTWtXxKIPLU'
+                or any(flag not in '+<>ACEJLNSsVWX' for flag in fields[3][1:])):
+            raise RuntimeError('malformed command process snapshot')
+        pid, parent, group = map(int, fields[:3])
+        if pid <= 0 or pid in members:
+            raise RuntimeError('invalid command process snapshot PID')
+        members[pid] = (parent, group, fields[3][0])
+    if not members:
+        raise RuntimeError('empty command process snapshot')
+    return members
+
+
+def _capture(pipe, output, done, errors, limit=OUTPUT_LIMIT):
+    remaining = limit
     try:
         while chunk := os.read(pipe.fileno(), 65536):
             output.write(chunk[:remaining])
@@ -182,7 +303,7 @@ class Commands:
                 try:
                     reader.start()
                     deadline = time.monotonic() + timeout
-                    while child.poll() is None or not done.wait(.05):
+                    while not tree.exited(deadline) or not done.wait(.05):
                         if errors:
                             raise errors[0]
                         if time.monotonic() > deadline:
@@ -190,18 +311,30 @@ class Commands:
                         time.sleep(.05)
                     if errors:
                         raise errors[0]
-                    child.wait(timeout=5)
-                    record['exit'] = child.returncode
-                except BaseException:
-                    tree.terminate()
-                    record['exit'] = child.returncode
+                except BaseException as error:
+                    original_error = error
                     raise
+                else:
+                    original_error = None
                 finally:
-                    if reader.ident is not None:
-                        reader.join(timeout=5)
-                    tree.close()
+                    cleanup_deadline = time.monotonic() + 5
+                    try:
+                        if tree.job and original_error is None:
+                            child.wait(timeout=5)
+                        else:
+                            tree.terminate(cleanup_deadline)
+                    except BaseException as cleanup_error:
+                        context = f'; original command failure: {original_error}' if original_error else ''
+                        raise RuntimeError(f'command cleanup failed: {cleanup_error}{context}') from cleanup_error
+                    finally:
+                        record['exit'] = child.returncode
+                        if reader.ident is not None:
+                            budget = 5 if tree.job else max(0, cleanup_deadline - time.monotonic())
+                            reader.join(timeout=budget)
+                        tree.close()
                     if reader.is_alive():
-                        raise RuntimeError('command pipe cleanup deadline exceeded')
+                        context = f'; original command failure: {original_error}' if original_error else ''
+                        raise RuntimeError('command pipe cleanup deadline exceeded' + context)
             if log.stat().st_size > OUTPUT_LIMIT:
                 raise RuntimeError('command deadline/output budget exceeded')
             with log.open('rb') as output:
