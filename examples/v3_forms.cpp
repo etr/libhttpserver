@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
                             {
                                 forms::temp_file_options files;
                                 files.directory = directory;
-                                files.random_names = false;
+                                files.random_names = true;
                                 // Only an explicitly selected, completed safe.txt upload is retained.
                                 files.should_keep = [keep](const auto&, const auto& filename, const auto&) {
                                     return keep && filename == "safe.txt";
@@ -76,9 +76,13 @@ int main(int argc, char** argv) {
                                 }
                                 text = describe(sink.take_fields());
                                 for (const auto& file : sink.completed()) {
-                                    text += "file=" +
-                                            std::filesystem::path(file.file_system_file_name).filename().string() +
-                                            " bytes=" + std::to_string(file.file_size) + "\n";
+                                    const auto basename = file.filename.substr(file.filename.find_last_of("/\\") + 1);
+                                    if (basename.empty() || basename == "." || basename == ".." ||
+                                        basename.find('\0') != std::string::npos) {
+                                        x.respond(http::status::from_code(400), {});
+                                        co_return;
+                                    }
+                                    text += "file=" + basename + " bytes=" + std::to_string(file.file_size) + "\n";
                                 }
                             }  // Cleanup/keep policy runs before the success response is observed.
                             co_await v3_example::reply(x, std::move(text));

@@ -25,15 +25,37 @@ from concurrent.futures import ThreadPoolExecutor
 EXAMPLES = Path(os.environ.get('V3_EXAMPLES_DIR', '../examples')).resolve()
 
 
+def retire_child(child, name, stderr, successful):
+    try:
+        if successful:
+            child.wait(timeout=15)
+    finally:
+        if child.poll() is None:
+            child.terminate()
+        try:
+            child.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait(timeout=3)
+        stderr.seek(0)
+        child.example_stderr = stderr.read().decode(errors='replace')
+    if successful:
+        assert child.returncode == 0, f'{name}: exit {child.returncode}\n{child.example_stderr}'
+        diagnostics = ('Sanitizer', 'runtime error:')
+        assert not any(marker in child.example_stderr for marker in diagnostics), (
+            f'{name}: sanitizer diagnostics\n{child.example_stderr}')
+
+
 @contextlib.contextmanager
 def running(name, *arguments):
     binary = EXAMPLES / name
     assert binary.is_file(), f'missing compiled example: {binary}'
-    with subprocess.Popen([str(binary), *(arguments or ('10',))], stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE) as child:
+    with tempfile.TemporaryFile() as stderr, subprocess.Popen(
+            [str(binary), *(arguments or ('3',))], stdout=subprocess.PIPE, stderr=stderr) as child:
         startup = queue.Queue(maxsize=1)
         reader = threading.Thread(target=lambda: startup.put(child.stdout.readline(128)), daemon=True)
         reader.start()
+        successful = False
         try:
             try:
                 line = startup.get(timeout=5)
@@ -41,24 +63,20 @@ def running(name, *arguments):
                 raise AssertionError(f'{name}: startup deadline expired') from None
             assert line.startswith(b'PORT='), f'{name}: invalid startup: {line!r}'
             yield child, int(line[5:])
+            successful = True
         finally:
-            if child.poll() is None:
-                child.terminate()
             try:
-                child.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait(timeout=3)
-            reader.join(timeout=1)
-            child.communicate(timeout=3)
+                retire_child(child, name, stderr, successful)
+            finally:
+                reader.join(timeout=1)
 
 
 @contextlib.contextmanager
 def controlled(name, *arguments, numeric=False):
     binary = EXAMPLES / name
     assert binary.is_file(), f'missing compiled example: {binary}'
-    with subprocess.Popen([str(binary), *arguments], stdin=subprocess.PIPE,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
+    with tempfile.TemporaryFile() as stderr, subprocess.Popen(
+            [str(binary), *arguments], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr) as child:
         lines = queue.Queue()
         def read_lines():
             for line in child.stdout: lines.put(line.strip())
@@ -68,16 +86,17 @@ def controlled(name, *arguments, numeric=False):
             except queue.Empty: raise AssertionError(f'{name}: output deadline expired') from None
         def command(text):
             child.stdin.write(text.encode() + b'\n'); child.stdin.flush()
+        successful = False
         try:
             first = line()
             assert numeric or first.startswith(b'PORT='), first
             yield child, int(first if numeric else first[5:]), command, line
+            successful = True
         finally:
-            if child.poll() is None: child.terminate()
-            try: child.wait(timeout=3)
-            except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
-            reader.join(timeout=1)
-            child.communicate(timeout=3)
+            try:
+                retire_child(child, name, stderr, successful)
+            finally:
+                reader.join(timeout=1)
 
 
 def request(port, method, path, body=None, headers=None):
@@ -116,6 +135,43 @@ def receive_frame(sock):
         length = int.from_bytes(exact(sock, 8), 'big')
     assert length <= 65536, 'unexpected unbounded frame'
     return head[0] & 0x0f, exact(sock, length)
+
+
+class HarnessTests(unittest.TestCase):
+    def test_helpers_reject_child_failure_after_startup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'failed-host'
+            binary.write_text('#!/usr/bin/env python3\nimport sys\nprint("PORT=1", flush=True)\n'
+                              'print("ERROR: LeakSanitizer: detected memory leaks", file=sys.stderr)\nsys.exit(1)\n')
+            binary.chmod(0o700)
+            for helper in [running, controlled]:
+                with self.subTest(helper=helper.__name__):
+                    with self.assertRaisesRegex(AssertionError, 'LeakSanitizer'):
+                        with helper(str(binary)) as result:
+                            result[0].wait(timeout=3)
+
+    def test_helpers_reject_sanitizer_diagnostics_even_on_zero_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'diagnostic-host'
+            binary.write_text('#!/usr/bin/env python3\nimport sys\nprint("PORT=1", flush=True)\n'
+                              'print("runtime error: invalid memory access", file=sys.stderr)\n')
+            binary.chmod(0o700)
+            for helper in [running, controlled]:
+                with self.subTest(helper=helper.__name__):
+                    with self.assertRaisesRegex(AssertionError, 'runtime error'):
+                        with helper(str(binary)) as result:
+                            result[0].wait(timeout=3)
+
+    def test_running_waits_for_natural_retirement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / 'retired'
+            binary = Path(directory) / 'retiring-host'
+            binary.write_text('#!/usr/bin/env python3\nimport pathlib, time\nprint("PORT=1", flush=True)\n'
+                              f'time.sleep(.1)\npathlib.Path({str(marker)!r}).write_text("retired")\n')
+            binary.chmod(0o700)
+            with running(str(binary)):
+                pass
+            self.assertTrue(marker.exists(), 'host was terminated before natural retirement')
 
 
 class ExampleTests(unittest.TestCase):
@@ -172,9 +228,37 @@ class ExampleTests(unittest.TestCase):
                     self.assertEqual(result.stdout, expected)
             self.assertEqual(request(port, 'GET', '/public')[2], b'public\n')
 
+    def test_form_read_reflection_has_plain_text_type(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with running('v3_forms', directory, '3') as (_, port):
+                c = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
+                try:
+                    c.request('POST', '/form/read', '%3Chtml%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E=x',
+                              {'Content-Type': 'application/x-www-form-urlencoded'})
+                    r = c.getresponse()
+                    self.assertEqual(r.status, 200)
+                    self.assertEqual(r.getheader('Content-Type'), 'text/plain; charset=utf-8')
+                    self.assertEqual(r.read(), b'<html><script>alert(1)</script>=x\n')
+                finally:
+                    c.close()
+
+    def test_retained_upload_survives_same_name_uploads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with running('v3_forms', directory, '3') as (_, port):
+                body = b'--demo\r\nContent-Disposition: form-data; name="file"; filename="safe.txt"\r\n\r\nabc'
+                headers = {'Content-Type': 'multipart/form-data; boundary=demo'}
+                self.assertEqual(request(port, 'POST', '/multipart/keep', body + b'\r\n--demo--\r\n', headers)[0], 200)
+                retained, = Path(directory).iterdir()
+                self.assertEqual(retained.read_bytes(), b'abc')
+                self.assertEqual(request(port, 'POST', '/multipart', body + b'\r\n--demo--\r\n', headers)[0], 200)
+                self.assertTrue(retained.exists(), 'ordinary same-name upload removed retained data')
+                self.assertEqual(request(port, 'POST', '/multipart', body, headers)[0], 400)
+                self.assertEqual(retained.read_bytes(), b'abc')
+                self.assertEqual(list(Path(directory).iterdir()), [retained])
+
     def test_forms_limits_files_and_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
-            with running('v3_forms', directory, '10') as (_, port):
+            with running('v3_forms', directory, '3') as (_, port):
                 for path in ['/form', '/form/read']:
                     self.assertEqual(request(port, 'POST', path, 'a=one&a=two+words', {'Content-Type': 'application/x-www-form-urlencoded'})[2], b'a=one\na=two words\n')
                     self.assertEqual(request(port, 'POST', path, 'a=%', {'Content-Type': 'application/x-www-form-urlencoded'})[0], 400)
@@ -208,14 +292,18 @@ class ExampleTests(unittest.TestCase):
                     self.assertTrue(interim.startswith(b'HTTP/1.1 100'), interim)
                     partial = b'--demo\r\nContent-Disposition: form-data; name="file"; filename="partial.txt"\r\n\r\nabc'
                     sock.sendall(f'{len(partial):x}\r\n'.encode() + partial + b'\r\n')
-                    path = Path(directory) / 'partial.txt'; deadline = time.monotonic() + 3
-                    while not path.exists() and time.monotonic() < deadline: threading.Event().wait(.005)
-                    self.assertTrue(path.exists(), 'multipart sink never began the partial file')
+                    deadline = time.monotonic() + 3
+                    while not list(Path(directory).iterdir()) and time.monotonic() < deadline: threading.Event().wait(.005)
+                    partials = list(Path(directory).iterdir())
+                    self.assertEqual(len(partials), 1, 'multipart sink never began the partial file')
+                    path = partials[0]
                 deadline = time.monotonic() + 3
                 while path.exists() and time.monotonic() < deadline: threading.Event().wait(.005)
                 self.assertFalse(path.exists(), 'disconnected upload did not clean its partial file')
                 self.assertEqual(upload('/multipart/keep')[0], 200)
-                self.assertEqual((Path(directory) / 'safe.txt').read_bytes(), b'abc')
+                retained, = Path(directory).iterdir()
+                self.assertNotEqual(retained.name, 'safe.txt')
+                self.assertEqual(retained.read_bytes(), b'abc')
 
     def test_streaming_admission_trailers_and_cap(self):
         with running('v3_body_streaming') as (_, port):
@@ -255,7 +343,7 @@ class ExampleTests(unittest.TestCase):
     def test_response_sources_reuse_and_one_shot(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'body.txt'; source.write_text('reopened\n')
-            with running('v3_response_sources', str(source), '10') as (_, port):
+            with running('v3_response_sources', str(source), '3') as (_, port):
                 for kind, expected in [('bytes', b'owned\n'), ('borrowed', b'leased\n'), ('reopen', b'reopened\n'), ('factory', b'fresh\n')]:
                     def send_source(_):
                         c = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
@@ -299,7 +387,15 @@ class ExampleTests(unittest.TestCase):
             finally: c.close()
             command('allow-loopback'); self.assertEqual(line(), b'ALLOWED')
             self.assertEqual(request(port, 'GET', '/peer')[0], 200)
-            command('stats'); report = line().decode()
+            deadline = time.monotonic() + 3
+            while True:
+                command('stats'); report = line().decode()
+                counters = dict(item.split('=') for item in report.split())
+                if (int(counters['sent']) > 0 and int(counters['completed']) > 0) or time.monotonic() >= deadline:
+                    break
+                threading.Event().wait(.005)
+            self.assertGreater(int(counters['sent']), 0, report)
+            self.assertGreater(int(counters['completed']), 0, report)
             self.assertIn('exceptions=1', report)
             self.assertIn('misses=1', report)
             self.assertRegex(report, r'delivered=[1-9]')

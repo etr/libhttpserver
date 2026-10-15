@@ -16,6 +16,9 @@ inline httpserver::server::sync_response value(std::string text, unsigned code =
 }
 inline httpserver::task<void> reply(httpserver::exchange& x, std::string text, unsigned code = 200,
                                     httpserver::http::fields fields = {}) {
+    if (!fields.first("Content-Type")) {
+        fields.append("Content-Type", "text/plain; charset=utf-8");
+    }
     fields.append("Content-Length", std::to_string(text.size()));
     if (!x.start_response(httpserver::http::status::from_code(code), fields).ok()) {
         co_return;

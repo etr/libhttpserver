@@ -142,9 +142,9 @@ show ordered text fields and sanitized filename/size without absolute paths.
 The sink and exchange remain alive through the awaited reader. Partial files
 are removed on abort; completed files are removed before replying by default.
 `/multipart/keep` deliberately retains a completed `safe.txt`; the application
-then owns/removes it. Use a private application-supplied upload directory;
-these short samples use nonrandom names and concurrent identical filenames
-should be avoided.
+then owns/removes it. Files use random storage names independent of their
+client filenames, so later uploads with the same client name leave retained
+files intact. Use a private application-supplied upload directory.
 
 ### Response sources and ownership
 
