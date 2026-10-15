@@ -46,6 +46,7 @@ class quic_connection_identity final {
     quic_connection_identity(quic_cid local, quic_cid peer, std::shared_ptr<quic_amplification_budget> admitted, quic_recovery& recovery, const server::peer_policy& policy, random_fill random,
                              quic_storage_lease storage);
     ~quic_connection_identity();
+    static std::size_t storage_capacity();
     quic_connection_identity(const quic_connection_identity&) = delete;
     quic_connection_identity& operator=(const quic_connection_identity&) = delete;
     // Promotion owns the initial registration until this explicit adoption.

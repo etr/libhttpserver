@@ -1,8 +1,9 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
-#include <httpserver/server/options.hpp>
 #include <string>
 #include <utility>
 #include <vector>
+#include <httpserver/detail/protocol_limits.hpp>
+#include <httpserver/server/options.hpp>
 
 namespace httpserver::server::detail {
 
@@ -202,7 +203,7 @@ http::outcome check_tls_protocol_combination(const tls_options& tls, const proto
 
 namespace httpserver::server {
 
-auto server_options::validate() const -> http::outcome {
+auto server_options::resolve_configuration(httpserver::detail::resolved_protocol_plan& plan) const -> http::outcome {
     if (listeners_.empty()) {
         return http::outcome(http::outcome_code::invalid_argument,
                              "server_options: at least one listener is required before"
@@ -232,7 +233,20 @@ auto server_options::validate() const -> http::outcome {
     if (const http::outcome result = detail::check_peer_policy(peers_.allow, "allow"); !result.ok()) {
         return result;
     }
-    return http::outcome::okay();
+    return httpserver::detail::resolve_protocol_policy(*this, plan);
+}
+
+http::outcome server_options::validate() const {
+    httpserver::detail::resolved_protocol_plan plan;
+    return resolve_configuration(plan);
+}
+http::outcome server_options::resolve_limits(effective_protocol_limits& out) const {
+    httpserver::detail::resolved_protocol_plan plan;
+    if (const auto result = httpserver::detail::protocol_plan_access::resolve(*this, plan); !result.ok()) {
+        return result;
+    }
+    out = std::move(plan.report);
+    return {};
 }
 
 }  // namespace httpserver::server

@@ -157,7 +157,7 @@ Private `io_operation` objects describe accept, receive, send, timer, wake, and 
 
 External-loop mode exposes opaque socket keys with generations, readable/writable interest changes, a wakeup handle, the next deadline, and nonblocking `dispatch(events, now)`. The application registers interests in its own compatible readiness loop, calls `dispatch` on readiness or timer expiry, then applies the next interest snapshot. Stale generations are ignored. No application handler runs under an internal I/O lock. Dispatch is non-reentrant for a given server; route workers may still execute concurrently. The Windows external-loop path uses readiness registration (for example WSAPoll), while the managed internal loop may use IOCP.
 
-Limits are hierarchical: server, listener, connection, and stream budgets for connections, streams, header bytes/fields, body buffers, response queues, QPACK/HPACK tables, blocked headers, QUIC reassembly, WebSocket messages, timers, and workers. Admission refuses work before capacity is committed; control-plane processing retains reserved capacity while data flow is backpressured. All public option combinations are validated before listeners accept. Timeouts cover handshake, header, body idle, application suspension, write idle, WebSocket close, and drain.
+Limits are hierarchical: server, listener, connection, and stream budgets for connections, streams, header bytes/fields, body buffers, response queues, QPACK/HPACK tables, blocked headers, QUIC reassembly, WebSocket messages, timers, and workers. Admission refuses work before capacity is committed; control-plane processing retains reserved capacity while data flow is backpressured. All public option combinations are validated before listeners accept. Independent protocol capacity profiles resolve once into an immutable startup plan; explicit feasibility and compiled availability are checked before any bind. See DR-V3-006 and `docs/v3-protocol-limits.md`. Timeouts cover handshake, header, body idle, application suspension, write idle, WebSocket close, and drain.
 
 ### 3.5 Lifecycle
 
@@ -282,6 +282,28 @@ Release gates:
 **Rationale:** Protocol compression and flow-control state belong to their connection, and 0-RTT adds replay policy without serving a v3 requirement.
 
 **Consequences:** State-machine, fairness, memory, and timer tests gate release.
+
+**Capacity clarification (2026-10-15):** PRD-V3N-REQ-014/016/037/039..043 use
+independent typed H2/H3/QUIC profiles and one immutable resolved plan. The common
+planner owns defaults, checked arithmetic, resource/wire bounds and owner
+translation. Semantic `validate()` uses that planner without build availability;
+pure `resolve_limits()` and native construction add the compiled-availability
+gate before any bind. Credential publication stays in startup readiness. Cached
+`effective_limits()` is independent of mutable credentials and runtime occupancy.
+Native owners consume exact plan values in both loop modes.
+
+Compression directions share the existing aggregate budget: QPACK reserves its
+decoder and peer-bounded encoder maxima, and HPACK includes the initial4096
+allowance until SETTINGS ACK. H3 planning uses production record/decoded/semantic
+storage formulas, prepaid data/critical subdivisions and persistent native/flow/
+framing ledgers. It includes three local critical roles and three supported peer critical roles
+(peer QPACK streams may be absent), scratch/receipt/output arrays, retained HEADERS, decoded metadata, semantic copies and transport/recovery/
+TLS workspace without charging prepaid storage twice. Explicit subdivisions may
+grow within the root budget. One feasible request envelope is not a simultaneous
+reservation promise for every advertised request. Terminal records retain a total
+ledger bound while MAX_STREAMS replenishes on normal retirement. Header maxima
+remain local and unadvertised; native datagram policy remains1200. Details and
+public bounds are in `docs/v3-protocol-limits.md`.
 
 ### DR-V3-007: Immutable TLS credential snapshots and exact ACME selection
 

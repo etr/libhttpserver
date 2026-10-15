@@ -135,7 +135,9 @@ struct connection_admission {
 // Per-connection tunables projected out of the server budget scope,
 // plus the response Date clock seam (tests inject fixed values; an
 // empty clock omits the Date engine field entirely).
+struct resolved_protocol_plan;
 struct connection_engine_config {
+    std::shared_ptr<const resolved_protocol_plan> protocol_limits;
     server::diagnostics diagnostics;
     server::protocol_set protocols;
     std::shared_ptr<drain_scope> drain_owner;

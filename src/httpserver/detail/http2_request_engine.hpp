@@ -27,6 +27,7 @@ struct http2_request_limits {
     hpack_section_limits headers{65536, 65536, 256};
     // Bounds live streams and pending output items, including reset-only items.
     std::size_t max_streams = 128;
+    std::size_t decoder_table_bytes = 4096;
     std::size_t body_buffer_bytes = 16384, response_buffer_bytes = 16384;
     http2_limits connection{};
     websocket::options websocket{16384, 65536, 65536, 16, 16};
@@ -45,6 +46,7 @@ class http2_request_engine {
                         executor& owner, http2_request_limits limits = {},
                         request_dispatch_context dispatch = {}, std::uint64_t connection_id = 0, net::peer_address peer = {}, http2_native_context native = {});
     ~http2_request_engine();
+    static std::size_t stream_storage();
     http2_request_engine(const http2_request_engine&) = delete;
     http2_request_engine& operator=(const http2_request_engine&) = delete;
     // Nonblocking, owner-serialized initiation. remaining counts one connection

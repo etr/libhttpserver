@@ -9,7 +9,7 @@ namespace httpserver::detail {
 bool http3_connection::initialize_qpack() {
     try {
         if (!decoder_table_.initialize(data_.ancestors, limits_.qpack_capacity).ok() ||
-            (limits_.qpack_capacity && !admit_qpack_output())) {
+            ((limits_.qpack_capacity || limits_.qpack_encoder_capacity.value_or(limits_.qpack_capacity)) && !admit_qpack_output())) {
             fail(0x107, "QPACK connection storage exhausted", 0); return false;
         }
         std::vector<std::byte> payload;
@@ -179,7 +179,7 @@ bool http3_connection::retain_section(std::uint64_t id, qpack_dynamic_bytes_resu
 }
 http3_encoded_section http3_connection::encode_section_allocated(std::uint64_t id, std::span<const qpack_field_view> fields, bool provisional) {
     server::reservation metadata;
-    const auto bytes = sizeof(outgoing_section) + 128 + fields.size() * sizeof(std::uint64_t) * 4;
+    const auto bytes = output_section_storage(fields.size());
     if (!critical_.budget.reserve(server::resource::quic_reassembly_bytes, bytes, metadata).ok())
         return {{qpack_state::limit_exceeded}, {}, {}, {}};
     http3_encoded_section result; result.owner = data_;

@@ -113,8 +113,8 @@ class drain_ticket {
 // controlling thread.
 class native_server {
  public:
-    // Stores the configuration; no I/O, no threads. The options may be
-    // re-read (mutated copies re-validated) until listen().
+    // Copies options and resolves immutable policy without starting workers.
+    // Credentials and backend readiness are checked at listen().
     explicit native_server(server_options options);
 
     // stop() if still running.
@@ -161,6 +161,10 @@ class native_server {
     // not already bound and leaves the server stopped; a partially
     // bound listen failure is terminal for this server object.
     http::outcome listen();
+
+    // Immutable local startup policy, independent of credential publication.
+    // Available before listen and after stop; failure leaves out unchanged.
+    http::outcome effective_limits(effective_protocol_limits& out) const;
 
     // Stop initiation (DR-V3-008): idempotent, non-blocking, safe from
     // any thread including inside a handler.

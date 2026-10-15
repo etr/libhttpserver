@@ -175,7 +175,7 @@ struct http2_request_engine::state : std::enable_shared_from_this<state> {
         return streams.empty() && pending.empty() && active.empty() && connection.output_idle();
     }
     void retire_cancelled();
-    static http2_settings receive_settings(std::size_t max_streams);
+    static http2_settings receive_settings(const http2_request_limits& limits);
     void discard(stream& value);
     bool incomplete(const stream& value) const;
     bool retired(stream& value);

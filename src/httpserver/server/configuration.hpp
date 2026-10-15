@@ -33,6 +33,7 @@
 #include <httpserver/server/budgets.hpp>
 #include <httpserver/server/diagnostics.hpp>
 #include <httpserver/server/options.hpp>
+#include <httpserver/server/protocol_limits.hpp>
 #include <httpserver/server/routes.hpp>
 
 #endif  // SRC_HTTPSERVER_SERVER_CONFIGURATION_HPP_

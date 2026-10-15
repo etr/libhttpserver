@@ -4,6 +4,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <httpserver/detail/capacity_math.hpp>
 #include <httpserver/detail/http3_request_state.hpp>
 namespace httpserver::detail {
 namespace {
@@ -30,6 +31,18 @@ std::optional<std::size_t> expanded_size(std::span<const qpack_field> fields, st
     return limit - remaining;
 }
 }  // namespace
+std::size_t http3_request_engine::record_storage(const http3_request_limits& limits, bool local) {
+    auto bytes = capacity_add(sizeof(state::record) + 1024, std::min<std::size_t>(16384, std::max<std::size_t>(1, limits.framing.data_chunk)));
+    bytes = capacity_add(bytes, capacity_multiply(limits.max_receipt_records, sizeof(http3_request_helpers::receipt)));
+    return capacity_add(bytes, capacity_multiply(local ? state::critical_output_records : limits.max_pending_output_records, sizeof(quic_information_id)));
+}
+std::size_t http3_request_engine::semantic_storage(const http3_request_limits& limits, std::size_t expanded, std::size_t fields) {
+    auto bytes = capacity_add(capacity_multiply(6, expanded), capacity_multiply(capacity_add(fields, 1), 256));
+    bytes = capacity_add(bytes, sizeof(state::stream));
+    bytes = capacity_add(bytes, limits.body_buffer_bytes);
+    bytes = capacity_add(bytes, capacity_multiply(3, limits.response_buffer_bytes));
+    return capacity_add(bytes, 512);
+}
 http3_request_engine::http3_request_engine(quic_storage_lease data, quic_storage_lease critical, quic_flow_control& flow, quic_recovery& recovery,
                                            const server::route_registry& routes, executor& owner, http3_request_limits limits,
                                            std::uint64_t id, net::peer_address peer, request_dispatch_context dispatch, http3_native_context native)
@@ -192,8 +205,7 @@ bool http3_request_engine::state::attach(quic_stream_state& transport, std::opti
     server::reservation charge, buffers;
     const auto scratch = std::min<std::size_t>(16384, std::max<std::size_t>(1, limits.framing.data_chunk));
     const auto output_records = role ? critical_output_records : limits.max_pending_output_records;
-    const auto bytes =
-        scratch + limits.max_receipt_records * sizeof(http3_request_helpers::receipt) + output_records * sizeof(quic_information_id);
+    const auto bytes = http3_request_engine::record_storage(limits, role.has_value()) - (sizeof(record) + 1024);
     if (!storage.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(record) + 1024, charge).ok() ||
         !storage.budget.reserve(server::resource::quic_reassembly_bytes, bytes, buffers).ok()) {
         fail(h3_error(0x107, "Bridge record storage exhausted", id));
@@ -295,7 +307,7 @@ bool http3_request_engine::state::head(record& r, std::span<const qpack_field> f
     }
     // Reserve semantic heads and derived targets before materializing; the core
     // independently charges the simultaneous decoded QPACK field section.
-    const auto storage = 6 * *expanded + (fields.size() + 1) * 256 + sizeof(stream) + limits.body_buffer_bytes + 3 * limits.response_buffer_bytes + 512;
+    const auto storage = http3_request_engine::semantic_storage(limits, *expanded, fields.size());
     server::reservation bytes, descriptors, memory;
     if (!data.budget.reserve(server::resource::header_bytes, std::max<std::size_t>(1, 5 * *expanded), bytes).ok() ||
         !data.budget.reserve(server::resource::header_fields, fields.size() + 1, descriptors).ok() ||

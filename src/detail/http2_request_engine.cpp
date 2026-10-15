@@ -28,7 +28,8 @@ bool valid_request_headers(const http2_request_limits& limits) {
     return headers;
 }
 bool valid_request_limits(const http2_request_limits& limits) {
-    return valid_request_headers(limits) && limits.max_streams && valid_queues(limits) && valid_websocket_limits(limits);
+    return valid_request_headers(limits) && limits.max_streams && limits.max_streams <= server::max_capacity(server::resource::streams) &&
+        limits.decoder_table_bytes <= server::max_capacity(server::resource::hpack_table_bytes) && valid_queues(limits) && valid_websocket_limits(limits);
 }
 }  // namespace
 http2_request_engine::http2_request_engine(server::resource_budget budget, const server::route_registry& routes,

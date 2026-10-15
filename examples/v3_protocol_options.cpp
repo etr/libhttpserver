@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <memory>
+#include <string>
 #include <httpserver/features.hpp>
 #include <httpserver/server/server.hpp>
 #include <httpserver/server/tls_credentials.hpp>
@@ -41,13 +42,30 @@ bool demonstrate(const char* label, httpserver::http::protocol protocol, bool tl
     }
     options.add_listener({"127.0.0.1", 0, tls, credentials,
         protocol == http::protocol::http_3 ? srv::listener_transport::udp : srv::listener_transport::tcp});
+    options.budgets().set(srv::resource::header_fields, 4096);
+    options.budgets().set(srv::resource::quic_reassembly_bytes, 16 * 1024 * 1024);
+    if (protocol == http::protocol::http_2) {
+        options.http2().emplace().max_concurrent_requests = 192;
+        options.http2()->decoder_table_bytes = 8192;
+        options.http2()->encoder_table_bytes = 16384;
+    }
+    if (protocol == http::protocol::http_3) {
+        options.http3().emplace().max_concurrent_requests = 24;
+        options.http3()->max_blocked_headers = 32;
+        options.quic().emplace().max_stream_records = 96;
+    }
+    srv::effective_protocol_limits limits;
+    const auto resolved = options.resolve_limits(limits);
     const auto validated = options.validate();
     srv::native_server server(options);
+    const auto inspected = server.effective_limits(limits);
+    if (inspected.code() != resolved.code()) return false;
     const auto listened = server.listen();
     const auto port = server.get_bound_port(0);
     std::cout << label << " validate=" << outcome_name(validated)
               << " listen=" << outcome_name(listened) << " port=" << port << '\n';
     server.stop();
+    if (server.effective_limits(limits).code() != inspected.code()) return false;
     if (!tls || available) return validated.ok() && listened.ok() && port != 0;
     return listened.code() == http::outcome_code::not_supported && port == 0;
 }

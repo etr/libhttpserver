@@ -287,3 +287,7 @@ shared/static consumers in managed/external modes. Supported TLS/H2/UDP-H3
 configurations bind and complete exchanges; missing credentials and invalid
 configurations retain their separate pre-bind rejection checks. Historical
 TASK-179 and TASK-182 records describe their original execution boundaries.
+
+Protocol capacity `resolve_limits()` adds build availability to semantic
+`validate()`; native `effective_limits()` reads the cached startup policy without
+requiring published credentials. See [capacity policy](v3-protocol-limits.md).

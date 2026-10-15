@@ -5,6 +5,7 @@
 #include <initializer_list>
 #include <vector>
 #include <utility>
+#include <httpserver/detail/capacity_math.hpp>
 #include <httpserver/detail/http3_connection.hpp>
 namespace httpserver::detail {
 namespace {
@@ -16,6 +17,7 @@ bool valid_limits(const http3_limits& limits) {
     if (limits.headers.max_fields > maximum / sizeof(qpack_field)) return false;
     return limits.headers.max_compressed_bytes <= maximum / 2 && limits.headers.max_expanded_bytes <= maximum - limits.headers.max_fields * sizeof(qpack_field) &&
         limits.qpack_capacity <= k_quic_max_integer && limits.qpack_capacity <= server::max_capacity(server::resource::qpack_table_bytes) &&
+        limits.qpack_encoder_capacity.value_or(limits.qpack_capacity) <= server::max_capacity(server::resource::qpack_table_bytes) &&
         limits.qpack_blocked_streams <= k_quic_max_integer && limits.qpack_retained_bytes <= maximum &&
         limits.qpack_instruction_bytes > 0 && limits.qpack_instruction_bytes <= maximum / 3 &&
         limits.qpack_output_bytes >= 10 && limits.qpack_output_bytes <= maximum / 2;
@@ -27,6 +29,13 @@ http3_progress progress_for(bool error, bool ready, std::size_t frames_left) {
     return http3_progress::input;
 }
 }  // namespace
+std::size_t http3_connection::descriptor_storage() { return sizeof(stream) + 128; }
+std::size_t http3_connection::decoded_storage(const qpack_section_limits& headers) {
+    return std::max<std::size_t>(1, capacity_add(headers.max_expanded_bytes, capacity_multiply(headers.max_fields, sizeof(qpack_field))));
+}
+std::size_t http3_connection::output_section_storage(std::size_t fields) {
+    return capacity_add(sizeof(outgoing_section) + 128, capacity_multiply(fields, sizeof(std::uint64_t) * 4));
+}
 http3_connection::http3_connection(quic_storage_lease data, quic_storage_lease critical, http3_limits limits, bool preadmitted)
     : data_(std::move(data)), critical_(std::move(critical)), limits_(limits), frames_left_(limits.frames_per_turn) {
     if (!valid_limits(limits_)) {
@@ -58,7 +67,7 @@ std::optional<http3_error> http3_connection::attach_stream(std::uint64_t id) {
     if (streams_.size() >= limits_.stream_records) return fail(0x107, "Stream record limit", id);
     server::reservation descriptor, charge;
     try {
-        if (!critical_.budget.reserve(server::resource::quic_reassembly_bytes, sizeof(stream) + 128, descriptor).ok() ||
+        if (!critical_.budget.reserve(server::resource::quic_reassembly_bytes, descriptor_storage(), descriptor).ok() ||
             !critical_.budget.reserve(server::resource::streams, 1, charge).ok()) return fail(0x107, "Stream metadata budget exhausted", id);
         auto s = std::make_unique<stream>(); s->descriptor = std::move(descriptor); s->stream_charge = std::move(charge);
         if (!(id & 2)) {
@@ -167,8 +176,7 @@ bool http3_connection::decode_fields(stream& s, std::uint64_t id) {
         }
         ++blocked_streams_; s.blocked = true; return true;
     }
-    const auto overhead = limits_.headers.max_fields * sizeof(qpack_field);
-    const auto charge = std::max<std::size_t>(1, limits_.headers.max_expanded_bytes + overhead);
+    const auto charge = decoded_storage(limits_.headers);
     if (!data_.budget.reserve(server::resource::quic_reassembly_bytes, charge, s.fields_charge).ok()) {
         fail(0x107, "Expanded HEADERS storage exhausted", id); return false;
     }

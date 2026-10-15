@@ -5,6 +5,7 @@
 #include <array>
 #include <utility>
 #include <httpserver/detail/quic_udp_listener.hpp>
+#include <httpserver/detail/protocol_limits.hpp>
 #include <httpserver/detail/io_udp_backend.hpp>
 #include <httpserver/detail/resource_scope.hpp>
 namespace httpserver::detail {
@@ -149,10 +150,11 @@ void quic_udp_listener::finish_admission(quic_server_admission::pending_handle h
         const auto snapshot = tls_credentials_access::acquire(*endpoint_.credentials);
         quic_network_config config;
         config.timeouts = config_.timeouts; config.port = port_;
-        const auto capacity = pending->budget.capacity(server::resource::quic_reassembly_bytes);
-        config.data_bytes = std::min<std::size_t>(393216, capacity * 3 / 8);
-        config.critical_bytes = std::min<std::size_t>(393216, capacity * 3 / 8);
-        config.max_requests = std::min<std::size_t>(16, pending->budget.capacity(server::resource::streams));
+        const auto& plan = *config_.protocol_limits;
+        config.data_bytes = plan.data_bytes; config.critical_bytes = plan.critical_bytes;
+        config.max_requests = plan.report.http3->max_concurrent_requests;
+        config.max_stream_records = plan.report.quic->max_stream_records;
+        config.request_limits = plan.http3;
         request_dispatch_context dispatch;
         dispatch.hooks = &hooks_; dispatch.peers = &peers_; dispatch.diagnostics = config_.diagnostics;
         if (config_.pages) dispatch.pages = *config_.pages;

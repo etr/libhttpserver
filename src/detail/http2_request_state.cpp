@@ -40,6 +40,7 @@ bool valid_response_lengths(const http::fields& fields, bool metadata_only) {
 namespace httpserver::detail {
 
 // cpplint cannot track this constructor's nested qualifiers or braced initializers.
+std::size_t http2_request_engine::stream_storage() { return sizeof(state::stream) + sizeof(http2_dispatch) + sizeof(route_executor) + 512; }
 // NOLINTBEGIN(whitespace/indent_namespace)
 http2_request_engine::state::stream::stream(state& s, std::uint32_t n, http::request_head h, server::resource_budget scope)
     : owner(s),
@@ -174,7 +175,7 @@ http2_request_engine::state::state(server::resource_budget b, const server::rout
       owner(e),
       handlers(std::make_shared<route_executor>(e)),
       limits(l),
-      connection(b, l.connection, receive_settings(l.max_streams), true, native.workers != nullptr),
+      connection(b, l.connection, receive_settings(l), true, native.workers != nullptr),
       scope(native.drain ? native.drain : std::make_shared<drain_scope>(dispatch_context.diagnostics)) {
     connection_counted = !native.drain;
     if (connection_counted) scope->enter();
@@ -219,11 +220,12 @@ auto http2_request_engine::state::retire_cancelled() -> void {
     }
 }
 
-auto http2_request_engine::state::receive_settings(std::size_t max_streams) -> http2_settings {
+auto http2_request_engine::state::receive_settings(const http2_request_limits& limits) -> http2_settings {
     http2_settings settings;
+    settings.header_table_size = static_cast<std::uint32_t>(limits.decoder_table_bytes);
     settings.initial_window_size = 0;
     settings.enable_connect_protocol = 1;
-    settings.max_concurrent_streams = static_cast<std::uint32_t>(std::min<std::size_t>(max_streams, 0xffffffff));
+    settings.max_concurrent_streams = static_cast<std::uint32_t>(limits.max_streams);
     return settings;
 }
 
@@ -457,7 +459,7 @@ auto http2_request_engine::state::admit(std::uint32_t id, http::request_head hea
     std::size_t retained = 0;
     for (const auto& field : fields) retained += field.name.size() + field.value.size() + 32;
     server::reservation metadata;
-    if (!stream_budget.reserve(server::resource::body_buffer_bytes, sizeof(stream) + sizeof(http2_dispatch) + sizeof(route_executor) + 512, metadata).ok()) {
+    if (!stream_budget.reserve(server::resource::body_buffer_bytes, http2_request_engine::stream_storage(), metadata).ok()) {
         reset(id, http2_error_code::refused_stream);
         return {};
     }

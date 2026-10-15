@@ -386,3 +386,7 @@ v3 development; no automatic v2 port is implied.
 - [turbo_mode.cpp](turbo_mode.cpp)
 - [url_registration.cpp](url_registration.cpp)
 - [websocket_echo.cpp](websocket_echo.cpp)
+
+`v3_protocol_options` also demonstrates typed H2/H3/QUIC capacity profiles, pure
+`resolve_limits()` and immutable `effective_limits()` inspection with adequate
+shared budgets. See [protocol capacity policy](../docs/v3-protocol-limits.md).

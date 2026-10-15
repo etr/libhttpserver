@@ -35,7 +35,7 @@ bool http3_connection::settings(std::span<const std::byte> payload, std::uint64_
             fail(0x109, "Invalid ENABLE_CONNECT_PROTOCOL setting", id); return false;
         }
     }
-    if (!encoder_table_.initialize(data_.ancestors, static_cast<std::size_t>(std::min<std::uint64_t>(limits_.qpack_capacity, staged.qpack_capacity))).ok()) {
+    if (!encoder_table_.initialize(data_.ancestors, static_cast<std::size_t>(std::min<std::uint64_t>(limits_.qpack_encoder_capacity.value_or(limits_.qpack_capacity), staged.qpack_capacity))).ok()) {
         fail(0x107, "Encoder table budget exhausted", id); return false;
     }
     staged.received = true; peer_ = staged;

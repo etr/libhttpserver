@@ -217,3 +217,10 @@ noinst_HEADERS += httpserver/detail/drain_ticket_state.hpp httpserver/detail/pee
 
 # Compiled non-template operations, partitioned by their owning headers.
 libhttpserver_v3core_la_SOURCES += websocket/options.cpp detail/unescape_helpers.cpp detail/http1_host.cpp detail/io_poll_backend_timers.cpp detail/http2_dispatch.cpp detail/connection_engine_config.cpp detail/io_completion_storage.cpp
+
+nobase_include_HEADERS += httpserver/server/protocol_limits.hpp
+noinst_HEADERS += httpserver/detail/protocol_limits.hpp
+libhttpserver_v3core_la_SOURCES += detail/protocol_limits.cpp
+
+noinst_HEADERS += httpserver/detail/capacity_math.hpp
+libhttpserver_v3core_la_SOURCES += detail/http3_capacity.cpp

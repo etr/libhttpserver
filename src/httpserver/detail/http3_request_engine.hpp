@@ -43,6 +43,8 @@ class http3_request_engine final {
                          executor& owner, http3_request_limits limits = {}, std::uint64_t connection_id = 0, net::peer_address peer = {},
                          request_dispatch_context dispatch = {}, http3_native_context native = {});
     ~http3_request_engine();
+    static std::size_t record_storage(const http3_request_limits& limits, bool local);
+    static std::size_t semantic_storage(const http3_request_limits& limits, std::size_t expanded, std::size_t fields);
     http3_request_engine(const http3_request_engine&) = delete;
     http3_request_engine& operator=(const http3_request_engine&) = delete;
     std::optional<http3_error> attach_peer(quic_stream_state& opened);
