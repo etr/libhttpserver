@@ -16,12 +16,16 @@ namespace v3_example {
 // A bounded demonstration host: optional lifetime in seconds, default ten.
 inline int run(httpserver::server::native_server& server, int argc, char** argv) {
     int seconds = 10;
-    if (argc > 2) return 2;
+    const auto usage = [] {
+        std::cerr << "usage: optional lifetime is one integer in seconds (1..3600)\n";
+        return 2;
+    };
+    if (argc > 2) return usage();
     if (argc == 2) {
         const std::string_view argument(argv[1]);
         const auto parsed = std::from_chars(argument.data(), argument.data() + argument.size(), seconds);
         if (parsed.ec != std::errc() || parsed.ptr != argument.data() + argument.size()
-                || seconds <= 0 || seconds > 3600) return 2;
+                || seconds <= 0 || seconds > 3600) return usage();
     }
     auto listened = server.listen();
     if (!listened.ok()) {

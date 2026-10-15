@@ -26,7 +26,7 @@ TCP/TLS/QUIC transport evidence; these are different kinds of proof.
 | HTTP/2 and HTTP/3 listeners | TLS-on: TCP ALPN `h2`; explicit UDP QUICv1/TLS1.3 ALPN `h3`, managed/external | `v3_protocol_options`, `v3_http3` |
 | HTTP/2 and HTTP/3 WebSocket | RFC8441/RFC9220 Extended CONNECT shares the bounded session API | Installed independent wire corpora |
 | Common HTTP/1.1, HTTP/2, HTTP/3 handlers | Semantic exchange contract exercised for each version | `test/unit/v3_examples_test.cpp` |
-| Certificate rotation | Public `tls_credentials::replace`, immutable accepted selections | `test/examples/v3_tls_rotation.cpp`, installed TLS runner |
+| Certificate rotation | Public `tls_credentials::replace`, immutable accepted selections | `examples/v3_tls_rotation` (canonical source in `test/examples`), installed TLS runner |
 
 `server_options::validate()` checks configuration semantics. TLS-on encrypted
 listeners also require compatible published credentials. HTTP/3 requires a UDP
@@ -153,7 +153,7 @@ streams; connection-wide response ordering is not an H2/H3 contract.
 `http::status::from_code(200).with_shoutcast()` retains the literal ICY status line on HTTP/1. On H2/H3 it
 maps to numeric 200 with the same body. This provides the response token, not a
 new SHOUTcast audio/metadata feature. WebSocket uses HTTP/1.1 Upgrade (101 and
-Accept); private H2/H3 transports use Extended CONNECT (200 without those fields).
+Accept); public H2/H3 listeners use Extended CONNECT (200 without those fields).
 HTTP/1.0 WebSocket and cleartext certificate/TLS cells are protocol applicability
 exclusions, not failed parity observations.
 
@@ -174,7 +174,10 @@ active generation, accepted sessions retain their contexts, and failed
 replacement leaves the active publication unchanged. It uses only installed
 public headers. `check-v3-public-tls.py` verifies selected certificates and held
 handshakes/connections across replacement through installed shared/static
-libraries. The private rotation suite remains supporting lifetime evidence.
+libraries. The private rotation suite remains supporting lifetime evidence. Build the public
+demonstration with `--enable-examples` and run
+`./examples/v3_tls_rotation CERTIFICATE_DIRECTORY managed 0`;
+see the [complete example commands](../examples/README.md).
 
 BSD, Windows and other nonlocal runs belong to CI and the v3 PR; the
 [TASK-183 local evidence](task-183-migration-evidence.md) records what ran locally.

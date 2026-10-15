@@ -309,11 +309,10 @@ check-v3-native-linkage:
 	@$(MAKE) $(AM_MAKEFLAGS) -C "$(top_builddir)/test" v3_native_linkage >/dev/null
 	@BUILD_DIR="$(abs_top_builddir)" SRC_DIR="$(top_srcdir)" V3_TLS_MODE="$(enable_v3_tls)" $(top_srcdir)/scripts/audit-v3-native-linkage.sh
 
-# TASK-040: enforce static invariants on the two flagship examples
-# (hello_world.cpp <= 10 LOC, lambda-only; shared_state.cpp class+mutex).
+# Enforce the explicit native v3 example source/build inventory.
 # Run as part of `make check` via check-local.
 check-examples:
-	@echo "=== check-examples: enforce TASK-040 invariants on examples/ ==="
+	@echo "=== check-examples: native v3 source/build inventory ==="
 	@$(top_srcdir)/scripts/check-examples.sh
 
 # TASK-041: enforce static invariants on README.md
@@ -609,3 +608,6 @@ EXTRA_DIST += scripts/run-v3-packaged-adapters.py scripts/check-v3-public-http1.
 EXTRA_DIST += test/installed/task199-capabilities.md \
  specs/architecture/v3/TASK-199-implementation-evidence.md \
  specs/architecture/v3/TASK-199-implementation-receipt.json
+
+EXTRA_DIST += scripts/lib/v3_examples.py scripts/lib/v3_example_consumers.py \
+    specs/architecture/v3/v2-parity-inventory.md

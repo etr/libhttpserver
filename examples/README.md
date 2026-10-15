@@ -1,228 +1,388 @@
-libhttpserver Examples
-======================
+# libhttpserver examples
 
-Native v3 examples
-------------------
+## Native v3 examples
 
-Read the [migration guide](../docs/v2-to-v3-migration.md) and
-[native API page](../docs/v3-api.md). Public examples include only installed
-native headers; the shared route/host helpers live beside their source files.
-
-| Example | What it demonstrates |
-| --- | --- |
-| [v3_routes.cpp](v3_routes.cpp) | Bounded `route_sync` GET/HEAD, coroutine POST echo, handler-safe stop |
-| [v3_protocol_options.cpp](v3_protocol_options.cpp) | HTTP/1.1, H2, H3 and TLS options; semantic validation versus typed public listener rejection |
-| [v3_websocket_echo.cpp](v3_websocket_echo.cpp) | HTTP/1.1 upgrade/rejection, text/binary echo, `try_send` backpressure, `writable`, retained session through close |
-| [v3_external_event_loop.cpp](v3_external_event_loop.cpp) | External host readiness, generation tokens, worker wakeups and deadlines |
-
-From the repository root (native C++20 build; no MHD or GnuTLS prerequisites):
+All fifteen programs below use installed public C++20 APIs. The native build
+requires a C++20 compiler, Autotools, and pthreads; it does not require MHD or
+GnuTLS. From the repository root:
 
 ```sh
 ./bootstrap
 mkdir -p build/native
 cd build/native
-CXX=clang++ CXXFLAGS='-std=c++20 -O0 -g' ../../configure --disable-v3-tls --enable-examples
-make -j2
+CC=clang CXX=clang++ CXXFLAGS='-std=c++20 -pthread -O1 -g' \
+  ../../configure --disable-v3-tls --enable-examples
+make -C src -j2
+make -C examples -j2
+```
+
+For TLS, configure another build with `--enable-v3-tls` and the OpenSSL 3.5 LTS
+provider described in [native TLS setup](../docs/native-tls-build.md).
+`V3_TLS_CFLAGS` and `V3_TLS_LIBS` select that provider. Examples never include
+provider headers. TLS-off builds include every program: TLS-specific examples
+exercise credential/runtime/publication/listener calls, report their typed
+`not_supported` outcomes and port zero, and exit successfully.
+
+| Program/source | Public API families |
+| --- | --- |
+| [v3_routes](v3_routes.cpp) | Sync/coroutine routes, captures, methods, full/prefix precedence, custom errors, exception boundaries |
+| [v3_request_data](v3_request_data.cpp) | Request head/raw target, ordered fields, cookies, bounded query decoding |
+| [v3_body_streaming](v3_body_streaming.cpp) | Header-time refusal/admission, incremental reads, upload/download trailers, bounded writes |
+| [v3_auth](v3_auth.cpp) | Basic/Digest policy creation and composed route guards |
+| [v3_forms](v3_forms.cpp) | URL-encoded adapter/reader, multipart sink, file cleanup/keep policy |
+| [v3_response_sources](v3_response_sources.cpp) | All six body sources, leases, overlays, send reports, one-shot claims, ICY status flag |
+| [v3_operations](v3_operations.cpp) | Eight lifecycle hooks, diagnostics, budgets/timeouts, live transport peer policy |
+| [v3_lifecycle](v3_lifecycle.cpp) | Application suspension/resume, timeout, cancellation/RAII, handler stop, graceful drain |
+| [v3_protocol_options](v3_protocol_options.cpp) | Protocol selection, feature reporting, validation, typed unavailable listeners |
+| [v3_external_event_loop](v3_external_event_loop.cpp) | Readiness snapshots, generations, wakeups, deadlines and host ownership |
+| [v3_websocket_echo](v3_websocket_echo.cpp) | H1 upgrade/refusal, text/binary echo, backpressure, owning session lifetime |
+| [v3_http2](v3_http2.cpp) | Certificate TCP H1/H2, RFC8441 Extended CONNECT WebSocket |
+| [v3_http3](v3_http3.cpp) | Shared TCP H1/H2 and UDP H3 routes/trailers, RFC9220 WebSocket, both loop modes |
+| [v3_tls_profiles](v3_tls_profiles.cpp) | SNI/default certificates, initial mTLS, external PSK runtime, ACME publication/removal |
+| [v3_tls_rotation](../test/examples/v3_tls_rotation.cpp) | Live valid/rejected replacement; established/new connection generations |
+
+Run the following commands from the configured build directory. For servers
+printing `PORT=12345`, set `PORT=12345` in the client terminal. Routes, request
+data, bodies, auth and H1 WebSocket hosts accept `[seconds]`
+(default 10, range 1–3600) and stop automatically. Forms and sources take their
+required input first, then `[seconds]`. Operational, lifecycle, TLS-profile and
+rotation hosts accept the documented stdin commands; EOF also stops them.
+H2/H3 print a numeric first port line. Every listener binds loopback.
+
+### Routes
+
+```sh
 ./examples/v3_routes 30
-# Another terminal: substitute the printed PORT value.
-curl http://127.0.0.1:PORT/hello
-curl --data-binary 'hello' http://127.0.0.1:PORT/echo
-curl -X POST http://127.0.0.1:PORT/stop
+# In another terminal with PORT set:
+curl -i "http://127.0.0.1:$PORT/items/42"
+curl -i "http://127.0.0.1:$PORT/items/special"
+curl -i "http://127.0.0.1:$PORT/tree/deep/child"
+curl -i -X CUSTOM "http://127.0.0.1:$PORT/extension"
+curl -i -X DELETE "http://127.0.0.1:$PORT/methods"
+curl --data-binary hello "http://127.0.0.1:$PORT/echo"
+curl -X POST "http://127.0.0.1:$PORT/stop"
 ```
 
-`v3_routes` and `v3_websocket_echo` listen on ephemeral loopback ports, print
-`PORT=...`, and default to a ten-second lifetime; an optional integer selects
-1–3600 seconds. `/stop` cancels active exchanges and need not return a reply.
-Run `./examples/v3_protocol_options` for the configuration report and
-`./examples/v3_external_event_loop 10` for a bounded external host.
-The WebSocket example accepts `/echo` without an Origin policy for local smoke
-use; applications should configure allowed origins, subprotocols and limits.
+Observe `42`, `special`, `deep`, `custom`, then a custom 405 with merged
+`Allow: GET, POST`. `/hello` explicitly registers both GET and HEAD; HEAD is
+never automatically registered. Full matches run before prefixes; full-tier
+siblings use registration order, and prefixes choose greatest depth then
+registration order. Register literals before captures. Custom methods are
+normalized to uppercase (`custom` also works); v2 regex routes are absent.
+`/throw` produces a sanitized 500. `/throw-committed` closes the exchange without
+a replacement response. `/stop` initiates cancellation; its caller has no
+promised reply.
 
-The protocol example compiles in TLS-off and TLS-on builds. In TLS-on, pass a PEM
-certificate chain and matching private key: `v3_protocol_options CHAIN_PEM KEY_PEM`.
-It binds each supported listener, reports the actual port, then stops. TLS-off
-reports typed `not_supported` with port zero for TLS/H2/H3.
-
-`v3_http3 CHAIN_PEM KEY_PEM [managed|external]` serves `/hello` through the same
-route on TCP H1/H2 and UDP H3, and `/ws/echo` through RFC9220 Extended CONNECT.
-Its sample SNI is `a.example` and required WebSocket subprotocol is `harness.v1`;
-adapt both to your certificates/application. The first output line is the UDP
-port; the second reports `TCP_PORT`. Enter `stop` or close stdin to shut down.
-The installed runner compiles this example in shared/static cells and exercises
-both loops with independent clients. The retained private gates remain separate.
-
-The native examples also compile as installed consumers. With libhttpserver.pc and prerequisite .pc metadata
-available via PKG_CONFIG_PATH, run from the repository root:
+### Request values and cookies
 
 ```sh
-clang++ -std=c++20 -I. examples/v3_routes.cpp -o /tmp/v3_routes $(pkg-config --cflags --libs libhttpserver)
-clang++ -std=c++20 examples/v3_websocket_echo.cpp -o /tmp/v3_websocket_echo $(pkg-config --cflags --libs libhttpserver)
-clang++ -std=c++20 examples/v3_protocol_options.cpp -o /tmp/v3_protocol_options $(pkg-config --cflags --libs libhttpserver)
-clang++ -std=c++20 examples/v3_external_event_loop.cpp -o /tmp/v3_external_event_loop $(pkg-config --cflags --libs libhttpserver)
+./examples/v3_request_data 30
+curl -i -H 'X-Repeat: first' -H 'X-Repeat: second' \
+  -H 'Cookie: a=1; a=2' -H 'Cookie: b=3' \
+  "http://127.0.0.1:$PORT/inspect?a=one&a=two+words&encoded=%2F"
 ```
 
-Public TLS rotation example
----------------------------
+Observe the unchanged encoded target, separate route path, ordered repeated
+fields/cookies/query pairs and two separate Set-Cookie fields. Only the query
+substring is decoded, under 256 bytes/8 fields. Malformed `%` gives 400; excess
+query bytes/fields give 413. Startup also checks field append/replacement/first/
+all/entry order and invalid cookie rendering preserving its output string.
 
-[test/examples/v3_tls_rotation.cpp](../test/examples/v3_tls_rotation.cpp) uses
-public headers and the `server::tls_credentials` store. Build with the genuine
-provider described in [native-tls-build.md](../docs/native-tls-build.md), then
-run `make -C test v3_tls_rotation` in the configured build. Supply a certificate
-directory containing the committed fixture names, a loop mode and a TCP port:
-`./test/v3_tls_rotation /path/to/test/data/tls_credentials managed 0`.
-The first output line is the actual listener port. The `/installed` route returns
-`rotation-example`. Stdin `invalid` preserves the active generation, `replace`
-publishes the `b.example` material, and `stop` shuts down. Existing connections
-continue across replacement; new handshakes select the new generation. The
-example smoke test and installed TCP/QUIC matrices verify these public operations.
-
-Legacy v2 examples
-------------------
-
-The remaining examples use the legacy umbrella and MHD-backed APIs. Each is a
-standalone program. They build with the same `--enable-examples` configuration;
-native sources link v3core separately and do not require legacy `HAVE_WEBSOCKET`.
-`scripts/verify-installed-examples.sh` compiles examples after installation.
-`scripts/check-examples.sh` enforces the pinned v2 introductory examples.
-
-Start here
-----------
-
-* `hello_world.cpp` — ten lines, no subclassing, no raw pointers. The
-  canonical "hello world" demo and the PRD §3.4 acceptance fixture for
-  the v2.0 lambda idiom.
-* `shared_state.cpp` — the canonical example of when the class form is
-  the right shape: an `http_resource` subclass that shares a `std::mutex`-
-  guarded counter between `render_get` and `render_post`.
-
-HTTP basics
------------
-
-* `setting_headers.cpp` — attach response headers fluently with
-  `with_header`.
-* `hello_with_get_arg.cpp` — read a query-string parameter from
-  `http_request::get_arg`.
-* `args_processing.cpp` — iterate every form/query argument.
-* `custom_error.cpp` — install custom `not_found_handler` and
-  `method_not_allowed_handler` and let `set_allowing` restrict methods
-  on a resource.
-* `allowing_disallowing_methods.cpp` — narrow a resource to a single
-  HTTP method via the allow mask.
-* `url_registration.cpp` — exact paths, prefix matches, regex paths,
-  and parametric segments (with optional per-segment regex).
-* `handlers.cpp` — register distinct lambdas for GET and POST on the
-  same path; the dispatcher composes them.
-
-Response shapes
----------------
-
-* `minimal_file_response.cpp` — stream a file from disk.
-* `binary_buffer_response.cpp` — return a binary buffer (e.g. a PNG).
-* `iovec_response_example.cpp` — gather a response body from multiple
-  borrowed buffers without copying.
-* `pipe_response_example.cpp` — stream from a pipe filled by a
-  background thread.
-* `empty_response_example.cpp` — bodyless responses for DELETE / HEAD.
-* `minimal_deferred.cpp` — deferred response: the body is produced
-  asynchronously by a callback.
-* `deferred_with_accumulator.cpp` — deferred response that mutates
-  shared state across calls.
-
-TLS and authentication
-----------------------
-
-* `minimal_https.cpp` — enable TLS with PEM key/cert files.
-* `minimal_https_psk.cpp` — TLS with pre-shared keys.
-* `basic_authentication.cpp` — per-request HTTP Basic auth inside the
-  handler.
-* `centralized_authentication.cpp` — server-wide `auth_handler` and
-  `auth_skip_paths`.
-* `digest_authentication.cpp` — per-request HTTP Digest auth via
-  `http_request::check_digest_auth`.
-* `client_cert_auth.cpp` — mutual TLS with X.509 client certificates.
-  Ships as a documentation artifact; not wired into `noinst_PROGRAMS`.
-
-Lifecycle hooks
----------------
-
-The hook bus (DR-012, §4.10) lets user code observe and short-circuit
-every interesting point in the request lifecycle. The four examples
-below demonstrate the user-visible resolution of issues #332, #273,
-#281, #69, and the per-route hook contract introduced in TASK-051.
-
-* `denied_ip_log.cpp` — a single `accept_decision` hook logs every
-  denied-IP rejection to stderr. Resolves issue #332.
-* `early_413.cpp` — a single `request_received` hook returns
-  `respond_with(http_response::empty().with_status(413))` when
-  `Content-Length` exceeds the configured cap. The request body never
-  crosses the I/O boundary. Resolves issue #273.
-* `clf_access_log.cpp` — a single `response_sent` hook formats a
-  Common Log Format line using the structured context fields
-  (`status`, `bytes_queued`, `elapsed`). Resolves issues #281 and #69.
-* `per_route_auth.cpp` — `http_resource::add_hook(before_handler, ...)`
-  guards a single route with HTTP Basic auth without touching sibling
-  routes. Demonstrates per-route hook scoping (DR-012).
-
-Operations
-----------
-
-* `daemon_info.cpp` — introspect the running daemon (bound port,
-  listen FD, active connections).
-* `external_event_loop.cpp` — drive `EXTERNAL_SELECT` from the
-  application's loop via `run_wait`.
-* `custom_access_log.cpp` — server-wide access-log callback.
-* `minimal_ip_access_control.cpp` — `deny_ip` / `allow_ip` under the
-  `ACCEPT` and `REJECT` policies.
-* `turbo_mode.cpp` — turbo, suppressed Date header, fastopen queue,
-  listen backlog.
-* `service.cpp` — the kitchen-sink reference example: CLI args,
-  optional TLS, all `render_*` overrides.
-
-Benchmarks
-----------
-
-* `benchmark_select.cpp`, `benchmark_threads.cpp`,
-  `benchmark_nodelay.cpp` — micro-benchmarks. See `test/v1_baseline/` for
-  v1.x reference numbers.
-
-WebSockets
-----------
-
-* `websocket_echo.cpp` — `websocket_handler` subclass registered via
-  `register_ws_resource` with `std::make_unique`.
-
-File upload
------------
-
-* `file_upload.cpp`, `file_upload_with_callback.cpp` — multipart
-  upload, GET serves the HTML form and POST processes the parts.
-
-Creating Certificates
-=====================
-
-Self-signed certificates can be created using OpenSSL using the
-following steps:
-
-    $ openssl genrsa -des3 -passout pass:x -out server.pass.key 2048
-    $ openssl rsa -passin pass:x -in server.pass.key -out server.key
-    $ openssl req -new -key server.key -out server.csr
-    $ openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt
-
-On the last step when prompted for a challenge password it can be left
-empty.
-
-Thanks to https://devcenter.heroku.com/articles/ssl-certificate-self
-for these instructions.
-
-`v3_http2.cpp` serves `/hello` through one certificate listener and one route
-table for HTTP/1.1 and HTTP/2. Build against the installed package:
+### Incremental bodies
 
 ```sh
-c++ -std=c++20 v3_http2.cpp $(pkg-config --cflags --libs libhttpserver) -pthread -o v3_http2
-./v3_http2 a-chain.pem a-key.pem
+./examples/v3_body_streaming 30
+curl -i -H 'Expect: 100-continue' --data-binary hello "http://127.0.0.1:$PORT/reject"
+curl -i --data-binary hello "http://127.0.0.1:$PORT/upload"
+curl -i --raw "http://127.0.0.1:$PORT/download"
 ```
 
-The example prints its loopback port and stops when stdin receives a line.
-The certificate chain must identify `a.example`; clients should verify its CA
-and SNI. HTTP/2 requires a TLS-on build. The installed H2 matrix compiles and
-runs this example with both shared and static linkage.
+Observe refusal before body admission, `bytes=5`, and 64 bounded generated
+chunks followed by ordered `X-End` trailers. `/download/slow` streams a fixed
+4 MiB payload from one 32 KiB buffer, with startup/finish-accepted handshakes
+for a slow reader smoke. Its explicit 16 MiB output budget includes retained
+allocation and bounded growth scratch; finish acceptance is not peer receipt. Upload uses a fixed 64-byte buffer
+and explicitly enforces a 1024-byte total cap; admission's buffering policy is
+not a total streaming byte limit. Completed request trailers are inspected
+only after EOF. `start_response()` closes the body reader: consume uploads
+before responding; this API does not demonstrate simultaneous duplex bodies.
+Writer failures retire the coroutine without attempting another response.
+
+### Authentication
+
+```sh
+./examples/v3_auth 30
+curl -i "http://127.0.0.1:$PORT/auth/basic"
+curl -i -u demo:secret "http://127.0.0.1:$PORT/auth/basic"
+curl -i --digest -u demo:secret "http://127.0.0.1:$PORT/auth/digest"
+curl -i "http://127.0.0.1:$PORT/public"
+```
+
+Missing/wrong credentials receive 401 challenges; correct demonstration
+credentials receive `authenticated`. Digest uses SHA-256 and the library's
+nonce/replay ledger. `/public` remains accessible. Basic requires TLS for
+credential confidentiality; plaintext loopback here is a local demonstration.
+
+### Forms and uploads
+
+```sh
+UPLOADS=$(mktemp -d)
+./examples/v3_forms "$UPLOADS" 30
+curl -i --data 'a=one&a=two+words' "http://127.0.0.1:$PORT/form"
+curl -i --data 'a=one&a=two+words' "http://127.0.0.1:$PORT/form/read"
+printf abc > /tmp/safe.txt
+curl -i -F 'note=one' -F 'note=two' -F 'file=@/tmp/safe.txt' \
+  "http://127.0.0.1:$PORT/multipart"
+```
+
+Both URL-encoded shapes preserve repeats (1024 bytes/8 fields); malformed
+encoding gives 400 and excess bytes give 413. Multipart explicitly limits
+4096 body bytes, 8 parts, 1024 bytes/part, 512 header bytes/part. Responses
+show ordered text fields and sanitized filename/size without absolute paths.
+The sink and exchange remain alive through the awaited reader. Partial files
+are removed on abort; completed files are removed before replying by default.
+`/multipart/keep` deliberately retains a completed `safe.txt`; the application
+then owns/removes it. Use a private application-supplied upload directory;
+these short samples use nonrandom names and concurrent identical filenames
+should be avoided.
+
+### Response sources and ownership
+
+```sh
+printf 'reopened\n' > /tmp/v3-body.txt
+./examples/v3_response_sources /tmp/v3-body.txt 30
+for kind in bytes borrowed reopen factory file pipe missing closes; do
+  curl -i "http://127.0.0.1:$PORT/$kind"
+done
+curl -i "http://127.0.0.1:$PORT/file"
+curl -i "http://127.0.0.1:$PORT/pipe"
+```
+
+Observe independent reusable bodies, per-send `X-Send` overlays, factory/pipe
+trailers, an owned file starting at its transferred position, and a prefilled
+pipe ending at EOF. Later file/pipe attempts become intentional precommit 409;
+`/closes` shows exactly-once release. `/missing` deliberately maps checked
+precommit failure to 404. Invalid empty leases are checked at startup.
+
+A lease owns the **actual immutable span storage**. Definition and exchange
+outlive `send_definition`; each concurrent factory call creates a fresh mutable
+producer and its spans survive until its next pull. Handle claims are
+nonrefundable, including failed preparation. Pipes must reach EOF or declare
+coherent bounded framing. File/pipe reads and producer pulls are synchronous
+application work, not asynchronous file I/O. The `/icy` route observes the literal ICY status flag on H1
+via `status::with_shoutcast()`; it does not implement an audio subsystem.
+
+### Operations and lifecycle
+
+```sh
+./examples/v3_operations
+curl -i "http://127.0.0.1:$PORT/short"
+curl -i "http://127.0.0.1:$PORT/peer"
+curl -i "http://127.0.0.1:$PORT/throw"
+# Host stdin: stats, deny-loopback, allow-loopback, stop
+./examples/v3_lifecycle
+curl -i "http://127.0.0.1:$PORT/wait"
+# Host prints PENDING; enter resume to complete it, or drain then wait.
+```
+
+Operations retains all eight hook handles, short-circuits `/short` to 202,
+adds `X-Hook: after`, observes exception/completion/status, and prints dispatched
+diagnostic counts/gauges from `stats`. Connection cap is four; header and
+response queues are bounded. `/peer` reports transport identity, independent
+of forwarded headers. `deny-loopback` applies to subsequent keepalive requests;
+restore access with stdin `allow-loopback`. Hooks perform no blocking I/O and
+never log credentials/bodies. Close clients before observing active gauges;
+retirement is asynchronous.
+
+Lifecycle creates fresh one-shot signals per `/wait`, keeps only copied
+signals in a synchronized registry, and prints `RETIRED` on RAII cleanup.
+`/timeout` returns 408 after 50 ms; disconnecting `/cancel` prints `CANCELLED`
+and retires its frame. POST `/stop` demonstrates handler-safe stop. `drain`
+initiates a 500 ms budget, `resume` can release accepted work, and `wait` is the
+coordinator's blocking ticket observation (`completed` or `deadline_expired`).
+No detached application threads or retained exchange pointers are used.
+
+### Protocols, external ownership and WebSocket
+
+```sh
+./examples/v3_protocol_options                      # TLS-off
+./examples/v3_protocol_options CHAIN_PEM KEY_PEM    # TLS-on
+./examples/v3_external_event_loop 30
+curl -i "http://127.0.0.1:$PORT/hello"
+./examples/v3_websocket_echo 30
+curl -i "http://127.0.0.1:$PORT/echo"                # refusal without Upgrade
+```
+
+Protocol options prints actual validation/listen outcomes and ports, then
+stops. The external host accepts an optional positive duration (the command above
+uses 30 seconds); without it the process remains running until signaled. It
+is the canonical readiness example: snapshot
+interests carry generations, the host waits on descriptors/wakeups/deadlines,
+and dispatches readiness through the public driver while owning the loop.
+H1 `/echo` accepts text/binary WebSocket frames, awaits writable under
+backpressure, and keeps the session alive through bounded close notification.
+Choose application origin/subprotocol/size policies before exposing it.
+
+For TLS programs supply a chain (leaf plus intermediates) and matching key for
+`a.example`; trust roots belong to clients. From the configured TLS build:
+
+```sh
+./examples/v3_http2 CHAIN_PEM KEY_PEM
+# Set PORT to its first numeric stdout line. Enter stop/EOF to finish.
+curl --cacert ROOT_PEM --resolve "a.example:$PORT:127.0.0.1" \
+  --http2 "https://a.example:$PORT/hello"
+./examples/v3_http3 CHAIN_PEM KEY_PEM external
+# First line: UDP port. Second: TCP_PORT <port>. Enter stop/EOF to finish.
+```
+
+H2 `/hello` returns `hello h2`; H3 `/hello` returns `hello native h3` and
+`x-end: native-fin`. H3's TCP listener also serves H1/H2. Use `managed` or
+`external`. Both protocols expose `/ws/echo` via Extended CONNECT and require
+`harness.v1`. A curl build may lack HTTP/2 or HTTP/3; the focused independent
+clients below cover Extended CONNECT/trailers without assuming curl support:
+
+```sh
+# From the repository root, create a dedicated client environment:
+python3 -m venv /tmp/v3-example-clients
+/tmp/v3-example-clients/bin/pip install -r test/integ/http2-client-requirements.txt \
+  -r test/integ/http3-client-requirements.txt
+V3_EXAMPLES_DIR="$PWD/build/native-tls/examples" V3_TLS_MODE=yes \
+  /tmp/v3-example-clients/bin/python test/integ/v3_examples_test.py \
+  ExampleTests.test_http2_hello_and_extended_connect \
+  ExampleTests.test_http3_hello_trailers_and_extended_connect_both_loops
+```
+
+The smoke runner starts/stops bounded children and verifies supplied repository
+test CA material; those credentials are test fixtures, not deployment keys.
+Missing optional protocol clients are explicitly skipped.
+
+### TLS profiles and rotation
+
+```sh
+./examples/v3_tls_profiles certificate A_CHAIN A_KEY B_CHAIN B_KEY
+./examples/v3_tls_profiles mtls CHAIN KEY CLIENT_ROOTS require
+./examples/v3_tls_profiles psk identity HEX_KEY
+./examples/v3_tls_profiles acme CHAIN KEY CHALLENGE_CERT CHALLENGE_KEY HEX_DIGEST
+# All print PORT=...; enter stop. ACME stdin: publish, invalid, remove, stop.
+```
+
+Certificate mode explicitly selects host A by default and B through exact SNI.
+Use hostname-verifying `curl --cacert ROOT_PEM --resolve ...` against `/hello`;
+for mTLS add `--cert CLIENT_CHAIN --key CLIENT_KEY`. `request` also works in
+place of `require`; `/hello` reports authenticated client metadata as
+`verified=0|1`. PSK is HTTP/1-only: the bounded runtime rejects unknown identity,
+checks callback cancellation/deadlines/identity/key caps, owns callback captures
+through retirement; the coordinator explicitly requests stop and waits for
+retirement. A
+TLS1.2 independent client uses the same `HEX_KEY` and identity (PSK authenticates
+through the shared key rather than an X.509 trust root):
+
+```sh
+printf 'GET /hello HTTP/1.1\r\nHost: a.example\r\nConnection: close\r\n\r\n' | \
+  openssl s_client -connect "127.0.0.1:$PORT" -servername a.example \
+  -tls1_2 -cipher PSK-AES128-GCM-SHA256 -psk_identity identity -psk "$HEX_KEY" -quiet
+```
+
+ACME receives application-supplied challenge material; the library does not
+issue certificates. `HEX_DIGEST` is the 32-byte key-authorization SHA-256 digest
+encoded as 64 hex digits and must match the challenge certificate's critical
+`acmeIdentifier` extension. Expiration is one hour. `publish` validates before
+publication; `invalid` preserves ordinary credentials; `remove` clears it.
+Ephemeral ports prove publication/removal and **nonselection**. Actual selection
+requires authentic TCP443, exact SNI and sole `acme-tls/1`; optionally append
+`443` to the ACME server command on a host permitted to bind it, then run:
+
+```sh
+openssl s_client -connect 127.0.0.1:443 -servername a.example \
+  -alpn acme-tls/1 -showcerts </dev/null
+```
+
+Inspect the presented challenge certificate and extension; ordinary self-signed
+certificates are not ACME challenge fixtures.
+
+```sh
+./examples/v3_tls_rotation CERTIFICATE_DIRECTORY managed 0
+# First output is the port. Stdin: invalid, replace, stop (or EOF).
+```
+
+Rotation also accepts `external`. Its directory supplies `a.pem`, `a-key.pem`,
+`b.pem`, `b-key.pem`, and `intermediate.pem`; chain files are composed from leaf
+plus that intermediate. `/installed` returns `rotation-example`. `invalid`
+prints `PRESERVED`; `replace` prints `REPLACED`. Established connections retain
+their accepted generation, and new handshakes select replacement B. Test both
+with the bounded smoke runner's rotation test. For separate new connections:
+
+```sh
+curl --cacert ROOT_PEM --resolve "a.example:$PORT:127.0.0.1" "https://a.example:$PORT/installed"
+# Enter replace on the host, then:
+curl --cacert ROOT_PEM --resolve "b.example:$PORT:127.0.0.1" "https://b.example:$PORT/installed"
+```
+
+### Installed consumers and source distributions
+
+From the repository root, after the configured library build:
+
+```sh
+BUILD_DIR="$PWD/build/native" CXX=clang++ scripts/verify-installed-examples.sh
+```
+
+The verifier stages the install, copies all sources/helpers to a separate
+temporary consumer directory, builds all fifteen with shared and static
+linkage, checks depfiles for private/source/build header contamination, and
+runs their bounded wire smokes against the staged package. `PYTHON` selects
+the optional client environment and `V3_TLS_MODE=yes|no` can select the lane.
+For a single installed consumer with installed pkg-config metadata:
+
+```sh
+clang++ -std=c++20 -pthread examples/v3_auth.cpp \
+  $(pkg-config --cflags --libs libhttpserver) -o /tmp/v3_auth
+```
+
+`make dist` includes every indexed source/helper and the verification scripts;
+archives build out of tree without `.git` or the original checkout.
+
+## Historical legacy v2 sources
+
+The following 38 sources are retained as unsupported historical v2 examples.
+They are not part of `--enable-examples` on `v3` and require the legacy v2 API,
+MHD/GnuTLS and original build configuration. Use the native examples above for
+v3 development; no automatic v2 port is implied.
+
+- [allowing_disallowing_methods.cpp](allowing_disallowing_methods.cpp)
+- [args_processing.cpp](args_processing.cpp)
+- [basic_authentication.cpp](basic_authentication.cpp)
+- [benchmark_nodelay.cpp](benchmark_nodelay.cpp)
+- [benchmark_select.cpp](benchmark_select.cpp)
+- [benchmark_threads.cpp](benchmark_threads.cpp)
+- [binary_buffer_response.cpp](binary_buffer_response.cpp)
+- [centralized_authentication.cpp](centralized_authentication.cpp)
+- [clf_access_log.cpp](clf_access_log.cpp)
+- [client_cert_auth.cpp](client_cert_auth.cpp)
+- [custom_access_log.cpp](custom_access_log.cpp)
+- [custom_error.cpp](custom_error.cpp)
+- [daemon_info.cpp](daemon_info.cpp)
+- [deferred_with_accumulator.cpp](deferred_with_accumulator.cpp)
+- [denied_ip_log.cpp](denied_ip_log.cpp)
+- [digest_authentication.cpp](digest_authentication.cpp)
+- [early_413.cpp](early_413.cpp)
+- [empty_response_example.cpp](empty_response_example.cpp)
+- [external_event_loop.cpp](external_event_loop.cpp)
+- [file_upload.cpp](file_upload.cpp)
+- [file_upload_with_callback.cpp](file_upload_with_callback.cpp)
+- [handlers.cpp](handlers.cpp)
+- [hello_with_get_arg.cpp](hello_with_get_arg.cpp)
+- [hello_world.cpp](hello_world.cpp)
+- [iovec_response_example.cpp](iovec_response_example.cpp)
+- [minimal_deferred.cpp](minimal_deferred.cpp)
+- [minimal_file_response.cpp](minimal_file_response.cpp)
+- [minimal_https.cpp](minimal_https.cpp)
+- [minimal_https_psk.cpp](minimal_https_psk.cpp)
+- [minimal_ip_access_control.cpp](minimal_ip_access_control.cpp)
+- [per_route_auth.cpp](per_route_auth.cpp)
+- [pipe_response_example.cpp](pipe_response_example.cpp)
+- [service.cpp](service.cpp)
+- [setting_headers.cpp](setting_headers.cpp)
+- [shared_state.cpp](shared_state.cpp)
+- [turbo_mode.cpp](turbo_mode.cpp)
+- [url_registration.cpp](url_registration.cpp)
+- [websocket_echo.cpp](websocket_echo.cpp)

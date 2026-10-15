@@ -24,7 +24,7 @@ def scenarios(executable,loop,args,directory,env,fixtures,commands,client,exampl
     if args.tls=='no':
         output=commands([executable,fixtures,loop],directory,env)
         require(output.strip()=='TLS_OFF_H3_REJECTED','same-source TLS-off typed H3 rejection')
-        require(commands([example],directory,env).strip()=='TLS_OFF_H3_REJECTED','installed example TLS-off rejection')
+        require(commands([example],directory,env).strip()=='replace=not_supported runtime=not_supported publish=not_supported remove=not_supported listen=not_supported port=0','installed example TLS-off rejection')
         return [],[dict(case='tls_off_h3_rejected',status='passed')]
     from v3_public_http2_h2 import Client as H2Client
     for name in CLIENTS:
@@ -199,7 +199,7 @@ def run(args):
         inputs=sorted(p for p in (source/'src').rglob('*') if p.suffix in ('.cpp','.hpp'))
         inputs += [source/p for p in ('src/Makefile.am','test/Makefile.am','configure.ac','test/installed/v3_http3_consumer.cpp','test/installed/v3_http3_aioquic.py','test/installed/v3_http3_semantics.hpp','test/installed/v3_http3_semantics.py','test/installed/v3_http3_credentials.py','test/installed/v3_tls_client.cpp','test/integ/http3-client-go/public.go','scripts/check-v3-public-http3.py','scripts/lib/v3_public_http3_inventory.py','test/integ/http3_websocket_wire.py','scripts/test-v3-public-http3.py')]
         inputs += [source/'scripts/lib/resource_limits_probe.py',source/'test/installed/v3_http3_flow.py',source/'test/installed/v3_http3_lifecycle.py',source/'test/installed/v3_http3_qpack.py']
-        inputs += [source/'examples/v3_http3.cpp',source/'examples/v3_host_poll.hpp',source/'examples/v3_protocol_options.cpp',source/'examples/Makefile.am']
+        inputs += [source/'examples/v3_http3.cpp',source/'examples/v3_example_ws.hpp',source/'examples/v3_tls_unavailable.hpp',source/'examples/v3_host_poll.hpp',source/'examples/v3_protocol_options.cpp',source/'examples/Makefile.am']
         inputs += [source/'scripts/lib/v3_public_http2_h2.py']
         inputs += sorted((source/'test/integ/http3-client-go').glob('*.go')) + [source/'test/integ/http3-client-go/go.mod',source/'test/integ/http3-client-go/go.sum']
         receipt['source_hashes']={str(p.relative_to(source)):digest(p) for p in inputs}
@@ -209,7 +209,7 @@ def run(args):
         cflags=shlex.split(commands(['pkg-config','--cflags','libhttpserver'],args.output,env))
         require(not audit.consumer_flag_violations(cflags,(source,build)),'compile flag contamination')
         directory=Path(tempfile.mkdtemp(prefix='task196-installed-')); receipt['consumer_directory']=str(directory)
-        for name in ('test/installed/v3_http3_consumer.cpp','test/installed/v3_http3_semantics.hpp','examples/v3_host_poll.hpp','examples/v3_http3.cpp','examples/v3_protocol_options.cpp'): shutil.copyfile(source/name,directory/Path(name).name)
+        for name in ('test/installed/v3_http3_consumer.cpp','test/installed/v3_http3_semantics.hpp','examples/v3_host_poll.hpp','examples/v3_http3.cpp','examples/v3_example_ws.hpp','examples/v3_tls_unavailable.hpp','examples/v3_protocol_options.cpp'): shutil.copyfile(source/name,directory/Path(name).name)
         fixtures=directory/'fixtures';shutil.copytree(source/'test/data/tls_credentials',fixtures)
         if args.tls=='yes':
             independent=directory/'credential-fixtures'

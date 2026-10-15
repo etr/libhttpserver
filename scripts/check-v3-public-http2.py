@@ -124,7 +124,7 @@ def run(args):
         else: node = args.node
         inputs = sorted(p for p in (source / 'src').rglob('*') if p.suffix in ('.cpp', '.hpp'))
         inputs += [source / p for p in ('src/Makefile.am', 'configure.ac', 'test/installed/v3_http2_consumer.cpp',
-                   'test/installed/v3_http2_node.mjs', 'test/installed/v3_http2_raw.mjs', 'examples/v3_http2.cpp', 'scripts/check-v3-public-http2.py')]
+                   'test/installed/v3_http2_node.mjs', 'test/installed/v3_http2_raw.mjs', 'examples/v3_http2.cpp', 'examples/v3_example_ws.hpp', 'examples/v3_tls_unavailable.hpp', 'scripts/check-v3-public-http2.py')]
         inputs += sorted((source / 'scripts/lib').glob('v3_public_http2*.py'))
         receipt['source_hashes'] = {str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
         receipt['source_identity'] = hashlib.sha256(json.dumps(receipt['source_hashes'], sort_keys=True).encode()).hexdigest()
@@ -135,7 +135,7 @@ def run(args):
         require(not audit.consumer_flag_violations(cflags, (source, build)), 'source/provider contaminated compile flags')
         consumer = Path(tempfile.mkdtemp(prefix='task195-installed-'))
         receipt['consumer_directory'] = str(consumer)
-        for p in ('test/installed/v3_http2_consumer.cpp', 'examples/v3_host_poll.hpp', 'examples/v3_http2.cpp'):
+        for p in ('test/installed/v3_http2_consumer.cpp', 'examples/v3_host_poll.hpp', 'examples/v3_http2.cpp', 'examples/v3_example_ws.hpp', 'examples/v3_tls_unavailable.hpp'):
             shutil.copyfile(source / p, consumer / Path(p).name)
         fixtures = consumer / 'fixtures'; shutil.copytree(source / 'test/data/tls_credentials', fixtures)
         (fixtures / 'client-valid-chain.pem').write_bytes((fixtures / 'client-valid.pem').read_bytes() + (fixtures / 'client-intermediate.pem').read_bytes())
