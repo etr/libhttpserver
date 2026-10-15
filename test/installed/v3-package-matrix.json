@@ -90,7 +90,7 @@
       "sources": [
         "unit/http2_conformance_test.cpp"
       ],
-      "execution": "header-only"
+      "execution": "installed-library"
     },
     "http3_exchange": {
       "sources": [

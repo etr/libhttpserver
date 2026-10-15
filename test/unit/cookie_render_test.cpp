@@ -499,7 +499,7 @@ LT_END_AUTO_TEST(roundtrip_first_token_is_name_value)
 // render_throws_when_parsed_name_contains_semicolon test (which passed
 // tautologically): assert the parser behaviour directly. Feeding
 // "a;Secure=1=x" — an attempt to smuggle ';' into a name — the parser
-// splits the header on ';' FIRST (src/cookie.cpp,
+// splits the header on ';' FIRST (src/http/cookie.cpp,
 // cookie::parse_cookie_header: header_value.find(';', pos)), drops the
 // "a" token (no '='), and parses "Secure=1=x" as name="Secure",
 // value="1=x". A parsed cookie name can therefore never contain ';'.
@@ -516,7 +516,7 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, render_guard_rejects_space_in_parsed_nam
     // a space (0x20), which is rejected by is_invalid_name_byte but NOT split
     // on by the parser's semicolon delimiter.
     //
-    // Parser behaviour relied upon (src/cookie.cpp): trim_ws() strips only
+    // Parser behaviour relied upon (src/http/cookie.cpp): trim_ws() strips only
     // ' ' and '\t' from BOTH ENDS of each ';'-delimited token
     // (`tok = trim_ws(tok)`) and again from the ends of the name portion
     // after splitting at the first '=' (`name_sv = trim_ws(name_sv)`).

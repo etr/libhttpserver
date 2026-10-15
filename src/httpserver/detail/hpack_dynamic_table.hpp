@@ -38,11 +38,7 @@
 #include <httpserver/server/budgets.hpp>
 
 namespace httpserver::detail {
-inline bool hpack_entry_size(std::size_t name, std::size_t value, std::size_t& out) noexcept {
-    if (name > SIZE_MAX - 32 || value > SIZE_MAX - 32 - name) return false;
-    out = name + value + 32;
-    return true;
-}
+bool hpack_entry_size(std::size_t name, std::size_t value, std::size_t& out) noexcept;
 
 // Synchronous, connection-serialized storage. Input strings own their octets
 // before eviction, including a name borrowed from an entry about to be evicted.
@@ -54,45 +50,15 @@ class hpack_dynamic_table {
     hpack_dynamic_table& operator=(const hpack_dynamic_table&) = delete;
 
     // Dynamic views are invalidated by insertion, eviction, or destruction.
-    std::optional<hpack_static_entry> lookup(std::uint64_t index) const noexcept {
-        if (const auto* entry = hpack_static_lookup(index)) return *entry;
-        if (index < 62 || index - 62 >= entries_.size()) return std::nullopt;
-        const auto& entry = entries_[static_cast<std::size_t>(index - 62)];
-        return hpack_static_entry{entry.name, entry.value};
-    }
-    std::uint64_t find(std::string_view name, std::string_view value) const noexcept {
-        if (const auto index = hpack_static_find(name, value)) return index;
-        for (std::size_t i = 0; i < entries_.size(); ++i) {
-            if (entries_[i].name == name && entries_[i].value == value) return i + 62;
-        }
-        return 0;
-    }
-    std::uint64_t find_name(std::string_view name) const noexcept {
-        if (const auto index = hpack_static_find_name(name)) return index;
-        for (std::size_t i = 0; i < entries_.size(); ++i) {
-            if (entries_[i].name == name) return i + 62;
-        }
-        return 0;
-    }
-    hpack_status insert(std::string name, std::string value) {
-        const auto name_size = name.size();
-        const auto value_size = value.size();
-        return insert_entry(name_size, value_size, [&](server::reservation charge) {
-            return entry{std::move(name), std::move(value), std::move(charge)};
-        });
-    }
+    std::optional<hpack_static_entry> lookup(std::uint64_t index) const noexcept;
+    std::uint64_t find(std::string_view name, std::string_view value) const noexcept;
+    std::uint64_t find_name(std::string_view name) const noexcept;
+    hpack_status insert(std::string name, std::string value);
     // Views must refer to externally owned fields, not table storage. Admission
     // precedes string copies; use insert with owned strings for table references.
-    hpack_status insert_copy(std::string_view name, std::string_view value) {
-        return insert_entry(name.size(), value.size(), [&](server::reservation charge) {
-            return entry{std::string(name), std::string(value), std::move(charge)};
-        });
-    }
-    void set_capacity(std::size_t capacity) noexcept {
-        capacity_ = capacity;
-        evict_to(capacity);
-    }
-    void clear() noexcept { entries_.clear(); bytes_ = 0; }
+    hpack_status insert_copy(std::string_view name, std::string_view value);
+    void set_capacity(std::size_t capacity) noexcept;
+    void clear() noexcept;
     std::size_t bytes() const noexcept { return bytes_; }
     std::size_t size() const noexcept { return entries_.size(); }
     std::size_t capacity() const noexcept { return capacity_; }
@@ -118,12 +84,7 @@ class hpack_dynamic_table {
         bytes_ += size;
         return {};
     }
-    void evict_to(std::size_t limit) noexcept {
-        while (bytes_ > limit) {
-            bytes_ -= entries_.back().charge.units();
-            entries_.pop_back();
-        }
-    }
+    void evict_to(std::size_t limit) noexcept;
     server::resource_budget budget_;
     std::size_t capacity_;
     std::size_t bytes_ = 0;

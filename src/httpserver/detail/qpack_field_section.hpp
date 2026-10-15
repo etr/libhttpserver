@@ -53,20 +53,11 @@ struct qpack_section_result {
     qpack_status status;
     std::vector<qpack_field> fields;
     std::uint64_t required_insert_count = 0;
-    http::fields materialize() const {
-        http::fields out;
-        for (const auto& field : fields) out.append(field.name, field.value);
-        return out;
-    }
+    http::fields materialize() const;
 };
 inline std::span<const std::uint8_t> qpack_octets(std::string_view value) noexcept {
     return {reinterpret_cast<const std::uint8_t*>(value.data()), value.size()};
 }
-inline bool qpack_admit_field(std::size_t name, std::size_t value, std::size_t& remaining) noexcept {
-    // RFC 9114 field-section size includes 32 octets per occurrence.
-    if (remaining < 32 || name > remaining - 32 || value > remaining - 32 - name) return false;
-    remaining -= 32 + name + value;
-    return true;
-}
+bool qpack_admit_field(std::size_t name, std::size_t value, std::size_t& remaining) noexcept;
 }  // namespace httpserver::detail
 #endif  // SRC_HTTPSERVER_DETAIL_QPACK_FIELD_SECTION_HPP_

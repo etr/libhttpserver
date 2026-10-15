@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <utility>
-#include "./quic_recovery_internal.hpp"
+#include <httpserver/detail/quic_recovery_internal.hpp>
 namespace httpserver::detail {
 namespace {
 bool valid_max_frame(const quic_flow_frame& frame, quic_endpoint_role role) {

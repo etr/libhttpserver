@@ -140,66 +140,25 @@ namespace detail {
 // interior OWS. Mirrors the engine-side rule
 // (detail/http1_head_parser.hpp contains_field_value_ctl), re-expressed
 // here because a public header may not include a private one.
-inline bool field_value_has_ctl(std::string_view v) noexcept {
-    for (const char c : v) {
-        const auto u = static_cast<unsigned char>(c);
-        if ((u < 0x20 && u != '\t') || u == 0x7F) return true;
-    }
-    return false;
-}
+bool field_value_has_ctl(std::string_view v) noexcept;
 
 // Wire-safety of one field set: every name a token (RFC 9110 tchar),
 // every value free of forbidden control bytes. Shared by the
 // definition factories (base fields) and the send path (overlay
 // fields).
-inline http::outcome check_fields_wire_safe(const http::fields& f) {
-    for (const http::fields::entry e : f.entries()) {
-        if (!http::detail::is_token(e.name)) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response fields: name '" + std::string(e.name)
-                    + "' is not a token");
-        }
-        if (field_value_has_ctl(e.value)) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response fields: value of '" + std::string(e.name)
-                    + "' carries a control byte");
-        }
-    }
-    return http::outcome::okay();
-}
+http::outcome check_fields_wire_safe(const http::fields& f);
 
 // Framing self-consistency of one field set: at most one
 // Content-Length occurrence, never a Transfer-Encoding beside a
 // Content-Length (the same conflicts the engine's response mode
 // rejects), and a numeric Content-Length when one is present (a
 // framing lie fails validation, not the wire).
-inline http::outcome check_fields_framing(const http::fields& f) {
-    if (f.count("content-length") > 1) {
-        return http::outcome(
-            http::outcome_code::invalid_argument,
-            "response fields: repeated Content-Length");
-    }
-    if (f.count("content-length") > 0
-            && f.count("transfer-encoding") > 0) {
-        return http::outcome(
-            http::outcome_code::invalid_argument,
-            "response fields: Transfer-Encoding with Content-Length");
-    }
-    std::uint64_t declared = 0;
-    return parse_content_length(f, declared);
-}
+http::outcome check_fields_framing(const http::fields& f);
 
 // Pins Content-Length to `size` when the field set carries neither
 // framing field (an explicit Content-Length or Transfer-Encoding passes
 // through verbatim; "0" is pinned like any other size).
-inline void pin_content_length(http::fields& f, std::uint64_t size) {
-    if (f.count("content-length") == 0
-            && f.count("transfer-encoding") == 0) {
-        f.append("Content-Length", std::to_string(size));
-    }
-}
+void pin_content_length(http::fields& f, std::uint64_t size);
 
 // Everything a send does before committing the head (defined after
 // send_report below): the one function reaching the definition's
@@ -225,15 +184,7 @@ class response_definition {
     // the fields carry neither framing field (including "0").
     static http::outcome owned_bytes(const http::status& s, http::fields f,
                                      std::vector<std::byte> body,
-                                     response_definition& out) {
-        build state;
-        state.status = s;
-        detail::pin_content_length(f, body.size());
-        state.fields = std::move(f);
-        state.body.kind = source_kind::owned_bytes;
-        state.body.bytes = std::move(body);
-        return commit(std::move(state), out);
-    }
+                                     response_definition& out);
 
     // Body re-read from `path` on every send: nothing is opened at
     // construction, so a definition outlives any one file's lifetime;
@@ -241,26 +192,12 @@ class response_definition {
     // Content-Length per send.
     static http::outcome reopen_file(const http::status& s, http::fields f,
                                      std::string path,
-                                     response_definition& out) {
-        build state;
-        state.status = s;
-        state.fields = std::move(f);
-        state.body.kind = source_kind::reopen_file;
-        state.body.path = std::move(path);
-        return commit(std::move(state), out);
-    }
+                                     response_definition& out);
 
     // Body produced per send by a fresh producer from `make`.
     static http::outcome factory(const http::status& s, http::fields f,
                                  body_factory make,
-                                 response_definition& out) {
-        build state;
-        state.status = s;
-        state.fields = std::move(f);
-        state.body.kind = source_kind::factory;
-        state.body.make = std::move(make);
-        return commit(std::move(state), out);
-    }
+                                 response_definition& out);
 
     // Body borrowed from application memory under an explicit lease:
     // the library stores only the view and the lease, never a copy.
@@ -273,16 +210,7 @@ class response_definition {
     static http::outcome borrowed(const http::status& s, http::fields f,
                                   std::span<const std::byte> body,
                                   body_lease lease,
-                                  response_definition& out) {
-        build state;
-        state.status = s;
-        detail::pin_content_length(f, body.size());
-        state.fields = std::move(f);
-        state.body.kind = source_kind::borrowed;
-        state.body.view = body;
-        state.body.lease = std::move(lease);
-        return commit(std::move(state), out);
-    }
+                                  response_definition& out);
 
     // Body streamed from an open std::FILE* TRANSFERRED to the
     // library and closed with std::fclose (see the owned_close_fn
@@ -313,22 +241,7 @@ class response_definition {
     static http::outcome owned_file(const http::status& s, http::fields f,
                                     std::FILE* handle,
                                     owned_close_fn close,
-                                    response_definition& out) {
-        if (handle == nullptr || !close) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response_definition: owned_file requires a handle and "
-                "a close operation");
-        }
-        build state;
-        state.status = s;
-        state.fields = std::move(f);
-        state.body.kind = source_kind::owned_file;
-        state.body.handle =
-            std::make_shared<detail::transferred_handle>(
-                handle, std::move(close));
-        return commit(std::move(state), out);
-    }
+                                    response_definition& out);
 
     // Body streamed from an open pipe endpoint TRANSFERRED to the
     // library and closed with std::fclose (see the owned_close_fn
@@ -357,22 +270,7 @@ class response_definition {
     static http::outcome owned_pipe(const http::status& s, http::fields f,
                                     std::FILE* handle,
                                     owned_close_fn close,
-                                    response_definition& out) {
-        if (handle == nullptr || !close) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response_definition: owned_pipe requires a handle and "
-                "a close operation");
-        }
-        build state;
-        state.status = s;
-        state.fields = std::move(f);
-        state.body.kind = source_kind::owned_pipe;
-        state.body.handle =
-            std::make_shared<detail::transferred_handle>(
-                handle, std::move(close));
-        return commit(std::move(state), out);
-    }
+                                    response_definition& out);
 
     // The empty, not-yet-valid definition; valid() reports false.
     response_definition() noexcept = default;
@@ -393,15 +291,9 @@ class response_definition {
     // The frozen status and base fields. For an invalid definition
     // these return shared empty instances. The fields never include
     // overlay content: a send merges its overlay into a local copy.
-    const http::status& status() const noexcept {
-        static const http::status empty;
-        return impl_ ? impl_->status : empty;
-    }
+    const http::status& status() const noexcept;
 
-    const http::fields& fields() const noexcept {
-        static const http::fields empty;
-        return impl_ ? impl_->fields : empty;
-    }
+    const http::fields& fields() const noexcept;
 
  private:
     // The one send-side reach into the frozen state: prepare_send
@@ -434,52 +326,12 @@ class response_definition {
 
     // Full validation of the assembled state; nothing is mutated on
     // failure (the caller never touches `out` before this returns ok).
-    static http::outcome validate(const build& state) {
-        if (!state.status.valid()) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response_definition: status code is invalid");
-        }
-        const http::outcome wire =
-            detail::check_fields_wire_safe(state.fields);
-        if (!wire.ok()) return wire;
-        const http::outcome framing =
-            detail::check_fields_framing(state.fields);
-        if (!framing.ok()) return framing;
-        if (state.body.kind == source_kind::reopen_file
-                && state.body.path.empty()) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response_definition: reopen_file requires a path");
-        }
-        if (state.body.kind == source_kind::factory && !state.body.make) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response_definition: factory requires a callable");
-        }
-        if (state.body.kind == source_kind::borrowed
-                && !state.body.lease.valid()) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response_definition: borrowed requires a lease");
-        }
-        return http::outcome::okay();
-    }
+    static http::outcome validate(const build& state);
 
     // Validates `state` and, only on success, freezes it into `out`:
     // the body block becomes its own shared immutable piece, so the
     // definition and any in-flight cursor alias one frozen source.
-    static http::outcome commit(build&& state, response_definition& out) {
-        const http::outcome checked = validate(state);
-        if (!checked.ok()) return checked;
-        impl frozen;
-        frozen.status = std::move(state.status);
-        frozen.fields = std::move(state.fields);
-        frozen.body = std::make_shared<const detail::response_body_source>(
-            std::move(state.body));
-        out.impl_ = std::make_shared<const impl>(std::move(frozen));
-        return http::outcome::okay();
-    }
+    static http::outcome commit(build&& state, response_definition& out);
 
     std::shared_ptr<const impl> impl_;
 };
@@ -512,91 +364,31 @@ namespace detail {
 // committed sequence is base-then-overlay with the overlay order
 // preserved (REQ-030). A local copy per send — the definition is
 // never touched.
-inline http::fields merge_send_fields(const response_definition& def,
-                                      const response_overlay& overlay) {
-    http::fields merged = def.fields();
-    for (const http::fields::entry e : overlay.headers.entries()) {
-        merged.append(e.name, e.value);
-    }
-    return merged;
-}
+http::fields merge_send_fields(const response_definition& def,
+                                      const response_overlay& overlay);
 
 // Trailer names that may never ride a trailer section: the framing
 // fields and the connection's routing name belong to the head only.
-inline http::outcome check_trailer_names(const http::fields& trailers) {
-    for (const std::string_view name :
-         {"Transfer-Encoding", "Content-Length", "Host"}) {
-        if (trailers.count(name) > 0) {
-            return http::outcome(
-                http::outcome_code::invalid_argument,
-                "response fields: '" + std::string(name)
-                    + "' cannot be a trailer");
-        }
-    }
-    return http::outcome::okay();
-}
+http::outcome check_trailer_names(const http::fields& trailers);
 
 // Pre-commit validation of one overlay: wire-safe headers, wire-safe
 // trailers, and no framing or routing names among the trailers.
-inline http::outcome check_overlay(const response_overlay& overlay) {
-    const http::outcome headers =
-        check_fields_wire_safe(overlay.headers);
-    if (!headers.ok()) return headers;
-    const http::outcome trailers =
-        check_fields_wire_safe(overlay.trailers);
-    if (!trailers.ok()) return trailers;
-    return check_trailer_names(overlay.trailers);
-}
+http::outcome check_overlay(const response_overlay& overlay);
 
 // Everything a send does BEFORE committing the head: gates on the
 // definition, validates the overlay and the merged framing, merges the
 // wire fields, and takes the send's cursor snapshot. A failure
 // here leaves the exchange untouched (DR-V3-005: conflicting
 // singleton/framing fields fail validation before headers commit).
-inline http::outcome prepare_send(const response_definition& def,
+http::outcome prepare_send(const response_definition& def,
                                   const response_overlay& overlay,
                                   http::fields& merged,
-                                  send_cursor& cursor) {
-    if (!def.valid()) {
-        return http::outcome(
-            http::outcome_code::invalid_argument,
-            "send_definition: definition is empty");
-    }
-    const http::outcome overlay_ok = check_overlay(overlay);
-    if (!overlay_ok.ok()) return overlay_ok;
-    merged = merge_send_fields(def, overlay);
-    const http::outcome framing = check_fields_framing(merged);
-    if (!framing.ok()) return framing;
-    const std::shared_ptr<const response_body_source>& body =
-        def.impl_->body;
-    const http::outcome prepared = cursor.prepare(body, merged);
-    if (!prepared.ok()) return prepared;
-    if (body->kind == response_source_kind::reopen_file
-            || body->kind == response_source_kind::owned_file) {
-        // The pinned size is per send: the file is re-observed (or the
-        // transferred handle probed) every time, never baked into the
-        // definition.
-        pin_content_length(merged, cursor.file_size());
-    }
-    return http::outcome::okay();
-}
+                                  send_cursor& cursor);
 
 // Streams the cursor's body into the exchange's writer, one pull at a
 // time; backpressure is the writer's (a parked write IS it).
-inline task<http::outcome> stream_body(exchange& x, send_cursor& cursor,
-                                       std::size_t& body_bytes) {
-    for (;;) {
-        const body_chunk chunk = cursor.pull();
-        if (!chunk.status.ok()) co_return chunk.status;
-        if (!chunk.data.empty()) {
-            const body_write written =
-                co_await x.writer().write(chunk.data);
-            if (!written.status.ok()) co_return written.status;
-            body_bytes += chunk.data.size();
-        }
-        if (chunk.end) co_return http::outcome::okay();
-    }
-}
+task<http::outcome> stream_body(exchange& x, send_cursor& cursor,
+                                       std::size_t& body_bytes);
 
 }  // namespace detail
 
@@ -629,30 +421,9 @@ inline task<http::outcome> stream_body(exchange& x, send_cursor& cursor,
 // a disconnect before or during the send; protocol_error — a file,
 // transferred, or borrowed body short of its pinned or declared
 // Content-Length.
-inline task<send_report> send_definition(exchange& x,
+task<send_report> send_definition(exchange& x,
                                          const response_definition& def,
-                                         response_overlay overlay = {}) {
-    send_report report;
-    if (x.disconnected()) {
-        report.status = http::outcome(
-            http::outcome_code::connection_closed,
-            "send_definition: exchange is disconnected");
-        co_return report;
-    }
-    http::fields merged;
-    detail::send_cursor cursor;
-    report.status = detail::prepare_send(def, overlay, merged, cursor);
-    if (!report.status.ok()) co_return report;
-    report.status = x.start_response(def.status(), merged);
-    if (!report.status.ok()) co_return report;
-    report.status =
-        co_await detail::stream_body(x, cursor, report.body_bytes);
-    if (!report.status.ok()) co_return report;
-    const body_finish finished =
-        co_await x.writer().finish(overlay.trailers);
-    report.status = finished.status;
-    co_return report;
-}
+                                         response_overlay overlay = {});
 
 }  // namespace httpserver
 

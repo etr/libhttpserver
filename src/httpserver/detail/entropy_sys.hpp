@@ -85,74 +85,26 @@ namespace entropy {
 // is one dispatch (below), not one multiply-branching body, so the
 // complexity gate reads each platform shim at its own size.
 #if defined(_WIN32)
-inline bool draw_via_bcrypt(std::byte* out, std::size_t count) noexcept {
-    return ::BCryptGenRandom(nullptr,
-                             reinterpret_cast<PUCHAR>(out),
-                             static_cast<ULONG>(count),
-                             BCRYPT_USE_SYSTEM_PREFERRED_RNG)
-           == STATUS_SUCCESS;
-}
+bool draw_via_bcrypt(std::byte* out, std::size_t count) noexcept;
 #elif defined(__linux__)
 // getrandom(2) may return short on signal interruption and for sizes
 // above the kernel's per-call ceiling: loop until the request is
 // satisfied, retrying EINTR.
-inline bool draw_via_getrandom(std::byte* out, std::size_t count) noexcept {
-    std::size_t done = 0;
-    while (done < count) {
-        const ssize_t got = ::getrandom(out + done, count - done, 0);
-        const bool interrupted = got < 0 && errno == EINTR;
-        if (interrupted) continue;
-        if (got <= 0) return false;
-        done += static_cast<std::size_t>(got);
-    }
-    return true;
-}
+bool draw_via_getrandom(std::byte* out, std::size_t count) noexcept;
 #elif defined(__APPLE__)
-inline bool draw_via_arc4(std::byte* out, std::size_t count) noexcept {
-    ::arc4random_buf(out, count);
-    return true;
-}
+bool draw_via_arc4(std::byte* out, std::size_t count) noexcept;
 #else
 // getentropy(3) documents a 256-byte per-call limit: chunk above it.
-inline bool draw_via_getentropy(std::byte* out, std::size_t count) noexcept {
-    while (count > 0) {
-        const std::size_t chunk = count < 256 ? count : 256;
-        if (::getentropy(out, chunk) != 0) return false;
-        out += chunk;
-        count -= chunk;
-    }
-    return true;
-}
+bool draw_via_getentropy(std::byte* out, std::size_t count) noexcept;
 #endif
 
 // The raw platform draw: true when every requested byte was produced.
-inline bool draw_bytes(std::byte* out, std::size_t count) noexcept {
-#if defined(_WIN32)
-    return draw_via_bcrypt(out, count);
-#elif defined(__linux__)
-    return draw_via_getrandom(out, count);
-#elif defined(__APPLE__)
-    return draw_via_arc4(out, count);
-#else
-    return draw_via_getentropy(out, count);
-#endif
-}
+bool draw_bytes(std::byte* out, std::size_t count) noexcept;
 
 // Fills @p out from the OS randomness source. A zero-length request
 // is ok; a failed or all-zero draw reports protocol_error (the caller
 // must not mint nonces from either).
-inline http::outcome fill(std::span<std::byte> out) {
-    if (out.empty()) return http::outcome::okay();
-    if (!draw_bytes(out.data(), out.size())) {
-        return http::outcome(http::outcome_code::protocol_error,
-                             "entropy: OS randomness source failed");
-    }
-    for (const std::byte b : out) {
-        if (b != std::byte{0}) return http::outcome::okay();
-    }
-    return http::outcome(http::outcome_code::protocol_error,
-                         "entropy: OS randomness source returned zeros");
-}
+http::outcome fill(std::span<std::byte> out);
 
 }  // namespace entropy
 

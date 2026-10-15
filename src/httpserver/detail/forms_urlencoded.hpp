@@ -86,35 +86,12 @@ class urlencoded_decoder {
     // are consumed into the token state (the stored prefix stops at
     // the failure); after a typed failure every later feed returns the
     // same outcome and consumes nothing.
-    http::outcome feed(std::span<const std::byte> wire) {
-        if (failed_) return failure_;
-        for (const std::byte b : wire) {
-            if (bytes_seen_ >= max_total_bytes_) {
-                fail(http::outcome_code::limit_exceeded,
-                     "raw body bytes budget exhausted");
-                return failure_;
-            }
-            ++bytes_seen_;
-            if (!feed_byte(static_cast<unsigned char>(b))) {
-                return failure_;
-            }
-        }
-        return http::outcome::okay();
-    }
+    http::outcome feed(std::span<const std::byte> wire);
 
     // Ends the body: flushes a pending token as a field (budget
     // checked) and rejects an escape still in progress (truncated at
     // end of body). Idempotent after a failure.
-    http::outcome finish() {
-        if (failed_) return failure_;
-        if (escaping_) {
-            fail(http::outcome_code::invalid_argument,
-                 "%HH escape truncated at end of body");
-            return failure_;
-        }
-        if (saw_token_byte_ && !commit_field()) return failure_;
-        return http::outcome::okay();
-    }
+    http::outcome finish();
 
     // The decoded fields in arrival order (repeated names appended);
     // the pending token of an unfinished or failed decode is not
@@ -128,100 +105,35 @@ class urlencoded_decoder {
     // in-progress escape sees every byte as its next digit (a
     // separator cutting an escape short is malformed), and '&' itself
     // is never a token byte.
-    bool feed_byte(unsigned char c) {
-        if (escaping_) return feed_escape(c);
-        if (c == '&') return flush_token();
-        saw_token_byte_ = true;
-        switch (c) {
-            case '+':
-                append(' ');
-                return true;
-            case '%':
-                escaping_ = true;
-                escape_digits_ = 0;
-                return true;
-            case '=':
-                if (in_value_) {
-                    value_.push_back('=');
-                } else {
-                    in_value_ = true;
-                }
-                return true;
-            default:
-                append(static_cast<char>(c));
-                return true;
-        }
-    }
+    bool feed_byte(unsigned char c);
 
     // Strict %HH: both digits must be case-insensitive hex; anything
     // else is the typed malformed rejection.
-    bool feed_escape(unsigned char c) {
-        if (!is_hex(c)) {
-            return fail(http::outcome_code::invalid_argument,
-                        "malformed %HH escape");
-        }
-        escape_value_ = escape_value_ * 16 + hex_value(c);
-        if (++escape_digits_ == 2) {
-            escaping_ = false;
-            append(static_cast<char>(escape_value_));
-        }
-        return true;
-    }
+    bool feed_escape(unsigned char c);
 
     // A separator: a token that consumed at least one wire byte is a
     // field; an empty token is skipped and never consumes field
     // budget.
-    bool flush_token() {
-        if (!saw_token_byte_) return true;
-        return commit_field();
-    }
+    bool flush_token();
 
     // Emits the pending token as a field. The budget check precedes
     // the append, so the over-cap pair never materializes.
-    bool commit_field() {
-        if (fields_.size() >= max_fields_) {
-            return fail(http::outcome_code::limit_exceeded,
-                        "form fields budget exhausted");
-        }
-        fields_.emplace_back(std::move(name_), std::move(value_));
-        reset_token();
-        return true;
-    }
+    bool commit_field();
 
-    void append(char c) {
-        if (in_value_) {
-            value_.push_back(c);
-        } else {
-            name_.push_back(c);
-        }
-    }
+    void append(char c);
 
-    void reset_token() {
-        name_.clear();
-        value_.clear();
-        in_value_ = false;
-        saw_token_byte_ = false;
-    }
+    void reset_token();
 
     static bool is_hex(unsigned char c) noexcept {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
             || (c >= 'A' && c <= 'F');
     }
 
-    static unsigned char hex_value(unsigned char c) noexcept {
-        if (c <= '9') return static_cast<unsigned char>(c - '0');
-        if (c >= 'a') return static_cast<unsigned char>(c - 'a' + 10);
-        return static_cast<unsigned char>(c - 'A' + 10);
-    }
+    static unsigned char hex_value(unsigned char c) noexcept;
 
     // Records the typed, sticky rejection and freezes the stored
     // prefix. Returns false so byte handlers can `return fail(...)`.
-    bool fail(http::outcome_code code, const char* what) {
-        failure_ = http::outcome(
-            code, std::string("urlencoded_decoder: ") + what);
-        failed_ = true;
-        return false;
-    }
+    bool fail(http::outcome_code code, const char* what);
 
     std::uint64_t max_total_bytes_;
     std::uint64_t max_fields_;

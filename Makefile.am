@@ -278,7 +278,7 @@ check-hygiene:
 # still runs the full test suite plus the header / example / lint gates, but
 # skips the source-only doc gates whose inputs it cannot satisfy. Release runners
 # may provide a verified specs/ tooling bundle; it is not a source checkout.
-check-local: check-headers check-examples lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage
+check-local: check-v3-compiled-operations check-headers check-examples lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage
 	@if test -d "$(top_srcdir)/specs" && test -e "$(top_srcdir)/.git"; then \
 		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen ; \
 	else \
@@ -611,3 +611,10 @@ EXTRA_DIST += test/installed/task199-capabilities.md \
 
 EXTRA_DIST += scripts/lib/v3_examples.py scripts/lib/v3_example_consumers.py \
     specs/architecture/v3/v2-parity-inventory.md
+
+EXTRA_DIST += docs/v3-source-layout.md scripts/check-v3-compiled-operations.py
+
+check-v3-compiled-operations: $(top_builddir)/src/libhttpserver.la
+	python3 $(top_srcdir)/scripts/check-v3-compiled-operations.py $(top_builddir)/src/.libs/libhttpserver.a
+
+.PHONY: check-v3-compiled-operations

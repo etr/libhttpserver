@@ -102,31 +102,6 @@ namespace detail {
 
 class peer_policy_impl;
 
-// TU-defined bridges over the incomplete pimpl: the header stays
-// vocabulary-only, the storage lives in the library.
-std::shared_ptr<peer_policy_impl> peer_policy_create();
-http::outcome peer_policy_denied_add(
-    const std::shared_ptr<peer_policy_impl>& owner, std::string_view text);
-http::outcome peer_policy_allowed_add(
-    const std::shared_ptr<peer_policy_impl>& owner, std::string_view text);
-http::outcome peer_policy_denied_drop(
-    const std::shared_ptr<peer_policy_impl>& owner, std::string_view text);
-http::outcome peer_policy_allowed_drop(
-    const std::shared_ptr<peer_policy_impl>& owner, std::string_view text);
-void peer_policy_set_mode(const std::shared_ptr<peer_policy_impl>& owner,
-                          peer_policy_mode mode) noexcept;
-peer_policy_mode peer_policy_get_mode(
-    const std::shared_ptr<peer_policy_impl>& owner) noexcept;
-void peer_policy_set_enabled(
-    const std::shared_ptr<peer_policy_impl>& owner, bool enabled) noexcept;
-bool peer_policy_get_enabled(
-    const std::shared_ptr<peer_policy_impl>& owner) noexcept;
-bool peer_policy_armed(
-    const std::shared_ptr<peer_policy_impl>& owner) noexcept;
-peer_verdict peer_policy_classify(
-    const std::shared_ptr<peer_policy_impl>& owner,
-    const net::peer_address& peer);
-
 }  // namespace detail
 
 // The server-wide peer policy store (thread-safe, runtime-mutable).
@@ -134,8 +109,7 @@ peer_verdict peer_policy_classify(
 // the object for their whole live window.
 class peer_policy {
  public:
-    peer_policy()
-        : impl_(detail::peer_policy_create()) { }
+    peer_policy();
 
     peer_policy(const peer_policy&) = delete;
     peer_policy& operator=(const peer_policy&) = delete;
@@ -143,54 +117,34 @@ class peer_policy {
     // Adds @p pattern to the deny (allow) list. Typed failures:
     // invalid_argument when the spelling does not parse. Idempotent
     // per the overlap rule.
-    http::outcome deny(std::string_view pattern) {
-        return detail::peer_policy_denied_add(impl_, pattern);
-    }
+    http::outcome deny(std::string_view pattern);
 
-    http::outcome allow(std::string_view pattern) {
-        return detail::peer_policy_allowed_add(impl_, pattern);
-    }
+    http::outcome allow(std::string_view pattern);
 
     // Removes @p pattern from the deny (allow) list. Removing a
     // pattern that is not present is a documented no-op (ok);
     // identity is the parsed pattern, so any spelling of it works.
     // A non-parsing spelling fails invalid_argument.
-    http::outcome remove_denied(std::string_view pattern) {
-        return detail::peer_policy_denied_drop(impl_, pattern);
-    }
+    http::outcome remove_denied(std::string_view pattern);
 
-    http::outcome remove_allowed(std::string_view pattern) {
-        return detail::peer_policy_allowed_drop(impl_, pattern);
-    }
+    http::outcome remove_allowed(std::string_view pattern);
 
-    void set_mode(peer_policy_mode mode) noexcept {
-        detail::peer_policy_set_mode(impl_, mode);
-    }
+    void set_mode(peer_policy_mode mode) noexcept;
 
-    peer_policy_mode mode() const noexcept {
-        return detail::peer_policy_get_mode(impl_);
-    }
+    peer_policy_mode mode() const noexcept;
 
     // A disabled policy admits every peer (the mode and lists are
     // kept, so re-enabling restores the previous stance).
-    void set_enabled(bool enabled) noexcept {
-        detail::peer_policy_set_enabled(impl_, enabled);
-    }
+    void set_enabled(bool enabled) noexcept;
 
-    bool enabled() const noexcept {
-        return detail::peer_policy_get_enabled(impl_);
-    }
+    bool enabled() const noexcept;
 
     // The zero-cost-when-unused gate (see the file comment).
-    bool armed() const noexcept {
-        return detail::peer_policy_armed(impl_);
-    }
+    bool armed() const noexcept;
 
     // The policy decision for @p peer under the current snapshot:
     // the truth table above. Never blocks on user code.
-    peer_verdict classify(const net::peer_address& peer) const {
-        return detail::peer_policy_classify(impl_, peer);
-    }
+    peer_verdict classify(const net::peer_address& peer) const;
 
  private:
     std::shared_ptr<detail::peer_policy_impl> impl_;

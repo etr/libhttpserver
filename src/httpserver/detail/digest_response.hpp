@@ -61,21 +61,11 @@ namespace digest {
 
 namespace response_detail {
 
-inline std::span<const std::byte> raw_bytes(std::string_view text) noexcept {
-    const auto* raw = reinterpret_cast<const std::byte*>(text.data());
-    return std::span<const std::byte>(raw, text.size());
-}
+std::span<const std::byte> raw_bytes(std::string_view text) noexcept;
 
 // "a:b:c" over any number of parts.
-inline std::string colon_joined(
-    std::initializer_list<std::string_view> parts) {
-    std::string out;
-    for (const std::string_view part : parts) {
-        if (!out.empty()) out.push_back(':');
-        out.append(part);
-    }
-    return out;
-}
+std::string colon_joined(
+    std::initializer_list<std::string_view> parts);
 
 }  // namespace response_detail
 

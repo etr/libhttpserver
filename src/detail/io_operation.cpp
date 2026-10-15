@@ -165,3 +165,122 @@ void op_handle::arm_stop(std::stop_token token) {
 
 }  // namespace detail
 }  // namespace httpserver
+
+/* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
+
+namespace httpserver::detail {
+
+auto op_state::claim_terminal() noexcept -> bool {
+    bool expected = false;
+    return terminal_.compare_exchange_strong(expected, true,
+                                             std::memory_order_acq_rel,
+                                             std::memory_order_acquire);
+}
+
+auto op_state::stored_result() const -> io_result {
+    std::lock_guard<std::mutex> lock(mu_);
+    return result_;
+}
+
+auto op_state::try_flag(std::atomic<bool>& flag) noexcept -> bool {
+    bool expected = false;
+    return flag.compare_exchange_strong(expected, true,
+                                        std::memory_order_acq_rel,
+                                        std::memory_order_acquire);
+}
+
+op_awaiter::op_awaiter(std::shared_ptr<op_state> state,
+               task_frame_base* frame) noexcept
+        : state_(std::move(state)) {
+    if (frame != nullptr) bind_frame(frame);
+}
+
+auto op_awaiter::bind_frame(task_frame_base* frame) noexcept -> op_awaiter& {
+    if (frame != nullptr) {
+        witness_ = frame->frame_witness_ptr();
+        resume_ex_ = frame->frame_executor();
+    }
+    return *this;
+}
+
+op_awaiter::~op_awaiter() {
+    if (state_) state_->disarm_waiter();
+}
+
+auto op_handle::bind_frame(task_frame_base* frame) noexcept -> op_handle& {
+    frame_ = frame;
+    return *this;
+}
+
+auto op_handle::submit(io_backend& backend) -> void {
+    if (state_ == nullptr || !state_->mark_submitted()) {
+        throw std::logic_error(
+            "httpserver::io operation submitted twice");
+    }
+    backend_ = &backend;
+    backend.submit(*state_);
+}
+
+auto op_handle::operator co_await() -> op_awaiter {
+    if (state_ == nullptr || !state_->mark_awaited()) {
+        throw std::logic_error(
+            "httpserver::io operation awaited twice");
+    }
+    return frame_ != nullptr ? op_awaiter(state_, frame_)
+                             : op_awaiter(state_);
+}
+
+// cpplint cannot track this constructor's nested qualifiers or braced initializers.
+// NOLINTBEGIN(whitespace/indent_namespace)
+accept_operation::accept_operation(io_connection_owner& owner, std::uint64_t connection)
+    : op_handle(std::make_shared<op_state>(io_op_kind::accept, &owner, connection, op_payload{accept_payload{}})) {}
+// NOLINTEND
+
+// cpplint cannot track this constructor's nested qualifiers or braced initializers.
+// NOLINTBEGIN(whitespace/indent_namespace)
+read_operation::read_operation(io_connection_owner& owner, std::uint64_t connection, std::span<std::byte> buffer, std::chrono::steady_clock::time_point deadline)
+    : op_handle(std::make_shared<op_state>(io_op_kind::read, &owner, connection, op_payload{read_payload{buffer, deadline}})) {}
+// NOLINTEND
+
+// cpplint cannot track this constructor's nested qualifiers or braced initializers.
+// NOLINTBEGIN(whitespace/indent_namespace)
+write_operation::write_operation(io_connection_owner& owner, std::uint64_t connection, std::span<const std::byte> bytes, std::chrono::steady_clock::time_point deadline)
+    : op_handle(std::make_shared<op_state>(io_op_kind::write, &owner, connection, op_payload{write_payload{bytes, deadline}})) {}
+// NOLINTEND
+
+udp_receive_operation::udp_receive_operation(io_connection_owner& owner, std::uint64_t socket, std::size_t capacity)
+    : op_handle(std::make_shared<op_state>(io_op_kind::udp_receive, &owner, socket, make_payload(capacity))) {}
+
+auto udp_receive_operation::make_payload(std::size_t capacity) -> op_payload {
+    auto packet = std::make_shared<io_datagram>();
+    const bool valid = capacity <= k_max_datagram_bytes;
+    if (valid) packet->bytes.resize(capacity);
+    return udp_payload{std::move(packet), valid, valid ? capacity : 0};
+}
+
+udp_send_operation::udp_send_operation(io_connection_owner& owner, std::uint64_t socket, std::span<const std::byte> bytes, datagram_endpoint peer)
+    : op_handle(std::make_shared<op_state>(io_op_kind::udp_send, &owner, socket, make_payload(bytes, peer))) {}
+
+auto udp_send_operation::make_payload(std::span<const std::byte> bytes, datagram_endpoint peer) -> op_payload {
+    auto packet = std::make_shared<io_datagram>();
+    const bool valid = bytes.size() <= k_max_datagram_bytes;
+    if (valid) packet->bytes.assign(bytes.begin(), bytes.end());
+    packet->peer = peer;
+    return udp_payload{std::move(packet), valid, valid ? bytes.size() : 0};
+}
+
+// cpplint cannot track this constructor's nested qualifiers or braced initializers.
+// NOLINTBEGIN(whitespace/indent_namespace)
+timer_operation::timer_operation(io_connection_owner& owner, std::uint64_t connection, std::chrono::steady_clock::time_point deadline)
+    : op_handle(std::make_shared<op_state>(io_op_kind::timer, &owner, connection, op_payload{timer_payload{deadline}})) {}
+// NOLINTEND
+
+wake_operation::wake_operation(io_connection_owner& owner, std::uint64_t connection) : op_handle(std::make_shared<op_state>(io_op_kind::wake, &owner, connection, op_payload{wake_payload{}})) {}
+
+// cpplint cannot track this constructor's nested qualifiers or braced initializers.
+// NOLINTBEGIN(whitespace/indent_namespace)
+cancel_operation::cancel_operation(io_connection_owner& owner, std::uint64_t connection, const op_handle& target)
+    : op_handle(std::make_shared<op_state>(io_op_kind::cancel, &owner, connection, op_payload{cancel_payload{target.state_}})) {}
+// NOLINTEND
+
+}  // namespace httpserver::detail

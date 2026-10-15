@@ -19,13 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-101 Step 5 (Check A): a consumer including the v3 server
-// configuration umbrella <httpserver/server/configuration.hpp> — and
-// each sub-header directly — without HTTPSERVER_COMPILATION (or any
-// other build/TLS configuration macro) must compile and link cleanly.
-// The v3 server configuration area is header-only, so the empty LDADD
-// of this target is itself part of the contract. The test passes by
-// virtue of compiling and linking; main() asserts nothing.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <chrono>
 #include <cstddef>

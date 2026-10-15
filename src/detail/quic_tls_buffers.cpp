@@ -4,7 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <utility>
-#include "detail/quic_tls_callbacks.hpp"
+#include <httpserver/detail/quic_tls_callbacks.hpp>
 namespace httpserver::detail {
 namespace {
 bool valid_level(quic_crypto_level level) { return static_cast<std::size_t>(level) < 3; }

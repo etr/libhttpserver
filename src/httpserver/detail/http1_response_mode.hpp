@@ -97,80 +97,20 @@ struct http1_response_mode {
     // final head-only response.
     static http1_response_mode compute(const http::request_head& request,
                                        const http::status& s,
-                                       const http::fields& fields) {
-        http1_response_mode mode;
-        if (!s.valid()) {
-            // Engine-internal misuse (an invalid status must never reach
-            // a response commit); respond_then_close lets the engine
-            // emit a synthesized error before the reset it now needs.
-            return reject(mode, http::outcome_code::invalid_argument,
-                          "status code is outside 100..599",
-                          http1_close_policy::respond_then_close);
-        }
-        if (s.informational() || s.code() == 204) {
-            // RFC 9112 section 6.3 rule 1: no body, and handler framing
-            // fields are stripped at emission (the framer's rule).
-            return mode;
-        }
-        if (s.code() == 304) {
-            // Metadata only: a Content-Length rides as the would-be GET
-            // body size; Transfer-Encoding is stripped at emission.
-            mode.kind = http1_response_body_kind::metadata_only;
-            return mode;
-        }
-        if (request.request_method.id() == http::method_id::head) {
-            // HEAD: fields verbatim, no framing validation. Migration
-            // note: v3 emits the handler's fields exactly and adds no
-            // framing, so even an ambiguous CL+TE pair passes through
-            // (there is no body to frame).
-            mode.kind = http1_response_body_kind::head_no_body;
-            return mode;
-        }
-        compute_body_framing(mode, request, fields);
-        return mode;
-    }
+                                       const http::fields& fields);
 
  private:
     // The framing branch over a body-carrying final response: TE vs CL
     // reconciliation, then the version-based engine selection.
     static void compute_body_framing(http1_response_mode& mode,
                                      const http::request_head& request,
-                                     const http::fields& fields) {
-        const std::span<const std::string> te =
-            fields.all("transfer-encoding");
-        const std::span<const std::string> cl =
-            fields.all("content-length");
-        // Both framings on a body response is ambiguous no matter what
-        // the values say (the request-side smuggling rule, mirrored).
-        if (!te.empty() && !cl.empty()) {
-            reject(mode, http::outcome_code::protocol_error,
-                   "Transfer-Encoding together with Content-Length",
-                   http1_close_policy::close_now);
-            return;
-        }
-        if (!te.empty()) {
-            compute_from_te(mode, te);
-        } else if (!cl.empty()) {
-            compute_from_cl(mode, cl);
-        } else if (request.request_protocol == http::protocol::http_1_1) {
-            // Engine-selected chunked: the framer appends
-            // "Transfer-Encoding: chunked".
-            mode.kind = http1_response_body_kind::chunked;
-        } else {
-            mode.kind = http1_response_body_kind::close_delimited;
-        }
-    }
+                                     const http::fields& fields);
 
     // Records a typed rejection; the mode's failure is sticky.
     static http1_response_mode& reject(http1_response_mode& mode,
                                        http::outcome_code code,
                                        std::string what,
-                                       http1_close_policy policy) {
-        mode.failure =
-            http::outcome(code, "http1_response_mode: " + std::move(what));
-        mode.close_policy = policy;
-        return mode;
-    }
+                                       http1_close_policy policy);
 
     // The response side accepts exactly one final "chunked" element;
     // every other spelling is a protocol error. Migration note: the
@@ -178,117 +118,36 @@ struct http1_response_mode {
     // connection; a response cannot unsend its head, so the handler-
     // pinned coding list is all-or-nothing and closes.
     static void compute_from_te(http1_response_mode& mode,
-                                const std::span<const std::string>& values) {
-        if (!is_single_chunked_te(values)) {
-            reject(mode, http::outcome_code::protocol_error,
-                   "Transfer-Encoding is not exactly one final chunked",
-                   http1_close_policy::close_now);
-            return;
-        }
-        mode.kind = http1_response_body_kind::chunked;
-    }
+                                const std::span<const std::string>& values);
 
     // Exactly one occurrence, whose whole comma-separated list is the
     // single token "chunked" (case-insensitive).
     static bool is_single_chunked_te(
-        const std::span<const std::string>& values) {
-        if (values.size() != 1) return false;
-        std::string_view rest = values.front();
-        bool chunked_seen = false;
-        for (;;) {
-            const std::size_t comma = rest.find(',');
-            const std::string_view element =
-                detail_head::trim_ows(rest.substr(0, comma));
-            const bool is_chunked =
-                !element.empty()
-                && detail_head::ascii_iequals(element, "chunked");
-            if (!is_chunked || chunked_seen) return false;
-            chunked_seen = true;
-            if (comma == std::string_view::npos) break;
-            rest.remove_prefix(comma + 1);
-        }
-        return chunked_seen;
-    }
+        const std::span<const std::string>& values);
 
     // The response side mirrors the request-side Content-Length
     // grammar: exactly one occurrence, 1*DIGIT without a leading zero
     // and without overflow.
     static void compute_from_cl(http1_response_mode& mode,
-                                const std::span<const std::string>& values) {
-        if (values.size() > 1) {
-            // Migration note (same as the request side): even identical
-            // duplicates are refused — framing-ambiguity resistance.
-            reject(mode, http::outcome_code::protocol_error,
-                   "duplicate Content-Length",
-                   http1_close_policy::close_now);
-            return;
-        }
-        std::uint64_t parsed = 0;
-        if (!parse_length(values.front(), parsed)) {
-            reject(mode, http::outcome_code::protocol_error,
-                   "Content-Length is not a valid digit count",
-                   http1_close_policy::close_now);
-            return;
-        }
-        mode.kind = http1_response_body_kind::length;
-        mode.content_length = parsed;
-    }
+                                const std::span<const std::string>& values);
 
     // 1*DIGIT, no leading zero, no overflow (from_chars backend).
-    static bool parse_length(std::string_view value, std::uint64_t& out) {
-        if (value.empty()) return false;
-        for (const char c : value) {
-            if (c < '0' || c > '9') return false;
-        }
-        if (value.size() >= 2 && value.front() == '0') return false;
-        return std::from_chars(value.data(), value.data() + value.size(),
-                               out, 10)
-                   .ec == std::errc();
-    }
+    static bool parse_length(std::string_view value, std::uint64_t& out);
 };
 
 // True iff any Connection value's comma-separated token list contains
 // `token` (case-insensitive, OWS-trimmed).
-inline bool has_connection_token(const std::span<const std::string>& values,
-                                 std::string_view token) {
-    for (const std::string& value : values) {
-        std::string_view rest = value;
-        for (;;) {
-            const std::size_t comma = rest.find(',');
-            const std::string_view element =
-                detail_head::trim_ows(rest.substr(0, comma));
-            if (detail_head::ascii_iequals(element, token)) return true;
-            if (comma == std::string_view::npos) break;
-            rest.remove_prefix(comma + 1);
-        }
-    }
-    return false;
-}
+bool has_connection_token(const std::span<const std::string>& values,
+                                 std::string_view token);
 
 // The keep-alive verdict of one response (RFC 9112 section 9.3):
 // close-delimited bodies always close; a request that announced close
 // gets close; HTTP/1.0 defaults to close unless it announced
 // keep-alive; otherwise keep-alive. A nonzero hint (the engine's
 // respond_then_close / close_now posture) forces close.
-inline http1_keepalive http1_response_keepalive(
+http1_keepalive http1_response_keepalive(
     const http::request_head& request, http1_response_body_kind kind,
-    http1_close_policy hint) {
-    if (hint != http1_close_policy::none
-            || kind == http1_response_body_kind::close_delimited) {
-        return http1_keepalive::close;
-    }
-    const std::span<const std::string> connection =
-        request.head_fields.all("connection");
-    if (has_connection_token(connection, "close")) {
-        return http1_keepalive::close;
-    }
-    if (request.request_protocol == http::protocol::http_1_0) {
-        return has_connection_token(connection, "keep-alive")
-                   ? http1_keepalive::keep_alive
-                   : http1_keepalive::close;
-    }
-    return http1_keepalive::keep_alive;
-}
+    http1_close_policy hint);
 
 }  // namespace detail
 

@@ -47,22 +47,10 @@ namespace forms_verdict {
 
 // limit_exceeded -> 413, invalid_argument -> 400, anything else -> an
 // invalid status (nothing to commit).
-inline http::status reject_status(const http::outcome& status) noexcept {
-    if (status.code() == http::outcome_code::limit_exceeded) {
-        return http::status::from_code(413);
-    }
-    if (status.code() == http::outcome_code::invalid_argument) {
-        return http::status::from_code(400);
-    }
-    return http::status::from_code(0);
-}
+http::status reject_status(const http::outcome& status) noexcept;
 
 // The length-framed empty rejection body.
-inline http::fields reject_fields() {
-    http::fields fields;
-    fields.append("Content-Length", "0");
-    return fields;
-}
+http::fields reject_fields();
 
 }  // namespace forms_verdict
 

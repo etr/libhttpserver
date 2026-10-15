@@ -141,3 +141,10 @@ http::outcome drain_scope::wait(server::drain_result& out) {
 }  // namespace detail
 
 }  // namespace httpserver
+
+#include <httpserver/detail/drain_ticket_state.hpp>
+namespace httpserver::detail {
+server::drain_ticket drain_ticket_access::make(std::shared_ptr<drain_scope> scope) {
+    return server::drain_ticket(std::make_unique<server::drain_ticket::impl>(std::move(scope)));
+}
+}  // namespace httpserver::detail

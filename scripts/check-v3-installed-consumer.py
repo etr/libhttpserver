@@ -95,6 +95,21 @@ def package_lane(args, source, output, mode, inventory):
             if cell['tls'] == mode and cell['linkage'] == linkage:
                 public[linkage]['cells'].append(traffic(executable, cell, consumer_dir, runtime_env, inventory))
                 (lane / 'public.json').write_text(json.dumps(public, indent=2))
+        compiled_sources = []
+        for name in ('v3_compiled_operations.cpp', 'v3_compiled_operations_worker.cpp'):
+            copied = consumer_dir / name
+            if not copied.exists():
+                shutil.copyfile(source / 'test/installed' / name, copied)
+            compiled_sources.append(copied)
+        compiled_executable = consumer_dir / ('compiled_operations_' + linkage + suffix)
+        compiled_provenance = compile_probe(args.compiler, compiled_sources, cflags, libraries,
+                                           compiled_executable, command, runtime_env, source, build, prefix, False)
+        compiled_graph = audit.dependency_graph([str(compiled_executable)])
+        matrix.check_linkage(compiled_graph, linkage, prefix)
+        command([str(compiled_executable)], consumer_dir, runtime_env)
+        public[linkage]['compiled_operations'] = dict(compile=compiled_provenance, dependencies=compiled_graph)
+        command([sys.executable, str(source / 'scripts/check-v3-compiled-operations.py'),
+                 str(prefix / 'lib/libhttpserver.a')], consumer_dir, runtime_env)
         private_dir = lane / ('integration-' + linkage)
         private_dir.mkdir()
         private_libraries = libraries + (shlex.split(env['V3_TLS_LIBS']) if mode == 'yes' else [])

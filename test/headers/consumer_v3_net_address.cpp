@@ -19,13 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-119 step 1: a consumer including <httpserver/net/address.hpp>
-// WITHOUT HTTPSERVER_COMPILATION (or any other build/TLS configuration
-// macro) must compile and link cleanly. The parsing and text
-// conversion live in the library, so every check here is a
-// static_assert over unevaluated expressions (the consumer_v3_hooks
-// convention): the empty LDADD of this target proves the vocabulary
-// surface itself needs no linkage.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <cstdint>
 #include <optional>

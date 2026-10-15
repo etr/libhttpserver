@@ -8,7 +8,7 @@
 #include <vector>
 #include <httpserver/detail/quic_key_state.hpp>
 #include "./quic_codec_test_support.hpp"
-#include "../../src/detail/quic_tls_callbacks.hpp"
+#include "../../src/httpserver/detail/quic_tls_callbacks.hpp"
 namespace {
 bool refuse_allocation = false;
 }

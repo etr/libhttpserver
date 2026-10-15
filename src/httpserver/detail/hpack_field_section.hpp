@@ -56,11 +56,7 @@ struct hpack_section_limits {
 struct hpack_section_result {
     hpack_status status;
     std::vector<hpack_field> fields;
-    http::fields materialize() const {
-        http::fields out;
-        for (const auto& field : fields) out.append(field.name, field.value);
-        return out;
-    }
+    http::fields materialize() const;
 };
 inline std::span<const std::uint8_t> hpack_octets(std::string_view value) noexcept {
     return {reinterpret_cast<const std::uint8_t*>(value.data()), value.size()};
@@ -68,25 +64,7 @@ inline std::span<const std::uint8_t> hpack_octets(std::string_view value) noexce
 
 // Allocation-free admission uses the primitive length parser and Huffman walk.
 // value is the decoded length; consumed includes the string's prefix.
-inline hpack_integer_result hpack_inspect_string(std::span<const std::uint8_t> input, hpack_string_limits limits) noexcept {
-    const auto length = hpack_decode_integer(input, 7, {});
-    if (!length.status.ok()) return length;
-    if (length.value > limits.max_encoded_bytes || length.value > SIZE_MAX) return {{hpack_state::limit_exceeded}};
-    const auto size = static_cast<std::size_t>(length.value);
-    if (size > input.size() - length.consumed) return {{hpack_state::incomplete}};
-    if ((input[0] & 0x80) == 0) {
-        if (size > limits.max_decoded_bytes) return {{hpack_state::limit_exceeded}};
-        return {{}, size, length.consumed + size};
-    }
-    auto result = hpack_codec::walk_huffman(input.subspan(length.consumed, size), limits.max_decoded_bytes, nullptr);
-    if (result.status.ok()) result.consumed = length.consumed + size;
-    return result;
-}
-inline bool hpack_admit_field(std::size_t name, std::size_t value, std::size_t& remaining) noexcept {
-    std::size_t size = 0;
-    if (!hpack_entry_size(name, value, size) || size > remaining) return false;
-    remaining -= size;
-    return true;
-}
+hpack_integer_result hpack_inspect_string(std::span<const std::uint8_t> input, hpack_string_limits limits) noexcept;
+bool hpack_admit_field(std::size_t name, std::size_t value, std::size_t& remaining) noexcept;
 }  // namespace httpserver::detail
 #endif  // SRC_HTTPSERVER_DETAIL_HPACK_FIELD_SECTION_HPP_

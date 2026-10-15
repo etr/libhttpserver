@@ -63,64 +63,30 @@ class fields {
 
     // Adds a new occurrence at the end of the sequence, keeping any
     // existing entries for the name.
-    void append(std::string_view name, std::string_view value) {
-        const std::size_t key = find_or_add_key(name);
-        value_store_[key].emplace_back(value);
-        order_.emplace_back(key, value_store_[key].size() - 1);
-        cache_dirty_ = true;
-    }
+    void append(std::string_view name, std::string_view value);
 
     // Erases every entry for the name (any case), then appends a
     // single entry at the end of the sequence. The first-seen spelling
     // of the name is retained.
-    void replace(std::string_view name, std::string_view value) {
-        const std::size_t key = find_or_add_key(name);
-        erase_order_for(key);
-        value_store_[key].clear();
-        value_store_[key].emplace_back(value);
-        order_.emplace_back(key, 0);
-        cache_dirty_ = true;
-    }
+    void replace(std::string_view name, std::string_view value);
 
     // Erases every entry for the name (any case). Returns true iff any
     // entry was removed.
-    bool remove(std::string_view name) {
-        const std::size_t key = find_key(name);
-        if (key == npos || value_store_[key].empty()) return false;
-        erase_order_for(key);
-        value_store_[key].clear();
-        cache_dirty_ = true;
-        return true;
-    }
+    bool remove(std::string_view name);
 
     // Earliest received occurrence of the name, or nullopt.
-    std::optional<std::string_view> first(std::string_view name) const {
-        const std::size_t key = find_key(name);
-        if (key == npos || value_store_[key].empty()) return std::nullopt;
-        return std::optional<std::string_view>(value_store_[key].front());
-    }
+    std::optional<std::string_view> first(std::string_view name) const;
 
     // All occurrences of the name in received order; empty span when
     // the name is absent.
-    std::span<const std::string> all(std::string_view name) const {
-        static constexpr std::span<const std::string> none;
-        const std::size_t key = find_key(name);
-        if (key == npos) return none;
-        return value_store_[key];
-    }
+    std::span<const std::string> all(std::string_view name) const;
 
     // Number of occurrences of the name.
-    std::size_t count(std::string_view name) const {
-        const std::size_t key = find_key(name);
-        return key == npos ? 0 : value_store_[key].size();
-    }
+    std::size_t count(std::string_view name) const;
 
     // The full sequence in insertion (wire) order. Building the cached views
     // may allocate; callers performing admission can contain allocation failure.
-    std::span<const entry> entries() const {
-        if (cache_dirty_) rebuild_cache();
-        return entry_cache_;
-    }
+    std::span<const entry> entries() const;
 
     bool empty() const noexcept { return order_.empty(); }
 
@@ -130,16 +96,7 @@ class fields {
     // Entry-sequence equality: same number of occurrences in the same
     // order, with equal (case-insensitive) names and equal values at
     // every position.
-    friend bool operator==(const fields& a, const fields& b) {
-        if (a.size() != b.size()) return false;
-        for (std::size_t i = 0; i < a.order_.size(); ++i) {
-            const auto& [ak, av] = a.order_[i];
-            const auto& [bk, bv] = b.order_[i];
-            if (!iequals(a.name_store_[ak], b.name_store_[bk])) return false;
-            if (a.value_store_[ak][av] != b.value_store_[bk][bv]) return false;
-        }
-        return true;
-    }
+    friend bool operator==(const fields& a, const fields& b);
 
     friend bool operator!=(const fields& a, const fields& b) {
         return !(a == b);
@@ -151,13 +108,7 @@ class fields {
 
     static constexpr std::size_t npos = static_cast<std::size_t>(-1);
 
-    static bool iequals(std::string_view a, std::string_view b) noexcept {
-        if (a.size() != b.size()) return false;
-        for (std::size_t i = 0; i < a.size(); ++i) {
-            if (ascii_lower(a[i]) != ascii_lower(b[i])) return false;
-        }
-        return true;
-    }
+    static bool iequals(std::string_view a, std::string_view b) noexcept;
 
     static constexpr char ascii_lower(const char c) noexcept {
         const auto u = static_cast<unsigned char>(c);
@@ -166,38 +117,13 @@ class fields {
                    : c;
     }
 
-    std::size_t find_key(std::string_view name) const noexcept {
-        for (std::size_t i = 0; i < name_store_.size(); ++i) {
-            if (iequals(name_store_[i], name)) return i;
-        }
-        return npos;
-    }
+    std::size_t find_key(std::string_view name) const noexcept;
 
-    std::size_t find_or_add_key(std::string_view name) {
-        const std::size_t existing = find_key(name);
-        if (existing != npos) return existing;
-        name_store_.emplace_back(name);
-        value_store_.emplace_back();
-        return name_store_.size() - 1;
-    }
+    std::size_t find_or_add_key(std::string_view name);
 
-    void erase_order_for(std::size_t key) {
-        order_.erase(std::remove_if(order_.begin(), order_.end(),
-                                    [key](const auto& slot) {
-                                        return slot.first == key;
-                                    }),
-                     order_.end());
-    }
+    void erase_order_for(std::size_t key);
 
-    void rebuild_cache() const {
-        entry_cache_.clear();
-        entry_cache_.reserve(order_.size());
-        for (const auto& [key, value_idx] : order_) {
-            entry_cache_.push_back(entry{name_store_[key],
-                                         value_store_[key][value_idx]});
-        }
-        cache_dirty_ = false;
-    }
+    void rebuild_cache() const;
 
     // Distinct names in first-seen order (first-seen spelling kept),
     // with one value list per name in received order.

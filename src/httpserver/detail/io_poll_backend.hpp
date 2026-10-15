@@ -99,25 +99,10 @@ constexpr int k_poll_idle_cap_ms = 1000;
 // unit-tested in io_backend_contract_test.cpp: no deadline returns the
 // idle cap; a due deadline returns 0; otherwise the ceil-to-millisecond
 // gap clamped to [0, k_poll_idle_cap_ms].
-inline int poll_timeout_ms(
+int poll_timeout_ms(
     std::chrono::steady_clock::time_point now,
     const std::optional<std::chrono::steady_clock::time_point>&
-        next_deadline) {
-    if (!next_deadline.has_value()) {
-        return k_poll_idle_cap_ms;
-    }
-    if (*next_deadline <= now) {
-        return 0;
-    }
-    const std::chrono::milliseconds gap = std::chrono::duration_cast<
-        std::chrono::milliseconds>(
-        std::chrono::ceil<std::chrono::milliseconds>(*next_deadline
-                                                     - now));
-    if (gap.count() >= k_poll_idle_cap_ms) {
-        return k_poll_idle_cap_ms;
-    }
-    return static_cast<int>(gap.count());
-}
+        next_deadline);
 
 class io_poll_backend final : public io_socket_backend {
  public:

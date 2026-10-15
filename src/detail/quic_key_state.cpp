@@ -4,7 +4,7 @@
 #include <limits>
 #include <utility>
 #include <httpserver/detail/quic_key_state.hpp>
-#include "./quic_crypto_provider.hpp"
+#include <httpserver/detail/quic_crypto_provider.hpp>
 namespace httpserver::detail {
 namespace {
 bool valid_level(quic_key_level level) noexcept { return static_cast<std::size_t>(level) < 3; }

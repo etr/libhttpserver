@@ -164,36 +164,12 @@ struct write_wait_node {
     std::shared_ptr<frame_witness> witness;  // null for foreign coroutines
     executor* target = nullptr;              // null resumes witness-guarded
 
-    bool claim() noexcept {
-        bool expected = false;
-        return delivered.compare_exchange_strong(expected, true,
-                                                  std::memory_order_acq_rel,
-                                                  std::memory_order_acquire);
-    }
+    bool claim() noexcept;
 
     // Posts the resumption to the waiter's executor. Only when no
     // executor is known does the resumption run inline, still guarded
     // by the frame witness.
-    void resume_posted() noexcept {
-        if (target != nullptr) {
-            try {
-                target->post([witness = witness, frame = awaiting] {
-                    if (witness) {
-                        guarded_resume(witness, frame);
-                    } else {
-                        frame.resume();
-                    }
-                });
-            } catch (...) {
-            }
-            return;
-        }
-        if (witness) {
-            guarded_resume(witness, awaiting);
-        } else {
-            awaiting.resume();
-        }
-    }
+    void resume_posted() noexcept;
 };
 
 // One parked response write (frame-resident awaitable, shaped after
@@ -203,31 +179,18 @@ struct write_wait_node {
 // dangling waiter registered with the engine.
 class body_write_wait final {
  public:
-    body_write_wait(body_sink* sink, stop_token cancel)
-        : sink_(sink), node_(std::make_shared<write_wait_node>()),
-          cancel_(std::move(cancel)) { }
+    body_write_wait(body_sink* sink, stop_token cancel);
 
     body_write_wait(const body_write_wait&) = delete;
     body_write_wait& operator=(const body_write_wait&) = delete;
     body_write_wait(body_write_wait&&) = delete;
     body_write_wait& operator=(body_write_wait&&) = delete;
 
-    body_write_wait& bind_frame(task_frame_base* frame) noexcept {
-        frame_ = frame;
-        return *this;
-    }
+    body_write_wait& bind_frame(task_frame_base* frame) noexcept;
 
     bool await_ready() const noexcept { return false; }
 
-    std::coroutine_handle<> await_suspend(std::coroutine_handle<> awaiting) {
-        node_->awaiting = awaiting;
-        node_->witness = frame_ ? frame_->frame_witness_ptr() : nullptr;
-        node_->target = frame_ ? frame_->frame_executor() : current_executor();
-        sink_->park(*this);
-        // Seam contract: completion is posted to this executor, never
-        // resumed inline on the parking (or completing) thread.
-        return std::noop_coroutine();
-    }
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<> awaiting);
 
     body_room await_resume() const noexcept { return node_->result; }
 
@@ -235,21 +198,13 @@ class body_write_wait final {
     // Exactly-once via the claim; a losing later completion is a
     // no-op. The posted job owns the node, so it stays safe across
     // waiter destruction.
-    void complete(body_room room) noexcept {
-        if (!node_->claim()) return;
-        node_->result = room;
-        node_->resume_posted();
-    }
+    void complete(body_room room) noexcept;
 
     // The exchange's disconnect token: the seam completes a parked
     // wait as cancelled when it fires.
     const stop_token& cancel_token() const noexcept { return cancel_; }
 
-    ~body_write_wait() {
-        if (!node_->delivered.load(std::memory_order_acquire)) {
-            sink_->unpark(*this);
-        }
-    }
+    ~body_write_wait();
 
  private:
     friend class http2_body_stream;
@@ -280,79 +235,14 @@ class response_writer {
     // Resolves ok only once the whole chunk was accepted; a partial
     // acceptance surfaces as further internal pushes. An empty chunk
     // fails invalid_argument without touching the engine.
-    task<body_write> write(std::span<const std::byte> data) {
-        const http::outcome gate = enter(data.empty());
-        if (!gate.ok()) {
-            co_return body_write{gate, 0};
-        }
-        pending_ = true;
-        std::size_t total = 0;
-        while (total < data.size()) {
-            const detail::body_push_result pushed =
-                sink_->push(data.subspan(total));
-            if (pushed.kind == detail::body_push::accepted) {
-                // A zero-byte accepted push is engine misuse: count
-                // nothing and re-push (never surface progress).
-                total += pushed.copied;
-                continue;
-            }
-            if (pushed.kind == detail::body_push::failed) {
-                fail_sticky(sink_->failure());
-                pending_ = false;
-                co_return body_write{failure_, total};
-            }
-            // Queue at capacity: park until the first of queue room,
-            // engine failure, or exchange disconnect. This suspension
-            // IS the backpressure (PRD-V3N-REQ-027).
-            detail::body_write_wait wait(sink_, cancel_token_);
-            if (co_await wait == detail::body_room::cancelled) {
-                pending_ = false;
-                co_return body_write{
-                    http::outcome(http::outcome_code::cancelled,
-                                  "response_writer: write cancelled by "
-                                  "disconnect"),
-                    total};
-            }
-        }
-        pending_ = false;
-        co_return body_write{http::outcome::okay(), total};
-    }
+    task<body_write> write(std::span<const std::byte> data);
 
     // Ends the response body. `trailers` ride the final framing (empty
     // when none). On ok the writer is closed; further write/finish fail
     // invalid_state. Exactly-once: the sink sees push_end at most once
     // (the one-outstanding gate serializes entry; a cancelled finish
     // never half-ends the body).
-    task<body_finish> finish(http::fields trailers = http::fields()) {
-        const http::outcome gate = enter(false);
-        if (!gate.ok()) {
-            co_return body_finish{gate};
-        }
-        pending_ = true;
-        for (;;) {
-            const detail::body_push_result pushed =
-                sink_->push_end(trailers);
-            if (pushed.kind == detail::body_push::accepted) {
-                finished_ = true;
-                pending_ = false;
-                close();
-                co_return body_finish{http::outcome::okay()};
-            }
-            if (pushed.kind == detail::body_push::failed) {
-                fail_sticky(sink_->failure());
-                pending_ = false;
-                co_return body_finish{failure_};
-            }
-            detail::body_write_wait wait(sink_, cancel_token_);
-            if (co_await wait == detail::body_room::cancelled) {
-                pending_ = false;
-                co_return body_finish{
-                    http::outcome(http::outcome_code::cancelled,
-                                  "response_writer: finish cancelled by "
-                                  "disconnect")};
-            }
-        }
-    }
+    task<body_finish> finish(http::fields trailers = http::fields());
 
     response_writer(response_writer&&) noexcept = default;
     response_writer& operator=(response_writer&&) noexcept = default;
@@ -367,10 +257,7 @@ class response_writer {
 
     // exchange::start_response, after the engine accepted the head. A
     // null sink keeps every write at invalid_state.
-    void activate(detail::body_sink* sink) noexcept {
-        sink_ = sink;
-        started_ = true;
-    }
+    void activate(detail::body_sink* sink) noexcept;
 
     // exchange::abort, and finish itself on success: the writer shuts
     // down and every later operation fails typed. Idempotent bool, so
@@ -386,44 +273,11 @@ class response_writer {
 
     // Shared entry gate of the write operations: fails typed and
     // touches nothing when a push may not start.
-    http::outcome enter(bool empty_chunk) const {
-        if (pending_) {
-            return http::outcome(http::outcome_code::invalid_state,
-                                 "response_writer: a write is already "
-                                 "outstanding");
-        }
-        if (cancel_token_.stop_requested()) {
-            return http::outcome(http::outcome_code::connection_closed,
-                                 disconnect_reason_.message());
-        }
-        if (closed_) {
-            return http::outcome(http::outcome_code::invalid_state,
-                                 "response_writer: writer is closed");
-        }
-        if (!started_ || sink_ == nullptr) {
-            return http::outcome(http::outcome_code::invalid_state,
-                                 "response_writer: response not started");
-        }
-        if (empty_chunk) {
-            return http::outcome(http::outcome_code::invalid_argument,
-                                 "response_writer: chunk is empty");
-        }
-        if (finished_) {
-            return http::outcome(http::outcome_code::invalid_state,
-                                 "response_writer: body already finished");
-        }
-        if (failed_) {
-            return failure_;
-        }
-        return http::outcome::okay();
-    }
+    http::outcome enter(bool empty_chunk) const;
 
     // Sticky failure: the body is unusable after this point; later
     // writes return the same outcome without touching the engine.
-    void fail_sticky(const http::outcome& reason) noexcept {
-        failed_ = true;
-        failure_ = reason;
-    }
+    void fail_sticky(const http::outcome& reason) noexcept;
 
     detail::body_sink* sink_ = nullptr;
     stop_token cancel_token_;

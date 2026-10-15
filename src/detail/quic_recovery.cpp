@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
 #include <iterator>
-#include "./quic_recovery_internal.hpp"
+#include <httpserver/detail/quic_recovery_internal.hpp>
 namespace httpserver::detail {
 quic_send_plan quic_recovery::reserve_packet(quic_pn_space space) { return reserve(space, false); }
 quic_send_plan quic_recovery::reserve(quic_pn_space space, bool critical) {

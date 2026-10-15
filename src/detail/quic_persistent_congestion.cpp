@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
-#include "./quic_recovery_internal.hpp"
+#include <httpserver/detail/quic_recovery_internal.hpp>
 namespace httpserver::detail {
 void quic_recovery::implementation::note_congestion_packet(const packet& p, quic_pn_space space) {
     if (p.path_epoch != path_epoch || p.pmtu_probe) return;

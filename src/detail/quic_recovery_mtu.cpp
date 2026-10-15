@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
-#include "./quic_recovery_internal.hpp"
+#include <httpserver/detail/quic_recovery_internal.hpp>
 namespace httpserver::detail {
 quic_recovery_result quic_recovery::set_peer_max_datagram_size(std::uint64_t bytes) {
     if (bytes < 1200 || bytes > k_quic_max_integer) return {quic_recovery_code::invalid};

@@ -27,7 +27,7 @@
 #include <httpserver/detail/tls_session.hpp>
 #include <httpserver/detail/tls_credentials.hpp>
 #include <httpserver/detail/tls_psk_attempt.hpp>
-#include "detail/quic_tls_callbacks.hpp"
+#include <httpserver/detail/quic_tls_callbacks.hpp>
 namespace httpserver::detail {
 namespace {
 void metadata_check(bool valid) {

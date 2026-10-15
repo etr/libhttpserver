@@ -19,13 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-098 Step 6 (Check A): a consumer including the v3 concurrency
-// umbrella <httpserver/concurrency/concurrency.hpp> — and each
-// sub-header directly — without HTTPSERVER_COMPILATION (or any other
-// build/TLS configuration macro) must compile and link cleanly. The v3
-// concurrency core is header-only, so the empty LDADD of this target is
-// itself part of the contract. The test passes by virtue of compiling
-// and linking, and delayed resume must deliver the checked outcome once.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <exception>
 #include <utility>

@@ -19,17 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-117: a consumer including
-// <httpserver/forms/multipart.hpp> WITHOUT HTTPSERVER_COMPILATION
-// (or any other build/TLS configuration macro) must compile and link
-// cleanly. The decoder and the adapters live in the library
-// (detail/forms_multipart.cpp and detail/forms_multipart_files.cpp in
-// v3core), so the empty LDADD of this target proves the vocabulary
-// surface needs no library linkage to consume; every check is a
-// static_assert over unevaluated expressions only -- no object whose
-// members live in the library is ever constructed
-// (make_multipart_route and the temp-file sink would run library
-// code, so they are only name-checked through decltype).
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <cstddef>
 #include <cstdint>

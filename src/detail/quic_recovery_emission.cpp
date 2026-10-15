@@ -1,5 +1,5 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
-#include "./quic_recovery_internal.hpp"
+#include <httpserver/detail/quic_recovery_internal.hpp>
 namespace httpserver::detail {
 quic_recovery_code quic_recovery::implementation::check_flow() const {
     const auto& p = *pending;

@@ -93,8 +93,24 @@ PY
     esac
     [ -n "$(find "$build/$target/seeds" -type f -print -quit)" ] || { echo "empty corpus: $target" >&2; exit 1; }
     sources=("$root/test/fuzz/${target}_fuzz.cpp")
-    if [ "$target" = http1_head ]; then sources+=("$root/src/detail/net_address.cpp"); fi
-    if [ "$target" = websocket_codec ]; then sources+=("$root/src/detail/websocket_codec.cpp"); fi
+    if [ "$target" = http1_head ] || [ "$target" = http1_body ] || [ "$target" = hpack ]; then
+        sources+=("$root/src/http/fields.cpp" "$root/src/http/method.cpp"
+            "$root/src/server/budgets.cpp" "$root/src/detail/resource_charge.cpp")
+    fi
+    if [ "$target" = http1_head ] || [ "$target" = http1_body ]; then
+        sources+=("$root/src/net/address.cpp" "$root/src/detail/net_address.cpp"
+            "$root/src/detail/http1_head_parser.cpp" "$root/src/detail/http1_body_mode.cpp" "$root/src/detail/http1_target.cpp"
+            "$root/src/detail/http1_host.cpp" "$root/src/detail/unescape_helpers.cpp")
+    fi
+    if [ "$target" = http1_body ]; then
+        sources+=("$root/src/detail/http1_body_decoder.cpp")
+    fi
+    if [ "$target" = hpack ]; then
+        sources+=("$root/src/detail/hpack_primitives.cpp" "$root/src/detail/hpack_dynamic_table.cpp"
+            "$root/src/detail/hpack_field_section.cpp" "$root/src/detail/hpack_decoder.cpp"
+            "$root/src/detail/hpack_encoder.cpp")
+    fi
+    if [ "$target" = websocket_codec ]; then sources+=("$root/src/detail/websocket_codec.cpp" "$root/src/detail/websocket_utf8.cpp"); fi
     if [ "$target" = quic_parser ]; then
         sources+=("$root/src/detail/quic_invariant_header.cpp" "$root/src/detail/quic_varint.cpp"
             "$root/src/detail/quic_packet.cpp" "$root/src/detail/quic_frame.cpp"

@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
 #include <limits>
-#include "./quic_recovery_internal.hpp"
+#include <httpserver/detail/quic_recovery_internal.hpp>
 namespace httpserver::detail {
 void quic_recovery::implementation::register_stream(std::uint64_t stream) {
     std::erase_if(streams, [&](auto entry) {

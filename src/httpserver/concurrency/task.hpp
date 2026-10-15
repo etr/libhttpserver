@@ -90,10 +90,7 @@ enum class task_state : std::uint8_t {
 // Owned executor adapters install a lease while resuming tasks. Affinity
 // assignment passes that lease to the frame witness, so in-flight completion
 // nodes keep their raw affinity pointer callable after engine teardown.
-inline std::shared_ptr<void>& current_task_executor_lifetime() noexcept {
-    thread_local std::shared_ptr<void> lifetime;
-    return lifetime;
-}
+std::shared_ptr<void>& current_task_executor_lifetime() noexcept;
 
 // Lifetime witness shared between a coroutine frame and every
 // "resume this frame" job posted to an executor. A job posted for a
@@ -108,12 +105,8 @@ struct frame_witness {
     std::shared_ptr<void> executor_lifetime;
 };
 
-inline void guarded_resume(const std::shared_ptr<frame_witness>& witness,
-                           std::coroutine_handle<> frame) {
-    std::lock_guard<std::recursive_mutex> lock(witness->mu);
-    if (!witness->valid) return;
-    frame.resume();
-}
+void guarded_resume(const std::shared_ptr<frame_witness>& witness,
+                           std::coroutine_handle<> frame);
 
 // Heap block backing spawn()'s one-shot completion callback. The
 // completion path moves the result out of the frame into this block
@@ -132,7 +125,7 @@ struct spawn_block_base {
 // awaiters defined in these headers.
 class task_frame_base {
  public:
-    task_frame_base() : witness_(std::make_shared<frame_witness>()) { }
+    task_frame_base();
     task_frame_base(const task_frame_base&) = delete;
     task_frame_base& operator=(const task_frame_base&) = delete;
 
@@ -142,12 +135,7 @@ class task_frame_base {
 
     // Transitions idle -> running. False means the frame was already
     // consumed (single-consumer violation or completion already underway).
-    bool try_consume() noexcept {
-        task_state expected = task_state::idle;
-        return state_.compare_exchange_strong(expected, task_state::running,
-                                              std::memory_order_acq_rel,
-                                              std::memory_order_acquire);
-    }
+    bool try_consume() noexcept;
 
     executor* frame_executor() const noexcept { return affinity_; }
 
@@ -171,94 +159,34 @@ class task_frame_base {
     }
 
     // -- consumer plumbing (used by task_awaiter) ------------------------
-    void set_affinity(executor* ex, std::shared_ptr<void> lifetime = {}) noexcept {
-        affinity_ = ex;
-        witness_->executor_lifetime = std::move(lifetime);
-    }
+    void set_affinity(executor* ex, std::shared_ptr<void> lifetime = {}) noexcept;
 
     void register_consumer(std::coroutine_handle<> awaiting,
                            executor* consumer_ex,
-                           std::shared_ptr<frame_witness> consumer_witness) noexcept {
-        consumer_ = awaiting;
-        consumer_executor_ = consumer_ex;
-        consumer_witness_ = std::move(consumer_witness);
-    }
+                           std::shared_ptr<frame_witness> consumer_witness) noexcept;
 
-    void set_exception(std::exception_ptr e) noexcept {
-        kind_ = task_kind::exception;
-        exception_ = std::move(e);
-    }
+    void set_exception(std::exception_ptr e) noexcept;
 
     // Exception entry point from the coroutine machinery: converts a
     // cancelled_exception into a typed terminal outcome and everything
     // else into a captured exception. Never lets an exception escape.
-    void capture_exception() noexcept {
-        try {
-            throw;
-        } catch (const cancelled_exception&) {
-            kind_ = task_kind::terminal;
-            terminal_ = http::outcome_code::cancelled;
-        } catch (...) {
-            kind_ = task_kind::exception;
-            exception_ = std::current_exception();
-        }
-    }
+    void capture_exception() noexcept;
 
     // -- spawn plumbing --------------------------------------------------
     void register_spawn_block(std::shared_ptr<spawn_block_base> block,
                               void* promise_erased,
                               void (*pack)(void*, void*),
-                              concurrency::unique_function<void()> deliver) noexcept {
-        spawn_block_ = std::move(block);
-        promise_erased_ = promise_erased;
-        pack_result_ = pack;
-        deliver_ = std::move(deliver);
-    }
+                              concurrency::unique_function<void()> deliver) noexcept;
 
     // Completion path, run exactly once from the final suspend awaiter.
     // Delivers the spawn callback (inline when the spawn executor is
     // current, posted otherwise) and returns the handle to resume next:
     // the registered consumer for symmetric transfer, or noop.
-    std::coroutine_handle<> finish() noexcept {
-        state_.store(task_state::done, std::memory_order_release);
-        if (spawn_block_) {
-            pack_result_(promise_erased_, spawn_block_.get());
-            auto deliver = std::move(deliver_);
-            deliver_ = concurrency::unique_function<void()>();
-            executor* const ex = spawn_block_->spawn_ex;
-            // post() is documented not to throw; a throw here would lose
-            // the delivery, so it is contained.
-            try {
-                if (ex != nullptr && !ex->is_current()) {
-                    ex->post(std::move(deliver));
-                } else {
-                    deliver();
-                }
-            } catch (...) {
-            }
-        }
-        if (consumer_) {
-            executor* const ex = consumer_executor_;
-            if (ex == nullptr || ex->is_current()) {
-                return consumer_;
-            }
-            const auto witness =
-                consumer_witness_ ? consumer_witness_ : witness_;
-            std::coroutine_handle<> frame = consumer_;
-            try {
-                ex->post([witness, frame] { guarded_resume(witness, frame); });
-            } catch (...) {
-            }
-        }
-        return std::noop_coroutine();
-    }
+    std::coroutine_handle<> finish() noexcept;
 
     // Marks the witness invalid under the lock; used right before a frame
     // is destroyed so that in-flight or later resume jobs become no-ops.
-    void invalidate() noexcept {
-        std::lock_guard<std::recursive_mutex> lock(witness_->mu);
-        witness_->valid = false;
-    }
+    void invalidate() noexcept;
 
     std::coroutine_handle<> self_handle() const noexcept { return self_; }
 
@@ -376,10 +304,7 @@ class task_result<void> {
 
     task_result(detail::task_kind kind,
                 std::exception_ptr exception,
-                http::outcome_code terminal) noexcept
-        : kind_(kind),
-          exception_(std::move(exception)),
-          terminal_(terminal) { }
+                http::outcome_code terminal) noexcept;
 
     detail::task_kind kind_;
     std::exception_ptr exception_;
@@ -598,10 +523,7 @@ template<>
 class [[nodiscard]] task<void> {
  public:
     struct promise_type final : detail::task_frame_base {
-        promise_type() {
-            self_ = std::coroutine_handle<promise_type>::from_promise(*this);
-            promise_erased_ = this;
-        }
+        promise_type();
 
         task get_return_object() {
             return task(std::coroutine_handle<promise_type>::from_promise(*this));
@@ -616,16 +538,7 @@ class [[nodiscard]] task<void> {
 
         void unhandled_exception() noexcept { capture_exception(); }
 
-        static void pack_result(void* erased_promise, void* erased_block) {
-            auto& promise = *static_cast<promise_type*>(erased_promise);
-            auto& block = *static_cast<detail::spawn_block<void>*>(erased_block);
-            block.kind = promise.kind_;
-            if (promise.kind_ == detail::task_kind::exception) {
-                block.exception = promise.exception_;
-            } else if (promise.kind_ == detail::task_kind::terminal) {
-                block.terminal = promise.terminal_;
-            }
-        }
+        static void pack_result(void* erased_promise, void* erased_block);
     };
 
     task() noexcept = default;
@@ -633,13 +546,7 @@ class [[nodiscard]] task<void> {
     task(task&& other) noexcept
         : handle_(std::exchange(other.handle_, {})) { }
 
-    task& operator=(task&& other) noexcept {
-        if (this != &other) {
-            destroy_frame();
-            handle_ = std::exchange(other.handle_, {});
-        }
-        return *this;
-    }
+    task& operator=(task&& other) noexcept;
 
     task(const task&) = delete;
     task& operator=(const task&) = delete;
@@ -662,12 +569,7 @@ class [[nodiscard]] task<void> {
     explicit task(std::coroutine_handle<promise_type> frame) noexcept
         : handle_(frame) { }
 
-    void destroy_frame() noexcept {
-        if (!handle_) return;
-        handle_.promise().invalidate();
-        handle_.destroy();
-        handle_ = {};
-    }
+    void destroy_frame() noexcept;
 
     std::coroutine_handle<promise_type> handle_;
 };

@@ -1,5 +1,5 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
-#include "detail/quic_tls_callbacks.hpp"
+#include <httpserver/detail/quic_tls_callbacks.hpp>
 #include <algorithm>
 #include <optional>
 #include <stdexcept>

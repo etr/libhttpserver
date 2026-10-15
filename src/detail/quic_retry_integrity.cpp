@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
-#include "./quic_crypto_provider.hpp"
+#include <httpserver/detail/quic_crypto_provider.hpp>
 namespace httpserver::detail {
 namespace {
 constexpr std::array<unsigned char, 16> retry_key{0xbe, 0x0c, 0x69, 0x0b, 0x9f, 0x66, 0x57, 0x5a, 0x1d, 0x76, 0x6b, 0x54, 0xe3, 0x68, 0xc8, 0x4e};

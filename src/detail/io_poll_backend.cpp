@@ -427,12 +427,7 @@ std::uint64_t io_poll_backend::poll_iterations() const {
     return poll_iterations_;
 }
 
-void io_poll_backend::expire_due_timers(
-    std::chrono::steady_clock::time_point now) {
-    // Shared with fake_io_backend (io_timer_sweep.hpp) so both drivers
-    // keep identical (deadline, sequence) expiry semantics.
-    sweep_due_timers(pending_, mu_, now);
-}
+
 
 std::optional<std::chrono::steady_clock::time_point>
 io_poll_backend::scan_interest_locked(

@@ -418,3 +418,23 @@ child receipts, commands, processes, depfiles, link maps, executables, fixtures
 and selected client/tool inputs. Both adapters use exclusive outputs and
 caller-bound run IDs, preserving failed attempts. No general stage registry or
 TASK-185 runner import is introduced. Its exact integration remains TASK-185 owned.
+
+### Source ownership and compiled operations
+
+Public non-template implementation is compiled in `src/<logical>.cpp`, paired
+with installed `src/httpserver/<logical>.hpp`. Private implementation is compiled
+in `src/detail/<logical>.cpp`, paired with noninstalled
+`src/httpserver/detail/<logical>.hpp`. Cohesive engine splits explicitly share
+their actual owning header; matching basenames do not require dummy headers or
+recombined protocol engines. Provider-conditioned implementation stays within
+the private provider target.
+
+Templates and constexpr operations remain visible for instantiation and constant
+evaluation. Trivial accessors, value operations and small byte/arithmetic
+primitives may remain inline with the recorded reason in
+[the complete ownership inventory](../../../docs/v3-source-layout.md). Complete
+public representation and template support remain in installed headers, including
+necessary detail declarations. An installed header never includes a noninstalled
+private header. Normal library linkage supplies compiled operations; standalone
+header compilation does not imply link-free runtime behavior. Extraction preserves
+API, representation, suspension points, resource accounting and protocol behavior.

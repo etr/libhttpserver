@@ -19,15 +19,7 @@
      02110-1301 USA
 */
 
-// TASK-104 step 5: a consumer including the v3 response writer —
-// <httpserver/response_writer.hpp> and <httpserver/exchange.hpp> —
-// without HTTPSERVER_COMPILATION (or any other build/TLS configuration
-// macro) must compile and link cleanly. The writer area is
-// header-only, so the empty LDADD of this target is itself part of the
-// contract. Every public response_writer member is named through the
-// exchange's start_response()/writer() surface (the shape route
-// handlers receive); the test passes by virtue of compiling and
-// linking.
+// Public headers compile without internal macros; compiled behavior uses library linkage.
 
 #include <cstddef>
 #include <span>
