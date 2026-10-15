@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011-2025 Sebastiano Merlino
+     Copyright (C) 2011-2026 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -13,50 +13,76 @@
      Lesser General Public License for more details.
 
      You should have received a copy of the GNU Lesser General Public
-     License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
-     USA
+     License along with this library; if not, write to the file
+     LICENSE in the distribution; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+     02110-1301 USA
 */
 
-// external_event_loop.cpp - run the daemon under EXTERNAL_SELECT and
-// drive it via run_wait() from the application's own loop. The
-// thread_safety(false) optimization is intentionally omitted for
-// portability (some MHD builds reject the combination at start).
-
-#include <csignal>
+#include <chrono>
+#include <cstdlib>
 #include <iostream>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
 
-#include <httpserver.hpp>
+#include <httpserver/server/server.hpp>
+#include "./host_poll.hpp"
 
-static volatile bool running = true;
-
-void signal_handler(int) {
-    running = false;
-}
-
-int main() {
-    signal(SIGINT, signal_handler);
-
-    httpserver::webserver ws{httpserver::create_webserver(8080)
-                                 .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)};
-
-    ws.on_get("/hello", [](const httpserver::http_request&) {
-        return httpserver::http_response::string("Hello from external event loop!");
-    });
-
-    ws.start(false);
-
-    std::cout << "Server running on port " << ws.get_bound_port() << std::endl;
-
-    while (running) {
-        ws.run_wait(1000);
-        // Do other work between iterations as needed.
+int main(int argc, char** argv) {
+    namespace srv = httpserver::server;
+    namespace http = httpserver::http;
+    // Optional seconds bounds a smoke invocation; ordinary hosting has
+    // no synthetic periodic timer and waits only for library deadlines.
+    std::optional<v3_host::clock_type::time_point> until;
+    if (argc > 1) {
+        const int seconds = std::atoi(argv[1]);
+        if (seconds <= 0) return 2;
+        until = v3_host::clock_type::now() + std::chrono::seconds(seconds);
     }
-
-    std::cout << "\nShutting down..." << std::endl;
-
-    // Graceful shutdown: stop accepting new connections first.
-    ws.quiesce();
-    ws.stop();
-    return 0;
+    srv::server_options options;
+    options.loop() = srv::loop_mode::external;
+    options.concurrency().workers = 2;
+    options.add_listener({"127.0.0.1", 0, false});
+    srv::native_server server(options);
+    auto configured = server.route_sync(http::method::known(http::method_id::get), "/hello",
+        [](const http::request_head&, std::span<const std::byte>) {
+            srv::sync_response response;
+            response.status = http::status::from_code(200);
+            constexpr std::string_view body = "hello from an external loop\n";
+            const auto* bytes = reinterpret_cast<const std::byte*>(body.data());
+            response.body.assign(bytes, bytes + body.size());
+            return response;
+        }, 1024);
+    if (!configured.ok()) return 1;
+    const auto listened = server.listen();
+    if (!listened.ok()) {
+        std::cerr << listened.message() << '\n';
+        return 1;
+    }
+    std::cout << "PORT=" << server.get_bound_port(0) << std::endl;
+    int status = 0;
+    try {
+        auto* driver = server.readiness();
+        auto snapshot = driver->interests();
+        while (server.is_running()) {
+            if (until && v3_host::clock_type::now() >= *until) break;
+            auto events = v3_host::wait(snapshot, until);
+            const auto result = driver->dispatch(events, v3_host::clock_type::now());
+            if (!result.ok()) {
+                std::cerr << result.message() << '\n';
+                status = 1;
+                break;
+            }
+            snapshot = driver->interests();
+        }
+        // poll registrations are local to wait(); none survive owner shutdown.
+        snapshot = {};
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        status = 1;
+    }
+    server.stop();
+    return status;
 }

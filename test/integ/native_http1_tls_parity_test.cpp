@@ -23,8 +23,8 @@
 #include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/tls_socket_backend.hpp>
 #include <parity/normalize.hpp>
-#include <parity/v3_dispatch_replay.hpp>
-#include <parity/v3_behavior_profiles.hpp>
+#include <parity/dispatch_replay.hpp>
+#include <parity/behavior_profiles.hpp>
 #include <parity/behavior_replay.hpp>
 #include <parity/behavior_observation.hpp>
 #include "./digest_client.hpp"

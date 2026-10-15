@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_native_benchmark as bench
+import native_benchmark as bench
 
 
 def observation():
@@ -104,7 +104,7 @@ class MeasurementTest(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError): bench.validate_server(bad, observation())
 
     def test_compile_probe_defaults_and_override(self):
-        import v3_package_integration as integration
+        import package_integration as integration
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); unit = root / 'consumer.cpp'; unit.write_text('')
             executable = root / 'consumer'; executable.write_text('')
@@ -124,7 +124,7 @@ class ReceiptTest(unittest.TestCase):
     def receipt(self, root, tls='no'):
         root = Path(root)
         consumer = root / 'consumer'; consumer.mkdir()
-        files = {'consumer.cpp': 'consumer', 'v3_host_poll.hpp': 'poll', 'client.py': 'client',
+        files = {'consumer.cpp': 'consumer', 'host_poll.hpp': 'poll', 'client.py': 'client',
                  'fixtures/root.pem': 'certificate', 'shared': 'shared binary', 'static': 'static binary',
                  'shared.map': 'shared map', 'static.map': 'static map', 'header.hpp': 'installed header',
                  'client-input.py': 'client dependency'}
@@ -132,16 +132,16 @@ class ReceiptTest(unittest.TestCase):
             path = consumer / name; path.parent.mkdir(exist_ok=True); path.write_text(content)
         sha = lambda path: bench.artifact(path)['sha256']
         identity = dict(source={name: sha(consumer / copy) for name, copy in (
-            ('test/installed/v3_benchmark_consumer.cpp', 'consumer.cpp'),
-            ('examples/v3_host_poll.hpp', 'v3_host_poll.hpp'),
-            ('test/installed/v3_benchmark_client.py', 'client.py'))},
+            ('test/installed/benchmark_consumer.cpp', 'consumer.cpp'),
+            ('examples/host_poll.hpp', 'host_poll.hpp'),
+            ('test/installed/benchmark_client.py', 'client.py'))},
             package={str(consumer / 'header.hpp'): sha(consumer / 'header.hpp')},
             fixtures={'root.pem': sha(consumer / 'fixtures/root.pem')}, tls=tls)
         consumers = {}
         for linkage in ('shared', 'static'):
             sources = {str(consumer / 'consumer.cpp'): sha(consumer / 'consumer.cpp')}
             dependencies = {str(consumer / name): sha(consumer / name) for name in
-                            ('consumer.cpp', 'v3_host_poll.hpp', 'header.hpp')}
+                            ('consumer.cpp', 'host_poll.hpp', 'header.hpp')}
             consumers[linkage] = dict(compile=dict(sources=sources, dependencies=list(dependencies),
                 dependency_sha256=dependencies, artifact_sha256=sha(consumer / linkage),
                 link_map=str(consumer / (linkage + '.map')), private_test_headers=False))
@@ -250,7 +250,7 @@ class ReceiptTest(unittest.TestCase):
 
 class ClientTest(unittest.TestCase):
     def client(self):
-        spec = importlib.util.spec_from_file_location('benchmark_client', Path(__file__).parent.parent / 'test/installed/v3_benchmark_client.py')
+        spec = importlib.util.spec_from_file_location('benchmark_client', Path(__file__).parent.parent / 'test/installed/benchmark_client.py')
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
         return module
 
@@ -281,7 +281,7 @@ class ClientTest(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever); thread.start()
             try:
                 output = Path(root) / 'failed.json'
-                child = subprocess.run([sys.executable, str(Path(__file__).parent.parent / 'test/installed/v3_benchmark_client.py'),
+                child = subprocess.run([sys.executable, str(Path(__file__).parent.parent / 'test/installed/benchmark_client.py'),
                     '--port', str(server.server_port), '--protocol', 'h1', '--run-id', 'a' * 32,
                     '--fixtures', root, '--warmup', '1', '--requests', '4', '--concurrency', '1',
                     '--payload', '16', '--output', str(output)], capture_output=True, timeout=10)
@@ -308,7 +308,7 @@ class ClientTest(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever); thread.start()
             try:
                 output = Path(root) / 'observation.json'
-                subprocess.run([sys.executable, str(Path(__file__).parent.parent / 'test/installed/v3_benchmark_client.py'),
+                subprocess.run([sys.executable, str(Path(__file__).parent.parent / 'test/installed/benchmark_client.py'),
                                 '--port', str(server.server_port), '--protocol', 'h1', '--run-id', 'a' * 32,
                                 '--fixtures', root, '--warmup', '2', '--requests', '4', '--concurrency', '2',
                                 '--payload', '16', '--output', str(output)], check=True, timeout=10)

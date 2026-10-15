@@ -12,7 +12,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_release_artifact as release_identity
+import release_artifact as release_identity
 ROOT = Path(__file__).resolve().parents[1]
 
 RUNNER_COMMIT = "740c05a10b61d65e8abd3ad38d60898004d335d9"
@@ -376,13 +376,13 @@ def main(argv=None):
         observation.write_text(runner_observation_patch(observation.read_text()))
         shutil.copyfile(__file__, runner / "task196_observation.py")
         (runner / "lib").mkdir(exist_ok=True)
-        shutil.copyfile(ROOT / "scripts/lib/v3_release_artifact.py", runner / "lib/v3_release_artifact.py")
+        shutil.copyfile(ROOT / "scripts/lib/release_artifact.py", runner / "lib/release_artifact.py")
     compose = runner / "docker-compose.yml"
     compose.write_text(compose_config(compose.read_text(), args.docker_direct_routing_compat, simulator_image))
     command = [sys.executable, "run.py", "-s", "libhttpserver", "-c", ",".join(matrix["peers"]), "-t", ",".join(matrix["cases"]), "-n", "libhttpserver", "-l", str(output / "runner-logs"), "-j", str(output / "results.json")]
     manifest = {"matrix": matrix, "runner_commit": RUNNER_COMMIT, "images": images, "docker_direct_routing_compat": args.docker_direct_routing_compat, "simulator_global_values": SIMULATOR_GLOBAL_VALUES, "simulator_clock_compatibility": clock, "command": command, "source_head": release_identity.revision(ROOT), "passed": False, "provenance": inputs,
                 "runner_observation": {"module_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                    "release_identity_sha256": hashlib.sha256((runner / "lib/v3_release_artifact.py").read_bytes()).hexdigest(),
+                    "release_identity_sha256": hashlib.sha256((runner / "lib/release_artifact.py").read_bytes()).hexdigest(),
                     "patched_testcases_sha256": hashlib.sha256((runner / "testcases_quic.py").read_bytes()).hexdigest(),
                     "original_testcases_sha256": hashlib.sha256((runner / "testcases_quic.original.py").read_bytes()).hexdigest()} if args.matrix == "task173" else None}
     try:

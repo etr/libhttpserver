@@ -68,21 +68,25 @@ class ReleaseContracts(unittest.TestCase):
         script = root / 'scripts/check-examples.sh'
         shutil.copyfile(ROOT / 'scripts/check-examples.sh', script)
         shutil.copyfile(ROOT / 'examples/Makefile.am', root / 'examples/Makefile.am')
-        names = ('v3_external_event_loop', 'v3_routes', 'v3_protocol_options',
-                 'v3_websocket_echo', 'v3_http3')
-        for name in names:
-            (root / 'examples' / (name + '.cpp')).touch()
+        from example_inventory import SOURCES
+        (root / 'scripts/lib').mkdir()
+        shutil.copyfile(ROOT / 'scripts/lib/example_inventory.py',
+                        root / 'scripts/lib/example_inventory.py')
+        for unit in SOURCES.values():
+            path = root / unit
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
 
         def check():
             return subprocess.run(['bash', str(script)], capture_output=True, text=True, timeout=5)
 
         accepted = check()
         self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
-        (root / 'examples/v3_http3.cpp').unlink()
+        (root / 'examples/http3.cpp').unlink()
         missing = check()
         self.assertNotEqual(missing.returncode, 0)
-        self.assertIn('missing native example: v3_http3', missing.stderr)
-        (root / 'examples/v3_http3.cpp').touch()
+        self.assertIn('missing native example: examples/http3.cpp', missing.stderr)
+        (root / 'examples/http3.cpp').touch()
         with (root / 'examples/Makefile.am').open('a') as stream:
             stream.write('\nnoinst_PROGRAMS += unrecognized_example\n')
         (root / 'examples/unrecognized_example.cpp').touch()
@@ -158,7 +162,7 @@ class ReleaseContracts(unittest.TestCase):
         self.gate.verify_library_files(build, prefix)
         (build / 'src/.libs/libhttpserver.so').write_text('borrowed build library')
         with self.assertRaises(ValueError): self.gate.verify_library_files(build, prefix)
-        matrix = self.gate.load_runner('lib/v3_package_matrix.py')
+        matrix = self.gate.load_runner('lib/package_matrix.py')
         (prefix / 'include').mkdir()
         header = prefix / 'include/public.hpp'; header.write_text('public')
         matrix.check_dependencies([str(header)], prefix, ROOT, build, False)
@@ -177,7 +181,7 @@ class ReleaseContracts(unittest.TestCase):
             with self.subTest(output=bad), self.assertRaises(ValueError): self.gate.automake_counts(bad)
 
     def test_automake_accepts_aligned_native_summary_without_loosening_counts(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         build = self.directory / 'native-build'; (build / 'test').mkdir(parents=True)
         text = '# TOTAL: 7\n# PASS:  5\n# SKIP:  2\n# XFAIL: 0\n# FAIL:  0\n# XPASS: 0\n# ERROR: 0\n'
         (build / 'test/test-suite.log').write_text(text)
@@ -201,7 +205,7 @@ class ReleaseContracts(unittest.TestCase):
                 self.gate.extract_archive(archive, self.directory / ('extracted-' + str(len(names))))
 
     def test_tsan_skip_is_only_permitted_for_named_non_race_allocation_case(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         output = 'close_allocation_failure_settles_once_and_wakes_parked_receive [SKIP] sanitizer owns operator new; fault injection is covered in normal and ASan/UBSan lanes\n2 tests executed\n5 checks\n-> 5 successes\n-> 0 failures\n-> 1 skipped\n'
         self.assertEqual(checks.native_counts(ROOT, 'websocket_drain_race', output, tsan=True)['skipped'], 0)
         for name, text in (('http1_response_outbox', output), ('websocket_drain_race', output.replace('close_allocation_failure_settles_once_and_wakes_parked_receive', 'unknown'))):
@@ -218,7 +222,7 @@ class ReleaseContracts(unittest.TestCase):
         self.assertTrue(manifest['preparation']['failure'])
 
     def test_only_named_nonlocal_backend_skips_are_allowed_in_local_automake(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         build = self.directory / 'local-build'; (build / 'test').mkdir(parents=True)
         (build / 'test/test-suite.log').write_text('# TOTAL: 5\n# PASS: 3\n# SKIP: 2\n# XFAIL: 0\n# FAIL: 0\n# XPASS: 0\n# ERROR: 0\n')
         for name in ('io_iocp_backend', 'io_kqueue_backend'):
@@ -242,7 +246,7 @@ class ReleaseContracts(unittest.TestCase):
         with self.assertRaises(ValueError): self.gate.check_tag_ready(manifest)
 
     def test_distribution_permits_only_exact_config_status_fixture_newline(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         checkout = self.directory / 'checkout'; archive = self.directory / 'archive'
         for root in (checkout, archive):
             (root / 'test').mkdir(parents=True)
@@ -256,7 +260,7 @@ class ReleaseContracts(unittest.TestCase):
         with self.assertRaises(ValueError): checks.verify_snapshot_packaging(checkout, snapshot, archive)
 
     def test_instrumented_header_fuzz_targets_require_current_source_and_bounds(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         directory = self.directory / 'fuzz'; directory.mkdir()
         (directory / 'capability.log').write_text('Done 2 runs in 0 second(s)\n')
         (directory / 'environment.log').write_text('clang 18')
@@ -297,7 +301,7 @@ class ReleaseContracts(unittest.TestCase):
 
     def test_positive_native_suite_cannot_bypass_packaged_library_equivalence(self):
         from types import SimpleNamespace
-        from v3_release_execution import ReleaseAttempt
+        from release_execution import ReleaseAttempt
         args = SimpleNamespace(output=self.directory / 'attempt', compiler=sys.executable, cc=sys.executable,
                                make='/bin/true', provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1)
         attempt = ReleaseAttempt(args, self.gate, {'stages': []}); attempt.source = ROOT
@@ -327,7 +331,7 @@ class ReleaseContracts(unittest.TestCase):
 
     def test_cxx_gate_bounds_each_native_test_before_waiting_for_aggregate(self):
         from types import SimpleNamespace
-        from v3_release_execution import ReleaseAttempt
+        from release_execution import ReleaseAttempt
         make = self.directory / 'make-tool'
         make.write_text('#!' + sys.executable + '\nfrom pathlib import Path\n'
                         'Path("test/integ").mkdir(parents=True,exist_ok=True)\n'
@@ -348,7 +352,7 @@ class ReleaseContracts(unittest.TestCase):
         self.assertEqual((logs / 'native-tests/integ/native_case.trs').read_text(), ':test-result: FAIL\n')
 
     def test_resource_plateau_receipt_requires_every_normal_allocator_window(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         lines = []
         for name in ('HTTP upload', 'HTTP output', 'WebSocket input', 'WebSocket output'):
             lines += ['CPU ' + name + ' sample=' + str(i) + ' cpu_seconds=0.001 wall_seconds=1.0' for i in range(3)]
@@ -361,10 +365,10 @@ class ReleaseContracts(unittest.TestCase):
             with self.subTest(output=bad), self.assertRaises(ValueError): checks.native_counts(ROOT, 'native_protocol_memory', bad)
 
     def test_rotation_requires_installed_wire_cells_instead_of_private_or_usage_output(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         for output in ('private rotation: old=1 active=2 failed replacement preserved=2\n',
-                       'usage: v3_tls_rotation certificate-directory managed|external port\n'):
-            with self.assertRaises(ValueError): checks.native_counts(ROOT, 'v3_tls_rotation', output)
+                       'usage: tls_rotation certificate-directory managed|external port\n'):
+            with self.assertRaises(ValueError): checks.native_counts(ROOT, 'tls_rotation', output)
         scenario = dict(case='installed_rotation_example', old_certificate_sha256='a' * 64,
                         new_certificate_sha256='b' * 64, held_requests=3, fresh_verified_requests=2)
         build, prefix = self.directory / 'build', self.directory / 'prefix'
@@ -385,7 +389,7 @@ class ReleaseContracts(unittest.TestCase):
                 checks.rotation_counts(bad, self.source, build, prefix)
 
     def test_http1_receipts_require_the_exact_parser_and_native_case_transcripts(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         rows = [line.split('\t') for line in (ROOT / 'test/conformance/http1/cases.tsv').read_text().splitlines()
                 if line and not line.startswith('#')]
         for suite in ('http1_conformance', 'native_http1_conformance'):
@@ -404,7 +408,7 @@ class ReleaseContracts(unittest.TestCase):
                         checks.native_counts(ROOT, suite, bad)
 
     def test_resource_slow_peer_receipt_uses_each_protocols_exact_resume_and_idle_bounds(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         window = dict(cpu_seconds=.001, wall_seconds=1, rss_before=1000000, rss_after=1000000)
         receipt = dict(normal_allocator_only=True, rss_slack=1048576, idle_core_fraction=.2)
         for name, size in (('h2', 131072), ('h3', 524288)):
@@ -535,7 +539,7 @@ class ReleaseContracts(unittest.TestCase):
 
     def packaged_attempt(self):
         from types import SimpleNamespace
-        from v3_release_execution import ReleaseAttempt
+        from release_execution import ReleaseAttempt
         output = Path(tempfile.mkdtemp(dir=self.directory))
         args = SimpleNamespace(output=output, compiler=sys.executable, cc=sys.executable,
             make='/bin/true', provider_prefix=self.directory, asan_options='detect_leaks=1', jobs=1,
@@ -622,8 +626,8 @@ else:
     def test_package_selects_the_pinned_clients_for_nested_public_checks(self):
         from unittest.mock import patch
         from types import SimpleNamespace
-        from v3_release_execution import ReleaseAttempt
-        import v3_release_checks as checks
+        from release_execution import ReleaseAttempt
+        import release_checks as checks
         args = SimpleNamespace(output=self.directory, compiler='cxx', cc='cc', make='make',
             provider_prefix=self.directory, asan_options='detect_leaks=1', jobs=1,
             python='/selected/python', node='/selected/node', pkg_config_dir=[], prerequisite_prefix=[])
@@ -667,7 +671,7 @@ else:
     def test_h3_passes_the_explicit_simulator_clock_receipt(self):
         from unittest.mock import patch
         from types import SimpleNamespace
-        from v3_release_execution import ReleaseAttempt
+        from release_execution import ReleaseAttempt
         args = SimpleNamespace(output=self.directory, compiler='cxx', cc='cc', make='make',
             provider_prefix=self.directory, asan_options='detect_leaks=1', jobs=1,
             python='python', go='go', tshark='tshark', runner_python='python', runner_dir='runner',
@@ -683,7 +687,7 @@ else:
     def test_required_asan_execution_rejects_disabled_leak_detection(self):
         from unittest.mock import patch
         from types import SimpleNamespace
-        from v3_release_execution import ReleaseAttempt
+        from release_execution import ReleaseAttempt
         args = SimpleNamespace(output=self.directory, compiler='cxx', cc='cc', make='make',
             provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1)
         attempt = ReleaseAttempt(args, self.gate, {}); attempt.source = self.source
@@ -693,7 +697,7 @@ else:
                 attempt.sanitized(None, 'asan', 'no', 'address,undefined')
 
     def test_tsan_timer_allocation_hook_has_only_its_named_existing_exclusion(self):
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         output = ('[SKIP] published_waiter_can_die_during_timeout_registration - sanitizer owns operator new; '
                   'timer-allocation reclaim hook runs in normal and ASan/UBSan lanes\n'
                   '4 tests executed\n1800 checks\n-> 1800 successes\n-> 0 failures\n-> 1 skipped\n')
@@ -705,7 +709,7 @@ else:
 
     def test_package_receipt_survives_later_native_build_and_check(self):
         from types import SimpleNamespace
-        from v3_release_execution import ReleaseAttempt
+        from release_execution import ReleaseAttempt
         output = self.directory / 'attempt'; output.mkdir()
         args = SimpleNamespace(output=output, compiler=sys.executable, cc=sys.executable,
             make='/bin/true', provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1)
@@ -730,7 +734,7 @@ else:
         logs = output / 'later-native'; logs.mkdir()
         native, _ = attempt.normal_build('no')
         attempt.native_check(self.gate.Commands(logs), native, attempt.env, 10)
-        checks = self.gate.load_runner('lib/v3_release_checks.py')
+        checks = self.gate.load_runner('lib/release_checks.py')
         self.assertEqual(checks.automake_result(native, 'Linux')['tests'], 1)
         self.assertEqual((build / 'test/.deps/case.Po').read_text(), 'compiled dependencies')
         self.gate.verify_receipt(row['receipt'], row['identity'])

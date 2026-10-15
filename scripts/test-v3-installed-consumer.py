@@ -14,10 +14,10 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_package_matrix as matrix
-import v3_package_commands as commands
-import v3_package_process as process
-import v3_package_traffic as traffic
+import package_matrix as matrix
+import package_commands as commands
+import package_process as process
+import package_traffic as traffic
 
 
 class MatrixTest(unittest.TestCase):
@@ -147,7 +147,7 @@ class MatrixTest(unittest.TestCase):
                 with self.assertRaises(ValueError): matrix.supported_configuration_results(bad, tls)
 
     def test_private_external_probe_can_use_the_named_host_helper_only(self):
-        matrix.check_dependencies(['/source/examples/v3_host_poll.hpp'], Path('/prefix'),
+        matrix.check_dependencies(['/source/examples/host_poll.hpp'], Path('/prefix'),
                                   Path('/source'), Path('/build'), private=True)
         with self.assertRaises(ValueError):
             matrix.check_dependencies(['/source/examples/other.hpp'], Path('/prefix'),

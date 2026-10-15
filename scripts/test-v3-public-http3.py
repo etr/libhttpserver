@@ -6,7 +6,7 @@ import sys
 import unittest
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_public_http3_inventory as inventory
+import public_http3_inventory as inventory
 
 class Contracts(unittest.TestCase):
     def client(self, name='aioquic'):

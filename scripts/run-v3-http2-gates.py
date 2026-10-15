@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/lib'))
-from v3_public_http2_inventory import validate_matrix
+from public_http2_inventory import validate_matrix
 SCENARIOS = {'multiplexing', 'reset', 'upload_flow', 'response_flow', 'websocket'}
 
 

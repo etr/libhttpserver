@@ -13,5 +13,5 @@ PREFIX="$STAGE$RESOLVED_PREFIX"
 make -C "$BUILD_DIR" install DESTDIR="$STAGE" >"$STAGE/install.log" 2>&1 || {
     cat "$STAGE/install.log"; exit 1;
 }
-"${PYTHON:-python3}" "$REPO_ROOT/scripts/lib/v3_example_consumers.py" \
+"${PYTHON:-python3}" "$REPO_ROOT/scripts/lib/example_consumers.py" \
     "$REPO_ROOT" "$BUILD_DIR" "$PREFIX" "$CONSUMER"

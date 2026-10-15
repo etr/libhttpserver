@@ -8,7 +8,7 @@ release acceptance.
 
 ## Python interface
 
-Import `scripts/lib/v3_release_package_adapters.py` from the extracted archive:
+Import `scripts/lib/release_package_adapters.py` from the extracted archive:
 
 ```python
 run_public_capabilities(inputs, output, run_id)

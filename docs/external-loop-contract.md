@@ -45,7 +45,7 @@ joins workers without further host dispatch. Unregister host handles and
 quiesce callbacks before server destruction; destruction cannot overlap host
 calls. Snapshot copies never retain socket ownership.
 
-The public-header-only `examples/v3_external_event_loop.cpp` uses POSIX `poll`
+The public-header-only `examples/external_event_loop.cpp` uses POSIX `poll`
 or Windows `WSAPoll`, retains each key/generation pair, and rebuilds its complete
 registration set after dispatch. It waits indefinitely when the library has no
 deadline. An optional positive seconds argument bounds the whole demonstration
@@ -54,8 +54,8 @@ invocation; it is not a periodic wake fallback.
 With an examples-enabled Autotools build:
 
 ```sh
-make -C _build/task-125/examples v3_external_event_loop
-_build/task-125/examples/v3_external_event_loop 10
+make -C _build/task-125/examples external_event_loop
+_build/task-125/examples/external_event_loop 10
 # Use the PORT printed by the example in a second terminal:
 curl --fail http://127.0.0.1:PORT/hello
 ```

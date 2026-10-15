@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-HELPER = ROOT / 'scripts/lib/v3_release_artifact.py'
+HELPER = ROOT / 'scripts/lib/release_artifact.py'
 
 
 class ArchiveContracts(unittest.TestCase):
@@ -81,7 +81,7 @@ class ArchiveContracts(unittest.TestCase):
             self.assertEqual(self.helper.verified(self.source, self.path), self.document)
 
     def test_http1_archive_runner_records_verified_snapshot_and_rejects_changed_source(self):
-        for name in ('run-v3-http1-websocket-gates.sh', 'lib/v3_release_artifact.py'):
+        for name in ('run-v3-http1-websocket-gates.sh', 'lib/release_artifact.py'):
             destination = self.source / 'scripts' / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / 'scripts' / name, destination)
@@ -108,7 +108,7 @@ class ArchiveContracts(unittest.TestCase):
                 self.assertTrue(hasattr(module, 'release_identity'), 'archive runner still requires Git: ' + name)
                 self.assertEqual(module.release_identity.revision(self.source), 'd' * 40)
         for name in ('run-v3-protocol-fuzz.sh',):
-            self.assertIn('v3_release_artifact.py', (ROOT / 'scripts' / name).read_text())
+            self.assertIn('release_artifact.py', (ROOT / 'scripts' / name).read_text())
 
 
 if __name__ == '__main__': unittest.main()

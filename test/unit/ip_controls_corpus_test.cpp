@@ -42,7 +42,7 @@
 #include <parity/normalize.hpp>
 #include <parity/response_frame.hpp>
 #include <parity/transcript.hpp>
-#include <parity/v3_dispatch_replay.hpp>
+#include <parity/dispatch_replay.hpp>
 
 #include "./littletest.hpp"
 

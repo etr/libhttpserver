@@ -21,7 +21,7 @@
 
 // TASK-118 step 6: parity replay of all four hooks.tseq cases through
 // the REAL hook bus + dispatcher + response framer (plan D6; the
-// shared driver in parity/v3_dispatch_replay.hpp, the routing_corpus
+// shared driver in parity/dispatch_replay.hpp, the routing_corpus
 // convention). The routing_hooks profile: a before_handler
 // short-circuit on DELETE /admin (with the pinned ~X-Hook suppression
 // of the after phase), an after_handler header mutation on every
@@ -40,7 +40,7 @@
 #include <parity/normalize.hpp>
 #include <parity/response_frame.hpp>
 #include <parity/transcript.hpp>
-#include <parity/v3_dispatch_replay.hpp>
+#include <parity/dispatch_replay.hpp>
 
 #include "./littletest.hpp"
 

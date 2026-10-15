@@ -22,7 +22,7 @@
 // TASK-118 step 6: parity replay of all six routing.tseq cases through
 // the REAL registry + dispatcher + response framer (plan D6, the
 // TASK-114 basic corpus convention; the shared replay driver lives in
-// parity/v3_dispatch_replay.hpp). The cases load the live transcript
+// parity/dispatch_replay.hpp). The cases load the live transcript
 // at runtime, dispatch through the real pipeline, frame with the real
 // framer, parse the wire with the parity response-frame parser, and
 // assert every expectation through the corpus's own assertion engine
@@ -42,7 +42,7 @@
 #include <parity/normalize.hpp>
 #include <parity/response_frame.hpp>
 #include <parity/transcript.hpp>
-#include <parity/v3_dispatch_replay.hpp>
+#include <parity/dispatch_replay.hpp>
 
 #include "./littletest.hpp"
 

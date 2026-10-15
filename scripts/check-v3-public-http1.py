@@ -14,12 +14,12 @@ import sys
 import tempfile
 import time
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'lib'))
-from v3_native_benchmark import require
-from v3_package_commands import Commands, runtime_environment
-from v3_package_integration import compile_probe
-from v3_package_matrix import load, check_linkage, supported_configuration_results
-from v3_package_process import Consumer
-from v3_package_traffic import traffic, response
+from native_benchmark import require
+from package_commands import Commands, runtime_environment
+from package_integration import compile_probe
+from package_matrix import load, check_linkage, supported_configuration_results
+from package_process import Consumer
+from package_traffic import traffic, response
 
 
 def module(path, name):
@@ -115,14 +115,14 @@ def supported(executable, cell, directory, env, fixtures, source, commands):
                     body, pending, head = response(peer)
                     require(body == b'installed-v3-ok\n' and not pending and peer.selected_alpn_protocol() == 'http/1.1', 'supported TLS exchange')
             elif protocol == 'h2':
-                from v3_public_http2_h2 import Client
+                from public_http2_h2 import Client
                 peer = Client(port, fixtures)
                 try:
                     result = peer.get('/installed'); body = result['body']
                     require(body == b'installed-v3-ok\n', 'supported H2 exchange')
                 finally: peer.close()
             else:
-                client = module(source / 'test/installed/v3_http3_aioquic.py', 'supported_h3')
+                client = module(source / 'test/installed/http3_aioquic.py', 'supported_h3')
                 async def get():
                     from aioquic.asyncio import connect
                     from aioquic.quic.configuration import QuicConfiguration
@@ -154,7 +154,7 @@ def run(args):
         cflags = shlex.split(commands(['pkg-config', '--cflags', 'libhttpserver'], args.output, env))
         require(not audit.consumer_flag_violations(cflags, (source, build)), 'private compile flags')
         directory = Path(tempfile.mkdtemp(prefix='task199-installed-h1-')); receipt['consumer_directory'] = str(directory)
-        units = ['test/installed/v3_package_consumer.cpp', 'test/installed/v3_websocket_consumer.cpp', 'examples/v3_host_poll.hpp', 'test/integ/native_websocket_client.py']
+        units = ['test/installed/package_consumer.cpp', 'test/installed/websocket_consumer.cpp', 'examples/host_poll.hpp', 'test/integ/native_websocket_client.py']
         for name in units: shutil.copyfile(source / name, directory / Path(name).name)
         fixtures = directory / 'fixtures'; shutil.copytree(source / 'test/data/tls_credentials', fixtures)
         receipt['source_hashes'] = {name: hashlib.sha256((source / name).read_bytes()).hexdigest() for name in units}
@@ -165,8 +165,8 @@ def run(args):
             if linkage == 'static': libraries = [str(prefix / 'lib/libhttpserver.a') if p == '-lhttpserver' else p for p in libraries]
             libraries += ['-pthread', '-Wl,-rpath,' + str(prefix / 'lib'), '-Wl,-rpath,' + str(provider / 'lib')]
             executable, ws = directory / linkage, directory / (linkage + '-websocket')
-            provenance = compile_probe(args.compiler, [directory / 'v3_package_consumer.cpp'], cflags, libraries, executable, commands, env, source, build, prefix, False)
-            ws_provenance = compile_probe(args.compiler, [directory / 'v3_websocket_consumer.cpp'], cflags, libraries, ws, commands, env, source, build, prefix, False)
+            provenance = compile_probe(args.compiler, [directory / 'package_consumer.cpp'], cflags, libraries, executable, commands, env, source, build, prefix, False)
+            ws_provenance = compile_probe(args.compiler, [directory / 'websocket_consumer.cpp'], cflags, libraries, ws, commands, env, source, build, prefix, False)
             graph = audit.dependency_graph([str(executable)]); check_linkage(graph, linkage, prefix)
             require(not audit.graph_violations(graph, 'strict', args.tls, 'aggregate', audit.load_policy(), provider), 'dependency graph')
             check_linkage(audit.dependency_graph([str(ws)]), linkage, prefix)

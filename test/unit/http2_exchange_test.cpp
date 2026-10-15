@@ -12,7 +12,7 @@
 #include <httpserver/detail/http1_head_parser.hpp>
 #include "./http2_request_fixture.hpp"
 #include "./littletest.hpp"
-#include <parity/v3_dispatch_replay.hpp>
+#include <parity/dispatch_replay.hpp>
 namespace hd = httpserver::detail;
 namespace hs = httpserver::server;
 namespace http = httpserver::http;

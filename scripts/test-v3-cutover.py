@@ -69,7 +69,8 @@ class CutoverTest(unittest.TestCase):
             script = (ROOT / name).read_text()
             self.assertNotIn('hello_world.cpp', script)
             self.assertNotIn('-lmicrohttpd', script)
-            self.assertIn('v3_', script)
+            self.assertIn('example_inventory' if name.endswith('check-examples.sh')
+                          else 'example_consumers.py', script)
         makefile = (ROOT / 'Makefile.am').read_text()
         self.assertNotIn('lint-deprecated-cookie-overload', makefile)
         self.assertNotIn('lint-no-tautological-asserts', makefile)
@@ -85,7 +86,7 @@ class CutoverTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIsNone(LEGACY.search(path.read_text()))
         matrix = (ROOT / 'scripts/check-v3-installed-consumer.py').read_text()
-        self.assertNotIn('pre-cutover', (ROOT / 'scripts/lib/v3_package_integration.py').read_text())
+        self.assertNotIn('pre-cutover', (ROOT / 'scripts/lib/package_integration.py').read_text())
         self.assertNotIn('pre-cutover', matrix)
         self.assertNotIn('strict-rejection', matrix)
         self.assertIn("'strict', args.provider_prefix", matrix)

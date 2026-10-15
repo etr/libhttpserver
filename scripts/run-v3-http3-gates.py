@@ -17,7 +17,7 @@ import sys
 UPLOAD = b'first\x00second\xffthird\x00'
 PINS = {'aioquic': '1.3.0', 'quic-go': 'v0.55.0'}
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
-import v3_release_artifact as release_identity
+import release_artifact as release_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 

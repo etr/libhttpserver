@@ -17,12 +17,12 @@ import time
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts/lib'))
-from v3_package_commands import Commands, runtime_environment
-from v3_package_integration import compile_probe
-from v3_package_matrix import check_linkage, check_scenarios, load
-from v3_package_process import Consumer
-from v3_package_traffic import response
-from v3_public_tls_profiles import scenarios as profile_scenarios, example as rotation_example
+from package_commands import Commands, runtime_environment
+from package_integration import compile_probe
+from package_matrix import check_linkage, check_scenarios, load
+from package_process import Consumer
+from package_traffic import response
+from public_tls_profiles import scenarios as profile_scenarios, example as rotation_example
 
 
 def check(value, message):
@@ -302,9 +302,9 @@ def run(args):
         inputs = sorted(path for path in (source / 'src').rglob('*')
                         if path.is_file() and path.suffix in ('.cpp', '.hpp'))
         inputs += [source / name for name in ('src/Makefile.am', 'configure.ac',
-                   'scripts/check-v3-public-tls.py', 'scripts/lib/v3_public_tls_profiles.py', 'scripts/lib/v3_package_matrix.py',
-                   'test/installed/v3-package-matrix.json', 'test/installed/v3_tls_consumer.cpp',
-                   'test/installed/v3_tls_profiles.cpp', 'test/installed/v3_tls_client.cpp', 'test/examples/v3_tls_rotation.cpp')]
+                   'scripts/check-v3-public-tls.py', 'scripts/lib/public_tls_profiles.py', 'scripts/lib/package_matrix.py',
+                   'test/installed/v3-package-matrix.json', 'test/installed/tls_consumer.cpp',
+                   'test/installed/tls_profiles.cpp', 'test/installed/tls_client.cpp', 'test/examples/tls_rotation.cpp')]
         receipt['source_hashes'] = {str(path.relative_to(source)): hashlib.sha256(path.read_bytes()).hexdigest()
                                     for path in inputs}
         receipt['source_identity'] = hashlib.sha256(json.dumps(receipt['source_hashes'], sort_keys=True).encode()).hexdigest()
@@ -320,7 +320,7 @@ def run(args):
         check(not audit.consumer_flag_violations(cflags, (source, args.build)), 'contaminated public compile flags')
         consumer = Path(tempfile.mkdtemp(prefix='task193-public-tls-client-'))
         receipt['consumer_directory'] = str(consumer)
-        for unit in ('test/installed/v3_tls_consumer.cpp', 'test/installed/v3_tls_profiles.cpp', 'test/installed/v3_tls_client.cpp', 'test/examples/v3_tls_rotation.cpp', 'examples/v3_host_poll.hpp'):
+        for unit in ('test/installed/tls_consumer.cpp', 'test/installed/tls_profiles.cpp', 'test/installed/tls_client.cpp', 'test/examples/tls_rotation.cpp', 'examples/host_poll.hpp'):
             shutil.copyfile(source / unit, consumer / Path(unit).name)
         fixtures = consumer / 'fixtures'
         shutil.copytree(source / 'test/data/tls_credentials', fixtures)
@@ -332,7 +332,7 @@ def run(args):
             (fixtures / (identity + '-chain.pem')).write_bytes(chain)
         independent = consumer / 'independent-client'
         command_log([args.compiler, '-std=c++20', '-I' + str(args.provider_prefix / 'include'),
-                     consumer / 'v3_tls_client.cpp', '-L' + str(args.provider_prefix / 'lib'),
+                     consumer / 'tls_client.cpp', '-L' + str(args.provider_prefix / 'lib'),
                      '-Wl,-rpath,' + str(args.provider_prefix / 'lib'), '-lssl', '-lcrypto', '-o', independent], consumer, env)
         receipt['independent_client'] = dict(executable=str(independent),
             sha256=hashlib.sha256(independent.read_bytes()).hexdigest(), dependencies=audit.dependency_graph([str(independent)]))
@@ -356,13 +356,13 @@ def run(args):
                 libraries += ['-pthread', '-Wl,-rpath,' + str(prefix / 'lib'), '-Wl,-rpath,' + str(args.provider_prefix / 'lib')]
             libraries += shlex.split(args.sanitize)
             executable = consumer / (linkage + ('.exe' if os.name == 'nt' else ''))
-            provenance = compile_probe(args.compiler, [consumer / 'v3_tls_consumer.cpp'], cflags + shlex.split(args.sanitize),
+            provenance = compile_probe(args.compiler, [consumer / 'tls_consumer.cpp'], cflags + shlex.split(args.sanitize),
                                        libraries, executable, command_log, env, source, args.build.resolve(), prefix, False)
             profiles = consumer / (linkage + '-profiles' + ('.exe' if os.name == 'nt' else ''))
-            profile_compile = compile_probe(args.compiler, [consumer / 'v3_tls_profiles.cpp'], cflags + shlex.split(args.sanitize),
+            profile_compile = compile_probe(args.compiler, [consumer / 'tls_profiles.cpp'], cflags + shlex.split(args.sanitize),
                                            libraries, profiles, command_log, env, source, args.build.resolve(), prefix, False)
             example = consumer / (linkage + '-rotation-example' + ('.exe' if os.name == 'nt' else ''))
-            example_compile = compile_probe(args.compiler, [consumer / 'v3_tls_rotation.cpp'], cflags + shlex.split(args.sanitize),
+            example_compile = compile_probe(args.compiler, [consumer / 'tls_rotation.cpp'], cflags + shlex.split(args.sanitize),
                                            libraries, example, command_log, env, source, args.build.resolve(), prefix, False)
             example_graph = audit.dependency_graph([str(example)])
             check_linkage(example_graph, linkage, prefix)

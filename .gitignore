@@ -133,13 +133,13 @@ __pycache__/
 !scripts/test-v3-package-workflow.py
 !scripts/prepare-v3-package-ci.py
 
-!test/integ/v3_examples_test.py
+!test/integ/examples_test.py
 !scripts/test-v3-cutover.py
 !scripts/check-v3-runtime-coexistence.py
 
 # TASK-185 release runner and dependency-free receipt contracts.
 !scripts/run-v3-release-gates.py
-!scripts/lib/v3_release_*.py
+!scripts/lib/release_*.py
 !test/integ/release_gate_runner_test.py
 !test/integ/release_artifact_test.py
 
@@ -150,17 +150,17 @@ __pycache__/
 !scripts/check-v3-public-tls.py
 !scripts/check-v3-public-http2.py
 !scripts/test-v3-public-http2.py
-!test/installed/v3_http3_credentials.py
-!test/installed/v3_http3_semantics.py
-!test/installed/v3_http3_lifecycle.py
-!test/installed/v3_http3_qpack.py
+!test/installed/http3_credentials.py
+!test/installed/http3_semantics.py
+!test/installed/http3_lifecycle.py
+!test/installed/http3_qpack.py
 
-!test/installed/v3_http3_flow.py
+!test/installed/http3_flow.py
 
 # TASK-198 opt-in benchmark tools and contracts.
 !scripts/run-v3-native-benchmarks.py
 !scripts/test-v3-native-benchmark.py
-!test/installed/v3_benchmark_client.py
+!test/installed/benchmark_client.py
 
 # TASK-199 packaged release adapters.
 !scripts/run-v3-packaged-adapters.py

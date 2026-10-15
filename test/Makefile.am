@@ -22,7 +22,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_C
 METASOURCES = AUTO
 noinst_PROGRAMS = native_websocket_fixture
 
-check_PROGRAMS = consumer_v3_timed_resume io_completion_storage io_iocp_backend io_kqueue_backend io_epoll_backend external_http1_e2e external_readiness_adapter consumer_v3_readiness readiness_contract consumer_v3_executor websocket_drain websocket_drain_race task_resume_signal_lifetime http1_websocket_upgrade http1_websocket_handshake websocket_progress websocket_upgrade_decision websocket_codec websocket_utf8 websocket_session websocket_session_race consumer_v3_websocket native_http1_parity littletest_skip_semantics digest_client_self_test transcript_parser response_frame normalize http_semantic_outcome http_semantic_method http_semantic_fields http_semantic_request_head consumer_v3_semantic v3_header_hygiene task_executor task_core task_cancellation task_resume_signal task_race task_stop_inside_handler consumer_v3_concurrency io_operation io_connection_owner fake_io_backend io_backend_contract server_options_validate server_budgets server_routes consumer_v3_server http_status exchange_decisions exchange_routing consumer_v3_exchange body_reader consumer_v3_body_reader response_writer consumer_v3_response_writer http1_parser http1_body_mode http1_body_decoder http1_body_source http1_response_mode http1_response_framer http1_response_outbox io_poll_sys_listener worker_pool connection_engine http1_error_synth drain_scope native_server consumer_v3_native_server native_http1_e2e route_sync consumer_v3_route_sync response_definition consumer_v3_response_definition response_sources consumer_v3_response_sources v3_native_linkage base64_vector sha1_vector md5_vector sha256_vector secure_compare entropy_sys digest_nonce_ledger digest_params digest_response_vector digest_auth_policy basic_auth_policy consumer_v3_auth basic_auth_corpus digest_auth_corpus urlencoded_decoder forms_urlencoded forms_urlencoded_route forms_urlencoded_corpus consumer_v3_forms multipart_decoder forms_multipart forms_multipart_route forms_multipart_files forms_multipart_corpus consumer_v3_multipart consumer_v3_multipart_runtime server_routes_families server_hooks request_lifecycle consumer_v3_hooks routing_corpus hooks_corpus net_address consumer_v3_net_address peer_policy consumer_v3_peer_policy ip_controls_corpus
+check_PROGRAMS = consumer_v3_timed_resume io_completion_storage io_iocp_backend io_kqueue_backend io_epoll_backend external_http1_e2e external_readiness_adapter consumer_v3_readiness readiness_contract consumer_v3_executor websocket_drain websocket_drain_race task_resume_signal_lifetime http1_websocket_upgrade http1_websocket_handshake websocket_progress websocket_upgrade_decision websocket_codec websocket_utf8 websocket_session websocket_session_race consumer_v3_websocket native_http1_parity littletest_skip_semantics digest_client_self_test transcript_parser response_frame normalize http_semantic_outcome http_semantic_method http_semantic_fields http_semantic_request_head consumer_v3_semantic semantic_header_hygiene task_executor task_core task_cancellation task_resume_signal task_race task_stop_inside_handler consumer_v3_concurrency io_operation io_connection_owner fake_io_backend io_backend_contract server_options_validate server_budgets server_routes consumer_v3_server http_status exchange_decisions exchange_routing consumer_v3_exchange body_reader consumer_v3_body_reader response_writer consumer_v3_response_writer http1_parser http1_body_mode http1_body_decoder http1_body_source http1_response_mode http1_response_framer http1_response_outbox io_poll_sys_listener worker_pool connection_engine http1_error_synth drain_scope native_server consumer_v3_native_server native_http1_e2e route_sync consumer_v3_route_sync response_definition consumer_v3_response_definition response_sources consumer_v3_response_sources native_linkage base64_vector sha1_vector md5_vector sha256_vector secure_compare entropy_sys digest_nonce_ledger digest_params digest_response_vector digest_auth_policy basic_auth_policy consumer_v3_auth basic_auth_corpus digest_auth_corpus urlencoded_decoder forms_urlencoded forms_urlencoded_route forms_urlencoded_corpus consumer_v3_forms multipart_decoder forms_multipart forms_multipart_route forms_multipart_files forms_multipart_corpus consumer_v3_multipart consumer_v3_multipart_runtime server_routes_families server_hooks request_lifecycle consumer_v3_hooks routing_corpus hooks_corpus net_address consumer_v3_net_address peer_policy consumer_v3_peer_policy ip_controls_corpus
 
 # TASK-099 step 1: private operation I/O contract (six owned operation
 # handles, exactly-once terminal claim). The test uses the default LDADD
@@ -97,15 +97,15 @@ http_semantic_request_head_LDADD = $(top_builddir)/src/libhttpserver.la
 # CPPFLAGS deliberately drops the -DHTTPSERVER_COMPILATION from
 # AM_CPPFLAGS (mirroring the true-consumer compile in the top-level
 # check-headers rule). Empty LDADD proves the v3 headers need no
-# library linkage. v3_header_hygiene scans the six headers for config
+# library linkage. semantic_header_hygiene scans the six headers for config
 # conditionals and backend/OS-socket tokens at runtime; it needs no
 # library linkage either, only the header directory define.
 consumer_v3_semantic_SOURCES = headers/consumer_v3_semantic.cpp
 consumer_v3_semantic_CPPFLAGS = -I$(top_srcdir)/src
 consumer_v3_semantic_LDADD = $(top_builddir)/src/libhttpserver.la
-v3_header_hygiene_SOURCES = unit/v3_header_hygiene_test.cpp
-v3_header_hygiene_CPPFLAGS = $(AM_CPPFLAGS) -DV3_SEMANTIC_HEADER_DIR='"$(top_srcdir)/src/httpserver"'
-v3_header_hygiene_LDADD = $(top_builddir)/src/libhttpserver.la
+semantic_header_hygiene_SOURCES = unit/semantic_header_hygiene_test.cpp
+semantic_header_hygiene_CPPFLAGS = $(AM_CPPFLAGS) -DV3_SEMANTIC_HEADER_DIR='"$(top_srcdir)/src/httpserver"'
+semantic_header_hygiene_LDADD = $(top_builddir)/src/libhttpserver.la
 # Public headers are self-contained; compiled behavior uses normal library linkage.
 consumer_v3_executor_SOURCES = headers/consumer_v3_executor.cpp
 consumer_v3_executor_CPPFLAGS = -I$(top_srcdir)/src
@@ -303,8 +303,8 @@ consumer_v3_native_server_LDADD = $(top_builddir)/src/libhttpserver.la
 native_http1_e2e_SOURCES = integ/native_http1_e2e_test.cpp \
 	parity/response_frame.cpp
 
-v3_native_linkage_SOURCES = integ/v3_native_linkage_test.cpp
-v3_native_linkage_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+native_linkage_SOURCES = integ/native_linkage_test.cpp
+native_linkage_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 
 # Public headers are self-contained; compiled behavior uses normal library linkage.
 route_sync_SOURCES = unit/route_sync_test.cpp
@@ -485,7 +485,7 @@ consumer_v3_hooks_LDADD = $(top_builddir)/src/libhttpserver.la
 # TASK-118 step 6: parity replay of the routing and hooks corpora
 # through the REAL registry + hook bus + dispatcher + response framer
 # (plan D6, the TASK-114 corpus convention; the shared driver lives in
-# parity/v3_dispatch_replay.hpp). The dispatcher lives in v3core, so
+# parity/dispatch_replay.hpp). The dispatcher lives in v3core, so
 # the suites link libhttpserver.la (default LDADD).
 routing_corpus_SOURCES = unit/routing_corpus_test.cpp \
 	parity/case_wire.cpp parity/response_frame.cpp parity/normalize.cpp \
@@ -540,16 +540,16 @@ behavior_replay_SOURCES = unit/behavior_replay_test.cpp parity/case_wire.cpp par
 behavior_replay_CPPFLAGS = $(AM_CPPFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"'
 behavior_replay_LDADD = $(top_builddir)/src/libhttpserver.la
 noinst_HEADERS += parity/behavior_replay.hpp
-noinst_HEADERS += parity/v3_behavior_profiles.hpp
+noinst_HEADERS += parity/behavior_profiles.hpp
 noinst_HEADERS += parity/behavior_observation.hpp
 EXTRA_DIST += parity/task179-capabilities.json integ/behavior_parity_runner_test.py
 TESTS += integ/behavior_parity_runner_test.py
 
-check_PROGRAMS += v3_behavior_parity
-v3_behavior_parity_SOURCES = unit/v3_behavior_parity_test.cpp parity/transcript.cpp parity/case_wire.cpp parity/response_frame.cpp parity/normalize.cpp
-v3_behavior_parity_CPPFLAGS = $(AM_CPPFLAGS) $(V3_TLS_CFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"' -DPARITY_DATA_ROOT='"$(top_srcdir)/test"'
-v3_behavior_parity_LDADD = $(top_builddir)/src/libhttpserver_v3core.la $(V3_TLS_LIBS)
-v3_behavior_parity_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+check_PROGRAMS += behavior_parity
+behavior_parity_SOURCES = unit/behavior_parity_test.cpp parity/transcript.cpp parity/case_wire.cpp parity/response_frame.cpp parity/normalize.cpp
+behavior_parity_CPPFLAGS = $(AM_CPPFLAGS) $(V3_TLS_CFLAGS) -DPARITY_TRANSCRIPT_DIR='"$(top_srcdir)/test/parity/transcripts"' -DPARITY_DATA_ROOT='"$(top_srcdir)/test"'
+behavior_parity_LDADD = $(top_builddir)/src/libhttpserver_v3core.la $(V3_TLS_LIBS)
+behavior_parity_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 # TASK-121: transport-neutral protocol tests link the native archive only.
 websocket_codec_SOURCES = unit/websocket_codec_test.cpp
@@ -786,7 +786,7 @@ route_sync_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 routing_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
-v3_native_linkage_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+native_linkage_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 websocket_codec_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
@@ -1064,7 +1064,7 @@ io_iocp_backend_SOURCES = unit/io_iocp_backend_test.cpp
 io_iocp_backend_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 io_iocp_backend_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
-EXTRA_DIST += installed/v3_package_consumer.cpp installed/v3-package-matrix.json
+EXTRA_DIST += installed/package_consumer.cpp installed/v3-package-matrix.json
 
 check_PROGRAMS += io_datagram io_udp_backend quic_invariant_header quic_datagram_dispatch
 io_datagram_SOURCES = unit/io_datagram_test.cpp
@@ -1552,25 +1552,25 @@ check_PROGRAMS += nonce_expiry_wait
 nonce_expiry_wait_SOURCES = unit/nonce_expiry_wait_test.cpp integ/nonce_expiry_wait.hpp
 nonce_expiry_wait_CPPFLAGS = -I$(top_srcdir)/test
 nonce_expiry_wait_LDADD = $(top_builddir)/src/libhttpserver.la
-check_PROGRAMS += v3_examples
-v3_examples_SOURCES = unit/v3_examples_test.cpp
-v3_examples_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
-v3_examples_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
-EXTRA_DIST += integ/v3_examples_test.py
+check_PROGRAMS += example_handlers
+example_handlers_SOURCES = unit/example_handlers_test.cpp
+example_handlers_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
+example_handlers_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
+EXTRA_DIST += integ/examples_test.py
 if BUILD_EXAMPLES
-TESTS += integ/v3_examples_test.py
+TESTS += integ/examples_test.py
 endif
 
 if NATIVE_V3_TLS
-check_PROGRAMS += v3_tls_rotation
-v3_tls_rotation_SOURCES = examples/v3_tls_rotation.cpp
-v3_tls_rotation_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/examples
-v3_tls_rotation_LDADD = $(tls_io_LDADD)
-v3_tls_rotation_LDFLAGS = $(tls_io_LDFLAGS)
+check_PROGRAMS += tls_rotation
+tls_rotation_SOURCES = examples/tls_rotation.cpp
+tls_rotation_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/examples
+tls_rotation_LDADD = $(tls_io_LDADD)
+tls_rotation_LDFLAGS = $(tls_io_LDFLAGS)
 endif
 
 # Native fixture dependencies must accompany their translation units in distributions.
-noinst_HEADERS += integ/raw_http_client.hpp parity/case_wire.hpp parity/v3_dispatch_replay.hpp unit/response_source_rig.hpp
+noinst_HEADERS += integ/raw_http_client.hpp parity/case_wire.hpp parity/dispatch_replay.hpp unit/response_source_rig.hpp
 
 # TASK-185 contracts do not need providers, compilers, Docker or network clients.
 TESTS += integ/release_gate_runner_test.py integ/release_artifact_test.py
@@ -1621,10 +1621,10 @@ http3_native_stream_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/test -I$(top_
 http3_native_stream_LDADD = $(top_builddir)/src/libhttpserver_v3core.la $(V3_TLS_LIBS)
 http3_native_stream_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS) $(H3_STREAM_RACE_LDFLAGS)
 
-EXTRA_DIST += installed/v3_http3_semantics.hpp installed/v3_http3_semantics.py
-EXTRA_DIST += installed/v3_http3_credentials.py
-EXTRA_DIST += installed/v3_http3_lifecycle.py
-EXTRA_DIST += installed/v3_http3_qpack.py installed/v3_http3_flow.py
+EXTRA_DIST += installed/http3_semantics.hpp installed/http3_semantics.py
+EXTRA_DIST += installed/http3_credentials.py
+EXTRA_DIST += installed/http3_lifecycle.py
+EXTRA_DIST += installed/http3_qpack.py installed/http3_flow.py
 
 # Dependency-free measurements/contracts only; full workloads are opt-in.
 TESTS += ../scripts/test-v3-native-benchmark.py
@@ -1635,10 +1635,10 @@ TESTS += ../scripts/test-v3-packaged-adapters.py
 consumer_v3_timed_resume_SOURCES = headers/consumer_v3_timed_resume.cpp
 consumer_v3_timed_resume_CPPFLAGS = -I$(top_srcdir)/src
 consumer_v3_timed_resume_LDADD = $(top_builddir)/src/libhttpserver.la
-check_PROGRAMS += v3_compiled_operations
-v3_compiled_operations_SOURCES = installed/v3_compiled_operations.cpp installed/v3_compiled_operations_worker.cpp
-v3_compiled_operations_CPPFLAGS = -I$(top_srcdir)/src
-v3_compiled_operations_LDADD = $(top_builddir)/src/libhttpserver.la
+check_PROGRAMS += compiled_operations
+compiled_operations_SOURCES = installed/compiled_operations.cpp installed/compiled_operations_worker.cpp
+compiled_operations_CPPFLAGS = -I$(top_srcdir)/src
+compiled_operations_LDADD = $(top_builddir)/src/libhttpserver.la
 
 check_PROGRAMS += protocol_limits
 TESTS += protocol_limits

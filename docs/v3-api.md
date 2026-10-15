@@ -17,12 +17,12 @@ with TLS ALPN `h2`. Explicit UDP listeners serve QUICv1 HTTP/3 with ALPN `h3`.
 HTTP/2 has no cleartext upgrade or prior-knowledge listener.
 Provider availability from \ref httpserver::query_features is a separate fact.
 
-\include v3_protocol_options.cpp
+\include protocol_options.cpp
 
 External hosts drive \ref httpserver::server::readiness_driver interests,
 generations, wakeups and deadlines. See the [external loop contract](https://github.com/etr/libhttpserver/blob/v3/docs/external-loop-contract.md).
 
-\include v3_external_event_loop.cpp
+\include external_event_loop.cpp
 
 \section native_v3_routes Routes, exchanges and bodies
 
@@ -38,8 +38,8 @@ reading with \ref httpserver::body_reader, commit before writing with
 \ref httpserver::response_definition and \ref httpserver::send_definition
 provide owned/reopened/leased body sources and per-send producers.
 
-\include v3_routes.cpp
-\include v3_route_handlers.hpp
+\include routes.cpp
+\include route_handlers.hpp
 
 See the [complete runnable example index](../examples/README.md#native-v3-examples)
 for request fields/cookies/query decoding, body admission/trailers, Basic/Digest,
@@ -66,10 +66,10 @@ canonical attribute ordering, SameSite=None and bounded GMT Expires behavior.
 writable; keep the session alive through close notification. The public example
 uses HTTP/1.1 Upgrade. Native H2 uses RFC8441 Extended CONNECT and native H3
 uses RFC9220 Extended CONNECT through the same operation. The public
-examples/v3_http3.cpp example demonstrates a certificate-backed UDP listener and
+examples/http3.cpp example demonstrates a certificate-backed UDP listener and
 keeps the WebSocket session alive through Close/FIN.
 
-\include v3_websocket_echo.cpp
+\include websocket_echo.cpp
 
 \section native_v3_shutdown Shutdown and outcomes
 
@@ -92,7 +92,7 @@ runtime through actual callback retirement; native stop never joins application
 lookups. Public ACME publish/remove accepts application-supplied material and
 selects only exact SNI plus sole acme-tls/1 on authentic TCP443.
 
-The installed public listener example at test/examples/v3_tls_rotation.cpp serves
+The installed public listener example at test/examples/tls_rotation.cpp serves
 requests across valid/rejected live replacement. Read the [TLS usage and lifetime
 contract](https://github.com/etr/libhttpserver/blob/v3/docs/native-tls-build.md).
 TLS-off retains the same declarations and typed unavailable operations.
@@ -136,7 +136,7 @@ MAX_STREAMS only after reliable FIN/reset acknowledgment; retained IDs cannot be
 recreated. The fixed lifetime history remains a connection envelope, even after
 live application charges return to baseline.
 
-See `examples/v3_http3.cpp` for one route registry serving TCP H1/H2 and UDP H3,
+See `examples/http3.cpp` for one route registry serving TCP H1/H2 and UDP H3,
 with an RFC9220 echo route and either loop mode.
 
 ## Protocol capacity policy

@@ -31,7 +31,7 @@
 #include <vector>
 
 #include <httpserver/server/server.hpp>
-#include "../../examples/v3_host_poll.hpp"
+#include "../../examples/host_poll.hpp"
 #include "./raw_http_client.hpp"
 #include "./littletest.hpp"
 

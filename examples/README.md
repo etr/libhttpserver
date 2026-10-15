@@ -25,21 +25,21 @@ exercise credential/runtime/publication/listener calls, report their typed
 
 | Program/source | Public API families |
 | --- | --- |
-| [v3_routes](v3_routes.cpp) | Sync/coroutine routes, captures, methods, full/prefix precedence, custom errors, exception boundaries |
-| [v3_request_data](v3_request_data.cpp) | Request head/raw target, ordered fields, cookies, bounded query decoding |
-| [v3_body_streaming](v3_body_streaming.cpp) | Header-time refusal/admission, incremental reads, upload/download trailers, bounded writes |
-| [v3_auth](v3_auth.cpp) | Basic/Digest policy creation and composed route guards |
-| [v3_forms](v3_forms.cpp) | URL-encoded adapter/reader, multipart sink, file cleanup/keep policy |
-| [v3_response_sources](v3_response_sources.cpp) | All six body sources, leases, overlays, send reports, one-shot claims, ICY status flag |
-| [v3_operations](v3_operations.cpp) | Eight lifecycle hooks, diagnostics, budgets/timeouts, live transport peer policy |
-| [v3_lifecycle](v3_lifecycle.cpp) | Application suspension/resume, timeout, cancellation/RAII, handler stop, graceful drain |
-| [v3_protocol_options](v3_protocol_options.cpp) | Protocol selection, feature reporting, validation, typed unavailable listeners |
-| [v3_external_event_loop](v3_external_event_loop.cpp) | Readiness snapshots, generations, wakeups, deadlines and host ownership |
-| [v3_websocket_echo](v3_websocket_echo.cpp) | H1 upgrade/refusal, text/binary echo, backpressure, owning session lifetime |
-| [v3_http2](v3_http2.cpp) | Certificate TCP H1/H2, RFC8441 Extended CONNECT WebSocket |
-| [v3_http3](v3_http3.cpp) | Shared TCP H1/H2 and UDP H3 routes/trailers, RFC9220 WebSocket, both loop modes |
-| [v3_tls_profiles](v3_tls_profiles.cpp) | SNI/default certificates, initial mTLS, external PSK runtime, ACME publication/removal |
-| [v3_tls_rotation](../test/examples/v3_tls_rotation.cpp) | Live valid/rejected replacement; established/new connection generations |
+| [routes](routes.cpp) | Sync/coroutine routes, captures, methods, full/prefix precedence, custom errors, exception boundaries |
+| [request_data](request_data.cpp) | Request head/raw target, ordered fields, cookies, bounded query decoding |
+| [body_streaming](body_streaming.cpp) | Header-time refusal/admission, incremental reads, upload/download trailers, bounded writes |
+| [auth](auth.cpp) | Basic/Digest policy creation and composed route guards |
+| [forms](forms.cpp) | URL-encoded adapter/reader, multipart sink, file cleanup/keep policy |
+| [response_sources](response_sources.cpp) | All six body sources, leases, overlays, send reports, one-shot claims, ICY status flag |
+| [operations](operations.cpp) | Eight lifecycle hooks, diagnostics, budgets/timeouts, live transport peer policy |
+| [lifecycle](lifecycle.cpp) | Application suspension/resume, timeout, cancellation/RAII, handler stop, graceful drain |
+| [protocol_options](protocol_options.cpp) | Protocol selection, feature reporting, validation, typed unavailable listeners |
+| [external_event_loop](external_event_loop.cpp) | Readiness snapshots, generations, wakeups, deadlines and host ownership |
+| [websocket_echo](websocket_echo.cpp) | H1 upgrade/refusal, text/binary echo, backpressure, owning session lifetime |
+| [http2](http2.cpp) | Certificate TCP H1/H2, RFC8441 Extended CONNECT WebSocket |
+| [http3](http3.cpp) | Shared TCP H1/H2 and UDP H3 routes/trailers, RFC9220 WebSocket, both loop modes |
+| [tls_profiles](tls_profiles.cpp) | SNI/default certificates, initial mTLS, external PSK runtime, ACME publication/removal |
+| [tls_rotation](../test/examples/tls_rotation.cpp) | Live valid/rejected replacement; established/new connection generations |
 
 Run the following commands from the configured build directory. For servers
 printing `PORT=12345`, set `PORT=12345` in the client terminal. Routes, request
@@ -52,7 +52,7 @@ H2/H3 print a numeric first port line. Every listener binds loopback.
 ### Routes
 
 ```sh
-./examples/v3_routes 30
+./examples/routes 30
 # In another terminal with PORT set:
 curl -i "http://127.0.0.1:$PORT/items/42"
 curl -i "http://127.0.0.1:$PORT/items/special"
@@ -76,7 +76,7 @@ promised reply.
 ### Request values and cookies
 
 ```sh
-./examples/v3_request_data 30
+./examples/request_data 30
 curl -i -H 'X-Repeat: first' -H 'X-Repeat: second' \
   -H 'Cookie: a=1; a=2' -H 'Cookie: b=3' \
   "http://127.0.0.1:$PORT/inspect?a=one&a=two+words&encoded=%2F"
@@ -91,7 +91,7 @@ all/entry order and invalid cookie rendering preserving its output string.
 ### Incremental bodies
 
 ```sh
-./examples/v3_body_streaming 30
+./examples/body_streaming 30
 curl -i -H 'Expect: 100-continue' --data-binary hello "http://127.0.0.1:$PORT/reject"
 curl -i --data-binary hello "http://127.0.0.1:$PORT/upload"
 curl -i --raw "http://127.0.0.1:$PORT/download"
@@ -111,7 +111,7 @@ Writer failures retire the coroutine without attempting another response.
 ### Authentication
 
 ```sh
-./examples/v3_auth 30
+./examples/auth 30
 curl -i "http://127.0.0.1:$PORT/auth/basic"
 curl -i -u demo:secret "http://127.0.0.1:$PORT/auth/basic"
 curl -i --digest -u demo:secret "http://127.0.0.1:$PORT/auth/digest"
@@ -127,7 +127,7 @@ credential confidentiality; plaintext loopback here is a local demonstration.
 
 ```sh
 UPLOADS=$(mktemp -d)
-./examples/v3_forms "$UPLOADS" 30
+./examples/forms "$UPLOADS" 30
 curl -i --data 'a=one&a=two+words' "http://127.0.0.1:$PORT/form"
 curl -i --data 'a=one&a=two+words' "http://127.0.0.1:$PORT/form/read"
 printf abc > /tmp/safe.txt
@@ -150,7 +150,7 @@ files intact. Use a private application-supplied upload directory.
 
 ```sh
 printf 'reopened\n' > /tmp/v3-body.txt
-./examples/v3_response_sources /tmp/v3-body.txt 30
+./examples/response_sources /tmp/v3-body.txt 30
 for kind in bytes borrowed reopen factory file pipe missing closes; do
   curl -i "http://127.0.0.1:$PORT/$kind"
 done
@@ -175,12 +175,12 @@ via `status::with_shoutcast()`; it does not implement an audio subsystem.
 ### Operations and lifecycle
 
 ```sh
-./examples/v3_operations
+./examples/operations
 curl -i "http://127.0.0.1:$PORT/short"
 curl -i "http://127.0.0.1:$PORT/peer"
 curl -i "http://127.0.0.1:$PORT/throw"
 # Host stdin: stats, deny-loopback, allow-loopback, stop
-./examples/v3_lifecycle
+./examples/lifecycle
 curl -i "http://127.0.0.1:$PORT/wait"
 # Host prints PENDING; enter resume to complete it, or drain then wait.
 ```
@@ -205,11 +205,11 @@ No detached application threads or retained exchange pointers are used.
 ### Protocols, external ownership and WebSocket
 
 ```sh
-./examples/v3_protocol_options                      # TLS-off
-./examples/v3_protocol_options CHAIN_PEM KEY_PEM    # TLS-on
-./examples/v3_external_event_loop 30
+./examples/protocol_options                      # TLS-off
+./examples/protocol_options CHAIN_PEM KEY_PEM    # TLS-on
+./examples/external_event_loop 30
 curl -i "http://127.0.0.1:$PORT/hello"
-./examples/v3_websocket_echo 30
+./examples/websocket_echo 30
 curl -i "http://127.0.0.1:$PORT/echo"                # refusal without Upgrade
 ```
 
@@ -227,11 +227,11 @@ For TLS programs supply a chain (leaf plus intermediates) and matching key for
 `a.example`; trust roots belong to clients. From the configured TLS build:
 
 ```sh
-./examples/v3_http2 CHAIN_PEM KEY_PEM
+./examples/http2 CHAIN_PEM KEY_PEM
 # Set PORT to its first numeric stdout line. Enter stop/EOF to finish.
 curl --cacert ROOT_PEM --resolve "a.example:$PORT:127.0.0.1" \
   --http2 "https://a.example:$PORT/hello"
-./examples/v3_http3 CHAIN_PEM KEY_PEM external
+./examples/http3 CHAIN_PEM KEY_PEM external
 # First line: UDP port. Second: TCP_PORT <port>. Enter stop/EOF to finish.
 ```
 
@@ -247,7 +247,7 @@ python3 -m venv /tmp/v3-example-clients
 /tmp/v3-example-clients/bin/pip install -r test/integ/http2-client-requirements.txt \
   -r test/integ/http3-client-requirements.txt
 V3_EXAMPLES_DIR="$PWD/build/native-tls/examples" V3_TLS_MODE=yes \
-  /tmp/v3-example-clients/bin/python test/integ/v3_examples_test.py \
+  /tmp/v3-example-clients/bin/python test/integ/examples_test.py \
   ExampleTests.test_http2_hello_and_extended_connect \
   ExampleTests.test_http3_hello_trailers_and_extended_connect_both_loops
 ```
@@ -259,10 +259,10 @@ Missing optional protocol clients are explicitly skipped.
 ### TLS profiles and rotation
 
 ```sh
-./examples/v3_tls_profiles certificate A_CHAIN A_KEY B_CHAIN B_KEY
-./examples/v3_tls_profiles mtls CHAIN KEY CLIENT_ROOTS require
-./examples/v3_tls_profiles psk identity HEX_KEY
-./examples/v3_tls_profiles acme CHAIN KEY CHALLENGE_CERT CHALLENGE_KEY HEX_DIGEST
+./examples/tls_profiles certificate A_CHAIN A_KEY B_CHAIN B_KEY
+./examples/tls_profiles mtls CHAIN KEY CLIENT_ROOTS require
+./examples/tls_profiles psk identity HEX_KEY
+./examples/tls_profiles acme CHAIN KEY CHALLENGE_CERT CHALLENGE_KEY HEX_DIGEST
 # All print PORT=...; enter stop. ACME stdin: publish, invalid, remove, stop.
 ```
 
@@ -301,7 +301,7 @@ Inspect the presented challenge certificate and extension; ordinary self-signed
 certificates are not ACME challenge fixtures.
 
 ```sh
-./examples/v3_tls_rotation CERTIFICATE_DIRECTORY managed 0
+./examples/tls_rotation CERTIFICATE_DIRECTORY managed 0
 # First output is the port. Stdin: invalid, replace, stop (or EOF).
 ```
 
@@ -334,8 +334,8 @@ the optional client environment and `V3_TLS_MODE=yes|no` can select the lane.
 For a single installed consumer with installed pkg-config metadata:
 
 ```sh
-clang++ -std=c++20 -pthread examples/v3_auth.cpp \
-  $(pkg-config --cflags --libs libhttpserver) -o /tmp/v3_auth
+clang++ -std=c++20 -pthread examples/auth.cpp \
+  $(pkg-config --cflags --libs libhttpserver) -o /tmp/auth
 ```
 
 `make dist` includes every indexed source/helper and the verification scripts;
@@ -366,7 +366,7 @@ v3 development; no automatic v2 port is implied.
 - [digest_authentication.cpp](digest_authentication.cpp)
 - [early_413.cpp](early_413.cpp)
 - [empty_response_example.cpp](empty_response_example.cpp)
-- [external_event_loop.cpp](external_event_loop.cpp)
+- [external_event_loop.cpp](legacy/external_event_loop.cpp)
 - [file_upload.cpp](file_upload.cpp)
 - [file_upload_with_callback.cpp](file_upload_with_callback.cpp)
 - [handlers.cpp](handlers.cpp)
@@ -385,8 +385,8 @@ v3 development; no automatic v2 port is implied.
 - [shared_state.cpp](shared_state.cpp)
 - [turbo_mode.cpp](turbo_mode.cpp)
 - [url_registration.cpp](url_registration.cpp)
-- [websocket_echo.cpp](websocket_echo.cpp)
+- [websocket_echo.cpp](legacy/websocket_echo.cpp)
 
-`v3_protocol_options` also demonstrates typed H2/H3/QUIC capacity profiles, pure
+`protocol_options` also demonstrates typed H2/H3/QUIC capacity profiles, pure
 `resolve_limits()` and immutable `effective_limits()` inspection with adequate
 shared budgets. See [protocol capacity policy](../docs/v3-protocol-limits.md).
