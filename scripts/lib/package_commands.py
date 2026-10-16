@@ -158,6 +158,16 @@ class _CommandTree:
             os.killpg(self.child.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass  # The snapshot must still prove that no live member remains.
+        except PermissionError:
+            # Darwin excludes zombies from group signals and can return EPERM.
+            self._anchor(deadline)
+            members = _process_snapshot(deadline)
+            self._check_leader(members.get(self.child.pid))
+            self._anchor(deadline)
+            _remaining(deadline)
+            if any(group == self.child.pid and state != 'Z'
+                   for _, group, state in members.values()):
+                raise
 
     def terminate(self, deadline=None):
         if self.job:

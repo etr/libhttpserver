@@ -285,6 +285,113 @@ class CommandsTest(unittest.TestCase):
                 self.assertEqual(len(data), record['bytes'])
                 self.assertEqual(hashlib.sha256(data).hexdigest(), record['sha256'])
 
+    @unittest.skipUnless(os.name == 'posix', 'POSIX zombie group permissions')
+    def test_owned_zombie_permission_denial_preserves_completed_receipts(self):
+        snapshot = commands._process_snapshot
+        scans = []
+        denied = []
+        def observe(deadline):
+            members = snapshot(deadline)
+            scans.append(members)
+            return members
+        def signal_group(pid, sig):
+            members = snapshot(time.monotonic() + 2)
+            leader = members.get(pid)
+            self.assertEqual((os.getpid(), pid, 'Z'), leader)
+            self.assertTrue(all(state == 'Z' for _, group, state in members.values() if group == pid))
+            denied.append(pid)
+            raise PermissionError(1, 'zombie group has no signal targets')
+        for fallback in ('native', 'no-waitid', 'ps'):
+            for status in (0, 7):
+                with self.subTest(fallback=fallback, status=status):
+                    scans.clear()
+                    waitid = getattr(os, 'waitid', None) if fallback == 'native' else None
+                    platform = 'darwin' if fallback == 'ps' else sys.platform
+                    with patch.object(commands, '_process_snapshot', observe), patch.object(os, 'killpg', signal_group):
+                        with patch.object(os, 'waitid', waitid, create=True), patch.object(sys, 'platform', platform):
+                            output = self.runner(self.command(f"print('completed'); raise SystemExit({status})"),
+                                                 self.root, os.environ, timeout=2, allow_failure=True)
+                    self.assertEqual('completed\n', output)
+                    record = json.loads((self.root / 'commands.json').read_text())[-1]
+                    data = Path(record['log']).read_bytes()
+                    self.assertEqual(status, record['exit'])
+                    self.assertEqual(len(data), record['bytes'])
+                    self.assertEqual(hashlib.sha256(data).hexdigest(), record['sha256'])
+                    self.assertNotIn('error', record)
+                    self.assertGreaterEqual(len(scans), 3, 'permission proof must retain stable retirement scans')
+        self.assertEqual(6, len(denied))
+
+    def zombie_tree(self):
+        tree = commands._CommandTree(self.command('pass'), self.root, os.environ)
+        self.addCleanup(tree.child.stdout.close)
+        self.addCleanup(lambda: tree.child.wait(timeout=2))
+        deadline = time.monotonic() + 2
+        while not tree.exited(deadline):
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(.01)
+        self.assertIsNone(tree.child.returncode)
+        return tree
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX live group permissions')
+    def test_live_group_permission_denial_fails_closed(self):
+        tree = commands._CommandTree(self.command('import time; time.sleep(30)'),
+                                     self.root, os.environ)
+        try:
+            self.assertFalse(tree.exited(time.monotonic() + 2))
+            with patch.object(os, 'killpg', side_effect=PermissionError(1, 'live group denied')):
+                with self.assertRaisesRegex(PermissionError, 'live group denied'):
+                    tree._kill_group(time.monotonic() + 2)
+            self.assertFalse(tree.exited(time.monotonic() + 2))
+        finally:
+            tree.child.kill(); tree.child.wait(timeout=2); tree.child.stdout.close()
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX permission evidence boundary')
+    def test_zombie_permission_denial_requires_complete_owned_retirement_evidence(self):
+        failures = dict(unavailable='unavailable', malformed='malformed', unknown='unverified group denied',
+                        live='unverified group denied', missing='ownership', changed='ownership',
+                        reaped='ownership', deadline='cleanup deadline exceeded')
+        for failure, message in failures.items():
+            with self.subTest(failure=failure):
+                tree = self.zombie_tree()
+                snapshot = commands._process_snapshot
+                pid = tree.child.pid
+                elapsed = 0
+                def evidence(deadline):
+                    nonlocal elapsed
+                    members = snapshot(deadline)
+                    if failure in ('unavailable', 'malformed'):
+                        raise RuntimeError(failure + ' command process snapshot')
+                    if failure in ('unknown', 'live'):
+                        members[pid + 1] = (pid, pid, '?' if failure == 'unknown' else 'S')
+                    if failure == 'missing': del members[pid]
+                    if failure == 'changed': members[pid] = (os.getpid() + 1, pid, 'Z')
+                    if failure == 'reaped': tree.child.wait(timeout=2)
+                    if failure == 'deadline': elapsed = 2
+                    return members
+                # The initial ownership check is real; corrupt only the post-denial proof.
+                def deny(pid, sig):
+                    commands._process_snapshot = evidence
+                    raise PermissionError(1, 'unverified group denied')
+                clock = (lambda: elapsed) if failure == 'deadline' else time.monotonic
+                with patch.object(commands, '_process_snapshot', snapshot), patch.object(os, 'killpg', side_effect=deny) as kill:
+                    with patch.object(commands.time, 'monotonic', clock):
+                        with self.assertRaisesRegex((PermissionError, RuntimeError), message):
+                            tree._kill_group(1 if failure == 'deadline' else time.monotonic() + 2)
+                    if failure == 'reaped':
+                        self.assertEqual(0, tree.child.returncode)
+                        with self.assertRaisesRegex(RuntimeError, 'ownership'):
+                            tree._kill_group(time.monotonic() + 2)
+                        self.assertEqual(1, kill.call_count, 'lost ownership must prevent another signal')
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX cleanup error context')
+    def test_live_permission_failure_retains_original_command_timeout(self):
+        with patch.object(os, 'killpg', side_effect=PermissionError(1, 'live group denied')):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup.*live group denied.*original command failure:.*deadline/output'):
+                self.runner(self.command('import time; time.sleep(.5)'), self.root, os.environ, timeout=.01)
+        receipt = json.loads((self.root / 'commands.json').read_text())[-1]
+        self.assertIn('original command failure:', receipt['error'])
+        self.assertNotIn('sha256', receipt)
+
     def assert_success_retires_socket_owner(self):
         ready = self.root / 'descendant.json'
         worker = ("import json,os,socket,time; from pathlib import Path; "
