@@ -13,13 +13,13 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Match Python prerequisite
         run: brew install python
-      - name: Run native command contracts
+      - name: Bound the unexplained native snapshot observation
         timeout-minutes: 2
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/v3-cleanup-contracts"
           cat > "$RUNNER_TEMP/v3-cleanup-command-contracts.py" <<'PYTHON'
-          import hashlib, importlib.util, json, os, subprocess, sys, unittest
+          import hashlib, importlib.util, json, os, subprocess, sys, time, unittest
           from pathlib import Path
           source = Path.cwd()
           output = Path(os.environ['RUNNER_TEMP'], 'v3-cleanup-contracts')
@@ -60,15 +60,30 @@ jobs:
                   global current_test
                   current_test = test.id()
                   super().startTest(test)
-          suite = unittest.defaultTestLoader.loadTestsFromTestCase(contracts.CommandsTest)
-          expected = [test.id() for test in suite]
-          result = unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
-          report = dict(expected=expected, tests_run=result.testsRun, successful=result.wasSuccessful(),
-                        failures=[test.id() for test, _ in result.failures],
-                        errors=[test.id() for test, _ in result.errors],
-                        skipped=[dict(test=test.id(), reason=reason) for test, reason in result.skipped])
+          started = time.monotonic()
+          trials = []
+          for iteration in range(1, 31):
+              if time.monotonic() - started >= 60:
+                  break
+              suite = unittest.TestSuite([contracts.CommandsTest(
+                  'test_owned_zombie_permission_denial_preserves_completed_receipts')])
+              result = unittest.TextTestRunner(verbosity=2, resultclass=Result, failfast=True).run(suite)
+              trial = dict(iteration=iteration, tests_run=result.testsRun, successful=result.wasSuccessful(),
+                           failures=[test.id() for test, _ in result.failures],
+                           errors=[test.id() for test, _ in result.errors],
+                           skipped=[dict(test=test.id(), reason=reason) for test, reason in result.skipped])
+              trials.append(trial)
+              report = dict(mode='bounded-owned-zombie-receipts', max_iterations=30, max_seconds=60,
+                            elapsed_seconds=time.monotonic() - started, trials=trials,
+                            successful=all(item['successful'] for item in trials),
+                            stop='first-failure' if not result.wasSuccessful() else 'running')
+              (output / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
+              if not result.wasSuccessful():
+                  break
+          report['stop'] = ('first-failure' if not report['successful'] else
+                            'iteration-limit' if len(trials) == 30 else 'time-limit')
           (output / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
-          raise SystemExit(not result.wasSuccessful())
+          raise SystemExit(not report['successful'])
           PYTHON
           set +e
           python3 "$RUNNER_TEMP/v3-cleanup-command-contracts.py" 2>&1 | tee "$RUNNER_TEMP/v3-cleanup-contracts/commands-test.log"
@@ -210,15 +225,17 @@ jobs:
           assert receipt['python'] == binding['python']
           assert (contracts / 'exit-status').read_text().strip() == '0'
           result = json.loads((contracts / 'result.json').read_text())
-          assert result['successful'] and not result['failures'] and not result['errors']
-          assert result['tests_run'] == len(result['expected']) == 22
-          assert len(set(result['expected'])) == 22
-          expected_skips = {
-              'native_contracts.CommandsTest.test_cleanup_discovery_failure_retains_original_error',
-              'native_contracts.CommandsTest.test_new_live_member_delays_retirement_and_zombies_do_not',
-              'native_contracts.CommandsTest.test_discovery_consumes_cleanup_deadline_without_restarting_wait'}
-          assert len(result['skipped']) == 3
-          assert {item['test'] for item in result['skipped']} == expected_skips
+          assert result['mode'] == 'bounded-owned-zombie-receipts' and result['successful']
+          assert result['max_iterations'] == 30 and result['max_seconds'] == 60
+          assert 1 <= len(result['trials']) <= 30
+          assert result['stop'] in ('iteration-limit', 'time-limit')
+          for trial in result['trials']:
+              assert trial['tests_run'] == 1 and trial['successful']
+              assert not trial['failures'] and not trial['errors'] and not trial['skipped']
+          # Full 22-contract native GREEN is retained from run 38838310419 for these helper/test hashes.
+          assert hashes == {
+              'scripts/lib/package_commands.py': 'e04b86a71ca0fc9085ea2bb527afaba0fc3bf030e0934ef02f78c44d46b344cb',
+              'scripts/test-v3-installed-consumer.py': 'fa2b3e67ae3f0e5921c98e2dc10fa3653e401f5e0a31b9e4ff219b1d130f3492'}
           assert receipt['uname'][0] == 'Darwin'
           assert len(receipt['commands']) == 3
           assert all(item['result'] == 'success' for item in receipt['commands'])
@@ -253,7 +270,7 @@ jobs:
           assert control['zombie_group_signal_zero']['errno'] == 1
           assert control['zombie_helper_sigkill']['result'] == 'success'
           (output / 'semantic-proof.json').write_text(json.dumps(dict(status='passed', source_sha=source_sha,
-              hashes=hashes, command_exits=[row['exit'] for row in records], native_contracts='passed'), indent=2) + '\n')
+              hashes=hashes, command_exits=[row['exit'] for row in records], native_contracts='retained-run-38838310419', bounded_receipt_probe='passed'), indent=2) + '\n')
           PY
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
