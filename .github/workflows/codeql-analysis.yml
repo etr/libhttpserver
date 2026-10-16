@@ -18,10 +18,10 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [master]
+    branches: [master, v3]
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: [master]
+    branches: [master, v3]
   schedule:
     - cron: '0 4 * * 4'
 
@@ -68,18 +68,32 @@ jobs:
       with:
         languages: ${{ matrix.language }}
 
-    # CodeQL's C/C++ database extractor traces the actual compile commands, so
-    # the library is built explicitly here rather than via the CodeQL Autobuild
-    # action (autobuild guesses the build and is intentionally not used). The
-    # build must be a clean from-scratch `make` so every TU is extracted; the
-    # in-source build (--enable-same-directory-build) keeps object files where
-    # the extractor expects them.
+    - name: Install build prerequisites
+      run: sudo apt-get update && sudo apt-get install -y autoconf automake libtool pkg-config perl
+    - name: Select source configuration
+      id: source
+      run: |
+        if grep -q 'libhttpserver_v3core_la_SOURCES' src/Makefile.am; then
+          echo 'native=true' >> "$GITHUB_OUTPUT"
+        fi
+    - name: Provision private native TLS provider
+      if: steps.source.outputs.native == 'true'
+      run: python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/codeql-prerequisites"
     - name: Build the library (CodeQL manual mode)
       run: |
-        ./bootstrap ;
-        ./configure --enable-same-directory-build ;
-        make ;
-      timeout-minutes: 30
+        ./bootstrap
+        mkdir "$RUNNER_TEMP/codeql-build"
+        cd "$RUNNER_TEMP/codeql-build"
+        if grep -q 'libhttpserver_v3core_la_SOURCES' "$GITHUB_WORKSPACE/src/Makefile.am"; then
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/codeql-prerequisites/provider/lib"
+          export V3_TLS_CFLAGS="-I$RUNNER_TEMP/codeql-prerequisites/provider/include"
+          export V3_TLS_LIBS="-L$RUNNER_TEMP/codeql-prerequisites/provider/lib -lssl -lcrypto"
+          "$GITHUB_WORKSPACE/./configure" --enable-v3-tls
+        else
+          "$GITHUB_WORKSPACE/./configure"
+        fi
+        make -j2
+      timeout-minutes: 40
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@411c4c9a36b3fca4d674f06b6396b2c6d23522c6  # v3.36.3

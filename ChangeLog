@@ -1,4 +1,11 @@
 Version 3.0.0 - 2026-10-10
+	Connect native TLS-off/on builds, replay and complete installed matrices to CI.
+	Add bounded sanitizer fuzz smoke, persistent trusted corpora and scheduled
+		campaign code that activates after default-branch cutover.
+	Require exact selected-archive readiness and all platform evidence before
+		publication, with immutable artifact verification and isolated permissions.
+	Fix an ambiguous QUIC replay cursor construction rejected by GCC 13.
+	Restore native Doxygen linked-page input and a Graphviz-compatible font.
 * Ship the C++20 native engine with SOVERSION 3 and native public headers.
 * Remove MHD and GnuTLS configure, source, build, link and package prerequisites.
 * Require strict TLS-on/off installed audits and validate versioned ABI-2/3 runtime coexistence.

@@ -78,7 +78,9 @@ def extract_archive(archive, directory):
         names = [Path(m.name) for m in members]
         need(names and len(members) < 20000 and sum(m.size for m in members) < 512 * 1024 * 1024,
              'archive exceeds release extraction bounds')
-        need(all(not p.is_absolute() and '..' not in p.parts for p in names), 'archive path traversal')
+        need(all(not p.is_absolute() and '..' not in p.parts and '\\' not in m.name
+                 and (m.isdir() or m.isfile()) for p, m in zip(names, members)), 'archive path traversal/link')
+        need(len({m.name for m in members}) == len(members), 'duplicate archive member')
         roots = {p.parts[0] for p in names if p.parts}
         need(len(roots) == 1, 'archive requires one source root')
         need(not directory.exists(), 'extracted directory already exists')
@@ -149,7 +151,7 @@ def rotation_counts(receipt, source, build, prefix):
     return counts(4, 20)
 
 
-def validate_package(root, directory, read_json):
+def validate_package(root, directory, read_json, source_root=None, provenance_path=Path):
     summary = read_json(directory / 'summary.json')
     need(summary.get('status') == 'passed' and set(summary.get('lanes', {})) == {'no', 'yes'}, 'package matrix incomplete')
     matrix = load_runner('lib/package_matrix.py', root)
@@ -161,8 +163,10 @@ def validate_package(root, directory, read_json):
         need(audit.get('violations') == [] and audit.get('tls_mode') == mode, 'package audit failed/wrong TLS')
         for linkage in ('shared', 'static'):
             public = audit['public'][linkage]
-            matrix.check_linkage(public['dependencies'], linkage, lane / 'prefix')
-            matrix.check_dependencies(public['compile']['dependencies'], lane / 'prefix', root, lane / 'build')
+            graph = dict(public['dependencies'], nodes=[dict(node, id=str(provenance_path(node['id']))) for node in public['dependencies']['nodes']])
+            matrix.check_linkage(graph, linkage, provenance_path(lane / 'prefix'))
+            matrix.check_dependencies([str(provenance_path(p)) for p in public['compile']['dependencies']],
+                provenance_path(lane / 'prefix'), provenance_path(source_root or root), provenance_path(lane / 'build'))
             cells = public['cells']
             need(len(cells) == 2 and all(len(cell['configurations']) == len(inventory['cases']) for cell in cells), 'package configuration coverage missing')
             suites = read_json(lane / ('integration-' + linkage) / 'suites.json')

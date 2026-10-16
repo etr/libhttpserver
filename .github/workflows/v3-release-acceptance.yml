@@ -1,0 +1,519 @@
+name: v3 selected archive acceptance
+'on':
+  workflow_call:
+    inputs:
+      source_commit:
+        type: string
+        required: true
+      source_version:
+        type: string
+        required: true
+      publication:
+        type: boolean
+        default: false
+  pull_request:
+    branches:
+    - v3
+    - master
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Resolved 40-hex commit; empty selects this workflow ref
+        type: string
+      source_version:
+        description: Exact source version; empty reads configure.ac
+        type: string
+permissions:
+  contents: read
+  actions: read
+env:
+  # Artifact/run APIs identify the PR branch head; checkout tests its merge SHA.
+  WORKFLOW_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      artifact_id: ${{ steps.archive.outputs.artifact-id }}
+      artifact_digest: ${{ steps.archive.outputs.artifact-digest }}
+      sha256: ${{ steps.prepare.outputs.sha256 }}
+      commit: ${{ steps.request.outputs.commit }}
+      version: ${{ steps.request.outputs.version }}
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ inputs.source_commit || github.sha }}
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Resolve source and version as structured data
+      id: request
+      env:
+        REQUEST_COMMIT: ${{ inputs.source_commit }}
+        REQUEST_VERSION: ${{ inputs.source_version }}
+      run: |-
+        python3 - <<'PYTHON'
+        import os,re,subprocess
+        from pathlib import Path
+        commit=os.environ['REQUEST_COMMIT'] or subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+        version=os.environ['REQUEST_VERSION']
+        if not version:
+            text=Path('configure.ac').read_text()
+            version='.'.join(re.search(r'm4_define\(\[libhttpserver_'+name+r'\],\[([0-9]+)\]\)',text)[1] for name in ('MAJOR_VERSION','MINOR_VERSION','REVISION'))
+        if not re.fullmatch(r'[0-9a-f]{40}',commit) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-(?:rc|alpha|beta)[0-9]+)?',version): raise SystemExit('invalid resolved request')
+        with open(os.environ['GITHUB_OUTPUT'],'a') as out: out.write('commit='+commit+'\nversion='+version+'\n')
+        PYTHON
+    - run: sudo apt-get update && sudo apt-get install -y autoconf automake libtool pkg-config
+    - id: prepare
+      env:
+        SOURCE_COMMIT: ${{ steps.request.outputs.commit }}
+        SOURCE_VERSION: ${{ steps.request.outputs.version }}
+      run: python3 scripts/run-v3-release-ci.py prepare --commit "$SOURCE_COMMIT" --version "$SOURCE_VERSION" --output "$RUNNER_TEMP/selected"
+    - id: archive
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: selected-archive
+        path: |-
+          ${{ runner.temp }}/selected/selected.json
+          ${{ runner.temp }}/selected/libhttpserver-*.tar.gz
+        retention-days: 30
+        if-no-files-found: error
+    - if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: selected-preparation-logs
+        path: ${{ runner.temp }}/selected/*.log
+        retention-days: 30
+        if-no-files-found: warn
+  darwin:
+    runs-on: macos-14
+    needs: prepare
+    timeout-minutes: 180
+    outputs:
+      artifact_id: ${{ steps.proof.outputs.artifact-id }}
+      artifact_digest: ${{ steps.proof.outputs.artifact-digest }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SELECTED_ID: ${{ needs.prepare.outputs.artifact_id }}
+      SELECTED_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
+        persist-credentials: false
+    - run: brew install autoconf automake libtool pkg-config python curl
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: 24.15.0
+    - name: Verify native Git and download immutable selected archive
+      run: |-
+        python3 -c 'import subprocess; subprocess.run(["git","--version"],check=True)'
+        python3 scripts/run-v3-release-ci.py download --artifact-id "$SELECTED_ID" --digest "$SELECTED_DIGEST" --output "$RUNNER_TEMP/selected"
+    - name: Selected provider and clients
+      run: |-
+        exec > >(tee "$RUNNER_TEMP/prerequisites-ci.log") 2>&1
+        python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites"
+        python3 -m venv "$RUNNER_TEMP/clients"
+        "$RUNNER_TEMP/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
+    - name: Complete native and installed TLS off/on proof
+      run: |
+        prefix=()
+        if ! python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",443)); s.close()'; then
+          prefix=(sudo env "PATH=$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD")
+        fi
+        "${prefix[@]}" python3 scripts/run-v3-release-ci.py platform --selection "$RUNNER_TEMP/selected/selected.json" --archive "$RUNNER_TEMP/selected/"libhttpserver-*.tar.gz --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$RUNNER_TEMP/clients/bin/python" --node node --output "$RUNNER_TEMP/platform" --pkg-config-dir "$(brew --prefix)/share/pkgconfig"
+    - id: proof
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: platform-Darwin
+        path: ${{ runner.temp }}/platform/Darwin.tar.gz
+        retention-days: 30
+        if-no-files-found: error
+    - if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: platform-Darwin-failure-evidence
+        path: |-
+          ${{ runner.temp }}/platform
+          ${{ runner.temp }}/prerequisites/preparation.json
+          ${{ runner.temp }}/prerequisites/*.log
+          ${{ runner.temp }}/prerequisites-ci.log
+        retention-days: 30
+        if-no-files-found: warn
+        compression-level: 0
+  windows:
+    runs-on: windows-2022
+    needs: prepare
+    timeout-minutes: 180
+    outputs:
+      artifact_id: ${{ steps.proof.outputs.artifact-id }}
+      artifact_digest: ${{ steps.proof.outputs.artifact-digest }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SELECTED_ID: ${{ needs.prepare.outputs.artifact_id }}
+      SELECTED_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
+    steps:
+    - name: Keep selected Git source bytes unchanged
+      shell: pwsh
+      run: git config --global core.autocrlf false
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
+        persist-credentials: false
+    - uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c
+      with:
+        msystem: MINGW64
+        update: true
+        install: autotools base-devel perl git mingw-w64-x86_64-clang mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-python
+          mingw-w64-x86_64-pkgconf mingw-w64-x86_64-libtool mingw-w64-x86_64-curl mingw-w64-x86_64-libsystre
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: 24.15.0
+    - name: Verify native Git and download immutable selected archive
+      run: |-
+        export PATH="/c/Program Files/Git/cmd:$PATH"
+        /mingw64/bin/python -c 'import subprocess; subprocess.run(["git","--version"],check=True)'
+        /mingw64/bin/python scripts/run-v3-release-ci.py download --artifact-id "$SELECTED_ID" --digest "$SELECTED_DIGEST" --output "$RUNNER_TEMP/selected"
+    - name: Selected provider and clients
+      run: |-
+        exec > >(tee "$RUNNER_TEMP/prerequisites-ci.log") 2>&1
+        /mingw64/bin/python scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites"
+        /mingw64/bin/python -m venv "$RUNNER_TEMP/clients"
+        "$(cygpath -m "$RUNNER_TEMP/clients/Scripts/python.exe")" -m pip install -r test/integ/http2-client-requirements.txt
+    - name: Complete native and installed TLS off/on proof
+      run: /mingw64/bin/python scripts/run-v3-release-ci.py platform --selection "$RUNNER_TEMP/selected/selected.json" --archive "$RUNNER_TEMP/selected/"libhttpserver-*.tar.gz
+        --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$(cygpath -m "$RUNNER_TEMP/clients/Scripts/python.exe")"
+        --node node --output "$RUNNER_TEMP/platform" --toolchain-prefix "$(cygpath -m /mingw64)"
+    - id: proof
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: platform-Windows
+        path: ${{ runner.temp }}/platform/Windows.tar.gz
+        retention-days: 30
+        if-no-files-found: error
+    - if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: platform-Windows-failure-evidence
+        path: |-
+          ${{ runner.temp }}/platform
+          ${{ runner.temp }}/prerequisites/preparation.json
+          ${{ runner.temp }}/prerequisites/*.log
+          ${{ runner.temp }}/prerequisites-ci.log
+        retention-days: 30
+        if-no-files-found: warn
+        compression-level: 0
+    defaults:
+      run:
+        shell: msys2 {0}
+  freebsd:
+    runs-on: ubuntu-24.04
+    needs: prepare
+    timeout-minutes: 180
+    outputs:
+      artifact_id: ${{ steps.proof.outputs.artifact-id }}
+      artifact_digest: ${{ steps.proof.outputs.artifact-digest }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SELECTED_ID: ${{ needs.prepare.outputs.artifact_id }}
+      SELECTED_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
+        persist-credentials: false
+    - name: Download immutable selected archive
+      run: python3 scripts/run-v3-release-ci.py download --artifact-id "$SELECTED_ID" --digest "$SELECTED_DIGEST" --output "$RUNNER_TEMP/selected"
+    - run: |
+        mkdir -p build
+        cp -R "$RUNNER_TEMP/selected" build/ci-selected-input
+    - uses: vmactions/freebsd-vm@c9f815bc7aa0d34c9fdd0619b034a32d6ca7b57e
+      with:
+        release: '14.3'
+        mem: 8192
+        cpu: 2
+        prepare: pkg install -y bash autoconf automake libtool pkgconf python311 gmake curl binutils perl5 llvm git py311-pip py311-virtualenv
+          node24
+        run: |-
+          set -eu
+          export RUNNER_TEMP=/tmp/v3-release-${{ github.run_id }}-${{ github.run_attempt }}
+          mkdir -p "$RUNNER_TEMP"
+          trap 'mkdir -p platform-evidence; cp -R "$RUNNER_TEMP/platform" platform-evidence/ 2>/dev/null || true; cp -R "$RUNNER_TEMP/prerequisites" platform-evidence/ 2>/dev/null || true' EXIT
+          if [ "$(node --version)" != v24.15.0 ]; then
+            mkdir -p "$RUNNER_TEMP/node-source"
+            curl --fail --location https://nodejs.org/dist/v24.15.0/node-v24.15.0.tar.gz -o "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz"
+            test "$(sha256 -q "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz")" = 729de494dd2872e5a3a6c32a1cd156a5413d4aca2772b2d873ee86bb5531bcd9
+            tar -xzf "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz" -C "$RUNNER_TEMP/node-source"
+            (
+              cd "$RUNNER_TEMP/node-source/node-v24.15.0"
+              ./configure --prefix="$RUNNER_TEMP/node"
+              gmake -j2 > "$RUNNER_TEMP/node-source/build.log" 2>&1
+              gmake install >> "$RUNNER_TEMP/node-source/build.log" 2>&1
+            )
+            export PATH="$RUNNER_TEMP/node/bin:$PATH"
+          fi
+          test "$(node --version)" = v24.15.0
+          python3.11 -c 'import subprocess; subprocess.run(["git","--version"],check=True)'
+          python3.11 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites" --make gmake
+          python3.11 -m venv "$RUNNER_TEMP/clients"
+          "$RUNNER_TEMP/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
+          python3.11 scripts/run-v3-release-ci.py platform --selection build/ci-selected-input/selected.json --archive build/ci-selected-input/libhttpserver-*.tar.gz --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$RUNNER_TEMP/clients/bin/python" --node node --make gmake --pkg-config-dir /usr/local/share/pkgconfig --output "$RUNNER_TEMP/platform"
+    - id: proof
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: platform-FreeBSD
+        path: platform-evidence/platform/FreeBSD.tar.gz
+        retention-days: 30
+        if-no-files-found: error
+    - if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: platform-FreeBSD-failure-evidence
+        path: platform-evidence
+        retention-days: 30
+        if-no-files-found: warn
+        compression-level: 0
+  full:
+    runs-on: ubuntu-24.04
+    needs:
+    - prepare
+    - darwin
+    - windows
+    - freebsd
+    timeout-minutes: 360
+    outputs:
+      authorization_id: ${{ steps.authorization.outputs.artifact-id }}
+      authorization_digest: ${{ steps.authorization.outputs.artifact-digest }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SELECTED_ID: ${{ needs.prepare.outputs.artifact_id }}
+      SELECTED_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
+      GOFLAGS: -mod=readonly
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ needs.prepare.outputs.commit }}
+        persist-credentials: false
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: 24.15.0
+    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+      with:
+        go-version: 1.25.1
+        cache: false
+    - name: Build and capture prerequisites
+      run: |-
+        exec > >(tee "$RUNNER_TEMP/prerequisites-ci.log") 2>&1
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang autoconf automake libtool pkg-config python3-venv perl binutils tshark iproute2 libcurl4-openssl-dev
+        python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites"
+        python3 -m venv "$RUNNER_TEMP/clients"
+        "$RUNNER_TEMP/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt -r test/integ/http3-client-requirements.txt websockets==15.0.1
+        python3 -m venv "$RUNNER_TEMP/runner-python"
+        git clone https://github.com/quic-interop/quic-interop-runner.git "$RUNNER_TEMP/quic-runner"
+        git -C "$RUNNER_TEMP/quic-runner" checkout --detach 740c05a10b61d65e8abd3ad38d60898004d335d9
+        "$RUNNER_TEMP/runner-python/bin/python" -m pip install -r "$RUNNER_TEMP/quic-runner/requirements.txt"
+        git clone https://github.com/summerwind/h2spec.git "$RUNNER_TEMP/h2spec-src"
+        git -C "$RUNNER_TEMP/h2spec-src" checkout --detach 70ac2294010887f48b18e2d64f5cccd48421fad1
+        make -C "$RUNNER_TEMP/h2spec-src" build
+        go -C test/integ/http3-client-go mod download
+        docker pull martenseemann/quic-network-simulator@sha256:c23d82a55caffe681b1bdae65d4d30d23e1283141a414a7f02ee56cf15f9c6b9
+        docker pull martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88
+        docker pull martenseemann/quic-network-simulator-endpoint@sha256:3b2b9e6fa317da238c8140a7b6d2bf8d4d45a8464b873eecac3ff2a32520b71a
+    - name: Download same selected archive
+      run: python3 scripts/run-v3-release-ci.py download --artifact-id "$SELECTED_ID" --digest "$SELECTED_DIGEST" --output "$RUNNER_TEMP/selected"
+    - name: Import immutable darwin bundle
+      env:
+        ARTIFACT_ID: ${{ needs.darwin.outputs.artifact_id }}
+        ARTIFACT_DIGEST: ${{ needs.darwin.outputs.artifact_digest }}
+      run: python3 scripts/run-v3-release-ci.py download --artifact-id "$ARTIFACT_ID" --digest "$ARTIFACT_DIGEST" --output "$RUNNER_TEMP/bundle-darwin"
+    - name: Import immutable windows bundle
+      env:
+        ARTIFACT_ID: ${{ needs.windows.outputs.artifact_id }}
+        ARTIFACT_DIGEST: ${{ needs.windows.outputs.artifact_digest }}
+      run: python3 scripts/run-v3-release-ci.py download --artifact-id "$ARTIFACT_ID" --digest "$ARTIFACT_DIGEST" --output "$RUNNER_TEMP/bundle-windows"
+    - name: Import immutable freebsd bundle
+      env:
+        ARTIFACT_ID: ${{ needs.freebsd.outputs.artifact_id }}
+        ARTIFACT_DIGEST: ${{ needs.freebsd.outputs.artifact_digest }}
+      run: python3 scripts/run-v3-release-ci.py download --artifact-id "$ARTIFACT_ID" --digest "$ARTIFACT_DIGEST" --output "$RUNNER_TEMP/bundle-freebsd"
+    - name: Execute all 18 gates against the selected archive
+      env:
+        ARCHIVE_SHA256: ${{ needs.prepare.outputs.sha256 }}
+      run: python3 scripts/run-v3-release-gates.py --output "$RUNNER_TEMP/full"   --selected-archive "$RUNNER_TEMP/selected/"libhttpserver-*.tar.gz
+        --selected-sha256 "$ARCHIVE_SHA256"   --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --compiler clang++ --cc clang
+        --make make --jobs 2   --python "$RUNNER_TEMP/clients/bin/python" --node "$(command -v node)" --go "$(command -v go)"   --h2spec
+        "$RUNNER_TEMP/h2spec-src/h2spec" --tshark "$(command -v tshark)"   --runner-python "$RUNNER_TEMP/runner-python/bin/python" --runner-dir
+        "$RUNNER_TEMP/quic-runner"   --server-image "libhttpserver-ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --docker-direct-routing-compat   --pkg-config-dir
+        /usr/lib/x86_64-linux-gnu/pkgconfig --pkg-config-dir /usr/share/pkgconfig --isolated-public-network
+    - name: Actual tag readiness and content-bound authorization
+      env:
+        PUBLICATION: ${{ inputs.publication || false }}
+        PRODUCER_DARWIN_ID: ${{ needs.darwin.outputs.artifact_id }}
+        PRODUCER_DARWIN_DIGEST: ${{ needs.darwin.outputs.artifact_digest }}
+        PRODUCER_WINDOWS_ID: ${{ needs.windows.outputs.artifact_id }}
+        PRODUCER_WINDOWS_DIGEST: ${{ needs.windows.outputs.artifact_digest }}
+        PRODUCER_FREEBSD_ID: ${{ needs.freebsd.outputs.artifact_id }}
+        PRODUCER_FREEBSD_DIGEST: ${{ needs.freebsd.outputs.artifact_digest }}
+      run: |-
+        args=()
+        if [ "$PUBLICATION" = true ]; then args+=(--publish --artifact-id "$SELECTED_ID"); fi
+        python3 scripts/run-v3-release-ci.py accept --manifest "$RUNNER_TEMP/full/manifest.json" --selection "$RUNNER_TEMP/selected/selected.json"   --platform-bundle "$RUNNER_TEMP/bundle-darwin/Darwin.tar.gz" --platform-bundle "$RUNNER_TEMP/bundle-windows/Windows.tar.gz"   --platform-bundle "$RUNNER_TEMP/bundle-freebsd/FreeBSD.tar.gz" --output "$RUNNER_TEMP/acceptance" "${args[@]}"
+    - id: authorization
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: release-readiness
+        path: |-
+          ${{ runner.temp }}/acceptance/authorization.json
+          ${{ runner.temp }}/acceptance/accepted-manifest.json
+          ${{ runner.temp }}/acceptance/validation.json
+        retention-days: 30
+        if-no-files-found: error
+    - if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: full-gate-failure-evidence
+        path: |-
+          ${{ runner.temp }}/full
+          ${{ runner.temp }}/prerequisites/preparation.json
+          ${{ runner.temp }}/prerequisites/*.log
+          ${{ runner.temp }}/prerequisites-ci.log
+        retention-days: 30
+        if-no-files-found: warn
+        compression-level: 0
+  publish:
+    runs-on: ubuntu-24.04
+    needs:
+    - prepare
+    - darwin
+    - windows
+    - freebsd
+    - full
+    if: inputs.publication == true && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SELECTED_ID: ${{ needs.prepare.outputs.artifact_id }}
+      SELECTED_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
+      GOFLAGS: -mod=readonly
+      SOURCE_COMMIT: ${{ needs.prepare.outputs.commit }}
+      SOURCE_VERSION: ${{ needs.prepare.outputs.version }}
+      ARCHIVE_SHA256: ${{ needs.prepare.outputs.sha256 }}
+      AUTHORIZATION_ID: ${{ needs.full.outputs.authorization_id }}
+      AUTHORIZATION_DIGEST: ${{ needs.full.outputs.authorization_digest }}
+      REQUIRED_RESULTS: '{"prepare":"${{ needs.prepare.result }}","darwin":"${{ needs.darwin.result }}","windows":"${{ needs.windows.result
+        }}","freebsd":"${{ needs.freebsd.result }}","full":"${{ needs.full.result }}"}'
+      PRODUCER_DARWIN_ID: ${{ needs.darwin.outputs.artifact_id }}
+      PRODUCER_DARWIN_DIGEST: ${{ needs.darwin.outputs.artifact_digest }}
+      PRODUCER_WINDOWS_ID: ${{ needs.windows.outputs.artifact_id }}
+      PRODUCER_WINDOWS_DIGEST: ${{ needs.windows.outputs.artifact_digest }}
+      PRODUCER_FREEBSD_ID: ${{ needs.freebsd.outputs.artifact_id }}
+      PRODUCER_FREEBSD_DIGEST: ${{ needs.freebsd.outputs.artifact_digest }}
+    steps:
+    - name: Publish accepted archive without candidate execution
+      run: |-
+        python3 - <<'PYTHON'
+        import hashlib
+        from datetime import datetime
+        import json
+        import os
+        from pathlib import Path, PurePosixPath, PureWindowsPath
+        import re
+        import stat
+        import subprocess
+        import zipfile
+
+
+        def need(condition, message):
+            if not condition:
+                raise ValueError(message)
+
+
+        def file_digest(path):
+            value=hashlib.sha256()
+            with Path(path).open('rb') as stream:
+                for chunk in iter(lambda:stream.read(1024*1024),b''):
+                    value.update(chunk)
+            return value.hexdigest()
+
+
+        def canonical(document):
+            return hashlib.sha256(json.dumps(document,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+
+        def publish_checked(authorization, expected, archive, manifest, tag_commit, publication):
+            need(expected['event'] in ('push','workflow_dispatch'), 'untrusted publication event')
+            need(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-(?:rc|alpha|beta)[0-9]+)?',expected['tag']), 'invalid tag')
+            need(authorization.get('schema_version') == 1 and authorization.get('binding') == expected, 'authorization identity differs')
+            need(canonical(manifest) == authorization['manifest_sha256'], 'accepted manifest changed')
+            need(tag_commit == expected['source_commit'] == manifest['release_artifact']['source']['head'], 'tag/source commit changed')
+            need(file_digest(archive) == expected['archive_sha256']
+                 == manifest['release_artifact']['archive']['sha256'], 'selected archive changed')
+            need(expected['producer_ids'] == ['FreeBSD','Darwin','Windows'] and
+                 set(expected['producer_artifacts']) == {'freebsd','darwin','windows'}, 'producer identities missing')
+            publication()
+
+
+        def api(endpoint):
+            return json.loads(subprocess.check_output(['gh','api',endpoint],text=True))
+
+
+        def download(artifact_id, expected_digest, directory, expected, run):
+            need(re.fullmatch(r'[1-9][0-9]*',artifact_id), 'invalid artifact ID')
+            endpoint='repos/'+expected['repository']+'/actions/artifacts/'+artifact_id
+            metadata=api(endpoint)
+            need(str(metadata['id']) == artifact_id and metadata['expired'] is False, 'wrong/expired artifact')
+            need(str(metadata['workflow_run']['id']) == expected['run_id'] and metadata['workflow_run']['head_sha'] == expected['workflow_source'], 'artifact source/run differs')
+            need(datetime.fromisoformat(metadata['created_at']) >= datetime.fromisoformat(run['run_started_at']), 'artifact from earlier run attempt')
+            archive=directory.with_suffix('.zip')
+            with archive.open('xb') as output:
+                subprocess.run(['gh','api',endpoint+'/zip'],stdout=output,check=True)
+            digest='sha256:'+file_digest(archive)
+            need(digest == metadata['digest'] and digest == 'sha256:'+expected_digest.removeprefix('sha256:'), 'artifact ZIP digest differs')
+            with zipfile.ZipFile(archive) as stream:
+                members=stream.infolist(); names=set()
+                need(len(members)<20004 and sum(m.file_size for m in members)<9*1024**3, 'artifact size bound')
+                for member in members:
+                    name=PurePosixPath(member.filename)
+                    need(not name.is_absolute() and not PureWindowsPath(member.filename).drive and '..' not in name.parts and '\\' not in member.filename
+                         and member.filename not in names and not stat.S_ISLNK(member.external_attr>>16), 'unsafe artifact member')
+                    names.add(member.filename)
+                directory.mkdir(); stream.extractall(directory)
+
+
+        def main():
+            expected=dict(repository=os.environ['GITHUB_REPOSITORY'],run_id=os.environ['GITHUB_RUN_ID'],run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],
+                workflow_source=os.environ['GITHUB_SHA'],source_commit=os.environ['SOURCE_COMMIT'],tag=os.environ['SOURCE_VERSION'],
+                archive_sha256=os.environ['ARCHIVE_SHA256'],event=os.environ['GITHUB_EVENT_NAME'],artifact_id=os.environ['SELECTED_ID'],
+                producer_ids=['FreeBSD','Darwin','Windows'],producer_artifacts={name:dict(id=os.environ['PRODUCER_'+name.upper()+'_ID'],digest=os.environ['PRODUCER_'+name.upper()+'_DIGEST']) for name in ('freebsd','darwin','windows')})
+            need(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',expected['repository']), 'invalid repository')
+            need(re.fullmatch(r'[0-9a-f]{40}',expected['source_commit']), 'invalid commit')
+            need(all(value=='success' for value in json.loads(os.environ['REQUIRED_RESULTS']).values()), 'required producer not successful')
+            run=api('repos/'+expected['repository']+'/actions/runs/'+expected['run_id']+'/attempts/'+expected['run_attempt'])
+            need(str(run['run_attempt'])==expected['run_attempt'] and run['repository']['full_name']==expected['repository'] and run['head_sha']==expected['workflow_source'], 'workflow attempt/source changed')
+            root=Path(os.environ['RUNNER_TEMP'])
+            download(expected['artifact_id'],os.environ['SELECTED_DIGEST'],root/'selected',expected,run)
+            download(os.environ['AUTHORIZATION_ID'],os.environ['AUTHORIZATION_DIGEST'],root/'authorized',expected,run)
+            selected=json.loads((root/'selected/selected.json').read_text())
+            need(selected['commit']==expected['source_commit'] and selected['version']==expected['tag'] and selected['sha256']==expected['archive_sha256'], 'selected descriptor differs')
+            need(Path(selected['archive']).name==selected['archive'], 'unsafe archive filename')
+            authorization=json.loads((root/'authorized/authorization.json').read_text())
+            manifest=json.loads((root/'authorized/accepted-manifest.json').read_text())
+            tag=api('repos/'+expected['repository']+'/git/ref/tags/'+expected['tag'])['object']
+            for _ in range(5):
+                if tag['type']=='commit': break
+                need(tag['type']=='tag', 'unexpected tag target')
+                tag=api('repos/'+expected['repository']+'/git/tags/'+tag['sha'])['object']
+            need(tag['type']=='commit','unresolved tag')
+            def create_release():
+                argv=['gh','release','create',expected['tag'],'--repo',expected['repository'],'--verify-tag',
+                      '--target',expected['source_commit'],'--title','libhttpserver '+expected['tag'],'--generate-notes']
+                if '-' in expected['tag']: argv.append('--prerelease')
+                subprocess.run(argv+[str(root/'selected'/selected['archive'])],check=True)
+            publish_checked(authorization,expected,root/'selected'/selected['archive'],manifest,tag['sha'],create_release)
+
+
+        main()
+
+        PYTHON

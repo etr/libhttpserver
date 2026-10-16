@@ -8,6 +8,18 @@ adapters. Public TLS/H2/H3, credential and throughput/latency stages now execute
 their installed-package adapters in both TLS modes with independent receipt
 validation. Private fixtures remain supporting evidence.
 
+## CI selected-archive execution
+
+The CI integration in [v3-ci.md](v3-ci.md) selects one immutable archive,
+produces portable FreeBSD/Darwin/Windows bundles, then executes the existing
+18-gate Linux inventory against that archive. Original platform receipts and
+referenced bytes are retained; a scoped catalog resolver validates them without
+foreign execution. Full readiness authorizes publication only after the actual
+validator accepts every required gate and platform. Existing fresh-archive
+callers and the separate release-owner pre-tag prerequisite remain supported.
+Validation-only PR/dispatch runs exercise the same acceptance path without
+creating tags or releases. Historical evidence below remains historical.
+
 ## Complete local implementation inventory (2026-10-14)
 
 The fresh `build/task185-final-19` inventory passes all **18 mandatory local

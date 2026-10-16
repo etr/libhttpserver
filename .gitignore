@@ -169,3 +169,9 @@ __pycache__/
 
 # v3 source-layout compiled implementation contract checker.
 !scripts/check-v3-compiled-operations.py
+
+# v3 CI selected-archive publication and portable platform contracts.
+!scripts/run-v3-release-ci.py
+!scripts/test-v3-ci-workflows.py
+!test/integ/release_ci_test.py
+!test/integ/release_platform_bundle_test.py

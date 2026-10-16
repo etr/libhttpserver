@@ -168,7 +168,7 @@ std::uint32_t quic_codec_fuzz_input(std::span<const std::uint8_t> input) {
         require(hd::decode_quic_varint(out).value == scalar.value);
         for (std::size_t width = 1; width <= 4; ++width) {
             hd::encode_quic_packet_number(scalar.value, width, out);
-            hd::quic_cursor c(std::span(out).first(width));
+            hd::quic_cursor c{std::span(out).first(width)};
             require(hd::reconstruct_quic_packet_number(c.fixed(width), width, scalar.value).code == hd::quic_codec_code::ok);
         }
     }
