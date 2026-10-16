@@ -84,32 +84,23 @@ class ReleaseAttempt:
             except Exception as error:
                 self.manifest['client_packages'] = {'failure': str(error)}
         self.manifest['source'] = release_identity.source_identity(self.root)
-        bootstrap_env = dict(self.env)
-        bootstrap_env.pop('V3_TLS_CFLAGS', None); bootstrap_env.pop('V3_TLS_LIBS', None)
-        self.command(cmd, ['bash', self.root / 'bootstrap'], self.root, bootstrap_env)
-        dist = self.output / 'distribution-build'; dist.mkdir()
-        self.command(cmd, ['bash', self.root / 'configure', '--enable-v3-tls=no', '--disable-examples'], dist, bootstrap_env)
-        self.command(cmd, [self.args.make, 'dist'], dist, bootstrap_env)
-        archives = list(dist.glob('libhttpserver-*.tar.gz'))
-        self.gate.need(len(archives) == 1, 'missing/ambiguous fresh distribution archive')
-        self.source = self.gate.extract_archive(archives[0], self.output / 'extracted')
-        archive_files = release_identity.source_files(self.source)
-        snapshot = self.manifest['source']['files_sha256']
-        transformations = checks.verify_snapshot_packaging(self.root, snapshot, self.source)
-        bundle = {}
-        # Repository specifications are declared tooling inputs, never borrowed libraries.
-        candidates = [self.root / '.gitignore'] + list((self.root / 'specs').rglob('*.md')) + list((self.root / 'docs').rglob('*.md'))
-        for path in candidates:
-            name = path.relative_to(self.root).as_posix()
-            destination = self.source / name
-            if not destination.exists():
-                self.gate.need(snapshot.get(name) == release_identity.sha256(path), 'tooling input not from selected snapshot: ' + name)
-                destination.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(path, destination)
-                bundle[name] = release_identity.sha256(destination)
-        files = release_identity.source_files(self.source)
-        identity = dict(schema_version=1, source_root=str(self.source), source=self.manifest['source'],
-                        archive=self.gate.artifact(archives[0]), files_sha256=files, tooling_bundle=bundle,
-                        packaged_files_sha256=archive_files, configured_transformations=transformations)
+        selected = getattr(self.args, 'selected_archive', None)
+        if selected:
+            archives = [Path(selected).resolve()]
+            expected_sha256 = self.args.selected_sha256
+        else:
+            bootstrap_env = dict(self.env)
+            bootstrap_env.pop('V3_TLS_CFLAGS', None); bootstrap_env.pop('V3_TLS_LIBS', None)
+            self.command(cmd, ['bash', self.root / 'bootstrap'], self.root, bootstrap_env)
+            dist = self.output / 'distribution-build'; dist.mkdir()
+            self.command(cmd, ['bash', self.root / 'configure', '--enable-v3-tls=no', '--disable-examples'], dist, bootstrap_env)
+            self.command(cmd, [self.args.make, 'dist'], dist, bootstrap_env)
+            archives = list(dist.glob('libhttpserver-*.tar.gz'))
+            self.gate.need(len(archives) == 1, 'missing/ambiguous fresh distribution archive')
+            expected_sha256 = self.gate.digest(archives[0])
+        from release_ci import selected_archive
+        identity = selected_archive(self.root, self.manifest['source'], archives[0], expected_sha256, self.output / 'extracted')
+        self.source = Path(identity['source_root'])
         path = self.output / 'artifact-identity.json'; self.gate.save(path, identity)
         self.env['V3_RELEASE_IDENTITY'] = str(path)
         self.manifest['release_artifact'] = identity

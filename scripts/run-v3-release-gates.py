@@ -86,7 +86,7 @@ def validate_inventory(document):
     need(document == inventory_document(), 'missing/duplicated/changed required gate or unknown exclusion')
 
 
-def verify_receipt(receipt, identity, public=False):
+def verify_receipt(receipt, identity, public=False, verify=verify_files):
     need(isinstance(receipt, dict) and receipt.get('status') == 'passed', 'missing/failed required receipt')
     need(receipt.get('identity') == identity and identity, 'historical/wrong archive, source, TLS or sanitizer identity')
     counts = receipt.get('counts', {})
@@ -94,7 +94,7 @@ def verify_receipt(receipt, identity, public=False):
          'missing/malformed counts')
     need(counts['tests'] > 0 and counts['checks'] > 0 and counts['successes'] == counts['checks']
          and counts['failures'] == counts['skipped'] == 0, 'empty/failed/skipped required receipts')
-    verify_files(receipt.get('artifacts', []))
+    verify(receipt.get('artifacts', []))
     if public:
         need(receipt.get('kind') == 'installed public capability' and
              set(receipt.get('witnesses', [])) >= {'tls', 'h2', 'h3', 'credentials'},
@@ -214,11 +214,21 @@ def verify_local_receipts(manifest):
 
 def verify_gate_rows(manifest, rows):
     for row in rows:
-        verify_files(row['artifacts'])
+        verify = verify_files
+        if row.get('portable_bundle'):
+            need(row['id'] in PLATFORMS, 'portable resolver is restricted to platform records')
+            from release_platform import Catalog, validate_origin
+            verify_files([row['portable_catalog']])
+            catalog = Catalog(Path(row['portable_bundle']))
+            original = json.loads((catalog.directory / 'receipt.json').read_text())
+            need({k: v for k, v in row.items() if k not in ('portable_bundle', 'portable_catalog')} == original, 'platform envelope changed')
+            validate_origin(ROOT, row, catalog)
+            verify = catalog.verify_files
+        verify(row['artifacts'])
         expected = expected_identity(manifest, row['id'])
         need(row.get('identity') == expected, 'gate does not belong to selected packaged release')
         need(row.get('receipt', {}).get('gate') == row['id'], 'wrong required gate receipt')
-        verify_receipt(row.get('receipt'), expected, public=row['id'] == 'public-capabilities')
+        verify_receipt(row.get('receipt'), expected, public=row['id'] == 'public-capabilities', verify=verify)
 
 
 def check_tag_ready(manifest):
@@ -245,10 +255,19 @@ def import_platform_receipts(manifest, paths):
         manifest['platforms'] = [receipt if r['id'] == name else r for r in manifest['platforms']]
 
 
+def import_platform_bundles(manifest, paths, output):
+    from release_platform import unpack, import_bundle
+    for index, path in enumerate(paths):
+        catalog = unpack(path, output / 'imported-platforms' / str(index))
+        import_bundle(ROOT, manifest, catalog, expected_identity(manifest, catalog.platform))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check-tag-ready', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--selected-archive', type=Path)
+    parser.add_argument('--selected-sha256')
     parser.add_argument('--provider-prefix', type=Path)
     parser.add_argument('--compiler')
     parser.add_argument('--cc')
@@ -261,14 +280,18 @@ def main(argv=None):
     parser.add_argument('--prerequisite-prefix', type=Path, action='append', default=[])
     parser.add_argument('--pkg-config-dir', type=Path, action='append', default=[])
     parser.add_argument('--platform-receipt', type=Path, action='append', default=[])
+    parser.add_argument('--platform-bundle', type=Path, action='append', default=[])
     parser.add_argument('--tool-artifact', type=Path, action='append', default=[])
     parser.add_argument('--docker-direct-routing-compat', action='store_true')
     parser.add_argument('--isolated-public-network', action='store_true')
     args = parser.parse_args(argv)
+    if bool(args.selected_archive) != bool(args.selected_sha256):
+        parser.error('--selected-archive and --selected-sha256 must be supplied together')
     if args.check_tag_ready:
         try:
             manifest = read_json(args.check_tag_ready)
             import_platform_receipts(manifest, args.platform_receipt)
+            import_platform_bundles(manifest, args.platform_bundle, args.check_tag_ready.parent)
             check_tag_ready(manifest)
             print('PASS: full release inventory verified; tag prerequisite satisfied')
             return 0
@@ -293,6 +316,7 @@ def main(argv=None):
         ReleaseAttempt(args, sys.modules[__name__], manifest).execute()
         manifest['artifact_identity_path'] = str(args.output / 'artifact-identity.json')
         import_platform_receipts(manifest, args.platform_receipt)
+        import_platform_bundles(manifest, args.platform_bundle, args.output)
         manifest['local_passed'] = local_passed(manifest)
         if manifest['local_passed']:
             try:

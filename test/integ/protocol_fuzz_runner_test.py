@@ -139,6 +139,50 @@ output.chmod(0o755)
                 self.assertTrue(list((build / target / 'seeds').glob('*.seed')))
                 self.assertTrue((build / target / 'reproduce.sh').is_file())
 
+    def test_seed_and_corpus_arguments_reject_invalid_inputs_before_compilation(self):
+        for seed in ('0', '-1', '4294967296', '$(touch marker)', '12x'):
+            with self.subTest(seed=seed), tempfile.TemporaryDirectory() as build:
+                result = subprocess.run(['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                    '--build-dir', build, '--seed', seed, '--compiler', '/missing/compiler'],
+                    capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn('invalid fuzz seed', result.stderr)
+
+    def test_restored_corpus_is_merged_without_following_links_or_overwriting_seeds(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            location = pathlib.Path(directory)
+            compiler = location / 'compiler'
+            compiler.write_text("#!/usr/bin/env python3\nimport pathlib,sys\n"
+                "if '--version' in sys.argv: print('recorder'); sys.exit()\n"
+                "p=pathlib.Path(sys.argv[sys.argv.index('-o')+1]); "
+                "p.write_text('#!/bin/sh\\nexit 0\\n'); p.chmod(0o755)\n")
+            compiler.chmod(0o755)
+            corpus = location / 'corpus'
+            (corpus / 'http1_head').mkdir(parents=True)
+            restored = corpus / 'http1_head' / 'extra'
+            restored.write_bytes(b'unique restored input')
+            build = location / 'build'
+            result = subprocess.run(['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                '--build-dir', str(build), '--compiler', str(compiler), '--targets', 'http1_head',
+                '--seed', '987', '--corpus-dir', str(corpus)], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            inputs = [p.read_bytes() for p in (corpus / 'http1_head').iterdir()]
+            self.assertIn(b'unique restored input', inputs)
+            for fixture in (ROOT / 'test/conformance/http1').glob('*.wire'):
+                self.assertIn(fixture.read_bytes(), inputs)
+            reproduction = (build / 'http1_head/reproduce.sh').read_text()
+            self.assertIn('-seed=987', reproduction)
+            self.assertIn(str(corpus / 'http1_head'), reproduction)
+            restored.unlink()
+            restored.symlink_to(ROOT / 'configure.ac')
+            bad = subprocess.run(['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                '--build-dir', str(location / 'bad'), '--compiler', str(compiler),
+                '--targets', 'http1_head', '--corpus-dir', str(corpus)],
+                capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(bad.returncode, 0)
+            self.assertIn('symlink', bad.stderr)
+
     def test_requested_unavailable_compiler_fails(self):
         with tempfile.TemporaryDirectory() as build:
             result = subprocess.run(['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),

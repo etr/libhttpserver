@@ -2,10 +2,10 @@ name: "Verify Build"
 
 on:
   push:
-    branches: [master]
+    branches: [master, v3]
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: [master]
+    branches: [master, v3]
   schedule:
     - cron: '0 0 * * 0'
 
@@ -15,7 +15,22 @@ permissions:
   contents: read
 
 jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.source.outputs.native }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - id: source
+        run: |
+          if grep -q 'libhttpserver_v3core_la_SOURCES' src/Makefile.am; then
+            echo 'native=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'native=false' >> "$GITHUB_OUTPUT"
+          fi
   verify:
+    needs: source
+    if: needs.source.outputs.native == 'false'
     name: Verify
     runs-on: ${{ matrix.os }}
     env:

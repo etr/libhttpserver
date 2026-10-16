@@ -333,7 +333,7 @@ check-release-notes:
 # exit 0 if doxygen is not installed.
 check-doxygen:
 	@echo "=== check-doxygen: enforce TASK-043 zero-warning invariant ==="
-	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-doxygen.sh
+	+@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-doxygen.sh
 
 # TASK-044: SOVERSION acceptance gate. Stages a clean DESTDIR install and
 # asserts that the v3.0 on-disk SONAME layout is correct (libhttpserver.so.3
@@ -620,3 +620,8 @@ check-v3-compiled-operations: $(top_builddir)/src/libhttpserver.la
 .PHONY: check-v3-compiled-operations
 
 EXTRA_DIST += docs/v3-protocol-limits.md scripts/check-v3-protocol-limits.py test/installed/protocol_limits_consumer.cpp
+
+EXTRA_DIST += scripts/run-v3-release-ci.py scripts/lib/release_ci.py scripts/lib/release_platform.py scripts/test-v3-ci-workflows.py
+EXTRA_DIST += .github/workflows/v3-release-acceptance.yml
+
+EXTRA_DIST += docs/v3-ci.md
