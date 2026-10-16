@@ -18,17 +18,60 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/v3-cleanup-contracts"
-          python3 - <<'PYTHON'
-          import hashlib, json, os, subprocess, sys
+          cat > "$RUNNER_TEMP/v3-cleanup-command-contracts.py" <<'PYTHON'
+          import hashlib, importlib.util, json, os, subprocess, sys, unittest
           from pathlib import Path
           source = Path.cwd()
+          output = Path(os.environ['RUNNER_TEMP'], 'v3-cleanup-contracts')
           paths = ('scripts/lib/package_commands.py', 'scripts/test-v3-installed-consumer.py')
           receipt = dict(source_sha=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                          python=sys.version, hashes={p: hashlib.sha256((source / p).read_bytes()).hexdigest() for p in paths})
-          Path(os.environ['RUNNER_TEMP'], 'v3-cleanup-contracts/source.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          (output / 'source.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          spec = importlib.util.spec_from_file_location('native_contracts', source / paths[1])
+          contracts = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(contracts)
+          snapshot = contracts.commands._process_snapshot
+          failures = []
+          current_test = None
+          def observed_snapshot(deadline):
+              try:
+                  return snapshot(deadline)
+              except Exception as error:
+                  item = dict(test=current_test, error=str(error))
+                  frame = error.__traceback__
+                  while frame:
+                      if frame.tb_frame.f_code.co_name == '_process_snapshot':
+                          values = frame.tb_frame.f_locals
+                          item.update(line=values.get('line'), fields=values.get('fields'))
+                          buffer = values.get('output')
+                          if buffer is not None:
+                              data = buffer.getvalue()
+                              path = output / ('snapshot-%04d.log' % len(failures))
+                              path.write_bytes(data)
+                              item.update(log=path.name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+                      frame = frame.tb_next
+                  failures.append(item)
+                  (output / 'snapshot-failures.json').write_text(json.dumps(failures, indent=2) + '\n')
+                  raise
+          # Retain parser evidence without replacing discovery, signals, or errors.
+          contracts.commands._process_snapshot = observed_snapshot
+          class Result(unittest.TextTestResult):
+              def startTest(self, test):
+                  global current_test
+                  current_test = test.id()
+                  super().startTest(test)
+          suite = unittest.defaultTestLoader.loadTestsFromTestCase(contracts.CommandsTest)
+          expected = [test.id() for test in suite]
+          result = unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
+          report = dict(expected=expected, tests_run=result.testsRun, successful=result.wasSuccessful(),
+                        failures=[test.id() for test, _ in result.failures],
+                        errors=[test.id() for test, _ in result.errors],
+                        skipped=[dict(test=test.id(), reason=reason) for test, reason in result.skipped])
+          (output / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
+          raise SystemExit(not result.wasSuccessful())
           PYTHON
           set +e
-          python3 scripts/test-v3-installed-consumer.py CommandsTest 2>&1 | tee "$RUNNER_TEMP/v3-cleanup-contracts/commands-test.log"
+          python3 "$RUNNER_TEMP/v3-cleanup-command-contracts.py" 2>&1 | tee "$RUNNER_TEMP/v3-cleanup-contracts/commands-test.log"
           status=${PIPESTATUS[0]}
           printf '%s\n' "$status" > "$RUNNER_TEMP/v3-cleanup-contracts/exit-status"
           exit "$status"
@@ -166,7 +209,16 @@ jobs:
           assert receipt['hashes'] == binding['hashes'] == hashes
           assert receipt['python'] == binding['python']
           assert (contracts / 'exit-status').read_text().strip() == '0'
-          assert '\nOK\n' in (contracts / 'commands-test.log').read_text()
+          result = json.loads((contracts / 'result.json').read_text())
+          assert result['successful'] and not result['failures'] and not result['errors']
+          assert result['tests_run'] == len(result['expected']) == 22
+          assert len(set(result['expected'])) == 22
+          expected_skips = {
+              'native_contracts.CommandsTest.test_cleanup_discovery_failure_retains_original_error',
+              'native_contracts.CommandsTest.test_new_live_member_delays_retirement_and_zombies_do_not',
+              'native_contracts.CommandsTest.test_discovery_consumes_cleanup_deadline_without_restarting_wait'}
+          assert len(result['skipped']) == 3
+          assert {item['test'] for item in result['skipped']} == expected_skips
           assert receipt['uname'][0] == 'Darwin'
           assert len(receipt['commands']) == 3
           assert all(item['result'] == 'success' for item in receipt['commands'])

@@ -305,6 +305,7 @@ class CommandsTest(unittest.TestCase):
             for status in (0, 7):
                 with self.subTest(fallback=fallback, status=status):
                     scans.clear()
+                    previous_denials = len(denied)
                     waitid = getattr(os, 'waitid', None) if fallback == 'native' else None
                     platform = 'darwin' if fallback == 'ps' else sys.platform
                     with patch.object(commands, '_process_snapshot', observe), patch.object(os, 'killpg', signal_group):
@@ -318,8 +319,8 @@ class CommandsTest(unittest.TestCase):
                     self.assertEqual(len(data), record['bytes'])
                     self.assertEqual(hashlib.sha256(data).hexdigest(), record['sha256'])
                     self.assertNotIn('error', record)
+                    self.assertGreater(len(denied), previous_denials, 'each case must reach owned-zombie EPERM')
                     self.assertGreaterEqual(len(scans), 3, 'permission proof must retain stable retirement scans')
-        self.assertEqual(6, len(denied))
 
     def zombie_tree(self):
         tree = commands._CommandTree(self.command('pass'), self.root, os.environ)
@@ -513,7 +514,7 @@ class CommandsTest(unittest.TestCase):
             if argv[0] in ('/bin/ps', '/usr/bin/ps'):
                 code = ("import subprocess; "
                         f"data=subprocess.check_output({argv!r}).decode('ascii'); "
-                        "print('\\n'.join(line + '>ACJ' for line in data.splitlines()))")
+                        "print('\\n'.join(line.rstrip() + '>ACJ' for line in data.splitlines()))")
                 argv = self.command(code)
             return popen(argv, *args, **kwargs)
         with patch.object(sys, 'platform', 'darwin'), patch.object(os, 'waitid', None, create=True), patch.object(subprocess, 'Popen', launch):
