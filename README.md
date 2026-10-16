@@ -766,9 +766,10 @@ See [response_sources.cpp](examples/response_sources.cpp).
 
 Configure `options.peer_policy()` before construction or use
 `server.peer_policy()` at runtime. The policy is enabled by default and starts
-in `peer_policy_mode::accept_all`: unmatched peers are admitted. In
-`reject_all`, unmatched peers are refused. In either mode a matching allow
-entry takes precedence over a deny entry. Disabled policy admits all peers.
+in `peer_policy_mode::accept_all`: unmatched peers are admitted, and a matching
+allow entry takes precedence over a deny entry. In `reject_all`, a peer is
+admitted only if it matches an allow entry and no deny entry. Disabled policy
+admits all peers.
 
 Runtime mutations are synchronized and callable from handlers. `deny(pattern)`,
 `allow(pattern)`, `remove_denied(pattern)` and `remove_allowed(pattern)` return
@@ -786,10 +787,11 @@ http::outcome restrict_peers(srv::native_server& server) {
 }
 ```
 
-Patterns accept exact IPv4/IPv6 addresses, CIDR and trailing IPv4 wildcards
-such as `192.168.*.*`. IPv6 uses CIDR rather than wildcard components. Keep
-wildcards trailing; mapped IPv6 CIDR is rejected. Peer metadata is the transport
-peer, not an address asserted by an HTTP forwarding header. Admission decisions
+Patterns accept exact IPv4/IPv6 addresses, CIDR and a single final-octet IPv4
+wildcard such as `192.168.1.*`. Use CIDR, such as `192.168.0.0/16`, for larger
+subnets. IPv6 uses CIDR rather than wildcard components; mapped IPv6 CIDR is
+rejected. Peer metadata is the transport peer, not an address asserted by an
+HTTP forwarding header. Admission decisions
 are observable through `accept_decision`; live policy also participates in
 request dispatch. See [operations.cpp](examples/operations.cpp).
 
