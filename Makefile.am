@@ -623,5 +623,7 @@ EXTRA_DIST += docs/v3-protocol-limits.md scripts/check-v3-protocol-limits.py tes
 
 EXTRA_DIST += scripts/run-v3-release-ci.py scripts/lib/release_ci.py scripts/lib/release_platform.py scripts/test-v3-ci-workflows.py
 EXTRA_DIST += .github/workflows/v3-release-acceptance.yml
+EXTRA_DIST += .github/workflows/v3-native.yml .github/workflows/changelog-check.yml
+EXTRA_DIST += .github/workflows/codeql-analysis.yml .github/workflows/verify-build.yml .github/workflows/release.yml
 
 EXTRA_DIST += docs/v3-ci.md
