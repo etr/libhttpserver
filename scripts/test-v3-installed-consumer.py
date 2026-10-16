@@ -507,6 +507,61 @@ class CommandsTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'cleanup.*snapshot'):
                 self.runner(self.command('pass'), self.root, os.environ, timeout=2)
 
+    def ps_output(self, data):
+        popen = subprocess.Popen
+        def launch(argv, *args, **kwargs):
+            if argv[0] in ('/bin/ps', '/usr/bin/ps'):
+                argv = self.command(f'import os; os.write(1, {data.encode("ascii")!r})')
+            return popen(argv, *args, **kwargs)
+        return patch.object(subprocess, 'Popen', launch)
+
+    @unittest.skipUnless(os.name == 'posix', 'Darwin unknown scheduling state')
+    def test_ps_unknown_state_preserves_complete_numeric_membership(self):
+        # Captured native rows: the unknown process belongs to a different group.
+        data = ' 2255  2178  2255 Z<  \n 2258   910   892 ?<  \n'
+        with patch.object(sys, 'platform', 'darwin'), self.ps_output(data):
+            members = commands._process_snapshot(time.monotonic() + 2)
+        self.assertEqual({2255: (2178, 2255, 'Z'), 2258: (910, 892, '?')}, members)
+
+    @unittest.skipUnless(os.name == 'posix', 'unknown owned process cannot prove retirement')
+    def test_ps_unknown_owned_member_cannot_justify_permission_denial(self):
+        for unknown in ('leader', 'descendant'):
+            with self.subTest(unknown=unknown):
+                tree = self.zombie_tree()
+                pid = tree.child.pid
+                data = f'{pid} {os.getpid()} {pid} ' + ('?<' if unknown == 'leader' else 'Z') + '\n'
+                if unknown == 'descendant':
+                    data += f'{pid + 1} {pid} {pid} ?<\n'
+                with patch.object(sys, 'platform', 'darwin'), patch.object(os, 'waitid', None, create=True), self.ps_output(data):
+                    with patch.object(os, 'killpg', side_effect=PermissionError(1, 'unknown group denied')):
+                        with self.assertRaisesRegex(PermissionError, 'unknown group denied'):
+                            tree._kill_group(time.monotonic() + 2)
+                self.assertIsNone(tree.child.returncode, 'unknown state cannot reap the ownership anchor')
+
+    @unittest.skipUnless(os.name == 'posix', 'strict ps snapshot structure')
+    def test_ps_unknown_state_does_not_relax_snapshot_validation(self):
+        for data in ('pid 910 892 ?<', '2258 parent 892 ?<', '2258 910 group ?<',
+                     '-1 910 892 ?<', '0 910 892 ?<', '2258 -1 892 ?<', '2258 910 -1 ?<',
+                     '2258 910 ?<', '2258 910 892 ?< command', '2258 910 892 ?Q',
+                     '2258 910 892 !<', '2258 910 892 ?<\n2258 910 892 Z'):
+            with self.subTest(data=data):
+                with patch.object(sys, 'platform', 'darwin'), self.ps_output(data + '\n'):
+                    with self.assertRaisesRegex(RuntimeError, 'snapshot'):
+                        commands._process_snapshot(time.monotonic() + 2)
+
+    @unittest.skipUnless(os.name == 'posix', 'strict ps ownership anchor')
+    def test_ps_unknown_state_cannot_hide_missing_or_changed_leader(self):
+        tree = self.zombie_tree()
+        pid = tree.child.pid
+        for data in (f'{pid + 1} {pid} {pid} ?<',
+                     f'{pid} {os.getpid() + 1} {pid} ?<', f'{pid} {os.getpid()} 0 ?<'):
+            with self.subTest(data=data):
+                with patch.object(sys, 'platform', 'darwin'), patch.object(os, 'waitid', None, create=True), self.ps_output(data + '\n'):
+                    with patch.object(os, 'killpg') as kill:
+                        with self.assertRaisesRegex(RuntimeError, 'ownership'):
+                            tree._kill_group(time.monotonic() + 2)
+                    kill.assert_not_called()
+
     @unittest.skipUnless(os.name == 'posix', 'documented BSD/macOS state modifiers')
     def test_ps_fallback_accepts_documented_state_modifiers(self):
         popen = subprocess.Popen

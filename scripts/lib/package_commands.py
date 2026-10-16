@@ -261,8 +261,9 @@ def _process_snapshot(deadline):
     for line in output.getvalue().decode('ascii').splitlines():
         _remaining(deadline)
         fields = line.split()
+        # Darwin can report unknown Mach state '?'; retain it as non-retired.
         if (len(fields) != 4 or any(not item.isdigit() for item in fields[:3])
-                or not fields[3] or fields[3][0] not in 'RSDZTWtXxKIPLU'
+                or not fields[3] or fields[3][0] not in 'RSDZTWtXxKIPLU?'
                 or any(flag not in '+<>ACEJLNSsVWX' for flag in fields[3][1:])):
             raise RuntimeError('malformed command process snapshot')
         pid, parent, group = map(int, fields[:3])
