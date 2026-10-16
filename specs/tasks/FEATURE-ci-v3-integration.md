@@ -29,7 +29,7 @@ are unchanged and cannot replace fresh evidence.
 
 Local verification: native TLS-off/on suites (239/270 tests, two documented
 nonlocal backend skips in each), all eleven sanitizer fuzz targets, genuine
-Doxygen/Graphviz, GCC QUIC replay and 99 focused CI/release/fuzz contracts passed.
+Doxygen/Graphviz, GCC QUIC replay and 100 focused CI/release/fuzz contracts passed.
 The fresh Linux installed attempt passed TLS-off but failed TLS-on public TLS at
 unprivileged TCP443 binding. Its unsuccessful receipt remains unchanged. A fresh
 focused public TLS run using the existing isolated network path passed all four

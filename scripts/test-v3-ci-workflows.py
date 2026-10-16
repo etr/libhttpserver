@@ -17,6 +17,19 @@ def workflow(name):
 
 
 class CIWorkflows(unittest.TestCase):
+    def test_freebsd_stages_selected_archive_for_vm_transfer(self):
+        steps = workflow('v3-release-acceptance.yml')['jobs']['freebsd']['steps']
+        run = next(step['run'] for step in steps if 'ci-selected-input' in step.get('run', ''))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            selected = root / 'runner' / 'selected'
+            selected.mkdir(parents=True)
+            (selected / 'selected.json').write_text('selected archive identity')
+            result = subprocess.run(['bash', '-e', '-c', run], cwd=root,
+                env=dict(os.environ, RUNNER_TEMP=str(root / 'runner')), capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / 'build/ci-selected-input/selected.json').read_text(), 'selected archive identity')
+
     def test_release_request_resolver_emits_structured_commit_and_version(self):
         steps = workflow('v3-release-acceptance.yml')['jobs']['prepare']['steps']
         run = next(step['run'] for step in steps if step.get('id') == 'request')

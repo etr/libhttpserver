@@ -220,7 +220,9 @@ jobs:
         persist-credentials: false
     - name: Download immutable selected archive
       run: python3 scripts/run-v3-release-ci.py download --artifact-id "$SELECTED_ID" --digest "$SELECTED_DIGEST" --output "$RUNNER_TEMP/selected"
-    - run: mkdir -p build cp -R "$RUNNER_TEMP/selected" build/ci-selected-input
+    - run: |
+        mkdir -p build
+        cp -R "$RUNNER_TEMP/selected" build/ci-selected-input
     - uses: vmactions/freebsd-vm@c9f815bc7aa0d34c9fdd0619b034a32d6ca7b57e
       with:
         release: '14.3'
