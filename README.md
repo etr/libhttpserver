@@ -10,1955 +10,1242 @@ Copyright (C)  2011-2026  Sebastiano Merlino.
 
 # libhttpserver
 
-![GA: Build Status](https://github.com/etr/libhttpserver/actions/workflows/verify-build.yml/badge.svg)
-[![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
+![GA: Build Status](https://github.com/etr/libhttpserver/actions/workflows/verify-build.yml/badge.svg?branch=v3)
+[![codecov](https://codecov.io/gh/etr/libhttpserver/branch/v3/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/1bd1e8c21f66400fb70e5a5ce357b525)](https://www.codacy.com/gh/etr/libhttpserver/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=etr/libhttpserver&amp;utm_campaign=Badge_Grade)
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/etr)
 
-## Native v3 entry point
-
-The `v3` branch provides the native C++20 API. Start with the
-[v2-to-v3 migration guide](docs/v2-to-v3-migration.md),
-[native API documentation](docs/v3-api.md), and
-[native examples and commands](examples/README.md#native-v3-examples).
-There is no v2 source or ABI compatibility shim. Include native headers such as
-`<httpserver/server/server.hpp>` directly.
-
-| Native capability | Current public availability |
-| --- | --- |
-| HTTP/1.0 and HTTP/1.1 plaintext | Managed and external listeners |
-| WebSocket over HTTP/1.1, HTTP/2 and HTTP/3 | Coroutine upgrade, bounded sessions, RFC8441/RFC9220 Extended CONNECT |
-| TLS / HTTP/2 / HTTP/3 listeners | Certificate and initial mTLS; TCP ALPN `h2`, explicit UDP QUICv1 ALPN `h3`; managed and external loops |
-| Certificate rotation | Public `tls_credentials::replace`; accepted sessions retain immutable selections |
-| TLS-off encrypted listeners | Same declarations; typed `not_supported` before binding |
-
-The [packaged release adapters](docs/v3-packaged-release-adapters.md) bind public
-capability and benchmark receipts to a distribution archive, staged installation
-and selected clients. See the [current capability report](test/installed/task199-capabilities.md).
-
-Build native examples with `./bootstrap`, an out-of-tree configure using
-`CXX=clang++ CXXFLAGS='-std=c++20 -O0 -g'`, `--enable-examples` and
-`--disable-v3-tls`, then `make -j2`. For the optional native provider use
-`--enable-v3-tls` and genuine OpenSSL 3.5.x patch 9 or later as described in
-[the native TLS build guide](docs/native-tls-build.md). Encrypted listeners require
-valid published credentials; HTTP/3 additionally requires explicit UDP configuration.
-The installed library is native-only: TLS-off needs C++20, threads and platform
-socket libraries; TLS-on adds the selected private OpenSSL provider. MHD and
-GnuTLS are no longer build or package prerequisites. Version **3.0.0** uses ELF
-SONAME `libhttpserver.so.3`; ABI-2 and ABI-3 versioned runtime files coexist for
-separate executables. Headers, pkg-config metadata, static archives and the
-unversioned library link retain shared development-package names. Parallel
-development-package installation and same-process ABI coexistence are not promised.
-
-## Legacy v2 reference manual
-
-The rest of this README documents the legacy v2 API and examples.
-
 ## Tl;dr
 
-libhttpserver is a C++20 library for building high-performance RESTful HTTP
-servers on top of [GNU libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/).
-v2.0 is a lambda-first redesign: a working server is ten lines, handlers are
-`std::function`s, responses are value-typed, and every public method is
-thread-safe by contract.
+libhttpserver is a C++20 library for embedding HTTP servers in your application.
+It owns its HTTP/1, HTTP/2, HTTP/3 and WebSocket engines. Handlers are callables:
+return a bounded response value for simple work, or use a coroutine to control
+body admission, streaming and upgrades.
 
 **Features:**
 
-- HTTP/1.1-compatible request parser
-- RESTful-oriented interface
-- Lambda-first handler API; class-form handlers (`http_resource`) when state is shared
-- Value-typed responses with seven factories and fluent `with_*` chaining
-- Cross-platform (Linux, *BSD, macOS, Windows / MSYS2-MinGW)
-- Multiple threading models (internal poll, internal select, thread pool, external loop)
-- IPv6 and dual-stack support
-- Optional TLS (HTTPS) via GnuTLS, including mTLS, SNI, and TLS-PSK
-- Optional Basic and Digest authentication (SHA-256, SHA-512/256, MD5)
-- Optional centralized authentication with path-based skip rules
-- Optional WebSocket support (requires libmicrohttpd built with WebSocket support)
-- Response shapes for every common body: string, file, iovec scatter-gather, pipe streaming, deferred callback, empty, and 401-unauthorized
-- Incremental POST processing (form-urlencoded, multipart/form-data, file uploads)
-- External event-loop integration (`run`, `run_wait`, `get_fdset`, `add_connection`)
-- Daemon introspection (bound port, active connections, listen FD)
-- Turbo mode, TCP_FASTOPEN, suppressed `Date` headers, configurable backlog
-- IP access control with wildcard ranges — deny list (`deny_ip`) and allow list (`allow_ip`), IPv4 & IPv6
-- Architecture contracts you can rely on: threading (DR-008 / §5.1) and error propagation (DR-009 / §5.2)
+- HTTP/1.0 and HTTP/1.1 over TCP, with managed or application-owned event loops.
+- Optional TLS, certificate/SNI stores, initial client authentication and atomic
+  credential rotation through a private OpenSSL provider.
+- HTTP/2 over TLS TCP with ALPN `h2`; HTTP/3 over explicitly configured TLS UDP
+  with QUICv1 and ALPN `h3`.
+- One route table shared by enabled protocols, with named path captures,
+  method sets, extension methods and prefix routes.
+- Pull-based request bodies, backpressured response writers, reusable immutable
+  response definitions and explicit ownership of borrowed/file/pipe sources.
+- Basic and Digest authentication policies, bounded form and multipart adapters,
+  live peer access policies, WebSocket sessions and lifecycle hooks.
+- Hierarchical resource budgets, typed protocol capacities, deadlines,
+  cancellation, graceful drain tickets and bounded diagnostics.
 
-This README is a guided reference: it walks the v2.0 API surface section by
-section. It is comprehensive but not exhaustive — the headers under
-[`src/httpserver/`](src/httpserver/) are the source of truth, and the
-[`examples/`](examples/) tree contains a runnable demonstration of every
-feature.
-
-For a visual mental model, see
-[`docs/architecture/`](docs/architecture/): a **class, relationship &
-filesystem map** and a **request lifecycle & routing flow** diagram
-(Mermaid inline on GitHub, plus richer self-contained HTML pages).
-
-The shortest possible server looks like this:
+Here is a complete plaintext server. Save it as `hello.cpp`; the build and
+consumer commands follow below. It serves `/hello` until you press Enter.
 
 ```cpp
-// Copyright 2026 Sebastiano Merlino
-// libhttpserver hello-world example — the lambda form.
-// Compiles in ten lines including main(), with no http_resource subclass
-// and no raw-pointer ownership. Production code typically qualifies names
-// explicitly; the `using namespace` here is a one-off so this file can
-// document the shortest possible end-to-end demo. See shared_state.cpp
-// for the class-based pattern that is appropriate when handlers must
-// share mutable state.
 #include <httpserver.hpp>
-using namespace httpserver;  // NOLINT(build/namespaces) - keep the demo at <=10 LOC
+#include <iostream>
+#include <span>
+#include <string>
+#include <string_view>
+
 int main() {
-    webserver ws{create_webserver(8080)};
-    ws.on_get("/hello", [](const http_request&) {
-        return http_response::string("Hello, World!");
-    });
-    ws.start(true);
+    namespace http = httpserver::http;
+    namespace srv = httpserver::server;
+    srv::server_options options;
+    options.concurrency().workers = 2;
+    options.add_listener({"127.0.0.1", 8080, false});
+    srv::native_server server(options);
+    const auto registered = server.route_sync(
+        http::method::known(http::method_id::get), "/hello",
+        [](const http::request_head&, std::span<const std::byte>) {
+            srv::sync_response response;
+            response.status = http::status::from_code(200);
+            response.fields.append("Content-Type", "text/plain");
+            constexpr std::string_view text = "Hello, World!\n";
+            const auto bytes = std::as_bytes(std::span(text));
+            response.body.assign(bytes.begin(), bytes.end());
+            return response;
+        }, 1024);
+    if (!registered.ok()) {
+        std::cerr << registered.message() << '\n';
+        return 1;
+    }
+    const auto listened = server.listen();
+    if (!listened.ok()) {
+        std::cerr << listened.message() << '\n';
+        return 1;
+    }
+    std::cout << "http://127.0.0.1:" << server.get_bound_port(0)
+              << "/hello (press Enter to stop)" << std::endl;
+    std::string line;
+    std::getline(std::cin, line);
+    server.stop();
 }
 ```
 
-The block above is reproduced byte-for-byte from
-[`examples/hello_world.cpp`](examples/hello_world.cpp); a CI gate
-(`scripts/check-readme.sh`) enforces the byte-for-byte equality.
-
 ## Table of contents
 
-* [Introduction](#introduction)
-* [Requirements](#requirements)
-* [Building and installation](#building-and-installation)
-* [Getting started — Hello, world](#getting-started--hello-world)
-* [Class-form handlers](#class-form-handlers)
-* [Structures and classes type definition](#structures-and-classes-type-definition)
-* [Create and work with a webserver](#create-and-work-with-a-webserver)
-* [The resource object](#the-resource-object)
-* [Routing](#routing)
-* [Request](#request)
-* [Response](#response)
-* [IP blocking and unblocking](#ip-blocking-and-unblocking)
-* [Authentication](#authentication)
-* [WebSocket support](#websocket-support)
-* [Daemon introspection and external event loops](#daemon-introspection-and-external-event-loops)
-* [HTTP utils](#http-utils)
-* [Lifecycle hooks](#lifecycle-hooks)
-* [Threading contract](#threading-contract)
-* [Error propagation](#error-propagation)
-* [Feature availability](#feature-availability)
-* [Migrating from v1](#migrating-from-v1)
-* [Examples](#examples)
-
-#### Community
-
-* [Code of Conduct](CODE_OF_CONDUCT.md)
-* [Contributing](CONTRIBUTING.md)
-
-#### Appendices
-
-* [Copying](#copying) — short statement of the documentation license.
-* [GNU-LGPL](COPYING.LESSER) — the GNU Lesser General Public License (the library's code license; full text in `COPYING.LESSER`).
-* [GNU-FDL](LICENSE) — the GNU Free Documentation License (this manual's license; full text in `LICENSE`).
-* [Thanks](#thanks)
+- [Introduction](#introduction)
+- [Requirements](#requirements)
+- [Building and installation](#building-and-installation)
+- [Getting started: Hello, world](#getting-started-hello-world)
+- [Callable handlers and shared state](#callable-handlers-and-shared-state)
+- [Structures and classes](#structures-and-classes)
+- [Create and work with a server](#create-and-work-with-a-server)
+- [Resource ownership](#resource-ownership)
+- [Routing](#routing)
+- [Request](#request)
+- [Response](#response)
+- [IP access control](#ip-access-control)
+- [Authentication and TLS](#authentication-and-tls)
+- [WebSocket support](#websocket-support)
+- [Server introspection and external event loops](#server-introspection-and-external-event-loops)
+- [HTTP utilities](#http-utilities)
+- [Lifecycle hooks](#lifecycle-hooks)
+- [Threading contract](#threading-contract)
+- [Error propagation](#error-propagation)
+- [Feature availability](#feature-availability)
+- [Examples](#examples)
+- [Community](#community)
+- [Copying](#copying)
+- [Thanks](#thanks)
 
 ## Introduction
 
-libhttpserver is meant to constitute an easy system to build HTTP servers in
-the REST fashion. It is built on top of [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/)
-and, like its substrate, it is a daemon library. The mission is to expose
-every useful HTTP capability through a simple, modern C++ API so that
-application code can focus on business logic rather than on the mechanics of
-HTTP request handling.
+libhttpserver handles HTTP transport and request lifecycles while your
+application supplies routes and policy. The installed `<httpserver.hpp>`
+umbrella includes the native API; you may also include individual headers under
+[`src/httpserver/`](src/httpserver/). Non-template operations are compiled into
+`libhttpserver`, so consumers must link the library.
 
-**Design.** libhttpserver is lambda-first. The shortest server is ten
-lines and uses no inheritance; handlers are
-`std::function<http_response(const http_request&)>`; responses are
-value-typed with seven factories and fluent `with_*` chaining; ownership
-of resource-form handlers is expressed in `std::unique_ptr` and
-`std::shared_ptr`. The class form (`http_resource`) is the right shape
-when several methods on one path share mutable state.
+The API separates a request head from its body. A coroutine receives an
+`exchange&` as soon as the complete head is routed. It can reject immediately,
+admit and consume the body, suspend while application work completes, send a
+response, or upgrade to a WebSocket. A bounded synchronous adapter collects a
+small body and invokes a value-returning function. Both forms use the same
+routing and protocol machinery.
 
-**Two contracts are load-bearing** — and both are stated explicitly in this
-README rather than left implicit:
+Ownership and capacity are explicit. A request belongs to its handler task;
+response definitions are immutable and may be shared subject to their source's
+replay contract; network queues and protocol state have bounded capacities.
+Expected failures carry `http::outcome`, and a handler exception is contained at
+the request boundary. Shutdown initiation is safe inside handlers; joining work
+belongs to a controlling thread.
 
-- **Thread-safety** (DR-008 / §5.1). Every public method on `webserver` is
-  thread-safe and re-entrant from inside a handler, with two
-  documented exceptions (`stop()`, `~webserver()`) that deadlock if invoked
-  from a handler thread.
-- **Error propagation** (DR-009 / §5.2). A handler that throws is caught
-  by the dispatcher and routed through `internal_error_handler`. There is
-  no throw-as-status idiom — to send a 404 from a handler, build it by value
-  with `http_response::empty().with_status(404)`.
-
-libhttpserver decodes form bodies automatically: `application/x-www-form-urlencoded`
-and `multipart/form-data` are parsed into the request's argument map. Files
-attached to multipart uploads are exposed through `http_request::get_files()`.
-
-All functions are reentrant and thread-safe unless explicitly stated otherwise.
-Clients can also specify resource limits on overall connection count, per-IP
-connection count, and per-connection memory to avoid resource exhaustion.
+This manual teaches ordinary use in that order. The
+[native API guide](docs/v3-api.md),
+[protocol capacity reference](docs/v3-protocol-limits.md), and
+[native architecture](specs/architecture/v3/architecture.md) provide additional
+detail. See [release notes](RELEASE_NOTES.md) for release information.
 
 [Back to TOC](#table-of-contents)
 
 ## Requirements
 
-libhttpserver can be used without any dependencies aside from libmicrohttpd.
+The plaintext build requires a C++20 compiler and standard library, threads,
+and the platform's socket facilities. Building a source checkout also requires
+Autoconf, Automake, Libtool, Make and pkg-config. `./bootstrap` generates the
+configure script and Makefile inputs. Doxygen is optional for generated API
+documentation; libcurl is used by tests and is not a library dependency.
 
-The minimum versions required are:
+TLS is optional and disabled by default. The TLS build requires genuine stable
+**OpenSSL 3.5.9 or later within the 3.5 release line**, including the linkable
+QUIC TLS callback API. Configure checks headers, library identity and the
+required provider operations. The provider is private to the library: no
+OpenSSL handles appear in the application-facing HTTP API.
 
-* g++ >= 11 or clang >= 13 (Apple Clang from Xcode 15+)
-* C++20 or newer
-* libmicrohttpd >= 1.0.0
-* *[Optionally]* for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
-* *[Optionally]* to compile the code reference, you'll need [doxygen](http://www.doxygen.nl/).
-
-On **RHEL 9** (and derivatives), the stock GCC 11 is too old for some C++20
-library features the build relies on; install the `gcc-toolset-14` package
-and `source /opt/rh/gcc-toolset-14/enable` before configuring.
-
-Additionally, for MinGW on Windows you will need:
-
-* libwinpthread (for MinGW-w64, if you use thread model `posix` you already have this)
-
-For versions before 0.18.0, on MinGW you will need:
-
-* libgnurx >= 2.5.1
-
-The test cases use [libcurl](http://curl.haxx.se/libcurl/) but you don't need
-it to compile the library itself.
-
-Please refer to the readme file for your particular distribution if there is
-one for important notes.
-
-| Platform | Toolchain | Notes |
-|---|---|---|
-| Debian 13 (trixie) | GCC 14.2 | Out-of-the-box |
-| RHEL 9 | `gcc-toolset-14` | Stock GCC 11 is too old; install the Red Hat toolset overlay |
-| RHEL 10 | GCC 14 | Out-of-the-box |
-| FreeBSD 14.x | base Clang 18+ | Out-of-the-box |
-| macOS | Homebrew GCC 15+ or current Apple Clang | Out-of-the-box |
-| vcpkg / Conan | GCC 13+ / Clang 16+ | Out-of-the-box |
+The source includes Linux, BSD/macOS and Windows networking implementations.
+Choose a toolchain with the required C++20 library facilities; platform build
+and runtime verification is performed in the corresponding CI lanes.
 
 [Back to TOC](#table-of-contents)
 
 ## Building and installation
 
-libhttpserver uses the standard autotools workflow. The usual build process is:
+Use an out-of-tree Autotools build. From the checkout root:
 
 ```sh
 ./bootstrap
-mkdir build
-cd build
-../configure
-make
+mkdir -p build/plain
+cd build/plain
+../../configure --disable-v3-tls --enable-examples --prefix=/usr/local
+make -j2
+make check
 sudo make install
 ```
 
-`make check` runs the test suite (unit + integration). `make -C examples`
-builds the fifteen [native v3 demonstrations](examples/README.md#native-v3-examples);
-the 38 historical v2 sources are unsupported on `v3`. `make dist` produces
-a portable source tarball.
+`--enable-examples` includes the fifteen [example targets](#examples).
+`make -C examples` builds them from the configured build directory.
+`make dist` creates a source archive. A release archive already contains the
+generated configure script, so its build can begin at configure.
 
-**ABI / packaging.** SOVERSION is 2. Distributions package
-`libhttpserver2`, parallel-installable with prior major versions so
-applications can link the major they need side by side. There is no
-inline namespace and no symbol-versioning script.
+### Linking an application
+
+After installation, compile the complete opening program with:
+
+```sh
+c++ -std=c++20 hello.cpp $(pkg-config --cflags --libs libhttpserver) -o hello
+c++ -std=c++20 hello.cpp $(pkg-config --cflags --static --libs libhttpserver) \
+    -o hello-static
+```
+
+Set `PKG_CONFIG_PATH` to `PREFIX/lib/pkgconfig` for a custom installation. Make
+sure the shared library is also discoverable by the platform's runtime loader
+(for example through an installed loader path or `LD_LIBRARY_PATH` on Linux).
+The `--static` pkg-config form adds private thread, platform socket and selected
+provider dependencies. It does not itself force archive selection: to use the
+second command for a static-library consumer, select a static-only installation
+or the toolchain's archive-selection flags. With both library forms installed,
+the linker may still select the shared object.
+
+Version 3.0.0 uses SOVERSION 3 (`libhttpserver.so.3` on ELF systems). Headers,
+`libhttpserver.pc`, static archives and the unversioned development library name
+are shared installation names. Use separate prefixes when keeping different
+development installations.
+
+### Configure options
+
+Run `../../configure --help` in the build directory for all options. Useful
+library options include:
+
+| Option | Purpose |
+| --- | --- |
+| `--enable-v3-tls` / `--disable-v3-tls` | TLS provider; default off |
+| `--enable-examples` / `--disable-examples` | Examples; default on |
+| `--enable-debug` | Enable debug compilation; default off |
+| `--enable-static` / `--disable-static` | Static archive |
+| `--enable-shared` / `--disable-shared` | Shared library |
+| `--disable-doxygen-doc` | Skip generated API documentation |
+| `--enable-same-directory-build` | Permit an in-tree build |
+
+### Optional TLS build
+
+Use a separate build directory and make the selected OpenSSL installation
+visible to pkg-config:
+
+```sh
+mkdir -p build/tls
+cd build/tls
+PKG_CONFIG_PATH=/opt/openssl-3.5/lib/pkgconfig \
+    ../../configure --enable-v3-tls --enable-examples \
+    --prefix=/opt/libhttpserver
+make -j2
+sudo make install
+```
+
+Adjust `lib` to the provider's actual library directory. For explicit selection,
+configure accepts `V3_TLS_CFLAGS` and `V3_TLS_LIBS`. Supply both with flags for
+the same installation, including the runtime search path when needed. See the
+[TLS build guide](docs/native-tls-build.md) for provider verification and
+commands. A TLS-enabled binary still needs valid published credentials and a
+TLS listener configuration before it can accept encrypted traffic.
+
+### Building on Windows with MSYS2
+
+Use the MINGW64 shell and a MinGW-w64 C++20 toolchain for native Windows
+applications. Install its compiler, Make, Libtool and pkg-config together with
+the MSYS Autotools tools, then follow the out-of-tree plaintext build above.
+Add the matching curl development package if running tests. Configure recognizes
+MinGW and MSYS hosts; MSYS builds depend on `msys-2.0.dll`. MinGW applications
+still need the runtime libraries required by their selected compiler.
+
+Libtool produces a static `.a` archive, a DLL and a `.dll.a` import library when
+the respective build forms are enabled. DLL naming follows Libtool's host
+convention. This Autotools workflow uses GCC-compatible toolchains. Use
+pkg-config with `-std=c++20` for consumers: private metadata includes pthread
+and Windows networking/crypto libraries (`ws2_32`, `mswsock`, `bcrypt`). TLS
+requires a matching supported OpenSSL installation on this platform too.
 
 [Back to TOC](#table-of-contents)
 
-### Optional parameters to the configure script
+## Getting started: Hello, world
 
-A complete list of parameters can be obtained by running `./configure --help`.
-The libhttpserver-specific options are listed below (the canonical configure
-options are also supported):
+The [opening program](#tldr) constructs `server_options`, adds a loopback TCP
+listener and passes a copy of the options to `native_server`. Port 8080 is fixed;
+use port 0 to let the OS choose an available port and inspect it through
+`get_bound_port(0)` after listening.
 
-* `--enable-same-directory-build` — enable in-tree builds. Strongly discouraged. *(default: no)*
-* `--enable-debug` — enable debug data generation. *(default: no)*
-* `--disable-doxygen-doc` — don't generate any Doxygen documentation. Doxygen is automatically invoked when present on the system and disabled otherwise.
-* `--enable-fastopen` — enable use of TCP_FASTOPEN. *(default: yes)*
-* `--enable-static` — enable static linking. *(default: yes)*
+`route_sync(method, pattern, handler, body_cap)` registers a bounded handler.
+It receives `const http::request_head&` and `std::span<const std::byte>` and
+returns `server::sync_response`: status, fields and owned body bytes. The body
+cap must be at least 1. A body exceeding the declared cap produces 413 without
+invoking the function; a bodyless request passes an empty span. The adapter
+supplies `Content-Length` when the returned fields have no explicit framing.
 
-Build-time feature flags (auto-detected, can be forced):
+Register all routes before `listen()`, check registration and startup outcomes,
+and keep the server alive while requests are being handled. `listen()` starts
+managed hosting and returns; it does not occupy the main thread. The example
+waits on stdin and calls `stop()` from that controlling thread, which joins
+engine tasks and workers before local state is destroyed.
 
-* `--with-gnutls` / `--without-gnutls` — enable/disable TLS support. Sets the `HAVE_GNUTLS` macro.
-* `--with-basic-auth` / `--without-basic-auth` — enable/disable Basic auth. Sets `HAVE_BAUTH`.
-* `--with-digest-auth` / `--without-digest-auth` — enable/disable Digest auth. Sets `HAVE_DAUTH`.
-* `--with-websocket` / `--without-websocket` — enable/disable WebSocket support. Sets `HAVE_WEBSOCKET`. Requires libmicrohttpd built with WebSocket support.
+In another terminal:
 
-See [Feature availability](#feature-availability) for how each of these flags
-affects the runtime API.
+```sh
+curl -v http://127.0.0.1:8080/hello
+```
+
+The response is `Hello, World!`. A HEAD route must be registered explicitly if
+you want HEAD requests to succeed; GET registration alone does not provide it.
+The [routes example](examples/routes.cpp) demonstrates GET and HEAD together.
 
 [Back to TOC](#table-of-contents)
 
-### Building on Windows (MSYS2)
+## Callable handlers and shared state
 
-MSYS2 provides multiple shell environments with different purposes.
-Understanding which shell to use is important:
+Choose the synchronous form for quick computation over a bounded complete
+body. It runs to completion on a worker; blocking database or filesystem work
+occupies that worker. Use `route()` with `task<void>(exchange&)` for early
+admission decisions, incremental input/output, application waits and upgrades.
+Tasks are lazy: `co_await` composes them, and the server owns the routed task's
+execution and lifetime.
 
-| Shell | Host triplet | Runtime dependency | Use case |
-|-------|--------------|--------------------|----------|
-| **MinGW64** | `x86_64-w64-mingw32` | Native Windows | **Recommended** for native Windows apps |
-| **MSYS** | `x86_64-pc-msys` | `msys-2.0.dll` | POSIX-style apps, build tools |
-
-**Recommended: use the MinGW64 shell** for building libhttpserver to
-produce native Windows binaries without additional runtime dependencies.
-
-#### Step-by-step build instructions
-
-1. Install [MSYS2](https://www.msys2.org/).
-2. Open the **MINGW64** shell (not the MSYS shell) from the Start Menu.
-3. Install dependencies:
-
-```sh
-pacman -S --needed mingw-w64-x86_64-{gcc,libtool,make,pkg-config,doxygen,gnutls,curl} autotools
-```
-
-4. Build and install [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) (>= 1.0.0).
-5. Build libhttpserver:
-
-```sh
-./bootstrap
-mkdir build && cd build
-../configure --disable-fastopen
-make
-make check  # run tests
-```
-
-**Important:** the `--disable-fastopen` flag is required on Windows as
-TCP_FASTOPEN is not supported there.
-
-#### If you use the MSYS shell
-
-Building from the MSYS shell also works, but the resulting binaries will
-depend on `msys-2.0.dll`. The configure script will emit a warning when
-building in this environment:
-
-```
-configure: WARNING: Building from MSYS environment. Binaries will depend on msys-2.0.dll.
-```
-
-Consider switching to the MinGW64 shell for native Windows binaries.
-
-#### Library files on Windows
-
-When building with GCC-based toolchains (MSYS2/MinGW, Cygwin), the
-following library files are generated:
-
-| File | Purpose |
-|------|---------|
-| `libhttpserver.a` | Static library archive |
-| `libhttpserver.dll` | Shared library (DLL) |
-| `libhttpserver.dll.a` | Import library for linking against the DLL |
-| `libhttpserver.la` | Libtool archive (used by libtool during linking) |
-
-**Note about `.lib` files:** the `.dll.a` format is the import library format
-used by GCC toolchains. If you're looking for `.lib` files, those are the
-MSVC (Microsoft Visual C++) import library format and are only generated
-when building with the MSVC toolchain. The `.dll.a` file serves the same
-purpose as `.lib` but for GCC-based compilers.
-
-**Linking against libhttpserver:**
-
-Using pkg-config (recommended):
-
-```sh
-g++ myapp.cpp $(pkg-config --cflags --libs libhttpserver) -o myapp
-```
-
-Manual linking:
-
-```sh
-g++ myapp.cpp -I/mingw64/include -L/mingw64/lib -lhttpserver -lmicrohttpd -o myapp
-```
-
-[Back to TOC](#table-of-contents)
-
-## Getting started — Hello, world
-
-The Tl;dr at the top of this README contains the entire program. Walking
-through it:
-
-* `webserver ws{create_webserver(8080)};` — `create_webserver` is a fluent
-  builder for the server configuration; `webserver` is constructed by
-  direct initialisation from the builder. `webserver` is non-copyable and
-  non-movable; pass it by reference once it exists. The constructor is
-  `explicit`, so callers must direct-init rather than rely on implicit
-  conversion.
-* `ws.on_get("/hello", [](const http_request&) { ... });` — register a
-  GET-only handler. The handler is a
-  `std::function<http_response(const http_request&)>`. There is no
-  subclass, no `shared_ptr`, no raw pointer. The seven HTTP-verb
-  shortcuts are `on_get`, `on_post`, `on_put`, `on_delete`, `on_patch`,
-  `on_options`, and `on_head`. For CONNECT and TRACE, use the
-  `route(http_method::CONNECT, ...)` and `route(http_method::TRACE, ...)`
-  forms covered under [Routing](#routing).
-* `return http_response::string("Hello, World!");` — `http_response` is
-  a value type. Factories on `http_response` build common shapes; the
-  fluent `with_*` mutators add headers, footers, cookies, and status.
-  The response is returned by value into the dispatcher.
-* `ws.start(true);` — `true` means *block this thread until the server
-  is stopped*. Pass `false` to start the listener and return immediately;
-  later call `stop_and_wait()` from another thread.
-
-To test the example, you can run the following from a terminal:
-
-```sh
-curl -XGET -v http://localhost:8080/hello
-```
-
-See [`examples/hello_world.cpp`](examples/hello_world.cpp) and
-[`examples/hello_with_get_arg.cpp`](examples/hello_with_get_arg.cpp) for
-the complete sources.
-
-[Back to TOC](#table-of-contents)
-
-## Class-form handlers
-
-Lambdas suffice when each HTTP method is independent. When several methods
-on one path share state — a counter, a cache, a mutex — derive from
-`http_resource` and register the
-subclass once:
+A class can hold shared application state without inheriting a library base.
+Capture a `shared_ptr` in each route that uses it, and synchronize mutable state.
+This fragment belongs before `server.listen()` in the opening program and
+requires `<atomic>` and `<memory>`:
 
 ```cpp
-class counter : public httpserver::http_resource {
- public:
-    httpserver::http_response render_get(const httpserver::http_request&) override {
-        std::lock_guard lock{m_};
-        return httpserver::http_response::string(std::to_string(n_));
-    }
-    httpserver::http_response render_post(const httpserver::http_request&) override {
-        std::lock_guard lock{m_};
-        ++n_;
-        return httpserver::http_response::string(std::to_string(n_));
-    }
- private:
-    std::mutex m_;
-    int n_ = 0;
+struct counter_state {
+    std::atomic<unsigned> count{0};
 };
-
-// ...
-ws.register_path("/count", std::make_unique<counter>());
+auto state = std::make_shared<counter_state>();
+const auto registered_counter = server.route_sync(
+    http::method::known(http::method_id::post), "/count",
+    [state](const http::request_head&, std::span<const std::byte>) {
+        srv::sync_response response;
+        response.status = http::status::from_code(200);
+        const std::string text = std::to_string(++state->count);
+        const auto bytes = std::as_bytes(std::span(text));
+        response.body.assign(bytes.begin(), bytes.end());
+        return response;
+    }, 1024);
+if (!registered_counter.ok()) return 1;
 ```
 
-The virtual hooks are `render_get`, `render_post`, `render_put`,
-`render_delete`, `render_head`, `render_options`, `render_patch`,
-`render_connect`, and `render_trace` — all lowercase, all returning
-`http_response` by value. The `webserver` takes ownership of the
-resource via `std::unique_ptr` (or a `std::shared_ptr` overload — see
-[Routing](#routing)).
-
-See [`examples/shared_state.cpp`](examples/shared_state.cpp) for the
-canonical example.
+Move-only handler captures are supported by `route_handler` and
+`sync_route_handler`. A registered callable may run concurrently for different
+requests. Capturing an object by reference does not extend its lifetime: keep
+it alive until `stop()` has returned. Never retain a handler's `exchange&` in
+another thread; exchange decisions and body operations belong to its executor.
+Use owning resume/cancellation handles for cross-thread signaling.
 
 [Back to TOC](#table-of-contents)
 
-## Structures and classes type definition
+## Structures and classes
 
-This is the cast of types you will work with. Each is detailed further on
-in its own section.
+| Type | Role |
+| --- | --- |
+| `server::native_server` | Owns listeners/engines/routes; noncopyable |
+| `server::server_options` | Listener, protocol, limit and TLS configuration |
+| `server::route_handler` | Move-only `task<void>(exchange&)` callable |
+| `server::sync_response` | Bounded handler response value |
+| `exchange` | Request head, body, writer, decisions and cancellation |
+| `http::request_head` | Target, routing path, method, protocol and fields |
+| `http::method`, `http::method_set`, `http::status` | Methods and statuses |
+| `http::fields` | Ordered, repeat-preserving field collection |
+| `body_reader`, `response_writer` | Request input and response output |
+| `response_definition`, `response_overlay` | Shared response and send fields |
+| `http::outcome` | Typed operation status with a diagnostic message |
+| `websocket::session` | Owning upgraded connection/stream handle |
+| `server::hook_handle`, `server::drain_ticket` | Hook and drain ownership |
 
-* **`webserver`** — represents the daemon listening on a socket for HTTP
-  traffic. Non-copyable, non-movable. See [Create and work with a
-  webserver](#create-and-work-with-a-webserver).
-  * **`create_webserver`** — fluent builder for the configuration that
-    `webserver`'s `explicit` constructor consumes. See the same section.
-* **`http_resource`** — base class for a logical collection of HTTP
-  methods bound to a path. Override the snake_case `render_*` virtuals.
-  See [The resource object](#the-resource-object).
-* **`http_request`** — the request passed to handlers. Read-only,
-  single-threaded per request. See [Request](#request).
-* **`http_response`** — the value-typed response. Seven factories cover
-  every body shape; fluent `with_*` mutators add headers, footers,
-  cookies, and status. See [Response](#response).
-  * Factories: `http_response::string`, `http_response::file`,
-    `http_response::iovec`, `http_response::pipe`, `http_response::empty`,
-    `http_response::deferred`, `http_response::unauthorized`.
-* **`http_method`** — strongly-typed enum of HTTP verbs (GET, POST, PUT,
-  DELETE, HEAD, OPTIONS, PATCH, CONNECT, TRACE). Declared in
-  `http_method.hpp`.
-* **`method_set`** — small bitset of `http_method` values, used by
-  `route()` for atomic multi-method registration.
-* **`iovec_entry`** — element type for `http_response::iovec` scatter-gather
-  responses. A `{ void* base, size_t length }` pair where the base
-  pointer is borrowed for the lifetime of the response.
-* **`websocket_handler`** — base class for handling WebSocket
-  connections; derive and implement `on_message`. See [WebSocket
-  support](#websocket-support).
-  * **`websocket_session`** — represents an active WebSocket connection;
-    methods to send text, binary, ping/pong, and close frames.
-* **`feature_unavailable`** — `std::runtime_error` subclass thrown when
-  application code requests a feature that was compiled out (no TLS,
-  no Basic auth, no Digest auth, no WebSocket). See [Feature
-  availability](#feature-availability).
+Most server-related types live in `httpserver::server`, semantic HTTP values in
+`httpserver::http`, and tasks/exchanges/body types in `httpserver`. Fragments
+below use `namespace http = httpserver::http;` and
+`namespace srv = httpserver::server;`. They show the surrounding handler or
+configuration function where needed; only the opening hello is a complete
+standalone program.
 
 [Back to TOC](#table-of-contents)
 
-## Create and work with a webserver
+## Create and work with a server
 
-Creating a webserver with a standard configuration is the one-liner shown
-in the Tl;dr:
+Configure the complete server before constructing it. `add_listener()` appends
+an endpoint and defers validation. Addresses are numeric IPv4/IPv6 literals;
+empty or `"*"` means any local address. DNS resolution belongs to the application.
+Listeners default to TCP, port 0 and plaintext. Set `transport` to
+`listener_transport::udp` explicitly for HTTP/3.
 
-```cpp
-webserver ws{create_webserver(8080)};
-```
-
-`create_webserver` is a *fluent builder*: every setter returns `*this` so
-calls chain. The `webserver` constructor is **`explicit`**: callers must
-direct-initialise (`webserver ws{cw};`) rather than rely on implicit
-conversion. The builder validates eagerly where the input domain
-is well-defined — `port` rejects values outside `[0, 65535]`, every `int`
-setter rejects negatives, etc. — and raises `std::invalid_argument` at the
-setter. Feature-gated settings (`use_ssl`, `basic_auth`, `digest_auth`,
-WebSocket registration) are validated by the `webserver` constructor, not
-the setter; so a builder configured for an unsupported feature throws
-`feature_unavailable` from `webserver(create_webserver)` rather than from
-the chained call.
-
-A complete chained example:
+This configuration fragment replaces the opening program's options setup:
 
 ```cpp
-webserver ws{create_webserver(8080)
-    .max_threads(4)
-    .max_connections(1024)
-    .connection_timeout(30)
-    .start_method(http::http_utils::INTERNAL_SELECT)
-    .turbo()
-    .suppress_date_header()};
+srv::server_options options;
+options.add_listener({"127.0.0.1", 8080, false});
+options.concurrency().workers = 4;
+options.timeouts().header = std::chrono::seconds(10);
+options.timeouts().body_idle = std::chrono::seconds(30);
+options.budgets().set(srv::resource::connections, 512);
+options.budgets().set(srv::resource::body_buffer_bytes, 8 * 1024 * 1024);
+const auto valid = options.validate();
+if (!valid.ok()) {
+    std::cerr << valid.message() << '\n';
+    return 1;
+}
+srv::native_server server(options);
 ```
 
-The rest of this section is a reference of every group of options.
+### Defaults and startup
 
-### Basic startup options
+The default protocol set is HTTP/1.0 plus HTTP/1.1. The default loop mode is
+`managed`; workers 0 lets the runtime select concurrency. At most 64 listeners
+and 1024 explicit workers are accepted. Timeout fields must be positive and at
+most 24 hours. Defaults are handshake 30 s, header 30 s, body idle 60 s,
+suspension 300 s, write idle 30 s, WebSocket close 10 s and drain 30 s.
 
-* **`.port(uint16_t p)` / `.port(int p)`** — the port the server listens
-  on. Can also be passed to the `create_webserver` constructor:
-  `create_webserver(8080)`. The `int` overload exists so that
-  out-of-`uint16_t` values like `70000` are expressible and rejected with
-  `std::invalid_argument`; the `uint16_t` overload keeps type-safe call
-  sites clean.
-* **`.max_connections(int n)`** — maximum number of concurrent connections
-  to accept. The default is `FD_SETSIZE − 4` (the maximum number of file
-  descriptors supported by `select` minus four for `stdin`, `stdout`,
-  `stderr`, and the server socket). That is, the default is as large as
-  possible. Note that if you set a low limit, browsers doing request
-  pipelining can saturate it.
-* **`.max_threads(int n)`** — size of the internal worker pool, or 0 to
-  spawn a thread per connection. Default 0.
-* **`.memory_limit(int bytes)`** — per-connection memory limit. Default 0
-  (libmicrohttpd default ≈ 32 kB).
-* **`.content_size_limit(size_t bytes)`** — cap on individual request
-  body size. Default `SIZE_MAX` (unlimited).
-* **`.connection_timeout(int seconds)`** — idle timeout for a
-  connection. Default 180.
-* **`.per_IP_connection_limit(int n)`** — cap on concurrent connections
-  from any single client IP. Default 0 (no limit).
-* **`.max_thread_stack_size(int bytes)`** — stack size for internal
-  worker threads. Default 0 (libmicrohttpd default).
+`validate()` is pure semantic validation: no descriptors, environment reads,
+credential loading or binding. `resolve_limits(out)` also checks build support
+and computes startup policy. `listen()` checks credentials/backend readiness,
+validates, binds configured listeners and starts hosting. Check its outcome:
+startup can still fail because an address is unavailable or credentials are
+missing. Failed partial binding is terminal for that server object; construct a
+new object for another attempt.
 
-### Listener, socket, and threading options
+### Budgets and protocol capacities
 
-* **`.start_method(http::http_utils::start_method_T m)`** — pick the
-  libmicrohttpd polling mode. Values include `INTERNAL_SELECT` (default),
-  `INTERNAL_POLL`, `INTERNAL_EPOLL`, and `EXTERNAL_SELECT` (for use with
-  `run` / `run_wait`).
-* **`.bind_address(const sockaddr* a)` / `.bind_address(const std::string& ip)`** — bind
-  to a specific address. The string overload accepts either IPv4
-  (`"127.0.0.1"`) or IPv6 (`"::1"`).
-* **`.bind_socket(int fd)`** — use a pre-existing listening socket.
-  Useful for socket-activation setups (systemd, launchd).
-* **`.use_ipv6(bool = true)`** — bind to an IPv6 socket. (Positive-polarity
-  form; see [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for the rename.)
-* **`.use_dual_stack(bool = true)`** — accept both IPv4 and IPv6 on the
-  same socket.
-* **`.listen_socket(bool = true)`** — own the listening socket. Pass
-  `false` when feeding connections in via `add_connection()`.
-* **`.thread_safety(bool = true)`** — internal locking. Defaults to
-  `true`; disable only if you understand the consequences.
-* **`.alpn(bool = true)`** — enable ALPN negotiation for HTTPS.
-* **`.listen_backlog(int n)`** — `listen(2)` backlog. Default 0
-  (libmicrohttpd default).
-* **`.address_reuse(int v)`** — `SO_REUSEADDR` / `SO_REUSEPORT` mode.
-* **`.tcp_nodelay(bool = true)`** — disable Nagle on accepted sockets.
-* **`.tcp_fastopen_queue_size(int n)`** — TCP_FASTOPEN queue size.
-  Requires `--enable-fastopen` at configure time.
-* **`.connection_memory_increment(size_t v)`** — incremental memory
-  allocation per connection.
-* **`.sigpipe_handled_by_app(bool = true)`** — tell libmicrohttpd that
-  the application installs its own `SIGPIPE` handler.
-* **`.client_discipline_level(int v)`** — strictness level for malformed
-  request handling. `-1` means default.
-* **`.turbo(bool = true)`** — enable libmicrohttpd's `USE_TURBO` flag
-  (sacrifices some safety checks for performance).
-* **`.suppress_date_header(bool = true)`** — omit the `Date:` response
-  header (small perf win at the cost of one piece of HTTP metadata).
+`budgets()` holds aggregate resource capacities: connections, streams, header
+bytes/fields, body buffers, response queues, HPACK/QPACK tables, blocked headers,
+QUIC reassembly, WebSocket messages, timers and routes. The resource budget model
+charges a reservation against its scope and ancestors. Byte capacities count
+storage in flight; count capacities limit live objects. Response queue charges
+include retained storage and metadata, so they can exceed payload byte counts.
 
-### Logging and validation
+Default server capacities include 1024 connections, 4096 streams, 1 MiB header
+bytes, 256 header fields, 8 MiB body buffers, 4 MiB response queues and 1024
+routes. Use the [budget header](src/httpserver/server/budgets.hpp) for all defaults
+and ceilings. A body admission cap bounds that request's buffering and is
+separate from aggregate server capacity.
 
-* **`.log_access(std::function<void(const std::string&)> cb)`** — invoked
-  once per accepted request with a single-line summary suitable for an
-  access log. Runs from MHD worker threads; **must be thread-safe**.
-* **`.log_error(std::function<void(const std::string&)> cb)`** — invoked
-  for errors the library decides are worth reporting. Same thread-safety
-  contract.
-* **`.validator(std::function<bool(const std::string&)> v)`** — called
-  early on every request; returning `false` rejects the request.
-* **`.unescaper(std::function<...> u)`** — overrides the URL-unescape
-  step. Default unescaper handles the canonical HTTP escapes.
-
-### Feature toggles (positive polarity)
-
-* **`.basic_auth(bool = true)`** — enable Basic auth handling.
-* **`.digest_auth(bool = true)`** — enable Digest auth handling.
-* **`.use_ssl(bool = true)`** — enable TLS.
-* **`.deferred(bool = true)`** — enable libmicrohttpd's deferred-response
-  internal optimisations. Required to use `http_response::deferred(...)`.
-* **`.debug(bool = true)`** — verbose libmicrohttpd debug output.
-* **`.pedantic(bool = true)`** — strict HTTP-RFC parsing.
-* **`.regex_checking(bool = true)`** — validate path regexes at
-  registration. Default `true`.
-* **`.ip_access_control(bool = true)`** — enable the IP access-control
-  machinery used by `deny_ip` / `allow_ip` (and their `remove_*`
-  counterparts). Default `true`. When `false`, every connection is
-  admitted and both lists are ignored.
-* **`.post_process(bool = true)`** — auto-parse `application/x-www-form-urlencoded`
-  and `multipart/form-data` bodies into the request's argument map.
-  Default `true`.
-* **`.put_processed_data_to_content(bool = true)`** — also expose
-  processed POST data through the raw content accessor.
-* **`.single_resource(bool = true)`** — short-circuit the resource lookup
-  when only one resource is registered.
-
-> The feature toggles all use positive polarity: pass `false` to disable
-> (`basic_auth(false)`, `use_ssl(false)`, etc.).
-
-### TLS (HTTPS) options
-
-These are no-ops unless the build has GnuTLS support. On a GnuTLS-off
-build, `webserver(create_webserver{}.use_ssl(true))` throws
-`feature_unavailable`.
-
-* **`.https_mem_key(const std::string& path)`** — load the PEM key from
-  the file at `path`.
-* **`.https_mem_cert(const std::string& path)`** — load the PEM
-  certificate from the file at `path`.
-* **`.https_mem_trust(const std::string& path)`** — load CA certificate(s)
-  for verifying client certificates (mTLS).
-* **`.raw_https_mem_key(const std::string& pem)`**
-  / **`.raw_https_mem_cert(...)`** / **`.raw_https_mem_trust(...)`** —
-  pass PEM material directly without reading a file.
-* **`.https_mem_dhparams(const std::string& pem)`** — explicit DH
-  parameters.
-* **`.https_key_password(const std::string& pw)`** — passphrase for an
-  encrypted private key.
-* **`.https_priorities(const std::string& s)`** — GnuTLS priority
-  string.
-* **`.https_priorities_append(const std::string& s)`** — append to the
-  default priority string.
-* **`.cred_type(http::http_utils::cred_type_T t)`** — `CERTIFICATE` /
-  `PSK` / `NONE`. Default `NONE`.
-* **`.psk_cred_handler(...)`** — PSK lookup callback for TLS-PSK.
-* **`.sni_callback(...)`** — Server Name Indication lookup callback
-  (returns the PEM `(cert, key)` pair for a hostname).
-
-### Authentication setup
-
-* **`.digest_auth_random(const std::string& s)`** — server-side random
-  seed for digest nonces.
-* **`.nonce_nc_size(int n)`** — replay-protection window size for
-  digest auth.
-* **`.auth_handler(auth_handler_ptr cb)`** — install a centralized
-  authentication handler that runs before every resource's `render_*`
-  call. The callback returns `std::nullopt` to allow the request to
-  proceed, or an `http_response` (typically
-  `http_response::unauthorized(realm)`) to reject it. Single source of
-  truth for auth — see [Centralized
-  authentication](#using-centralized-authentication).
-* **`.auth_skip_paths(const std::vector<std::string>& paths)`** — paths
-  to bypass `auth_handler`. Exact match (`"/health"`) and wildcard
-  suffixes (`"/public/*"`) are both supported.
-
-### Custom error handlers
-
-* **`.not_found_handler(error_handler h)`** — invoked when no resource
-  matches the request path (HTTP 404). The handler returns
-  `http_response` by value.
-* **`.method_not_allowed_handler(error_handler h)`** — invoked when a
-  resource matches the path but not the HTTP method (HTTP 405).
-* **`.internal_error_handler(internal_error_handler_t h)`** — invoked
-  when a handler throws or the library hits an internal failure during
-  dispatch. The handler signature is
-  `http_response(const http_request&, std::string_view message)`. Load-bearing:
-  see [Error propagation](#error-propagation).
-* **`.expose_exception_messages(bool = true)`** — restores the v1
-  behaviour of including the originating exception message in the
-  **default** 500 response body. Default is `false`: the default body
-  is the fixed string `"Internal Server Error"`
-  ([DR-009 Revision 1](specs/architecture/11-decisions/DR-009.md),
-  CWE-209 information-disclosure fix). The configured `log_error`
-  callback continues to receive the verbatim message regardless of
-  this flag — only the HTTP response body is affected.
-  **Warning:** exception messages routinely contain file paths, SQL
-  fragments, internal identifiers, and attacker-influenced input.
-  Enable only in development or behind an explicit `#ifndef NDEBUG`
-  guard. A configured `internal_error_handler` is unaffected — it
-  always receives the message and can build any body it wants.
-
-A worked example:
+The optional `http2()`, `http3()` and `quic()` profiles tune their respective
+protocol state independently. They do not enable a protocol. For example,
+after choosing an appropriate TLS TCP listener and enabling HTTP/2:
 
 ```cpp
-auto cfg = httpserver::create_webserver(8080)
-    .not_found_handler([](const httpserver::http_request&) {
-        return httpserver::http_response::string("nope").with_status(404);
-    })
-    .method_not_allowed_handler([](const httpserver::http_request&) {
-        return httpserver::http_response::empty().with_status(405);
-    })
-    .internal_error_handler([](const httpserver::http_request&, std::string_view what) {
-        // CWE-209: 'what' may contain file paths, SQL fragments, or
-        // attacker-influenced input. Log it internally; do NOT echo
-        // it to the HTTP client.
-        (void)what;  // e.g. logger->error(what);
-        return httpserver::http_response::string("Internal Server Error").with_status(500);
-    });
-httpserver::webserver ws{cfg};
+options.http2().emplace().max_concurrent_requests = 192;
+options.http2()->decoder_table_bytes = 8192;
+options.http2()->encoder_table_bytes = 16384;
+srv::effective_protocol_limits limits;
+const auto resolved = options.resolve_limits(limits);
+if (!resolved.ok()) {
+    std::cerr << resolved.message() << '\n';
+    return 1;
+}
 ```
 
-### File-upload options
-
-* **`.file_upload_target(file_upload_target_T t)`** —
-  `FILE_UPLOAD_MEMORY_ONLY` (default) keeps uploads in memory;
-  `FILE_UPLOAD_DISK_ONLY` writes to disk; `FILE_UPLOAD_MEMORY_AND_DISK`
-  does both.
-* **`.file_upload_dir(const std::string& dir)`** — directory for
-  on-disk uploads. Must not be empty.
-* **`.generate_random_filename_on_upload(bool = true)`** — name uploaded
-  files randomly (vs. trust the client's `Content-Disposition: filename=`).
-* **`.file_cleanup_callback(file_cleanup_callback_ptr cb)`** — invoked
-  after request completion to clean up uploaded files. Return `true` to
-  delete the file from disk, `false` to keep it.
-
-### Daemon / external event-loop options
-
-These dovetail with the runtime methods covered under [Daemon
-introspection and external event loops](#daemon-introspection-and-external-event-loops).
-The `default_policy` selects which list is the exception list — i.e. what
-happens to an address on neither list:
-
-* **`.default_policy(http::http_utils::policy_T p)`** — `ACCEPT` (default)
-  admits every address except those on the deny list (`deny_ip`); `REJECT`
-  refuses every address except those on the allow list (`allow_ip`). Under
-  either policy an allow entry overrides a matching deny entry.
-
-### Runtime operations on `webserver`
-
-Once constructed, the `webserver` instance exposes:
-
-* **`bool start(bool blocking = false)`** — start listening. When
-  `blocking == true`, this thread blocks until the server stops.
-* **`bool stop()`** — stop the daemon and join libmicrohttpd's worker
-  threads. **Calling this from inside a handler deadlocks** — see
-  [Threading contract](#threading-contract).
-* **`void stop_and_wait()`** — `stop()` then wait until every in-flight
-  handler has returned. Same deadlock contract as `stop()`.
-* **`bool is_running()`** — true if the daemon is currently accepting
-  connections.
-
-Registration verbs (covered in detail under [Routing](#routing)):
-`on_get`, `on_post`, `on_put`, `on_delete`, `on_patch`, `on_options`,
-`on_head`, `route(...)`, `register_path(...)`, `register_prefix(...)`,
-`register_ws_resource(...)`, and the matching `unregister_*` forms.
+Profiles must fit aggregate budgets and protocol bounds. See the
+[capacity tables](docs/v3-protocol-limits.md) and
+[protocol options example](examples/protocol_options.cpp) for complete HTTP/2,
+HTTP/3 and QUIC configurations. `native_server::effective_limits(out)` exposes
+the immutable resolved local policy before listening and after stopping. It is
+startup policy, not negotiated peer SETTINGS, live queue occupancy or a way to
+resize a running engine. Failure leaves `out` unchanged.
 
 [Back to TOC](#table-of-contents)
 
-## The resource object
+## Resource ownership
 
-The `http_resource` class represents a logical collection of HTTP methods
-that will be associated with a URL when registered on the webserver. The
-class is **designed for extension**. When the webserver matches a request
-against a resource, the method corresponding to the request's HTTP verb
-is called on the resource.
+Routes own their callables; captured smart pointers express shared application
+ownership. The server retains listener credential stores and copies options.
+References returned by `hooks()` and `peer_policy()` are valid for the server's
+lifetime. The `readiness()` adapter is borrowed and server-owned.
 
-The `http_resource` class contains the following extensible methods
-(also called *handlers* or *render methods*) — every one returns
-`http_response` by value:
+An `exchange` and its request head belong to the active request task. Read its
+fields and captures there; copy strings or values that must survive the request.
+Body read results view your destination buffer. Keep buffers alive across their
+awaited operations and avoid moving an exchange while a read/write is pending.
 
-* **`http_response render_get(const http_request& req)`** — invoked on an HTTP GET request.
-* **`http_response render_post(const http_request& req)`** — invoked on an HTTP POST request.
-* **`http_response render_put(const http_request& req)`** — invoked on an HTTP PUT request.
-* **`http_response render_head(const http_request& req)`** — invoked on an HTTP HEAD request.
-* **`http_response render_delete(const http_request& req)`** — invoked on an HTTP DELETE request.
-* **`http_response render_trace(const http_request& req)`** — invoked on an HTTP TRACE request.
-* **`http_response render_options(const http_request& req)`** — invoked on an HTTP OPTIONS request.
-* **`http_response render_connect(const http_request& req)`** — invoked on an HTTP CONNECT request.
-* **`http_response render_patch(const http_request& req)`** — invoked on an HTTP PATCH request.
-* **`http_response render(const http_request& req)`** — fallback invoked when no method-specific override is provided.
-
-These methods are all `virtual`; override only the verbs your resource
-supports. Unhandled verbs fall through to `render()`; if the resource also
-does not override `render()`, the dispatch returns the configured 405
-response.
-
-### Restricting allowed methods
-
-By default, every HTTP verb falls through to `render()`. To narrow a
-resource to a specific subset of methods, use the `set_allowing` /
-`disallow_all` API:
-
-```cpp
-class read_only : public httpserver::http_resource {
- public:
-    read_only() {
-        disallow_all();
-        set_allowing("GET", true);
-        set_allowing("HEAD", true);
-    }
-    httpserver::http_response render_get(const httpserver::http_request&) override {
-        return httpserver::http_response::string("ok");
-    }
-};
-```
-
-Requests for disallowed verbs are short-circuited by the dispatcher and
-land in the `method_not_allowed_handler` (HTTP 405) without calling
-`render_*`. See [`examples/allowing_disallowing_methods.cpp`](examples/allowing_disallowing_methods.cpp)
-for a worked example.
-
-### Ownership
-
-Resources are passed to the webserver via `std::unique_ptr` (the
-webserver takes exclusive ownership) or `std::shared_ptr` (caller and
-webserver share ownership). Ownership is always expressed through a
-smart pointer.
+`response_definition` shares immutable state. A definition must outlive every
+`send_definition()` task using it; capturing the definition by value in a route
+is a convenient way to ensure this. Its source determines replay and storage
+ownership, described under [Response](#response). Handles such as a
+`drain_ticket` or an accepted WebSocket session own their associated state, but
+they do not make unrelated application captures live longer.
 
 [Back to TOC](#table-of-contents)
 
 ## Routing
 
-The `webserver` exposes three families of registration entry points.
-They are all interoperable: within one server, some paths can be
-lambdas and others can be `http_resource` subclasses.
+All enabled HTTP versions use the same route table. Register before `listen()`;
+registration closes once `listen()` runs and later attempts return
+`invalid_state`. Registration returns typed failures for malformed patterns,
+invalid/empty methods or handlers, duplicate overlapping registrations and
+route-budget exhaustion.
 
-### Lambda form: per-method, exact path
+`route(method, pattern, handler)` accepts one known or extension method.
+`route(method_set, pattern, handler)` accepts multiple known methods.
+`route_prefix(method_set, pattern, handler)` matches a subtree. A method set is
+built with `set(http::method_id::get)` and similar calls; an extension method is
+created with `http::method::extension("CUSTOM")` and registered individually.
+`route_sync` registers one bounded synchronous method at a time.
 
-`on_get`, `on_post`, `on_put`, `on_delete`, `on_patch`, `on_options`,
-`on_head` — each takes an exact path and a
-`std::function<http_response(const http_request&)>`:
+Patterns are slash-separated literal segments or whole `{name}` segments.
+Parameter names contain letters, digits or underscores and must be unique
+within a pattern. Captures are separate from query/form fields and available
+in registration-pattern order through `exchange::path_args()`.
 
-```cpp
-ws.on_get("/hello", [](const http_request&) {
-    return http_response::string("Hello, World!");
-});
-ws.on_post("/items", [](const http_request& req) {
-    return http_response::string("created: " + std::string{req.get_arg("name")})
-        .with_status(201);
-});
-```
-
-Re-registering the same `(method, path)` pair throws. The seven
-shortcuts cover the seven verbs with first-class handler functions;
-CONNECT and TRACE go through `route()` (below).
-
-### Lambda form: atomic multi-method via `route()`
-
-`route()` is the primary escape hatch when the HTTP method is known
-only at runtime (e.g. loaded from config, selected from a dispatch
-table). The single-method form:
+This helper registers a parameterized coroutine route and returns the
+registration outcome (include `<httpserver.hpp>`):
 
 ```cpp
-route(http_method m, "/info", handler)
+http::outcome add_item_route(srv::native_server& server) {
+    return server.route(http::method::known(http::method_id::get), "/items/{id}",
+        [](httpserver::exchange& x) -> httpserver::task<void> {
+            const std::string text = x.path_args().front().value;
+            http::fields fields;
+            fields.append("Content-Length", std::to_string(text.size()));
+            if (!x.start_response(http::status::from_code(200), fields).ok()) co_return;
+            const auto written =
+                co_await x.writer().write(std::as_bytes(std::span(text)));
+            if (!written.status.ok()) co_return;
+            if (!(co_await x.writer().finish()).status.ok()) co_return;
+        });
+}
 ```
 
-takes a runtime `http_method` value and is the canonical form for
-config-driven or table-driven registration (PRD-HDL-REQ-006).
+### Precedence and methods
 
-`route(method_set methods, "/info", handler)` additionally allows
-registering a handler under several methods in a single critical
-section — either every slot is registered, or none of them are:
+Full matches are considered before prefixes. Within full matches, the first
+registration accepting the method wins; literals and parameter patterns share
+that registration-order tier. Register `/items/special` before `/items/{id}` if
+the literal should win. Among prefix matches, the deepest accepting pattern
+wins, with registration order breaking ties. `/` is a catch-all prefix.
 
-```cpp
-ws.route(http_method::GET | http_method::HEAD, "/info",
-         [](const http_request&) {
-             return http_response::string("info");
-         });
-```
+The tier decision is method-blind: a full-match path with the wrong method owns
+the 405 instead of falling through to a prefix. The selected tier's methods
+supply `Allow`. A complete path miss produces 404. GET does not imply HEAD;
+register HEAD explicitly. The synchronous adapter keeps the corresponding body
+length for HEAD without sending body bytes. Coroutine HEAD handlers must also
+respect the protocol's body rules.
 
-A `method_set` is the bitwise-or of `http_method` values. This is the
-only entry point through which CONNECT and TRACE are reachable as
-lambdas: `route(http_method::CONNECT, "/proxy", handler)`.
+Use `options.not_found_response(factory)` and
+`options.method_not_allowed_response(factory)` before constructing the server
+to customize miss pages. A factory receives the request head and returns a
+`hook_response`. A method-mismatch response receives an `Allow` field when one
+was not supplied. A throwing factory or invalid returned status falls back to
+the default page. See [routes.cpp](examples/routes.cpp) for these cases.
 
-### Resource form: `register_path` and `register_prefix`
-
-For `http_resource` subclasses (the [class form](#class-form-handlers)):
-
-```cpp
-ws.register_path("/count",   std::make_unique<counter>());   // exact match
-ws.register_prefix("/static", std::make_unique<files>());    // subtree match
-```
-
-Both methods have `std::shared_ptr<http_resource>` overloads for the
-case where you need to retain a reference to the resource:
-
-```cpp
-auto cnt = std::make_shared<counter>();
-ws.register_path("/count", cnt);
-// cnt is still usable from outside the webserver.
-```
-
-**Parameterised paths.** Brace syntax captures path segments:
-
-```cpp
-ws.register_path("/users/{id}", std::make_unique<user_resource>());
-```
-
-The captured value is available inside the handler via
-`http_request::get_arg("id")`.
-
-**Per-segment regex constraints.** Add a regex after a pipe to constrain
-a segment:
-
-```cpp
-ws.register_path("/users/{id|[0-9]+}", std::make_unique<user_resource>());
-```
-
-Only requests where the `id` segment matches `[0-9]+` will match this
-registration.
-
-Regex validation is on by default; disable with `regex_checking(false)`
-on the builder if you need pure literal-path semantics.
-
-**Unregistration.** `unregister_path(path)` and `unregister_prefix(path)`
-remove an exact-match or prefix-match registration respectively.
-`unregister_resource(path)` is a kind-agnostic convenience that atomically
-clears whichever kind (exact or prefix) is registered at `path` — use it
-when the caller does not track how the resource was registered.
+[Back to TOC](#table-of-contents)
 
 ## Request
 
-`http_request` is read-only inside a handler. The accessors are designed
-around `std::string_view` so reading headers and arguments does not
-allocate.
+### Head and peer data
 
-### Path, method, version
+`x.head()` returns the complete semantic head:
 
-| Accessor | Returns | Notes |
-|---|---|---|
-| `get_path()` | `std::string_view` | The decoded path |
-| `get_path_pieces()` | `const std::vector<...>&` | Split path components |
-| `get_method()` | `httpserver::http_method` | Strongly-typed enum; see `http_method.hpp` |
-| `get_version()` | `std::string_view` | `"HTTP/1.1"`, `"HTTP/2"`, … |
-| `get_querystring()` | `std::string_view` | Raw query string (no decoding) |
-| `get_connection_id()` | uintptr-style id | Stable identifier for the underlying connection |
-| `get_requestor()` | `std::string_view` | Connecting peer's IP address (text form) |
-| `get_requestor_port()` | `unsigned short` | Connecting peer's port |
+| Member/accessor | Meaning |
+| --- | --- |
+| `raw_target` | Exact received target bytes, preserving escapes and query |
+| `route_path` | Validated/normalized input used by routing |
+| `request_method` | `http::method`, including extension identity |
+| `request_protocol` | `http::protocol` for this request |
+| `head_fields` | Ordered header fields, including repetitions |
+| `x.path_args()` | Named path captures; separate from query and form data |
+| `x.peer()` | Immutable transport address/port snapshot |
+| `x.connection_id()` | Library connection identity for correlation |
+| `x.tls()` | Shared immutable TLS peer metadata; absent for plaintext |
 
-### Headers, arguments, cookies
+`http::fields::first(name)` returns an optional first value;
+`all(name)` returns all matching values with case-insensitive field names.
+`entries()` preserves order. Use `append` to retain repeated values and
+`replace` when replacing all values for one name.
 
-| Accessor | Returns | Notes |
-|---|---|---|
-| `get_headers()` | `const map&` | All request headers |
-| `get_header(name)` | `std::string_view` | First value for a named header |
-| `get_args()` | `const map&` | All query / form arguments |
-| `get_arg(name)` | `std::string_view` | First value for a query / form arg |
-| `get_arg_flat(name)` | `std::string_view` | Alias for `get_arg`; explicit "first value only" form |
-| `get_cookies()` | `const map&` | All cookies |
-| `get_cookie(name)` | `std::string_view` | First value for a named cookie |
-| `get_footers()` | `const map&` | Chunked trailers |
+Query decoding is explicit. Extract the suffix after `?` from `raw_target` and
+pass its bytes to `forms::decode_urlencoded(encoded, limits, out)`. A
+`form_fields` collection preserves repeated pairs and empty values. Cookie
+parsing is also explicit: include `<httpserver/http/cookie.hpp>` and call
+`http::parse_cookie_header()` on each Cookie field. Do not flatten repeated
+headers or cookies unless that is the policy you want. The
+[request data example](examples/request_data.cpp) demonstrates these operations.
 
-### Uploaded files (multipart)
+### Body admission and incremental reads
 
-| Accessor | Returns | Notes |
-|---|---|---|
-| `get_files()` | `const map&` | Uploaded files keyed by form field name |
-| `get_content()` | `std::string_view` | The raw request body |
-| `get_content_size_limit()` | `size_t` | Configured cap, in bytes |
+A handler can answer directly from the head to refuse an upload before admitting
+its body. `admit_body(body_policy{cap})` starts bounded body delivery and allows
+`x.body()` operations. A zero policy cap selects the engine default; choose an
+explicit positive bound for predictable request handling. A bodyless admitted
+request reads immediately to EOF.
 
-See [`examples/file_upload.cpp`](examples/file_upload.cpp) and
-[`examples/file_upload_with_callback.cpp`](examples/file_upload_with_callback.cpp)
-for working programs.
+`read_some(buffer)` returns `body_read` with status, a view into the caller's
+buffer, and `end_of_body`. Read until authoritative EOF before using trailers
+or starting a response that depends on the whole upload. `collect(maximum)`
+buffers the remaining body and fails `limit_exceeded` when it grows past the
+cap; exactly-at-cap succeeds. Only one read or collect may be outstanding.
+Consumption releases receive credit; stopping reads applies backpressure.
 
-### Authentication accessors
+This complete handler function can be registered for POST with `server.route`.
+It caps total upload bytes separately from buffer capacity, consumes EOF,
+then returns a small streamed response:
 
-| Accessor | Returns | Notes |
-|---|---|---|
-| `get_user()` | `std::string_view` | Basic-auth user; empty when `HAVE_BAUTH` is off |
-| `get_pass()` | `std::string_view` | Basic-auth password; empty when `HAVE_BAUTH` is off |
-| `get_digested_user()` | `std::string_view` | Digest-auth user; empty when `HAVE_DAUTH` is off |
-| `check_digest_auth(realm, password, nonce_timeout, signal_stale, algo)` | `digest_auth_result` | Validates a digest auth response against a plaintext password |
-| `check_digest_auth_digest(realm, ha1, ...)` | `digest_auth_result` | Same as above but against a pre-computed HA1 hash |
+```cpp
+httpserver::task<void> upload_size(httpserver::exchange& x) {
+    if (!x.admit_body({1024}).ok()) co_return;
+    std::array<std::byte, 64> buffer;
+    std::size_t total = 0;
+    for (;;) {
+        const auto read = co_await x.body().read_some(buffer);
+        if (!read.status.ok()) {
+            if (read.status.code() == http::outcome_code::limit_exceeded) {
+                const auto rejected = x.respond(http::status::from_code(413), {});
+                if (!rejected.ok()) co_return;
+            }
+            co_return;
+        }
+        total += read.data.size();
+        if (total > 1024) {
+            const auto rejected = x.respond(http::status::from_code(413), {});
+            if (!rejected.ok()) co_return;
+            co_return;
+        }
+        if (read.end_of_body) break;
+    }
+    // x.body().trailers() is final here; start_response closes the reader.
+    const std::string text = "bytes=" + std::to_string(total) + "\n";
+    http::fields fields;
+    fields.append("Content-Length", std::to_string(text.size()));
+    if (!x.start_response(http::status::from_code(200), fields).ok()) co_return;
+    const auto written =
+        co_await x.writer().write(std::as_bytes(std::span(text)));
+    if (!written.status.ok()) co_return;
+    if (!(co_await x.writer().finish()).status.ok()) co_return;
+}
+```
 
-> **Security note.** Basic auth (`get_user`/`get_pass`) transmits
-> credentials as Base64 — effectively cleartext. Digest auth
-> (`get_digested_user`) avoids transmitting the password but is still
-> vulnerable to man-in-the-middle attacks without TLS. Both are only
-> safe when the server is configured with TLS (`HAVE_GNUTLS`, `.use_ssl(true)`).
-> See [Feature availability](#feature-availability) and
-> [`examples/basic_authentication.cpp`](examples/basic_authentication.cpp).
+Include `<array>` alongside `<httpserver.hpp>`, `<span>` and `<string>`.
+`x.body().trailers()` is separate from `head_fields` and final only at EOF.
+A disconnect wakes parked body operations with a typed failure. Do not commit
+response headers and then attempt to continue reading the upload.
 
-`digest_auth_result` is a strongly-typed enum:
+### Forms and uploaded files
 
-* `OK` — authentication succeeded.
-* `NONCE_STALE` — the nonce is stale; signal the client to retry with a fresh nonce by setting `signal_stale = true` in the response.
-* `WRONG_USERNAME`, `WRONG_REALM`, `WRONG_URI`, `WRONG_QOP`, `WRONG_ALGO`, `RESPONSE_WRONG` — specific reasons for failure.
-* `WRONG_HEADER`, `TOO_LARGE`, `NONCE_WRONG`, `NONCE_OTHER_COND`, `ERROR` — other failure conditions.
+Form bodies are decoded through bounded adapters:
 
-### TLS / client-certificate accessors
+- `forms::read_urlencoded(x, limits)` admits and collects a URL-encoded body,
+  returning fields or a typed rejection. `make_urlencoded_route(limits, handler)`
+  adapts a value-returning form handler; `decode_urlencoded` works on bytes
+  already in memory, including query strings.
+- `forms::read_multipart(x, limits, sink)` incrementally parses multipart data
+  into a `part_sink`. Limits bound body bytes, part count, per-part bytes and
+  per-part header bytes.
+- `make_multipart_route(limits, handler)` collects non-file fields in memory
+  and drains file parts without retaining them. To retain file bytes in memory,
+  implement an application `part_sink` under the same limits.
+- `temp_file_part_sink` uses a caller-selected existing directory and owns
+  cleanup of temporary files. `temp_file_options::random_names` avoids trusting
+  client filenames;
+  `should_keep` decides which completed files survive cleanup.
 
-When the build was compiled with GnuTLS (`HAVE_GNUTLS`) **and** the
-client presented an X.509 certificate during the TLS handshake, these
-accessors return the certificate details. On a non-TLS build, or when
-the client did not present a certificate, they return empty / `-1` /
-`false`:
+A URL-encoded handler can be written directly (include
+`<httpserver/forms/urlencoded.hpp>`):
 
-| Accessor | Returns | Notes |
-|---|---|---|
-| `has_client_certificate()` | `bool` | True if a client cert was presented |
-| `is_client_cert_verified()` | `bool` | True if the chain validated against the configured trust store |
-| `get_client_cert_dn()` | `std::string_view` | Subject Distinguished Name |
-| `get_client_cert_issuer_dn()` | `std::string_view` | Issuer Distinguished Name |
-| `get_client_cert_cn()` | `std::string_view` | Subject Common Name |
-| `get_client_cert_fingerprint_sha256()` | `std::string_view` | Hex-encoded SHA-256 fingerprint |
-| `get_client_cert_not_before()` | `time_t` | Validity-start timestamp; `-1` if unavailable |
-| `get_client_cert_not_after()` | `time_t` | Validity-end timestamp; `-1` if unavailable |
+```cpp
+httpserver::task<void> submit_form(httpserver::exchange& x) {
+    const auto form = co_await httpserver::forms::read_urlencoded(x, {1024, 8});
+    if (!form.ok()) {
+        if (form.reject_status().valid()) {
+            const auto rejected =
+                x.respond(form.reject_status(), form.reject_fields());
+            if (!rejected.ok()) co_return;
+        }
+        co_return;
+    }
+    // Validate form.fields before storing application data.
+    http::fields fields;
+    fields.append("Content-Length", "0");
+    const auto accepted = x.respond(http::status::from_code(204), fields);
+    if (!accepted.ok()) co_return;
+}
+```
 
-See [`examples/client_cert_auth.cpp`](examples/client_cert_auth.cpp) for a
-worked mTLS example.
-
-### Lifetime contract
-
-Every `string_view` returned by `http_request` is valid for the duration
-of the handler invocation **and no longer**. Copy what you need to keep
-(e.g. into a `std::string`); do not hand a view to a deferred callback.
-The references returned by `get_headers()`, `get_args()`,
-`get_path_pieces()`, `get_files()`, and `get_cookies()` follow the same
-rule. `http_request` is **single-threaded per request**: sharing one
-`http_request` across threads is undefined.
-
-### Method enum
-
-`http_method` (declared in
-`http_method.hpp`) covers the canonical
-HTTP methods. `method_set` is a bitset used by atomic multi-method
-registration on `route()` (see [Routing](#routing)).
+The multipart sink must live throughout `read_multipart`; its destructor handles
+cleanup on success, parser failure and cancellation. Keep policy applies only
+to completed uploads. Treat a supplied filename as metadata, validate any name
+used by the application, and copy fields/file metadata that must survive sink
+destruction. See [forms.cpp](examples/forms.cpp) for memory-independent temp-file
+handling and cleanup before the success response.
 
 [Back to TOC](#table-of-contents)
 
 ## Response
 
-`http_response` is a **value type** — move-only, returned by value,
-never `shared_ptr`-wrapped. There is no class hierarchy of body
-subclasses; the body shape is a runtime detail of one type. Build a
-response with one of the seven factories described below and decorate
-it with the fluent `with_*` mutators.
+An exchange takes one terminal decision. `respond(status, fields)` commits a
+one-shot head with no active writer, suitable for empty replies/rejections.
+`start_response(status, fields)` commits the streaming head and enables
+`writer()`. Both close request-body reading. A failed precommit decision leaves
+the exchange available; a second terminal action returns `invalid_state`.
 
-### The seven factories
+### Streaming a body
 
-| Factory | Body shape | Use when |
-|---|---|---|
-| `http_response::string(body, [status, content_type])` | In-memory string (small bodies live inline via SBO) | The body is already in memory |
-| `http_response::file(path)` | Stream a file from disk | The body is a static or generated file on disk |
-| `http_response::iovec(entries)` | Scatter-gather over a vector of `iovec_entry` (zero-copy) | The body is assembled from several existing buffers |
-| `http_response::pipe(fd)` | Stream from a pipe / FIFO | The body is being produced by another process or thread |
-| `http_response::empty([status])` | Empty body | 204 No Content, redirects, HEAD responses |
-| `http_response::deferred(producer, [closure, content_type])` | Body produced incrementally by a callback | The body cannot be materialised up-front (long-poll, streaming) |
-| `http_response::unauthorized(realm, [status, content_type, algorithm])` | 401 with the proper `WWW-Authenticate` header | Reject a request that lacks valid credentials |
+After a successful `start_response`, await `writer().write(bytes)` and
+`writer().finish(trailers)`. A successful write means the entire supplied span
+was copied into the engine's bounded queue. It does not acknowledge peer receipt.
+Keep the span's storage alive until the await completes. Only one write or
+finish may be outstanding. Queue exhaustion suspends a writer until capacity,
+failure or cancellation arrives.
 
-`iovec_entry` is the element type of the `iovec()` vector:
+This handler sends generated chunks without buffering the whole response:
 
 ```cpp
-struct iovec_entry {
-    const void* base;   // borrowed for the response's lifetime
-    size_t length;
-};
-```
-
-The `base` pointer is **borrowed**: the caller must keep the underlying
-storage alive until the response has been fully written to the wire.
-For owning scatter-gather, copy your strings into a `std::vector<std::string>`
-that the response captures by value.
-
-### Fluent mutation
-
-Every `http_response` exposes `with_status`, `with_header`, `with_footer`,
-and `with_cookie`. These return `*this` (by reference on lvalues, by
-rvalue-reference on rvalues), so calls can chain:
-
-```cpp
-return httpserver::http_response::string("hi")
-    .with_header("X-Trace-Id", trace_id)
-    .with_status(201);
-```
-
-The fluent helpers are intentionally narrow — every other mutation
-(content type, body data) is set at the factory call. This keeps the
-"build it, return it, done" idiom uniform across response shapes.
-
-### Building error responses by value
-
-There is **no throw-as-status idiom**. To return a 404 from a handler,
-build it explicitly:
-
-```cpp
-if (!found) {
-    return httpserver::http_response::empty().with_status(404);
+httpserver::task<void> download(httpserver::exchange& x) {
+    http::fields fields;
+    fields.append("Content-Type", "text/plain");
+    if (!x.start_response(http::status::from_code(200), fields).ok()) co_return;
+    const std::string chunk = "generated-chunk\n";
+    for (int i = 0; i < 64; ++i) {
+        const auto written = co_await x.writer().write(std::as_bytes(std::span(chunk)));
+        if (!written.status.ok()) co_return;
+    }
+    http::fields trailers;
+    trailers.append("X-End", "complete");
+    if (!(co_await x.writer().finish(trailers)).status.ok()) co_return;
 }
 ```
 
-Or with a body:
+The engine chooses framing for an unframed streaming response according to the
+protocol. If you declare `Content-Length`, supply exactly that body length.
+Trailer support and body-forbidden statuses follow protocol rules; do not add
+conflicting framing fields. Once the head is accepted, a later failure must
+abort/reset/close according to the protocol rather than replace the response.
+
+### Immutable response definitions
+
+Create `response_definition` values through checked factories and send them with
+`send_definition(exchange, definition, overlay)`. Copies share frozen state.
+Every send owns its cursor, serialization, cancellation and overlay, so
+replayable sources can be used concurrently without changing the definition.
+
+| Factory/source | Library ownership | Replay contract |
+| --- | --- | --- |
+| `owned_bytes` | Body bytes | Reusable |
+| `reopen_file` | Path; fresh file per send | Reusable if path resolves |
+| `factory` | Fresh-producer callable | Reusable; concurrent-safe factory |
+| `borrowed` | Span and `body_lease` | Reusable; immutable leased bytes |
+| `owned_file` | Transferred `std::FILE*`/close | One send attempt |
+| `owned_pipe` | Transferred `std::FILE*`/close | One send attempt |
+
+This helper constructs an owned reusable response, captures it into a route and
+checks each send. It can be called before listening:
 
 ```cpp
-return httpserver::http_response::string("user not found").with_status(404);
+http::outcome add_cached_route(srv::native_server& server) {
+    const std::string text = "cached\n";
+    const auto bytes = std::as_bytes(std::span(text));
+    httpserver::response_definition definition;
+    const auto made = httpserver::response_definition::owned_bytes(
+        http::status::from_code(200), {},
+        std::vector<std::byte>(bytes.begin(), bytes.end()), definition);
+    if (!made.ok()) return made;
+    return server.route(http::method::known(http::method_id::get), "/cached",
+        [definition](httpserver::exchange& x) -> httpserver::task<void> {
+            httpserver::response_overlay overlay;
+            overlay.headers.append("X-Source", "cache");
+            const auto sent =
+                co_await httpserver::send_definition(x, definition, overlay);
+            if (!sent.status.ok()) co_return;
+        });
+}
 ```
 
-For 401 responses, the dedicated `http_response::unauthorized` factory
-sets the right `WWW-Authenticate` header for you:
+An overlay appends headers after base fields and carries per-send trailers. It
+never mutates the definition. Overlay/framing validation happens before head
+commit; a conflict fails with the exchange untouched. Use an owned smart-pointer
+keeper for a borrowed body's lease; an empty lease is rejected. A producer's
+chunk data must remain valid until its next pull and must be nonempty unless it
+marks the end.
 
-```cpp
-return httpserver::http_response::unauthorized("MyRealm");
-```
-
-See [`examples/setting_headers.cpp`](examples/setting_headers.cpp),
-[`examples/iovec_response_example.cpp`](examples/iovec_response_example.cpp),
-[`examples/minimal_file_response.cpp`](examples/minimal_file_response.cpp),
-[`examples/pipe_response_example.cpp`](examples/pipe_response_example.cpp),
-[`examples/empty_response_example.cpp`](examples/empty_response_example.cpp),
-[`examples/minimal_deferred.cpp`](examples/minimal_deferred.cpp), and
-[`examples/binary_buffer_response.cpp`](examples/binary_buffer_response.cpp)
-for working programs covering every response shape.
+Transferred file/pipe handles are closed exactly once on completion, failure,
+cancellation or destruction of an unsent holder. One-shot claims are taken
+before probing and are not refundable: a failed probe still spends the send
+attempt, and concurrent losers fail `invalid_state`. Reopen a path or use a
+fresh-producer factory for repeated sends. File reads/producers can occupy the
+calling worker; choose sources appropriate to your latency requirements.
+See [response_sources.cpp](examples/response_sources.cpp).
 
 [Back to TOC](#table-of-contents)
 
-## IP blocking and unblocking
+## IP access control
 
-libhttpserver supports both IPv4 and IPv6 and manages them transparently.
-The only requirement for IPv6 is that it is enabled on the underlying
-server — set `use_ipv6(true)` on `create_webserver` (or `use_dual_stack(true)`
-for both stacks on the same socket).
+Configure `options.peer_policy()` before construction or use
+`server.peer_policy()` at runtime. The policy is enabled by default and starts
+in `peer_policy_mode::accept_all`: unmatched peers are admitted, and a matching
+allow entry takes precedence over a deny entry. In `reject_all`, a peer is
+admitted only if it matches an allow entry and no deny entry. Disabled policy
+admits all peers.
 
-You can populate the deny list and the allow list (with individual IPs or
-wildcard ranges) at runtime using these methods on `webserver`:
-
-* **`void deny_ip(std::string_view ip)`** — add one IP (or a range,
-  e.g. `"127.0.0.*"`) to the deny list. Connections from a matching
-  address are refused at the policy callback. This is the exception list
-  under the default `ACCEPT` policy.
-* **`void remove_denied_ip(std::string_view ip)`** — remove one IP (or a
-  range) from the deny list. Idempotent: removing an entry that is not
-  currently denied is a no-op.
-* **`void allow_ip(std::string_view ip)`** — add one IP (or a range) to
-  the allow list. This is the exception list under the `REJECT` policy
-  (permit only these). Under `ACCEPT`, an allow entry overrides a
-  matching `deny_ip` entry.
-* **`void remove_allowed_ip(std::string_view ip)`** — remove one IP (or a
-  range) from the allow list. Idempotent.
-
-### IP string format
-
-The IP string format can represent both IPv4 and IPv6. Addresses are
-normalised internally by the webserver to a common representation, so
-any valid IPv4 or IPv6 textual representation works. To express a
-range, omit the octet you want to wildcard and specify `'*'` in its
-place.
-
-Examples of valid IPs include:
-
-* `"192.168.5.5"` — standard IPv4
-* `"192.168.*.*"` — range of IPv4 addresses; in the example, everything between `192.168.0.0` and `192.168.255.255`
-* `"2001:db8:8714:3a90::12"` — standard IPv6; clustered empty ranges are fully supported
-* `"2001:db8:8714:3a90:*:*"` — range of IPv6 addresses
-* `"::ffff:192.0.2.128"` — IPv4 nested into IPv6
-* `"::192.0.2.128"` — IPv4 nested into IPv6 (without the `ffff` prefix)
-* `"::ffff:192.0.*.*"` — ranges of IPv4 IPs nested into IPv6
-
-### Allow-list mode
-
-By default (`ACCEPT` policy) the deny list is the exception list: use
-`deny_ip` to refuse specific addresses and admit everyone else. To invert
-this into an allow list — refuse everyone except specific addresses — set
-the default policy to `REJECT` and populate the allow list with `allow_ip`:
+Runtime mutations are synchronized and callable from handlers. `deny(pattern)`,
+`allow(pattern)`, `remove_denied(pattern)` and `remove_allowed(pattern)` return
+outcomes. `set_mode()` changes the default stance and `set_enabled()` controls
+policy evaluation. The following helper permits a private subnet and refuses
+unmatched peers; check its result before relying on that policy:
 
 ```cpp
-webserver ws{create_webserver(8080)
-    .default_policy(http::http_utils::REJECT)};
-ws.allow_ip("192.168.0.*");  // permits 192.168.0.0/24, refuses everything else
+http::outcome restrict_peers(srv::native_server& server) {
+    auto& policy = server.peer_policy();
+    const auto allowed = policy.allow("192.168.0.0/16");
+    if (!allowed.ok()) return allowed;
+    policy.set_mode(srv::peer_policy_mode::reject_all);
+    return http::outcome::okay();
+}
 ```
 
-See [`examples/minimal_ip_access_control.cpp`](examples/minimal_ip_access_control.cpp)
-for a worked example of both modes.
+Patterns accept exact IPv4/IPv6 addresses, CIDR and a single final-octet IPv4
+wildcard such as `192.168.1.*`. Use CIDR, such as `192.168.0.0/16`, for larger
+subnets. IPv6 uses CIDR rather than wildcard components; mapped IPv6 CIDR is
+rejected. Peer metadata is the transport peer, not an address asserted by an
+HTTP forwarding header. Admission decisions
+are observable through `accept_decision`; live policy also participates in
+request dispatch. See [operations.cpp](examples/operations.cpp).
 
 [Back to TOC](#table-of-contents)
 
-## Authentication
+## Authentication and TLS
 
-libhttpserver supports four authentication mechanisms, all of which can
-be combined freely (e.g. mTLS *and* digest auth in a two-factor
-configuration):
+### Basic and Digest policies
 
-* **Basic authentication** — username and password are exchanged in
-  clear (base64-encoded) between the client and the server. Use only
-  for non-sensitive content or under HTTPS. With Basic auth, the
-  application sees the cleartext password — useful for chained
-  authentication against an external store. Enable / disable with
-  `basic_auth(true|false)` on the builder.
-* **Digest authentication** — a one-way authentication scheme based on
-  hash algorithms (MD5, SHA-256, or SHA-512/256). Only the hash transits
-  the network; a server-issued nonce prevents replay attacks. Appropriate
-  for general use, especially when HTTPS is not available. SHA-256 is the
-  default; SHA-512/256 is also supported for stronger security. Enable /
-  disable with `digest_auth(true|false)`.
-* **Client-certificate authentication (mTLS)** — uses an X.509
-  certificate from the client. The strongest of the three mechanisms,
-  but requires HTTPS. Combines well with Basic or Digest for layered
-  authentication. Enable with `use_ssl(true)` plus configured `https_mem_trust`.
-* **Centralized authentication** — a single per-request callback that
-  runs *before* any resource's render method, so individual handlers
-  don't need to repeat auth code. Configured via `auth_handler` and
-  `auth_skip_paths` on the builder.
+Authentication policies operate on a request head. `basic_auth_policy::create`
+accepts fixed credentials or an application validator; `check(head)` returns a
+verdict with `allowed()`, a challenge status and challenge fields. A validator
+may run concurrently and must keep its captures alive. Avoid recording decoded
+credentials in logs or responses. Basic transmits a Base64-encoded password;
+use TLS to protect authentication traffic.
 
-### Using Basic authentication
+For routine route protection, compose `make_basic_guard(policy, next)` or
+`make_digest_guard(policy, next)` with a route. A guard sends its challenge when
+a check fails, and invokes the next handler when accepted. Create a shared policy
+wrapper for several protected routes and leave public routes unwrapped.
+
+This helper obtains credentials from its caller and registers one guarded route:
 
 ```cpp
-class user_pass_resource : public httpserver::http_resource {
- public:
-    httpserver::http_response render_get(const httpserver::http_request& req) override {
-        if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
-            return httpserver::http_response::unauthorized("test@example.com");
-        }
-        return httpserver::http_response::string(
-            std::string{req.get_user()} + " " + std::string{req.get_pass()});
-    }
-};
-
-int main() {
-    httpserver::webserver ws{httpserver::create_webserver(8080)};
-    ws.register_path("/hello", std::make_unique<user_pass_resource>());
-    ws.start(true);
+http::outcome add_private_route(srv::native_server& server,
+                               std::string user, std::string password) {
+    httpserver::auth::basic_auth_policy policy;
+    const auto made = httpserver::auth::basic_auth_policy::create(
+        "private", std::move(user), std::move(password), policy);
+    if (!made.ok()) return made;
+    return server.route(http::method::known(http::method_id::get), "/private",
+        httpserver::auth::make_basic_guard(std::move(policy),
+            [](httpserver::exchange& x) -> httpserver::task<void> {
+                http::fields fields;
+                fields.append("Content-Length", "0");
+                const auto sent = x.respond(http::status::from_code(204), fields);
+                if (!sent.ok()) co_return;
+                co_return;
+            }));
 }
 ```
 
-To test:
+Digest supports `digest_algorithm::md5` and `digest_algorithm::sha_256`.
+The default algorithm is MD5; explicitly choose SHA-256 in
+`digest_auth_options` when required. The policy checks nonces, expiration and
+replay state and produces an appropriate challenge, including stale handling.
+Digest does not replace TLS protection. The [auth example](examples/auth.cpp)
+selects SHA-256 explicitly and demonstrates both guard forms.
 
-```sh
-curl -XGET -v -u myuser:mypass http://localhost:8080/hello
-```
+### Certificates, SNI and initial mTLS
 
-You will get back the user and password you passed. Try passing wrong
-credentials to see the failure response. See
-[`examples/basic_authentication.cpp`](examples/basic_authentication.cpp)
-for the full source.
+A `tls_credentials` store publishes validated immutable generations. Configure
+`tls_host_credentials` entries with canonical DNS host names, PEM certificate
+chains and private keys, plus ALPN. Unknown or absent SNI uses `default_host`.
+The listener retains the store, and each accepted TLS session pins a complete
+selection through handshake and I/O retirement.
 
-### Using Digest authentication
-
-`check_digest_auth` returns a `digest_auth_result` enum with fine-grained
-status codes (see [Request](#request) for the full list). The skeleton
-of a digest-protected handler is:
+This helper configures a TLS TCP listener from application-supplied PEM strings.
+It includes `<httpserver/server/tls_credentials.hpp>` via the umbrella:
 
 ```cpp
-httpserver::http_response render_get(const httpserver::http_request& req) override {
-    if (req.get_digested_user().empty()) {
-        return httpserver::http_response::unauthorized(
-            "test@example.com", 401, "text/plain",
-            httpserver::http::http_utils::digest_algorithm::SHA_256);
-    }
-    auto result = req.check_digest_auth(
-        "test@example.com", "mypass", 300, 0,
-        httpserver::http::http_utils::digest_algorithm::SHA_256);
-    if (result == httpserver::http::http_utils::digest_auth_result::NONCE_STALE) {
-        return httpserver::http_response::unauthorized(
-            "test@example.com", 401, "text/plain",
-            httpserver::http::http_utils::digest_algorithm::SHA_256)
-            .with_header("Stale", "true");
-    }
-    if (result != httpserver::http::http_utils::digest_auth_result::OK) {
-        return httpserver::http_response::unauthorized(
-            "test@example.com", 401, "text/plain",
-            httpserver::http::http_utils::digest_algorithm::SHA_256);
-    }
-    return httpserver::http_response::string("SUCCESS");
+http::outcome configure_tls(srv::server_options& options,
+                           std::string chain, std::string key) {
+    auto store = std::make_shared<srv::tls_credentials>();
+    srv::tls_credentials_config credentials;
+    credentials.hosts.push_back({"a.example", std::move(chain), std::move(key),
+                                 {"h2", "http/1.1"}});
+    const auto published = store->replace(credentials);
+    if (!published.ok()) return published;
+    options.tls().provider = srv::tls_provider::system_default;
+    options.tls().profile = srv::tls_profile::certificates;
+    options.protocols().enable(http::protocol::http_2);
+    options.add_listener({"127.0.0.1", 8443, true, store});
+    return options.validate();
 }
 ```
 
-To test:
+HTTP/2 needs enabled HTTP/2, a TLS TCP listener and an eligible certificate ALPN
+selection containing `h2`. HTTP/3 needs enabled HTTP/3, a TLS UDP listener and
+`h3`. Merely linking the provider enables neither listener. Use numeric bind
+addresses; the credential's DNS name serves certificate/SNI selection.
 
-```sh
-curl -XGET -v --digest --user myuser:mypass localhost:8080/hello
-```
+For mutual TLS, choose `tls_profile::mutual_tls`, provide `trust_roots_pem`, and
+set matching client-auth policy in the options and credential entry. Unset mode
+means `require` for mutual TLS and `none` for certificate profiles. Explicit
+`tls_client_certificate_mode::request` permits an anonymous peer but verifies a
+presented chain; `require` needs a verified client chain. Authentication timing
+is `initial_handshake`, including HTTP/3. `exchange::tls()` exposes an immutable
+metadata snapshot: certificate presence/verification, subject/issuer DN, common
+name, SHA-256 fingerprint and UTC validity times. Make application authorization
+decisions from verified identity and your own policy.
 
-You'll get `SUCCESS` in response; observe the response message in detail
-to see the full digest handshake. See
-[`examples/digest_authentication.cpp`](examples/digest_authentication.cpp).
+### Credential rotation
 
-### Using centralized authentication
+Keep an owning store handle to rotate credentials. Call `store->replace(candidate)`
+with a complete candidate configuration. Validation builds it synchronously and
+publishes atomically; failure preserves the active generation. New selections
+see the published generation, while existing sessions retain their selection.
+Caller PEM buffers may be destroyed after `replace()` returns. Rotation does not
+retrofit the identity of an established connection.
 
-The per-resource pattern above duplicates auth logic across every
-resource. Centralized authentication lets you define the policy once and
-have it applied automatically to every request:
+The [TLS rotation source](test/examples/tls_rotation.cpp) demonstrates replacement,
+preservation on invalid input and selection across connections. The
+[TLS profiles example](examples/tls_profiles.cpp) demonstrates certificate/SNI
+and request/require client-auth modes.
 
-```cpp
-// auth runs once per request before any render_*; return std::nullopt to allow
-auto auth = [](const httpserver::http_request& req)
-    -> std::optional<httpserver::http_response> {
-    if (req.get_user() != "admin" || req.get_pass() != "secret") {
-        return httpserver::http_response::unauthorized("MyRealm");
-    }
-    return std::nullopt;
-};
+### External PSK and ACME challenges
 
-httpserver::webserver ws{httpserver::create_webserver(8080)
-    .auth_handler(auth)
-    .auth_skip_paths({"/health", "/public/*"})};
+`tls_profile::external_psk` is available for eligible HTTP/1 TLS connections.
+Configure a bounded `tls_psk_runtime`, a `tls_psk_config::lookup` and explicit
+identity/key/attempt bounds. The lookup receives borrowed identity/context with
+a deadline and cancellation token. Copy retained data and synchronize captured
+state. TLS 1.3 identity is opaque bytes; TLS 1.2 uses its textual wire identity.
 
-ws.register_path("/api",    std::make_unique<api_resource>());
-ws.register_path("/health", std::make_unique<health_resource>());
-ws.start(true);
-```
+A timed-out callback that ignores cancellation retains its slot until returning;
+its late result cannot authenticate. Server stop does not join arbitrary
+application lookup callbacks. Keep their state alive, call the lookup runtime's
+`request_stop()`, and check `wait_retired(deadline)` before releasing captures.
+The runtime rejects waiting from its own callback. See
+[tls_profiles.cpp](examples/tls_profiles.cpp) for a complete ownership pattern.
 
-The `auth_handler` callback runs for every request before the resource's
-render method. It receives the `http_request` and can:
-
-* Return `std::nullopt` to allow the request to proceed normally.
-* Return an `http_response` (typically `http_response::unauthorized`) to
-  reject the request. The response is moved onto the wire by the
-  dispatcher; no heap allocation is required.
-
-`auth_skip_paths` accepts a vector of paths that should bypass the
-handler:
-
-* Exact matches: `"/health"` matches only `/health`.
-* Wildcard suffixes: `"/public/*"` matches `/public/`, `/public/info`,
-  `/public/docs/api`, etc.
-
-To test (without auth — returns 401):
-
-```sh
-curl -v http://localhost:8080/api
-```
-
-With valid auth — returns 200:
-
-```sh
-curl -u admin:secret http://localhost:8080/api
-```
-
-Health endpoint (skip path) — works without auth:
-
-```sh
-curl http://localhost:8080/health
-```
-
-See [`examples/centralized_authentication.cpp`](examples/centralized_authentication.cpp).
-
-### Using client-certificate authentication (mTLS)
-
-Client-certificate authentication (mutual TLS, mTLS) provides strong
-authentication by requiring the client to present an X.509 certificate
-during the TLS handshake. To enable mTLS:
-
-1. `use_ssl(true)` — enable TLS.
-2. `https_mem_key("server_key.pem")` and `https_mem_cert("server_cert.pem")` — server certificate.
-3. `https_mem_trust("ca_cert.pem")` — CA certificate(s) to verify client certificates.
-
-```cpp
-class secure : public httpserver::http_resource {
- public:
-    httpserver::http_response render_get(const httpserver::http_request& req) override {
-        if (!req.has_client_certificate()) {
-            return httpserver::http_response::string("client certificate required")
-                .with_status(401);
-        }
-        if (!req.is_client_cert_verified()) {
-            return httpserver::http_response::string("certificate not verified")
-                .with_status(403);
-        }
-        std::string cn{req.get_client_cert_cn()};
-        return httpserver::http_response::string("Welcome, " + cn + "!");
-    }
-};
-
-int main() {
-    httpserver::webserver ws{httpserver::create_webserver(8443)
-        .use_ssl(true)
-        .https_mem_key("server_key.pem")
-        .https_mem_cert("server_cert.pem")
-        .https_mem_trust("ca_cert.pem")};
-    ws.register_path("/secure", std::make_unique<secure>());
-    ws.start(true);
-}
-```
-
-Available client-certificate methods (require GnuTLS support):
-
-* `has_client_certificate()` — was a client cert presented?
-* `is_client_cert_verified()` — did the chain validate?
-* `get_client_cert_dn()` — subject Distinguished Name
-* `get_client_cert_issuer_dn()` — issuer Distinguished Name
-* `get_client_cert_cn()` — Common Name from the subject
-* `get_client_cert_fingerprint_sha256()` — hex-encoded SHA-256 fingerprint
-* `get_client_cert_not_before()` / `get_client_cert_not_after()` — validity window
-
-Test with a client certificate:
-
-```sh
-curl -k --cert client_cert.pem --key client_key.pem https://localhost:8443/secure
-```
-
-Without a client certificate (will be rejected):
-
-```sh
-curl -k https://localhost:8443/secure
-```
-
-See [`examples/client_cert_auth.cpp`](examples/client_cert_auth.cpp).
-
-### Server Name Indication (SNI) callback
-
-SNI lets a server host multiple TLS certificates on a single IP address.
-The client indicates which hostname it's connecting to during the TLS
-handshake, and the server can select the appropriate certificate.
-Configure an SNI callback that returns the `(cert_pem, key_pem)` pair for
-each server name:
-
-```cpp
-std::map<std::string, std::pair<std::string, std::string>> certs;
-
-auto sni = [](const std::string& server_name)
-    -> std::pair<std::string, std::string> {
-    auto it = certs.find(server_name);
-    if (it != certs.end()) return it->second;
-    return {"", ""};  // fall back to the default certificate
-};
-
-httpserver::webserver ws{httpserver::create_webserver(443)
-    .use_ssl(true)
-    .https_mem_key("default_key.pem")
-    .https_mem_cert("default_cert.pem")
-    .sni_callback(sni)};
-```
-
-SNI support requires libmicrohttpd 1.0.0 or later compiled with GnuTLS.
-
-### TLS-PSK (pre-shared key)
-
-For environments where X.509 certificates are impractical, libhttpserver
-also supports TLS-PSK via `cred_type(http::http_utils::PSK)` plus a
-`psk_cred_handler` callback returning the PSK for a given identity. See
-[`examples/minimal_https_psk.cpp`](examples/minimal_https_psk.cpp).
+`publish_acme(challenge)` and `remove_acme(host)` manage application-supplied
+TLS-ALPN challenge material. Publication validates certificate/key material,
+the key-authorization digest and expiration. Challenge selection requires exact
+canonical SNI, **sole** ALPN `acme-tls/1`, TCP and the authentic local port 443.
+Ordinary HTTP ALPN remains separate. The application obtains challenge material,
+coordinates issuance and removes it; the library does not issue certificates.
 
 [Back to TOC](#table-of-contents)
 
 ## WebSocket support
 
-libhttpserver provides WebSocket support when libmicrohttpd is built
-with WebSocket functionality. To use WebSockets, derive from the
-`websocket_handler` class and implement `on_message`.
+Register a coroutine route and call `co_await x.upgrade(options)` before a
+terminal response/body delivery. The same surface supports HTTP/1.1 Upgrade,
+HTTP/2 Extended CONNECT and HTTP/3 Extended CONNECT on their configured
+transports. TLS-off listeners serve HTTP/1.1 upgrades; H2/H3 require their TLS
+listeners.
 
-### The `websocket_handler` class
+`ws_upgrade_options` specifies subprotocol preference, exact serialized origin
+allowlists, absent-origin policy and session limits. By default an empty origin
+allowlist accepts any syntactically valid origin and absent origins are allowed;
+set explicit policy for browser-facing applications. Upgrade success means
+bounded handshake admission (101 or a successful CONNECT response), not peer
+acknowledgment. A refusal carries `rejection_status`/`rejection_fields` and leaves
+the exchange open so the handler can send an ordinary HTTP response.
 
-The `websocket_handler` class provides the following virtual methods:
+The accepted result owns a `websocket::session`:
 
-* **`void on_open(websocket_session& session)`** — called when a new WebSocket connection is established. Default implementation does nothing.
-* **`void on_message(websocket_session& session, std::string_view msg)`** — called when a text message is received. **This is the only pure virtual method and must be implemented.**
-* **`void on_binary(websocket_session& session, const void* data, size_t len)`** — called when a binary message is received. Default implementation does nothing.
-* **`void on_ping(websocket_session& session, std::string_view payload)`** — called when a ping frame is received. Default implementation sends a pong.
-* **`void on_close(websocket_session& session, uint16_t code, const std::string& reason)`** — called when the WebSocket connection is closed. Default implementation does nothing.
+- `receive()` yields owning message data or typed closure/failure. One receive
+  may be outstanding at a time.
+- `try_send(kind, bytes)` copies the whole payload when accepted. Temporary
+  backpressure leaves queues unchanged and carries an OK status; inspect the
+  disposition as well as the status.
+- `writable()` waits for capacity for at least an empty frame. Retry `try_send`
+  afterward; it does not promise room for an arbitrary message or acknowledge
+  delivery. Only one writable wait may be outstanding.
+- `close(code, reason)` begins a bounded close handshake. Register `on_close`
+  once before terminal closure and retain the handle through notification.
 
-### The `websocket_session` class
-
-The `websocket_session` class provides methods to interact with the
-client:
-
-* **`void send_text(const std::string& msg)`** — send a text message.
-* **`void send_binary(const void* data, size_t len)`** — send a binary message.
-* **`void send_ping(const std::string& payload = "")`** — send a ping frame.
-* **`void send_pong(const std::string& payload = "")`** — send a pong frame.
-* **`void close(uint16_t code = 1000, const std::string& reason = "")`** — close the WebSocket connection.
-* **`bool is_valid()`** — true while the session is still open.
-
-### Registering WebSocket resources
-
-WebSocket handlers are registered with `register_ws_resource`, which
-takes ownership of a `websocket_handler` subclass via `std::unique_ptr`
-(or shares it via `std::shared_ptr`):
-
-```cpp
-class echo : public httpserver::websocket_handler {
- public:
-    void on_message(httpserver::websocket_session& session,
-                    std::string_view msg) override {
-        session.send_text("Echo: " + std::string{msg});
-    }
-};
-
-int main() {
-    httpserver::webserver ws{httpserver::create_webserver(8080)};
-    ws.register_ws_resource("/echo", std::make_unique<echo>());
-    // or, with shared ownership:
-    auto handler = std::make_shared<echo>();
-    ws.register_ws_resource("/echo2", handler);
-    ws.start(true);
-}
-```
-
-On a build with `HAVE_WEBSOCKET` disabled — for example, when the system
-libmicrohttpd was built without WebSocket support — `register_ws_resource`
-throws `feature_unavailable`. See [Feature
-availability](#feature-availability) for how to detect this at runtime
-without preprocessor gates, and
-[`examples/websocket_echo.cpp`](examples/legacy/websocket_echo.cpp) for a
-worked example.
+Session entry points synchronize shared state, but moving/destroying a handle
+must not race access to that handle. Server drain initiates Close 1001 and bounds
+the handshake by its remaining deadline. Use [websocket_echo.cpp](examples/websocket_echo.cpp)
+and its [session helper](examples/example_ws.hpp) for a complete receive/send/
+backpressure loop and close lifetime management.
 
 [Back to TOC](#table-of-contents)
 
-## Daemon introspection and external event loops
+## Server introspection and external event loops
 
-libhttpserver exposes several methods for integrating with external
-event loops and for querying daemon state at runtime.
+`get_bound_port(listener_index)` reports the actual bound port, including an
+OS-chosen ephemeral port. It returns 0 before listening or for an invalid index.
+`is_running()` remains true during graceful rundown until stop initiation.
+`effective_limits(out)` exposes resolved startup policy, and the diagnostic
+channel supplies approximate live counters.
 
-### Daemon introspection
+Set `options.loop() = srv::loop_mode::external` before construction to let an
+application event loop own readiness and timer advancement. Workers remain
+library-owned. `server.readiness()` returns a stable borrowed adapter in external
+mode and `nullptr` in managed mode; before listen/after stop it is inactive.
 
-* **`uint16_t webserver::get_bound_port()`** — actual port the daemon is
-  bound to. Especially useful when you pass port `0` to let the OS
-  choose an ephemeral port.
-* **`int webserver::get_listen_fd()`** — the listen socket file
-  descriptor, or `-1` if not available.
-* **`unsigned int webserver::get_active_connections()`** — the number of
-  currently active connections.
-* **`bool webserver::is_running()`** — true if the daemon is currently
-  accepting connections.
+The host loop follows this sequence:
 
-### External event-loop integration
+1. Obtain `driver->interests()`: a coherent owned snapshot of socket interests,
+   an optional wake interest and an optional next deadline.
+2. Register the complete snapshot in the host loop. Omitted interests must be
+   unregistered. Handles are borrowed; only the library closes them. Preserve
+   the full-width Winsock carrier on Windows.
+3. Wait for readiness or the deadline. Forward readiness with the original
+   `(socket_key, generation)`, including wake events; dispatch an empty event
+   batch when the deadline expires without socket readiness.
+4. Call `driver->dispatch(events, steady_clock::now())`, check its outcome and
+   replace registrations from a fresh snapshot. Dispatch never waits; overlapping
+   or recursive calls on the same driver return `invalid_state`. Stale generation
+   callbacks are ignored.
+5. Remove host registrations and discard borrowed handles before destroying the
+   server. A snapshot copy does not extend handle lifetime.
 
-When using the server without internal threading (e.g. with
-`listen_socket(false)` or with `start_method(EXTERNAL_SELECT)`), you can
-drive the event loop yourself:
-
-* **`bool webserver::run()`** — process pending events once and return
-  immediately.
-* **`bool webserver::run_wait(int32_t millisec)`** — block until events
-  are available or the timeout expires.
-* **`bool webserver::get_fdset(void* read, void* write, void* except, int* max_fd)`**
-  — retrieve file descriptor sets for use with `select(2)`.
-* **`bool webserver::get_timeout(uint64_t* timeout)`** — the maximum
-  time to wait before calling `run()` again.
-* **`bool webserver::add_connection(int socket, const sockaddr* addr, socklen_t len)`**
-  — hand off an externally-accepted connection to the daemon. Used with
-  socket-activation or load-balancer integrations.
-* **`int webserver::quiesce()`** — stop accepting new connections while
-  allowing in-flight requests to complete. Returns the listen socket FD,
-  which the caller can then close or pass elsewhere.
-
-### Stopping the daemon
-
-* **`bool webserver::stop()`** — stop the daemon, join libmicrohttpd's
-  worker threads, and return. **Calling `stop()` from inside a handler
-  deadlocks** (it joins the calling thread); see [Threading
-  contract](#threading-contract).
-* **`void webserver::stop_and_wait()`** — equivalent to `stop()` plus a
-  drain that waits for every in-flight handler to return. Same deadlock
-  contract as `stop()`.
-
-A small example combining everything:
-
-```cpp
-// Bind to an OS-chosen port, print the actual one, drive the loop
-// externally, then drain on shutdown.
-webserver ws{create_webserver(0).start_method(http::http_utils::EXTERNAL_SELECT)};
-ws.start(false);
-std::cout << "listening on port " << ws.get_bound_port() << '\n';
-while (running) {
-    ws.run_wait(1000);
-}
-ws.quiesce();
-ws.stop_and_wait();
-```
-
-See [`examples/daemon_info.cpp`](examples/daemon_info.cpp) and
-[`examples/external_event_loop.cpp`](examples/legacy/external_event_loop.cpp)
-for runnable demonstrations.
+The complete [external loop example](examples/external_event_loop.cpp) uses
+[host_poll.hpp](examples/host_poll.hpp) for POSIX poll and Windows WSAPoll,
+including wake handles and deadline-derived waits. The
+[external loop contract](docs/external-loop-contract.md) specifies lifecycle and
+threading details for other host loops.
 
 [Back to TOC](#table-of-contents)
 
-## HTTP utils
+## HTTP utilities
 
-libhttpserver provides a set of constants and helpers to help you build
-your HTTP server. The full list of named constants (status codes, common
-methods, common content types, named algorithms) lives in
-`src/httpserver/http_utils.hpp` — it
-would be redundant to enumerate it here.
+Use the semantic value headers rather than transport-specific constants:
 
-The following utility functions are available on `http::http_utils`:
-
-* **`const char* reason_phrase(unsigned int status_code)`** — the
-  standard HTTP reason phrase for a given status code (e.g. `"OK"` for
-  200, `"Not Found"` for 404).
-* **`bool is_feature_supported(int feature)`** — whether a specific
-  libmicrohttpd feature is supported on the current system. Feature
-  constants are defined by the `MHD_FEATURE` enum.
-* **`const char* get_mhd_version()`** — the version string of the
-  underlying libmicrohttpd library.
+- `http::method::known(method_id)` constructs a standard method;
+  `method::extension(token)` preserves a valid extension token. `method_set`
+  represents standard methods for multi-method registration.
+- `http::status::from_code(code)` constructs a status and `valid()` checks it.
+  Category predicates such as `success()` and `client_error()` classify it.
+- `http::fields` preserves order/repetition, with `append`, `replace`, `first`,
+  `all`, `count` and `entries` for access.
+- `<httpserver/http/cookie.hpp>` provides `cookie`, `parse_cookie_header` and
+  checked `render_set_cookie(cookie, out)`. Render each Set-Cookie separately;
+  configure path, Secure, HttpOnly and SameSite according to application policy.
+- `query_features()` reports build/provider support. See [Feature
+  availability](#feature-availability) for how it relates to actual listeners.
 
 [Back to TOC](#table-of-contents)
 
 ## Lifecycle hooks
 
-The hook bus is the single extension surface for observing or
-short-circuiting the request lifecycle. It replaces v1's single-slot
-patchwork (one `log_access` callback, one `not_found_handler`, one
-`method_not_allowed_handler`, one `internal_error_handler`, one
-`auth_handler`) with eleven distinct phases spanning connection,
-request, routing, handler, and response. Each phase accepts multiple
-subscribers and is observable both server-wide (via `webserver::add_hook`)
-and, for the five post-route-resolution phases, per-route (via
-`http_resource::add_hook`). The contract is captured in DR-012 and
-[`specs/architecture/04-components/hooks.md`](specs/architecture/04-components/hooks.md).
+Use `server.hooks().add<hook_phase::phase>(callback)` for server-wide request
+policy/observation. Each callback receives its phase-specific context and
+returns `hook_action`. The returned move-only `hook_handle` removes the
+registration on destruction; keep it alive or call `detach()` for server-lifetime
+registration. Add/remove operations are safe before and after listening.
 
-Each call returns a move-only `hook_handle`. The handle's destructor
-removes the registration; `hook_handle::detach()` disarms the destructor
-so the registration persists for the webserver's lifetime.
+There are eight phases:
 
-### Phases
+| Phase | When | Capability |
+| --- | --- | --- |
+| `accept_decision` | Peer-policy verdict fixed | Observe verdict |
+| `request_received` | Head before routing/body | Short-circuit |
+| `route_resolved` | Lookup finished, including miss | Observe route |
+| `before_handler` | Before call; also method mismatch | Short-circuit |
+| `handler_exception` | Handler/eligible hook failure | Recovery response |
+| `after_handler` | Head commitment | Mutate status/fields |
+| `response_sent` | Engine accepted the committed head | Observe acceptance |
+| `request_completed` | Exchange settles once | Observe typed result |
 
-| Phase | Fires at | Short-circuit | Per-route eligible |
-|-------|----------|---------------|--------------------|
-| `connection_opened` | New TCP / TLS connection accepted by MHD | No | No |
-| `accept_decision` | After the default-policy / deny-list / allow-list verdict; the connection has been accepted or denied | No | No |
-| `request_received` | Request line and headers parsed, body not yet consumed | Yes (`hook_action`) | No |
-| `body_chunk` | Each upload-body chunk delivered by MHD | Yes (`hook_action`) | No |
-| `route_resolved` | After URL → resource resolution; carries the matched route or "no match" | No | No |
-| `before_handler` | After route resolution and method check, immediately before the handler runs | Yes (`hook_action`) | Yes |
-| `handler_exception` | Exception escapes the handler, before `internal_error_handler` is consulted | Yes (`hook_action`) | Yes |
-| `after_handler` | Handler returned a response, before it is queued on the wire (mutation point) | Yes (`hook_action`) | Yes |
-| `response_sent` | Response handed to `MHD_queue_response`; carries `status`, `bytes_queued`, `elapsed` | No | Yes |
-| `request_completed` | Request lifecycle finished (success or failure); last hook to fire per request | No | Yes |
-| `connection_closed` | Connection torn down (peer close or server close) | No | No |
+`hook_action::pass()` continues the chain. The first `respond_with(hook_response)`
+in a short-circuit-capable phase stops the remaining callbacks in that phase.
+Observation phases ignore response actions; `after_handler` offers head
+mutation rather than whole-body replacement. Registration order is preserved,
+and changes during firing affect subsequent snapshots.
 
-### Short-circuit semantics
+For example, before listening, keep this handle in the controlling scope:
 
-Phases marked "Short-circuit" return a `hook_action`:
-`hook_action::pass()` lets the chain continue;
-`hook_action::respond_with(response)` aborts the chain at that
-position. The wrapped response is sent on the wire in place of any
-handler output. Subsequent hooks in the same phase are not invoked.
-Observation-only phases (`connection_opened`, `accept_decision`,
-`connection_closed`, `route_resolved`, `response_sent`,
-`request_completed`) ignore the return; the chain always runs to
-completion.
+```cpp
+auto head_hook = server.hooks().add<srv::hook_phase::after_handler>(
+    [](srv::after_handler_ctx& context) {
+        context.fields.append("X-Service", "example");
+        return srv::hook_action::pass();
+    });
+```
 
-### Per-route hooks
+`response_sent` means head acceptance by the engine, not wire delivery of the
+head or body. If the engine rejects framing/field bytes, that phase does not
+fire and `request_completed` reports failure. Observe per-body progress in the
+handler's read/write loop. Use wrapping route handlers for route-specific
+policy, including authentication.
 
-`http_resource::add_hook(phase, fn)` accepts only the five
-post-route-resolution phases: `before_handler`, `handler_exception`,
-`after_handler`, `response_sent`, `request_completed`. Per-route hooks
-fire after the server-wide chain at the same phase, and only if that
-server-wide chain did not short-circuit. Passing any other phase
-throws `std::invalid_argument` naming the rejected phase. See
-[`examples/per_route_auth.cpp`](examples/per_route_auth.cpp) for a
-worked example.
+Hook exceptions are contained and treated as pass. Unanswered precommit failures
+from `request_received`, `route_resolved` or `before_handler` can be surfaced to
+`handler_exception`; that chain is consulted at most once per request. Throws
+from commit/completion phases cannot replace an accepted head. Keep callbacks
+short, thread-safe and nonblocking; `accept_decision` runs on the accept task.
+See the [hook contract](src/httpserver/server/hooks.hpp) and
+[operations example](examples/operations.cpp).
 
-### Examples
+### Bounded diagnostics
 
-* [`examples/denied_ip_log.cpp`](examples/denied_ip_log.cpp) — log every
-  denied-IP rejection via a single `accept_decision` hook.
-* [`examples/early_413.cpp`](examples/early_413.cpp) — return 413 from
-  a `request_received` hook before the body is consumed.
-* [`examples/clf_access_log.cpp`](examples/clf_access_log.cpp) — write
-  a Common Log Format access line from a `response_sent` hook.
-* [`examples/per_route_auth.cpp`](examples/per_route_auth.cpp) —
-  per-route HTTP Basic auth via `http_resource::add_hook(before_handler, ...)`.
+`server::diagnostics` is a copyable shared channel configured through
+`options.diagnostic_channel()`. Default construction disables it. Records contain
+scalar protocol/resource/lifecycle information rather than request/TLS identity.
+Producers enqueue into a bounded 128-record queue; counters track drops and
+callback failures.
 
-### v1 aliases
-
-Each of the v1 single-slot setters is an alias for an `add_hook` call
-at the corresponding phase. The aliases survive for ergonomic call
-sites; new code can use either form.
-
-| v1 setter | Equivalent `add_hook` call |
-|-----------|----------------------------|
-| `log_access(fn)` | `ws.add_hook(hook_phase::response_sent, fn)` |
-| `not_found_handler(fn)` | `ws.add_hook(hook_phase::route_resolved, fn)` |
-| `method_not_allowed_handler(fn)` | `ws.add_hook(hook_phase::before_handler, fn)` |
-| `internal_error_handler(fn)` | `ws.add_hook(hook_phase::handler_exception, fn)` |
-| `auth_handler(fn)` | `ws.add_hook(hook_phase::before_handler, fn)` |
-
-The aliases install observation-stub hooks under the same dispatch
-plumbing, so the on-the-wire behaviour is identical regardless of
-which form the caller used.
+Call `channel.dispatch(max_events)` from your chosen control thread to deliver
+a bounded batch outside engine/queue locks. New events cannot extend that call
+beyond the queue observed at entry. Concurrent/recursive dispatch returns
+`invalid_state`, and callback exceptions are counted/contained. Keep callback
+captures alive through the last dispatch; destruction never dispatches.
+`counters()` exposes event totals, active connections/streams and charged response
+queue bytes. Fields are individually atomic; concurrent snapshots are approximate.
 
 [Back to TOC](#table-of-contents)
 
 ## Threading contract
 
-Distilled from
-[`specs/architecture/05-cross-cutting.md`](specs/architecture/05-cross-cutting.md)
-§5.1 and DR-008
-([`specs/architecture/11-decisions/DR-008.md`](specs/architecture/11-decisions/DR-008.md)):
+The native [architecture](specs/architecture/v3/architecture.md) and public
+contracts distinguish executor-owned work from synchronized handles:
 
-1. **Public methods on `webserver` are thread-safe and re-entrant from
-   inside a handler.** Two exceptions: `stop()` and `~webserver()`
-   **deadlock** if invoked from a handler thread, because they wait for
-   that very thread to drain. `stop_and_wait()` delegates to `stop()`
-   and carries the same deadlock risk. Stop the server from a different
-   thread, or signal an external stop loop. v2 provides both `stop()`
-   (signal and return) and `stop_and_wait()` (signal and drain until
-   all in-flight handlers finish).
-2. **Handlers run concurrently on libmicrohttpd worker threads.** The
-   same lambda or `http_resource` instance is invoked from many threads
-   at once. Any state you share — counters, caches, file handles — must
-   be synchronised on your side. The library does not synchronise user
-   state for you.
-3. **`http_request` is single-threaded per request.** Sharing one
-   `http_request` across threads is undefined; the per-request arena
-   makes no guarantees outside the calling thread.
-4. **`http_response` is value-typed with exclusive ownership.**
-   Returning it transfers ownership into the dispatcher. There is no
-   shared mutable response object.
-5. **User-supplied callbacks** — `log_access`, `log_error`,
-   `not_found_handler`, `method_not_allowed_handler`,
-   `internal_error_handler`, `file_cleanup_callback`, PSK / SNI / ALPN
-   callbacks, and any registered `render_*` — may run concurrently on
-   multiple threads. Implementations MUST be thread-safe.
+1. Server methods are thread-safe unless documented otherwise; lifecycle calls
+   (`listen()`/`stop()`) belong to one controlling thread. Routes close at listen,
+   while hook and peer-policy mutation remain runtime-safe.
+2. Different requests may invoke the same callable/captured state concurrently.
+   Synchronize application state. An exchange's decisions, reader and writer
+   run on its handler executor. Copy request data needed outside that lifetime.
+3. `request_stop()` is nonblocking, idempotent and handler-safe. It releases
+   listeners and disconnects active exchanges. `stop()` additionally closes
+   engines and joins workers; call it from a controlling thread outside counted
+   work. The destructor performs stop. Keep application captures alive until
+   this join completes.
+4. `begin_drain(budget, ticket)` stops accepting new work and initiates graceful
+   rundown without waiting. For HTTP/1, in-flight work flushes, idle connections
+   close and unstarted pipelined heads are dropped; WebSockets begin Close 1001.
+   The positive budget bounds the ticket's wait. A server supports one drain;
+   calls before listen, after stop or after a previous drain return invalid_state.
+5. `ticket.wait(result)` reports `completed` or `deadline_expired` with the
+   remaining count at expiry. Waiting from work counted by that drain returns
+   `would_deadlock`. Tickets retain their counted scope after server destruction.
+   Stop during a drain can complete it before expiry; an expired result remains
+   expired after cancellation unwinds.
+
+### Suspension and cancellation
+
+`x.suspend(resume_signal&)` obtains a signal for a pending decision. Copy the
+owning signal to application work and `co_await signal.wait()` or
+`signal.wait_for(duration)` on the handler executor. Another thread calls
+`signal.signal()`; the result distinguishes resumed, timeout and cancellation.
+Exchange disconnect wakes pending operations. `x.cancellation()` gives a fan-out
+stop token whose `cancelled()` awaitable throws `cancelled_exception`; ordinary
+body/writer operations report typed cancellation. Use RAII to retire pending
+application registrations on every path.
+
+Shutdown can cancel pending work but cannot make arbitrary blocking application
+code cooperative. Respect cancellation/deadlines in application operations and
+retain their captures until retirement. The [lifecycle example](examples/lifecycle.cpp)
+shows resume, timeout, cancellation and drain without leaking an `exchange&` to
+another thread. External PSK callbacks have their own explicit retirement
+contract described under [Authentication and TLS](#authentication-and-tls).
 
 [Back to TOC](#table-of-contents)
 
 ## Error propagation
 
-Distilled from
-[`specs/architecture/05-cross-cutting.md`](specs/architecture/05-cross-cutting.md)
-§5.2 and DR-009
-([`specs/architecture/11-decisions/DR-009.md`](specs/architecture/11-decisions/DR-009.md)):
+Check `outcome.ok()` before consuming a successful operation's outputs.
+`outcome.code()` is the stable semantic discriminator and `message()` is a
+human-readable diagnostic. Reader/writer/send/upgrade results embed an outcome
+alongside their operation-specific data.
 
-1. **A handler that throws `std::exception` is caught.** The library
-   logs the exception via the configured `log_error` callback and then
-   invokes `internal_error_handler(request, e.what())`. The response
-   returned by `internal_error_handler` is sent to the client; if no
-   custom `internal_error_handler` is configured, a default 500 with
-   the **fixed body `"Internal Server Error"`** is sent
-   (DR-009 Revision 1, CWE-209 fix — exception text often contains
-   file paths, SQL fragments, or attacker-influenced input and must
-   not cross a process boundary to an untrusted client). To restore
-   the v1 behaviour of including the exception message in the body
-   for development, set `.expose_exception_messages(true)` on the
-   builder. The verbatim message is still surfaced via the
-   `log_error` callback and to any configured
-   `internal_error_handler` regardless of the flag.
-2. **A handler that throws something other than `std::exception`** is
-   also caught, with `"unknown exception"` substituted for the message.
-   The same default body (`"Internal Server Error"`) applies; the
-   `"unknown exception"` sentinel reaches the wire only when
-   `.expose_exception_messages(true)` is set.
-3. **Library-internal failures during dispatch** (allocation, body
-   materialisation) flow through the same `internal_error_handler` path.
-4. **If `internal_error_handler` itself throws**, the library logs and
-   sends a hardcoded 500 with an empty body. There is no third level of
-   fallback.
-5. **`feature_unavailable` is a normal `std::runtime_error`** — no
-   special status mapping. Catch it explicitly if you want to map it to
-   a 503 or similar; the library does not.
-6. **There is no throw-as-status idiom.** A handler that wants to
-   return 404, 400, etc. builds the response by value (see
-   [Response](#response)):
-   `return httpserver::http_response::empty().with_status(404);`.
+| Code | Typical cause |
+| --- | --- |
+| `invalid_argument` | Invalid configuration, pattern, status or field input |
+| `invalid_state` | Late registration, duplicate decision, spent source |
+| `limit_exceeded` | Body, queue, route or protocol capacity exhausted |
+| `protocol_error` | Invalid peer framing/protocol behavior |
+| `not_supported` | Feature unavailable in this build or configuration |
+| `connection_closed`, `cancelled`, `timeout` | Closure/cancellation/deadline |
+| `would_deadlock` | Waiting from work counted by the wait |
+| `peer_refused` | Peer access policy rejected admission |
 
-Install custom error handlers on the builder:
+A route that throws before commitment is contained. The `handler_exception`
+chain may supply a recovery response; otherwise the dispatcher synthesizes a
+bare 500 with no fixed text body. Returning without a terminal decision also
+synthesizes 500. A handler exception after commitment aborts the response through
+the protocol engine; it cannot replace the accepted head. Disconnect cancellation
+is a quiet end, reported through completion state rather than a new error page.
 
-```cpp
-auto cfg = httpserver::create_webserver(8080)
-    .not_found_handler([](const httpserver::http_request&) {
-        return httpserver::http_response::string("nope").with_status(404);
-    })
-    .method_not_allowed_handler([](const httpserver::http_request&) {
-        return httpserver::http_response::empty().with_status(405);
-    })
-    .internal_error_handler([](const httpserver::http_request&, std::string_view what) {
-        // CWE-209: 'what' may contain file paths, SQL fragments, or
-        // attacker-influenced input. Log it internally; do NOT echo
-        // it to the HTTP client.
-        (void)what;  // e.g. logger->error(what);
-        return httpserver::http_response::string("Internal Server Error").with_status(500);
-    });
-httpserver::webserver ws{cfg};
-```
-
-See [`examples/custom_error.cpp`](examples/custom_error.cpp) for a
-worked example. Note that the snippet above — which echoes `what`
-verbatim to the wire — is illustrative of the explicit-handler case;
-the **default** (no `internal_error_handler` configured) path now
-sends a fixed body, and only the `log_error` callback receives the
-verbatim message. To restore the v1 verbose-body default for
-development, chain `.expose_exception_messages(true)` on the builder
-(see [Custom error handlers](#custom-error-handlers)).
+To answer 400/404/503 intentionally, call `respond`, stream a response or return
+a synchronous value with that status. Exceptions do not map automatically to
+HTTP status codes. Keep exception details in application diagnostics and avoid
+echoing internal data to clients. General C++ allocation failures can still
+throw where specified (for example, readiness snapshot allocation); typed
+outcomes do not promise that every allocation is nonthrowing. See the
+[request lifecycle owner](src/detail/request_lifecycle.cpp) for containment.
 
 [Back to TOC](#table-of-contents)
 
 ## Feature availability
 
-Several capabilities are gated by build-time flags. v2.0 makes the
-gating visible at the API level so application code does not need
-preprocessor guards on `HAVE_*` macros.
+`query_features()` returns build support flags `tls_provider`, `tcp_tls`,
+`http2`, `http3` and a process-lifetime `provider_version` string. Provider
+availability and transport support are distinct from configured listeners:
 
-| Build flag | When disabled | Public-API behavior |
-|---|---|---|
-| `HAVE_BAUTH` | Basic-auth disabled | `get_user`, `get_pass` return empty `string_view`; `features().basic_auth == false`; `create_webserver::basic_auth(true)` throws `feature_unavailable` at `webserver` construction |
-| `HAVE_DAUTH` | Digest-auth disabled | `get_digested_user` returns empty; `check_digest_auth` returns a sentinel result; `features().digest_auth == false`; `create_webserver::digest_auth(true)` throws `feature_unavailable` |
-| `HAVE_GNUTLS` | TLS disabled | All `get_client_cert_*` accessors return empty / `-1` / `false`; `features().tls == false`; `create_webserver::use_ssl(true)` throws `feature_unavailable` |
-| `HAVE_WEBSOCKET` | WebSocket disabled | `register_ws_resource` throws `feature_unavailable`; `features().websocket == false` |
+| Capability | Public listener requirements |
+| --- | --- |
+| HTTP/1 plaintext | TCP; default protocols; either loop mode |
+| HTTP/1 TLS | Provider, TLS profile/store and TLS TCP |
+| HTTP/2 | Build support, enabled H2, certificate TLS TCP, ALPN `h2` |
+| HTTP/3 | Build support, enabled H3, certificate TLS UDP, ALPN `h3` |
+| WebSocket | HTTP/1.1 Upgrade or H2/H3 Extended CONNECT |
+| Basic/Digest, forms, routes, hooks | Native; no feature switches |
 
-### Probing at runtime
+A TLS-off build keeps the same public declarations. `query_features()` returns
+false support flags and an empty provider version; encrypted operations return
+`not_supported` before binding. `validate()` checks semantics independently of
+build availability, so also check `resolve_limits()`/`listen()` and credential
+publication. A TLS-enabled build with no TLS listener remains a plaintext
+server.
 
-`webserver::features()` returns a small struct of four `bool`s — one
-per flag — so callers can branch without preprocessor help:
-
-```cpp
-if (ws.features().tls) {
-    // safe to read client-certificate accessors on this build
-}
-if (ws.features().websocket) {
-    ws.register_ws_resource("/sock", std::make_unique<my_socket>());
-}
-```
-
-### `feature_unavailable`
-
-Derives from `std::runtime_error`. Its `what()` names both the disabled
-feature and the build flag that gates it, so log lines pinpoint which
-flag a deployment is missing. Catch it where you call a feature-gated
-method:
-
-```cpp
-try {
-    ws.register_ws_resource("/sock", std::make_unique<my_socket>());
-} catch (const httpserver::feature_unavailable& e) {
-    std::cerr << "websocket support is not available: " << e.what() << '\n';
-}
-```
-
-Deny lists, IP-allow handling, and similar features that do not depend
-on external libraries are always available: `webserver::deny_ip(addr)` /
-`webserver::remove_denied_ip(addr)` and `webserver::allow_ip(addr)` /
-`webserver::remove_allowed_ip(addr)` install and clear per-server access
-rules at runtime regardless of build flags.
-
-[Back to TOC](#table-of-contents)
-
-## Migrating from v1
-
-If you're porting an application from the v1 line, the rename / removed /
-added cheat sheet — every API surface that moved — lives in
-[`RELEASE_NOTES.md`](RELEASE_NOTES.md). The packaging is
-parallel-installable across major versions, so applications can link
-the major they need side by side while porting.
+Lower-level HTTP/2 and QUIC/HTTP/3 engines are not additional listener modes.
+In particular, engine support for cleartext HTTP/2 machinery does not provide
+a public h2c listener. Initial mTLS is supported; post-handshake authentication
+is not an available configuration. External PSK is restricted to eligible
+HTTP/1 TLS connections. ACME publication selects application-supplied challenges
+under the strict TCP/SNI/ALPN/port rules described above.
 
 [Back to TOC](#table-of-contents)
 
 ## Examples
 
-Every example is a standalone program under [`examples/`](examples/). A
-fully grouped index — with one-line descriptions of every binary — lives
-in [`examples/README.md`](examples/README.md). The summary below points
-to the canonical example for each topic covered in this manual.
+Configure with `--enable-examples`, then run `make -C examples` in the build
+directory. These are the fifteen native built targets; each source states its
+arguments. Programs that print `PORT=...` use OS-chosen ports so multiple demos
+can run without fixed-port collisions.
 
-### Start here
+| Target | Source | Demonstrates |
+| --- | --- | --- |
+| `external_event_loop` | [external_event_loop.cpp](examples/external_event_loop.cpp) | Host poll/WSAPoll, wake interests and deadlines |
+| `routes` | [routes.cpp](examples/routes.cpp) | Full/prefix routing, captures, methods, HEAD and miss pages |
+| `protocol_options` | [protocol_options.cpp](examples/protocol_options.cpp) | Validation, typed capacities and effective policy |
+| `websocket_echo` | [websocket_echo.cpp](examples/websocket_echo.cpp) | Upgrade, bounded messages, backpressure and closure |
+| `http3` | [http3.cpp](examples/http3.cpp) | Managed/external QUIC HTTP/3 and WebSocket routes |
+| `request_data` | [request_data.cpp](examples/request_data.cpp) | Repeated fields, query decoding and cookies |
+| `body_streaming` | [body_streaming.cpp](examples/body_streaming.cpp) | Early refusal, bounded upload and generated download |
+| `auth` | [auth.cpp](examples/auth.cpp) | Basic and SHA-256 Digest guards |
+| `forms` | [forms.cpp](examples/forms.cpp) | URL-encoded forms, temp files and keep/cleanup |
+| `response_sources` | [response_sources.cpp](examples/response_sources.cpp) | Owned, leased, reopened, factory and one-shot sources |
+| `operations` | [operations.cpp](examples/operations.cpp) | Peer policy, eight hooks, diagnostics and resource limits |
+| `lifecycle` | [lifecycle.cpp](examples/lifecycle.cpp) | Suspension, cancellation, timeout and drain tickets |
+| `tls_profiles` | [tls_profiles.cpp](examples/tls_profiles.cpp) | SNI, initial mTLS, external PSK and ACME publication |
+| `http2` | [http2.cpp](examples/http2.cpp) | Managed/external TLS HTTP/2 and WebSocket routes |
+| `tls_rotation` | [tls_rotation.cpp](test/examples/tls_rotation.cpp) | Atomic credential replacement and pinned sessions |
 
-* [`examples/hello_world.cpp`](examples/hello_world.cpp) — ten lines, lambda
-  form, no subclass, no raw pointer. Reproduced byte-for-byte at the top
-  of this README.
-* [`examples/shared_state.cpp`](examples/shared_state.cpp) — when the
-  class form is the right shape: an `http_resource` subclass with a
-  mutex-guarded counter shared between `render_get` and `render_post`.
+For example, from the build directory:
 
-### HTTP basics
+```sh
+./examples/routes 30
+./examples/body_streaming 30
+./examples/forms /tmp 30
+./examples/external_event_loop 30
+```
 
-* [`examples/setting_headers.cpp`](examples/setting_headers.cpp) — fluent
-  `with_header` chaining.
-* [`examples/hello_with_get_arg.cpp`](examples/hello_with_get_arg.cpp) —
-  read a query-string parameter from `http_request::get_arg`.
-* [`examples/args_processing.cpp`](examples/args_processing.cpp) —
-  iterate every form / query argument.
-* [`examples/url_registration.cpp`](examples/url_registration.cpp) —
-  exact paths, prefix matches, parameterised segments, per-segment regex.
-* [`examples/handlers.cpp`](examples/handlers.cpp) — distinct lambdas
-  for GET and POST on the same path; the dispatcher composes them.
-* [`examples/allowing_disallowing_methods.cpp`](examples/allowing_disallowing_methods.cpp)
-  — narrow a resource to a specific subset of HTTP verbs.
-* [`examples/custom_error.cpp`](examples/custom_error.cpp) — install
-  `not_found_handler`, `method_not_allowed_handler`, and `internal_error_handler`.
+Run these individually, read the printed port and use curl in a second terminal.
+The numeric argument bounds the demo's runtime. `operations` and `lifecycle`
+accept stdin commands instead; TLS demos need caller-supplied material. See the
+[native example commands](examples/README.md#native-v3-examples) for complete
+invocations and clients. TLS-specific demos report unavailability on a TLS-off
+build.
 
-### Response shapes
+[Back to TOC](#table-of-contents)
 
-* [`examples/minimal_file_response.cpp`](examples/minimal_file_response.cpp) —
-  stream a file from disk via `http_response::file`.
-* [`examples/binary_buffer_response.cpp`](examples/binary_buffer_response.cpp) —
-  return a binary buffer (e.g. a PNG) from memory.
-* [`examples/iovec_response_example.cpp`](examples/iovec_response_example.cpp) —
-  gather a response body from multiple borrowed buffers without copying.
-* [`examples/pipe_response_example.cpp`](examples/pipe_response_example.cpp) —
-  stream from a pipe filled by a background thread.
-* [`examples/empty_response_example.cpp`](examples/empty_response_example.cpp) —
-  bodyless responses for DELETE and HEAD.
-* [`examples/minimal_deferred.cpp`](examples/minimal_deferred.cpp) — body
-  produced asynchronously by a callback.
-* [`examples/deferred_with_accumulator.cpp`](examples/deferred_with_accumulator.cpp) —
-  deferred response that mutates shared state across calls.
+## Community
 
-### TLS and authentication
-
-* [`examples/minimal_https.cpp`](examples/minimal_https.cpp) — enable
-  TLS with PEM key / cert files.
-* [`examples/minimal_https_psk.cpp`](examples/minimal_https_psk.cpp) —
-  TLS with pre-shared keys.
-* [`examples/basic_authentication.cpp`](examples/basic_authentication.cpp) —
-  per-request HTTP Basic auth inside the handler.
-* [`examples/centralized_authentication.cpp`](examples/centralized_authentication.cpp) —
-  server-wide `auth_handler` and `auth_skip_paths`.
-* [`examples/digest_authentication.cpp`](examples/digest_authentication.cpp) —
-  per-request HTTP Digest auth via `check_digest_auth`.
-* [`examples/client_cert_auth.cpp`](examples/client_cert_auth.cpp) —
-  mutual TLS with X.509 client certificates.
-
-### Lifecycle hooks
-
-* [`examples/denied_ip_log.cpp`](examples/denied_ip_log.cpp) — log every
-  denied-IP rejection from a single `accept_decision` hook (issue #332).
-* [`examples/early_413.cpp`](examples/early_413.cpp) — short-circuit
-  oversized uploads with 413 before any body bytes are consumed via a
-  `request_received` hook (issue #273).
-* [`examples/clf_access_log.cpp`](examples/clf_access_log.cpp) —
-  Common Log Format access logger written as a `response_sent` hook
-  using the structured `status` / `bytes_queued` / `elapsed` context
-  fields (issues #281 and #69).
-* [`examples/per_route_auth.cpp`](examples/per_route_auth.cpp) —
-  per-route HTTP Basic auth via `http_resource::add_hook(before_handler,
-  ...)` that does not touch sibling routes (DR-012).
-
-### Operations
-
-* [`examples/daemon_info.cpp`](examples/daemon_info.cpp) — introspect
-  the running daemon (bound port, listen FD, active connections).
-* [`examples/external_event_loop.cpp`](examples/legacy/external_event_loop.cpp) —
-  drive `EXTERNAL_SELECT` from the application's loop via `run_wait`.
-* [`examples/custom_access_log.cpp`](examples/custom_access_log.cpp) —
-  server-wide access-log callback.
-* [`examples/minimal_ip_access_control.cpp`](examples/minimal_ip_access_control.cpp) —
-  `deny_ip` / `allow_ip` under the `ACCEPT` and `REJECT` policies.
-* [`examples/turbo_mode.cpp`](examples/turbo_mode.cpp) — turbo,
-  suppressed Date header, fastopen queue, listen backlog.
-* [`examples/service.cpp`](examples/service.cpp) — kitchen-sink
-  reference example: CLI args, optional TLS, every `render_*` override.
-
-### File uploads
-
-* [`examples/file_upload.cpp`](examples/file_upload.cpp) — multipart
-  upload through `http_request::get_files`.
-* [`examples/file_upload_with_callback.cpp`](examples/file_upload_with_callback.cpp) —
-  upload with a `file_cleanup_callback`.
-
-### WebSockets
-
-* [`examples/websocket_echo.cpp`](examples/legacy/websocket_echo.cpp) —
-  `websocket_handler` subclass registered via `register_ws_resource`.
-
-### Benchmarks
-
-* [`examples/benchmark_select.cpp`](examples/benchmark_select.cpp),
-  [`examples/benchmark_threads.cpp`](examples/benchmark_threads.cpp),
-  [`examples/benchmark_nodelay.cpp`](examples/benchmark_nodelay.cpp) —
-  micro-benchmarks.
+Please read the [Code of Conduct](CODE_OF_CONDUCT.md) and
+[contribution guide](CONTRIBUTING.md). Report issues and contribute patches through
+[the project repository](https://github.com/etr/libhttpserver).
 
 [Back to TOC](#table-of-contents)
 
@@ -1981,10 +1268,10 @@ full text.
 
 ## Thanks
 
-libhttpserver builds on the work of the GNU libmicrohttpd developers and
-the many contributors to libhttpserver itself (see the project's git
-history for the complete list). Particular thanks to everyone who has
-filed issues, sent patches, and stress-tested the v2.0 redesign.
+Thanks to the many contributors to libhttpserver, everyone who has filed issues,
+sent patches and stress-tested the library, and the GNU libmicrohttpd developers
+whose work supported its early development. See the project's Git history for
+the complete contributor list.
 
 If libhttpserver is useful to you, consider sponsoring continued
 maintenance: <https://github.com/sponsors/etr>.
