@@ -151,7 +151,7 @@ class PublicationContracts(unittest.TestCase):
         ci=self.ci()
         archive=self.directory/'artifact.zip'
         with zipfile.ZipFile(archive,'w') as stream: stream.writestr('selected.json','selected bytes')
-        expected=dict(repository='etr/libhttpserver',run_id='12',run_attempt='1',source_commit='d'*40,artifact_id='23')
+        expected=dict(repository='etr/libhttpserver',run_id='12',run_attempt='1',workflow_head='d'*40,artifact_id='23')
         metadata=dict(id=23,expired=False,created_at='2026-10-15T03:01:00Z',workflow_run={'id':12,'head_sha':'d'*40},digest='sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest())
         run=dict(id=12,run_attempt=1,run_started_at='2026-10-15T03:00:00Z',repository={'full_name':'etr/libhttpserver'},head_sha='d'*40)
         ci.verify_download(archive,metadata,run,expected,metadata['digest'],self.directory/'download')
@@ -167,6 +167,59 @@ class PublicationContracts(unittest.TestCase):
             digest='sha256:'+hashlib.sha256(bad.read_bytes()).hexdigest()
             with self.subTest(name=name),self.assertRaises(ValueError):
                 ci.verify_download(bad,dict(metadata,digest=digest),run,expected,digest,self.directory/('badzip-%d'%index))
+
+    def test_pr_download_binds_api_branch_head_and_retains_merge_source_descriptor(self):
+        import hashlib
+        import zipfile
+        ci=self.ci()
+        head='08c5b7b5eb5e992f5a12d88136064010fc435f9d'
+        merge='b5f8d51fe8b597fb3c720aa5459c04b9147c615b'
+        archive=self.directory/'pr-artifact.zip'
+        with zipfile.ZipFile(archive,'w') as stream:
+            stream.writestr('selected.json',json.dumps({'commit':merge,'source':{'head':merge}}))
+        digest='sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()
+        expected=dict(repository='etr/libhttpserver',run_id='38848731938',run_attempt='1',workflow_head=head,artifact_id='12024142302')
+        metadata=dict(id=12024142302,expired=False,created_at='2026-10-16T04:05:15Z',
+            workflow_run=dict(id=38848731938,head_sha=head),digest=digest)
+        run=dict(id=38848731938,run_attempt=1,head_sha=head,event='pull_request',
+            repository={'full_name':'etr/libhttpserver'},run_started_at='2026-10-16T04:04:45Z')
+        destination=self.directory/'pr-download'
+        ci.verify_download(archive,metadata,run,expected,digest,destination)
+        self.assertEqual(json.loads((destination/'selected.json').read_text())['commit'],merge)
+        for index, altered in enumerate((dict(expected,workflow_head=merge),dict(expected,workflow_head='a'*40),
+                dict(expected,run_id='38848731939'),dict(expected,run_attempt='2'),dict(expected,repository='other/repo'))):
+            with self.subTest(expected=altered),self.assertRaises(ValueError):
+                ci.verify_download(archive,metadata,run,altered,digest,self.directory/('wrong-pr-'+str(index)))
+        for field,value in (('id',12024142303),('workflow_run',dict(id=38848731939,head_sha=head)),
+                            ('workflow_run',dict(id=38848731938,head_sha=merge)),('digest','sha256:'+'a'*64)):
+            with self.subTest(field=field,value=value),self.assertRaises(ValueError):
+                ci.verify_download(archive,dict(metadata,**{field:value}),run,expected,digest,self.directory/'wrong-origin')
+
+    def test_download_entrypoint_uses_trusted_api_head_instead_of_pr_merge_sha(self):
+        import argparse
+        import hashlib
+        import io
+        import os
+        import zipfile
+        from unittest.mock import patch
+        spec=importlib.util.spec_from_file_location('release_ci_entrypoint',ROOT/'scripts/run-v3-release-ci.py')
+        entrypoint=importlib.util.module_from_spec(spec); spec.loader.exec_module(entrypoint)
+        head='08c5b7b5eb5e992f5a12d88136064010fc435f9d'; merge='b5f8d51fe8b597fb3c720aa5459c04b9147c615b'
+        stream=io.BytesIO()
+        with zipfile.ZipFile(stream,'w') as archive: archive.writestr('selected.json',json.dumps({'commit':merge}))
+        contents=stream.getvalue(); digest='sha256:'+hashlib.sha256(contents).hexdigest()
+        metadata=dict(id=12024142302,expired=False,created_at='2026-10-16T04:05:15Z',
+            workflow_run=dict(id=38848731938,head_sha=head),digest=digest)
+        run=dict(id=38848731938,run_attempt=1,head_sha=head,repository={'full_name':'etr/libhttpserver'},run_started_at='2026-10-16T04:04:45Z')
+        def transport(argv,stdout,check):
+            self.assertEqual(argv,['gh','api','repos/etr/libhttpserver/actions/artifacts/12024142302/zip'])
+            stdout.write(contents)
+        env=dict(GITHUB_REPOSITORY='etr/libhttpserver',GITHUB_RUN_ID='38848731938',GITHUB_RUN_ATTEMPT='1',
+                 GITHUB_SHA=merge,WORKFLOW_HEAD_SHA=head)
+        args=argparse.Namespace(artifact_id='12024142302',digest=digest,output=self.directory/'cli-download')
+        with patch.dict(os.environ,env),patch('subprocess.check_output',side_effect=[json.dumps(metadata),json.dumps(run)]),patch('subprocess.run',side_effect=transport):
+            entrypoint.download(args)
+        self.assertEqual(json.loads((args.output/'selected.json').read_text())['commit'],merge)
 
     def test_exact_commit_request_rejects_modified_and_untracked_source_inputs(self):
         import subprocess

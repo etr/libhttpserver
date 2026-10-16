@@ -85,9 +85,9 @@ def validate_request(root, commit, version):
 
 def verify_download(archive, metadata, run, expected, expected_digest, destination):
     require(str(metadata['id']) == expected['artifact_id'] and metadata['expired'] is False, 'wrong/expired artifact ID')
-    require(str(metadata['workflow_run']['id']) == expected['run_id'] and metadata['workflow_run']['head_sha'] == expected['source_commit'], 'artifact from another workflow source/run')
+    require(str(metadata['workflow_run']['id']) == expected['run_id'] and metadata['workflow_run']['head_sha'] == expected['workflow_head'], 'artifact from another workflow source/run')
     require(str(run['id']) == expected['run_id'] and str(run['run_attempt']) == expected['run_attempt']
-            and run['repository']['full_name'] == expected['repository'] and run['head_sha'] == expected['source_commit'], 'wrong repository/source/run attempt')
+            and run['repository']['full_name'] == expected['repository'] and run['head_sha'] == expected['workflow_head'], 'wrong repository/source/run attempt')
     require(datetime.fromisoformat(metadata['created_at']) >= datetime.fromisoformat(run['run_started_at']), 'artifact belongs to an earlier run attempt')
     from release_artifact import sha256
     digest = 'sha256:' + sha256(archive)

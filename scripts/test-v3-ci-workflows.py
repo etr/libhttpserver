@@ -17,6 +17,11 @@ def workflow(name):
 
 
 class CIWorkflows(unittest.TestCase):
+    def test_artifact_api_head_is_bound_to_trusted_event_head(self):
+        lane = workflow('v3-release-acceptance.yml')
+        self.assertEqual(lane.get('env', {}).get('WORKFLOW_HEAD_SHA'),
+                         '${{ github.event.pull_request.head.sha || github.sha }}')
+
     def test_freebsd_stages_selected_archive_for_vm_transfer(self):
         steps = workflow('v3-release-acceptance.yml')['jobs']['freebsd']['steps']
         run = next(step['run'] for step in steps if 'ci-selected-input' in step.get('run', ''))

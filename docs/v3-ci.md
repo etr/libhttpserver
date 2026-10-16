@@ -93,6 +93,12 @@ a download action is insufficient. Artifact creation must belong to the current
 run attempt; rerun all jobs to produce fresh release proof rather than reusing
 artifacts from successful jobs in an earlier attempt.
 
+On PR runs, artifact/run API metadata identifies the PR branch head, while
+`GITHUB_SHA` and the selected checkout identify the test merge commit. Downloads
+bind the API head to the trusted event's PR head. Selected archive preparation
+and platform proof still require the exact selected checkout commit, source
+snapshot and archive bytes; these two source identities are not interchangeable.
+
 The final publisher alone receives `contents: write`. It checks successful
 mandatory dependencies, same-run artifacts, manifest and archive hashes and the
 current tag target before `gh release create --verify-tag`. It runs only inline

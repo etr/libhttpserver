@@ -129,7 +129,7 @@ def download(args):
     import subprocess
     from release_ci import verify_download
     expected=dict(repository=os.environ['GITHUB_REPOSITORY'],run_id=os.environ['GITHUB_RUN_ID'],
-        run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],source_commit=os.environ['GITHUB_SHA'],artifact_id=args.artifact_id)
+        run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],workflow_head=os.environ['WORKFLOW_HEAD_SHA'],artifact_id=args.artifact_id)
     require(args.artifact_id.isdigit(), 'invalid artifact ID')
     endpoint='repos/'+expected['repository']+'/actions/artifacts/'+args.artifact_id
     metadata=json.loads(subprocess.check_output(['gh','api',endpoint],text=True))

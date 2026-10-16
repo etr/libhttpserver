@@ -26,6 +26,9 @@ name: v3 selected archive acceptance
 permissions:
   contents: read
   actions: read
+env:
+  # Artifact/run APIs identify the PR branch head; checkout tests its merge SHA.
+  WORKFLOW_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 jobs:
   prepare:
     runs-on: ubuntu-24.04

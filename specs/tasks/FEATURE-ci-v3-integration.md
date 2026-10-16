@@ -20,7 +20,11 @@ protocol behavior, default-branch setting, tag or release changes.
       and recheck the existing tag before the release side effect.
 - [x] Exercise publication refusal and success through the actual validator,
       with only the final publication side effect mocked.
-- [ ] Root: run the actual GitHub PR pipeline; verify manual dispatch availability.
+- [x] Root: verify manual native campaign dispatch invocation (accepted at
+      08c5b7b5; campaign execution outcomes remain pending).
+- [ ] Root: complete actual GitHub PR pipeline verification. First selected
+      archive attempt failed at API PR-head versus merge-SHA origin binding;
+      causal repair and negative controls passed locally; fresh CI is pending.
 - [ ] CI / v3 PR: obtain fresh full local gate and FreeBSD/Darwin/Windows receipts
       for the selected commit/archive. Missing evidence is not a release pass.
 
@@ -29,7 +33,8 @@ are unchanged and cannot replace fresh evidence.
 
 Local verification: native TLS-off/on suites (239/270 tests, two documented
 nonlocal backend skips in each), all eleven sanitizer fuzz targets, genuine
-Doxygen/Graphviz, GCC QUIC replay and 100 focused CI/release/fuzz contracts passed.
+Doxygen/Graphviz, GCC QUIC replay and 100 initial CI/release/fuzz contracts passed.
+The subsequent artifact-origin repair adds three focused contracts (103 total).
 The fresh Linux installed attempt passed TLS-off but failed TLS-on public TLS at
 unprivileged TCP443 binding. Its unsuccessful receipt remains unchanged. A fresh
 focused public TLS run using the existing isolated network path passed all four
