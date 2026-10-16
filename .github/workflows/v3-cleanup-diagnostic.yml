@@ -1,0 +1,130 @@
+name: v3 cleanup diagnostic
+on:
+  pull_request:
+    branches: [v3]
+    paths: ['.github/workflows/v3-cleanup-diagnostic.yml']
+permissions:
+  contents: read
+jobs:
+  macos-cleanup:
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Match Python prerequisite
+        run: brew install python
+      - name: Observe actual helper and native zombie signal semantics
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/v3-cleanup-native-probe.py" <<'PY'
+          #!/usr/bin/env python3
+          """Bounded observational probe: execute the checked-out helper unchanged."""
+          import argparse
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+          import platform
+          import select
+          import signal
+          import sys
+          import time
+          import traceback
+          
+          parser = argparse.ArgumentParser()
+          parser.add_argument('--source', type=Path, default=Path.cwd())
+          parser.add_argument('--output', type=Path, required=True)
+          args = parser.parse_args()
+          source = args.source.resolve()
+          args.output.mkdir(parents=True, exist_ok=False)
+          sys.path.insert(0, str(source / 'scripts/lib'))
+          import package_commands as commands
+          spec = importlib.util.spec_from_file_location('audit', source / 'scripts/audit-v3-installed-package.py')
+          audit = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(audit)
+          
+          receipt = dict(platform=platform.platform(), uname=list(platform.uname()), python=sys.version,
+                         waitid=callable(getattr(os, 'waitid', None)), wnowait=hasattr(os, 'WNOWAIT'),
+                         source=str(source), uid=os.getuid(), observations=[], commands=[], controls=[])
+          
+          def state(tree, deadline):
+              members = commands._process_snapshot(deadline)
+              tree._check_leader(members.get(tree.child.pid))
+              return dict(pid=tree.child.pid, parent=os.getpid(), returncode=tree.child.returncode,
+                          anchor_exited=tree._anchor(deadline),
+                          group={str(pid): value for pid, value in members.items() if value[1] == tree.child.pid})
+          
+          original_kill_group = commands._CommandTree._kill_group
+          
+          def observed_kill_group(tree, deadline):
+              item = state(tree, deadline)
+              receipt['observations'].append(item)
+              try:
+                  result = original_kill_group(tree, deadline)
+                  item['signal'] = 'success'
+                  return result
+              except BaseException as error:
+                  item.update(signal=type(error).__name__, errno=getattr(error, 'errno', None), error=str(error))
+                  item['after'] = state(tree, deadline)
+                  raise
+          
+          # Observation only; the original helper performs every signal and cleanup.
+          commands._CommandTree._kill_group = observed_kill_group
+          runner = commands.Commands(args.output)
+          for argv in (['git', 'branch', '--show-current'], [sys.executable, '-c', 'pass'],
+                       [sys.executable, '-c', 'raise SystemExit(7)']):
+              item = dict(argv=argv)
+              try:
+                  item['output'] = runner(argv, source, audit.clean_environment(), timeout=3, allow_failure=True)
+                  item['result'] = 'success'
+              except Exception as error:
+                  item.update(result=type(error).__name__, error=str(error), traceback=traceback.format_exc())
+              receipt['commands'].append(item)
+          
+          # A fresh owned live leader is the contrasting permission control.
+          tree = commands._CommandTree([sys.executable, '-u', '-c', "import time; print('ready', flush=True); time.sleep(30)"], source, os.environ)
+          deadline = time.monotonic() + 5
+          control = dict(kind='live-to-zombie')
+          try:
+              if not select.select([tree.child.stdout], [], [], 3)[0]:
+                  raise RuntimeError('live control readiness deadline exceeded')
+              if tree.child.stdout.readline() != b'ready\n':
+                  raise RuntimeError('live control did not become ready')
+              control['live'] = state(tree, deadline)
+              original_kill_group(tree, deadline)
+              control['live_sigkill'] = 'success'
+              while not tree.exited(deadline):
+                  commands._remaining(deadline)
+                  time.sleep(.001)
+              control['zombie'] = state(tree, deadline)
+              for label, operation in (
+                      ('zombie_pid_signal_zero', lambda: os.kill(tree.child.pid, 0)),
+                      ('zombie_group_signal_zero', lambda: os.killpg(tree.child.pid, 0)),
+                      ('zombie_helper_sigkill', lambda: original_kill_group(tree, deadline))):
+                  tree._anchor(deadline)
+                  try:
+                      operation()
+                      control[label] = dict(result='success')
+                  except Exception as error:
+                      control[label] = dict(result=type(error).__name__, errno=getattr(error, 'errno', None), error=str(error))
+              control['after'] = state(tree, deadline)
+          except Exception as error:
+              control.update(error=str(error), traceback=traceback.format_exc())
+          finally:
+              # Only our unreaped direct child; never signal after wait/reap.
+              if tree.child.returncode is None:
+                  tree.child.kill()
+                  tree.child.wait(timeout=2)
+              tree.child.stdout.close()
+          receipt['controls'].append(control)
+          (args.output / 'probe.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          print(json.dumps(receipt, indent=2), flush=True)
+          PY
+          python3 "$RUNNER_TEMP/v3-cleanup-native-probe.py" --source "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/v3-cleanup-diagnostic"
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v3-cleanup-diagnostic-${{ github.sha }}
+          path: ${{ runner.temp }}/v3-cleanup-diagnostic
+          if-no-files-found: error
