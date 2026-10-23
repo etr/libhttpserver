@@ -1,6 +1,6 @@
 # FEATURE-ci-outbox-capacity: portable HTTP/1 outbox capacity admission
 
-Status: implementation and focused local verification complete. Validation/finalization belong to the caller. Base: `v3` at `56da7ec9e7ca848de9a19e58fbeb59e2baaa801c`.
+Status: Complete (local implementation, Groundwork validation and finalization). Native execution remains CI / v3 PR owned. Base: `v3` at `56da7ec9e7ca848de9a19e58fbeb59e2baaa801c`.
 
 A valid response head previously failed under libc++19 because `reserve(276)` retained capacity279 and the outbox required an exact capacity match. The unchanged real outbox reproduced the failure while its framer accepted the same response. Native macOS CI attribution remains corroborated; the original failing wire/subcase was not observed.
 
@@ -23,3 +23,7 @@ Evidence is retained in `.debug/FEATURE-ci-outbox-capacity/`: commands, build/ru
 Separate Linux incidental failure remains **UNCERTAIN**, as settled by the prior single bounded check. Its evidence is `.debug/FEATURE-ci-native-runtime/journal.md`: native `icy_http10_and_head_keep_framing` assertions354/356 failed; a subsequent unchanged-core parity replay passed6 tests/35 assertions but its process failed LSan because ptrace is unsupported in the sandbox. This is not a passing process gate or proof of independence. This task does not reopen, retry or repair that failure.
 
 Project notes: C++20; normal setup is `./bootstrap`, out-of-tree `configure --disable-v3-tls`, `make`. Tests use `test/littletest.hpp`; this task directly compiled the affected existing test with its real production translation units using GNU libstdc++ and the retained task-local libc++19, without installing dependencies. `cpplint` reads root `CPPLINT.cfg` (200-column limit). Worktree creation required the existing Git sandbox escalation; branch/path came verbatim from Groundwork's identity helper. No configured agent memory was available.
+
+- [x] Caller: Groundwork validation completed with seven approvals and zero findings; matching evidence reused.
+- [x] Caller: local task finalization into v3.
+- [ ] CI / v3 PR: obtain fresh native platform evidence; no release-readiness claim.
