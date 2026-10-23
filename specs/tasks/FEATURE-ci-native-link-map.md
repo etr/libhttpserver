@@ -1,7 +1,7 @@
 # FEATURE-ci-native-link-map
 
-Status: Implemented; local affected checks pass. Groundwork validation and
-finalization remain caller-owned. Native platform results remain CI / v3 PR owned.
+Status: Complete (local implementation, Groundwork validation and finalization).
+Native platform results remain CI / v3 PR owned; no release readiness claimed.
 
 Scope: repair the installed-consumer link-map option rejected by Darwin ld.
 Base: v3 at `808f7fa20b0bc2f3c3049140b86189e704c5378e`.
@@ -14,7 +14,8 @@ Base: v3 at `808f7fa20b0bc2f3c3049140b86189e704c5378e`.
       dependency hashes, artifact hash, and dependency contamination rejection.
 - [x] Run affected Python module tests and a real local GNU compile/link/run.
 - [x] Check the diff and Python syntax; record unavailable native evidence.
-- [ ] Caller: complete Groundwork validation and finalization.
+- [x] Caller: complete Groundwork validation and finalization.
+      Three focused reviewers approved with no findings; affected evidence reused.
 - [ ] CI / v3 PR: obtain fresh native Darwin installed-consumer and selected
       archive results after merge; retain other platform results honestly.
 
