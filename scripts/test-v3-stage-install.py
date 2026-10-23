@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import platform
+import re
 import shlex
 import shutil
 import subprocess
@@ -49,7 +50,21 @@ class StagedInstallRecipes(unittest.TestCase):
              'RANLIB=' + cls.shell_path(cls.build / 'native-ranlib-boundary.sh')], cwd=cls.build,
             env=cls.environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         if result.returncode:
-            raise RuntimeError(result.stdout)
+            # Preserve the failed check before class cleanup removes config.log.
+            try:
+                log = (cls.build / 'config.log').read_text(errors='replace')
+                core = log.split('## Cache variables.', 1)[0]
+                checks = list(re.finditer(r'^configure:\d+: checking ', core, re.MULTILINE))
+                diagnostic = core[checks[-1].start():] if checks else ''
+                diagnostic = diagnostic.split('\nconfigure: failed program was:', 1)[0]
+                excerpt = diagnostic.encode()
+                # The installed matrix retains only the final 3000 output bytes.
+                if len(excerpt) > 2000:
+                    excerpt = excerpt[:1000] + b'\n[configure check truncated]\n' + excerpt[-1000:]
+                diagnostic = '\nLast configure check (config.log):\n' + excerpt.decode(errors='replace')
+            except OSError as error:
+                diagnostic = '\nCannot read fixture config.log: ' + str(error)
+            raise RuntimeError(result.stdout + diagnostic)
         cls.installer = cls.build / 'native-install-boundary.sh'
         # A tiny real library reaches Automake/libtool's archive and DLL install
         # paths without compiling the unrelated protocol engines in each fixture.

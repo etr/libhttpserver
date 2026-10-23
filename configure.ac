@@ -162,7 +162,7 @@ NETWORK_LIBS=""
 case "$host" in
     *-mingw*)
         NETWORK_HEADER="winsock2.h"
-        ADDITIONAL_LIBS="-lpthread -no-undefined"
+        ADDITIONAL_LIBS="-lpthread"
         NETWORK_LIBS="-lws2_32 -lmswsock -lbcrypt"
         native_srcdir=$(cd $srcdir; pwd -W)
         ;;
@@ -172,13 +172,13 @@ Building from MSYS environment. Binaries will depend on msys-2.0.dll.
 For native Windows binaries, use the MinGW64 shell instead.
 ])
         NETWORK_HEADER="winsock2.h"
-        ADDITIONAL_LIBS="-lpthread -no-undefined"
+        ADDITIONAL_LIBS="-lpthread"
         NETWORK_LIBS="-lws2_32 -lmswsock -lbcrypt"
         native_srcdir=$(cd $srcdir; pwd -W)
         ;;
     *-cygwin*)
         NETWORK_HEADER="arpa/inet.h"
-        ADDITIONAL_LIBS="-lpthread -no-undefined"
+        ADDITIONAL_LIBS="-lpthread"
         ;;
     *)
         NETWORK_HEADER="arpa/inet.h"
@@ -217,6 +217,7 @@ AS_IF([test "x$ac_cv_have_decl_explicit_bzero" = "xyes"],
      AM_CFLAGS="$AM_CFLAGS -DHAVE_EXPLICIT_BZERO"])
 
 CXXFLAGS="-D_REENTRANT $CXXFLAGS"
+# Libtool-only flags belong in the library target, never compiler LDFLAGS.
 LDFLAGS="$NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 AM_CONDITIONAL([COND_CROSS_COMPILE], [test "x$cross_compiling" = xyes])
 # Static consumers need the same socket and thread libraries as the aggregate.
