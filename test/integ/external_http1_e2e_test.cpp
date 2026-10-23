@@ -276,4 +276,7 @@ LT_END_AUTO_TEST(reconnect_replayed_callbacks_and_host_driven_drain)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
+#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
+    httpserver::detail::deadline_trace_flush();
+#endif
 LT_END_AUTO_TEST_ENV()

@@ -31,6 +31,26 @@ LLVM toolchain and `-O0 -g`. Checkout versus extracted archive/execution context
 is now an observed distinction; it is not an established cause. The CA issue is
 queued separately and is outside this task.
 
+## First native diagnostic result and remaining uncertainty
+
+Native diagnostic run `39974555288`, job `120485650697`, passes all four existing
+cases with zero failures using the exact c0 archive plus the live stderr trace
+overlay. The header case takes 303.347 ms. Its actual timer sequence 8 fires,
+applies result 0, resumes, matches the current deadline, enforces timeout,
+releases the connection and closes the native socket successfully near 300 ms.
+A snapshot with no deadline occurs between timer application and watchdog
+resumption; a later host wait receives a wake. The original f91/c0 untraced
+archive failures remain unexplained. Passing under tracing is neither a fix nor
+proof that the failure is independent of this path.
+
+Source review of that handoff finds registration retirement/reset under the
+backend mutex, followed by notify; notify and wake acknowledgment share that
+mutex. Snapshots borrow handles; dispatch-held leases end before the host returns
+to waiting. No violated race invariant or decisive forced-interleaving regression
+was established from this successful trace. The next checkpoint reduces trace
+perturbation and records actual notify/signal/ack states to distinguish missing
+wake from retained lease when a failure is observed.
+
 ## Action items
 
 - [x] Preserve and read prior/current evidence without repeating the closed Linux probe.
@@ -42,7 +62,9 @@ queued separately and is outside this task.
   jobs explicitly on manual dispatch.
 - [x] Check enabled/disabled trace compilation, bounded output, errno preservation,
   ordinary-build argument elision, workflow syntax and changed-file lint.
-- [ ] Execute the native diagnostic and retain actual installed-library provenance.
+- [x] Execute the first native diagnostic and retain actual installed-library provenance.
+- [x] Prepare bounded in-memory capture with deferred output and explicit event timestamps.
+- [ ] Execute one reviewed buffered-trace native diagnostic against the same exact archive.
 - [ ] Establish cause from native evidence, then write and observe a failing
   regression before applying a narrow repair.
 - [ ] Remove all temporary trace code/header and workflow edits before final merge.
@@ -50,12 +72,20 @@ queued separately and is outside this task.
 
 ## Checkpoint scope and checks
 
-`HTTPSERVER_DIAG_HEADER_DEADLINE` enables temporary stderr records, capped at 64
-per call site. Correlation uses connection IDs, operation pointers/sequences,
-socket descriptors and registration generations. Time points are converted with
-`duration_cast<nanoseconds>`; header durations are explicit milliseconds. No
-request bytes, credentials or peer content are logged. Ordinary builds erase
-trace argument evaluation.
+`HTTPSERVER_DIAG_HEADER_DEADLINE` enables temporary typed metadata capture,
+capped at 64 records per call site and 2,048 records overall. Each record stores
+an explicit monotonic `event_ns`, a static format and copied scalar/pointer
+values in fixed storage in the compiled library. Capture performs no formatting,
+stderr writes, allocation or application mutex locking. The installed test and
+library use that same buffer. Only after all four test fixtures have stopped and
+the suite has completed does the test call flush to format and emit stderr.
+Correlation uses connection IDs, operation pointers/sequences, socket descriptors
+and registration generations; new notify/signal/ack metadata covers the observed
+wake/retirement handoff. Time points use `duration_cast<nanoseconds>`; header
+durations are explicit milliseconds. No request bytes, credentials or peer
+content are retained. Capture and flush preserve errno; ordinary builds erase
+trace argument evaluation, storage and diagnostic symbols. A discarded compile
+branch retains format checking without executing stderr writes during capture.
 
 Manual dispatch runs macOS only, preserving its selected compiler/runtime,
 provider setup and artifact upload. It builds and installs TLS-off libraries at
@@ -96,7 +126,16 @@ workflow extraction/overlay block passes, all eight original overlay files match
 the exact base, and the private trace header is present. All eight affected
 translation units also pass diagnostic-enabled syntax/format checks using only
 the extracted source/include paths. Workflow syntax passes again; only workflow provenance and this task record change in the follow-up.
-Darwin execution and the original required gate remain incomplete.
+The buffered capture contract was tested RED/GREEN: live stderr output first
+fails the deferred-output assertion; the new buffer passes. Enabled/disabled
+checks link the actual io_operation implementation as a shared library and prove
+no output before flush, 64/site caps across concurrent producers, errno
+preservation, typed field formatting, positive per-event timestamps, one buffer
+shared by executable/library events, and no diagnostic symbols or argument
+evaluation in ordinary builds. The updated literal archive overlay and
+workflow/test-preservation checks pass; both enabled/disabled extracted-source
+syntax checks and changed-file lint pass. Buffered native execution and the
+original required gate remain incomplete.
 
 The caller reviews/publishes only this task branch and dispatches the existing
 workflow, then resumes this same worktree with actual native evidence. No root

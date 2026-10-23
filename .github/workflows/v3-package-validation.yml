@@ -115,6 +115,7 @@ jobs:
                      CPPFLAGS='-DHTTPSERVER_DIAG_HEADER_DEADLINE',
                      LDFLAGS='-Wl,-rpath,' + str(provider / 'lib'))
           receipt = dict(kind='diagnostic-only; not complete package validation', tls='no', linkage='shared',
+                         trace_mode='bounded memory; stderr emitted after all suite fixtures stop',
                          revision=command(['git', 'rev-parse', 'HEAD'], checkout, env).strip(),
                          compiler=command([compiler, '--version'], checkout, env),
                          provider_header_sha256=hashlib.sha256((provider / 'include/openssl/opensslv.h').read_bytes()).hexdigest())
