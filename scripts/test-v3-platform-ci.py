@@ -102,7 +102,8 @@ class SelectedPlatformEnvironment(unittest.TestCase):
     class NativeChecksComplete(Exception):
         pass
 
-    def native_checks(self, root, inherited_prefix=None, selected=True, dependency_selected=True):
+    def native_checks(self, root, inherited_prefix=None, selected=True, dependency_selected=True,
+                      selected_tools=False, retain_tools=False):
         """Run the archive orchestrator, real child/make and the production audit.
 
         Only archive identity, the expensive package producer and native inspectors
@@ -162,7 +163,7 @@ class SelectedPlatformEnvironment(unittest.TestCase):
                                             source={}, files_sha256={})))
         args = argparse.Namespace(selection=selection, output=root / 'output', archive=root / 'source.tar.gz',
             provider_prefix=root / 'provider', compiler=str(sdk / 'bin/clang++'), cc='/llvm/bin/clang',
-            make=shutil.which('gmake') or shutil.which('make'), jobs=2, client_python=sys.executable,
+            make=os.environ.get('MAKE') or shutil.which('gmake') or shutil.which('make'), jobs=2, client_python=sys.executable,
             node='node', pkg_config_dir=[], toolchain_prefix=sdk if selected else None)
         release = dict(source_root=str(source), source={}, files_sha256={})
         counts = dict(tests=1, checks=1)
@@ -171,18 +172,119 @@ class SelectedPlatformEnvironment(unittest.TestCase):
         env.pop('V3_PACKAGE_TOOLCHAIN', None)
         if inherited_prefix is not None:
             env['V3_PACKAGE_TOOLCHAIN'] = str(inherited_prefix)
+        if selected_tools:
+            compiler = root / 'selected compiler.py'
+            compiler.write_text(textwrap.dedent('''\
+                import json, os, shlex, sys
+                assert sys.argv[1:3] == ['--selected-toolchain', 'argument with spaces'], sys.argv
+                with open(os.environ['COMPILER_CALLS'], 'a') as stream:
+                    stream.write(json.dumps(sys.argv[3:]) + '\\n')
+                command = shlex.split(os.environ['CALLER_CXX']) + sys.argv[3:]
+                os.execvp(command[0], command)
+                '''))
+            make = root / 'selected-make'
+            make.symlink_to(shutil.which('gmake') or shutil.which('make'))
+            python = root / 'selected python'
+            python.symlink_to(sys.executable)
+            args.compiler = shlex.join([str(python), str(compiler), '--selected-toolchain', 'argument with spaces'])
+            args.cc = str(root / 'selected cc')
+            args.make = str(make)
+            probe = root / 'compile probe.py'
+            probe.write_text(textwrap.dedent('''\
+                import os, shlex, subprocess
+                assert os.environ['CC'] == os.environ['EXPECTED_CC'], os.environ.get('CC')
+                assert os.environ['MAKE'] == os.environ['EXPECTED_MAKE'], os.environ.get('MAKE')
+                subprocess.run(shlex.split(os.environ['CXX']) + ['-std=c++20', '-fsyntax-only',
+                    '-x', 'c++', '-I' + os.environ['PUBLIC_HEADERS'], '-'],
+                    input='#include <httpserver.hpp>\\nhttpserver::server::server_options options;\\n',
+                    text=True, check=True)
+                '''))
+            for mode in ('no', 'yes'):
+                makefile = root / 'fixture' / ('tls-' + mode) / 'build/Makefile'
+                with makefile.open('a') as stream:
+                    stream.write('check: selected-tools\nselected-tools:\n\t' + shlex.join([sys.executable, str(probe)]) + '\n')
+            env.update(CXX='unselected-cxx', CC='unselected-cc', MAKE='unselected-make',
+                       EXPECTED_CC=args.cc, EXPECTED_MAKE=args.make, PUBLIC_HEADERS=str(ROOT / 'src'),
+                       CALLER_CXX=os.environ.get('CXX', 'c++'), COMPILER_CALLS=str(root / 'compiler-calls.jsonl'))
+        if retain_tools:
+            compiler_alias = root / 'compiler alias.py'
+            compiler_alias.symlink_to(compiler)
+            args.compiler = shlex.join([str(python), str(compiler_alias), '--selected-toolchain', 'argument with spaces'])
+            cc = Path(args.cc)
+            cc.symlink_to(shutil.which('cc'))
+            args.cc = shlex.join([str(cc), '-DSELECTED_CC=1'])
+            env['EXPECTED_CC'] = args.cc
+            # Exercise a spaced make executable at the retention boundary. GNU
+            # make's recursive MAKE variable needs a shell-quoted command.
+            make_alias = root / 'selected make'
+            make_alias.symlink_to(make)
+            args.make = str(make_alias)
+            for mode in ('no', 'yes'):
+                makefile = root / 'fixture' / ('tls-' + mode) / 'build/Makefile'
+                with makefile.open('a') as stream:
+                    stream.write('MAKE := ' + shlex.quote(str(make_alias)) + '\n')
+            env['EXPECTED_MAKE'] = shlex.quote(str(make_alias))
+            args.node = sys.executable
+            args.archive.touch()
+            header = args.provider_prefix / 'include/openssl/opensslv.h'
+            header.parent.mkdir(parents=True)
+            header.write_text('selected provider header')
+            gate.artifact = lambda path: dict(path=str(path), bytes=path.stat().st_size,
+                                              sha256=hashlib.sha256(path.read_bytes()).hexdigest())
         with patch.object(entrypoint.platform, 'system', return_value='FreeBSD'), \
                 patch.object(entrypoint, 'validate_request'), \
                 patch.object(entrypoint.identity, 'source_identity', return_value={}), \
                 patch.object(entrypoint, 'selected_archive', return_value=release), \
                 patch.object(entrypoint, 'gate_runner', return_value=gate), \
                 patch.object(entrypoint.checks, 'validate_package', return_value=counts), \
-                patch.object(entrypoint.checks, 'automake_result', side_effect=[counts, self.NativeChecksComplete()]), \
+                patch.object(entrypoint.checks, 'automake_result', side_effect=[counts, counts if retain_tools else self.NativeChecksComplete()]), \
+                patch.object(entrypoint, 'validate_origin'), \
                 patch.dict(os.environ, env, clear=True):
             try:
                 entrypoint.platform_proof(args)
             finally:
                 self.assertEqual(os.environ, env, 'archive proof must keep its selected SDK environment local')
+
+    @unittest.skipIf(os.name == 'nt', 'selected tools fixture requires POSIX scripts and GNU make')
+    def test_explicit_tools_reach_real_make_and_python_compiler_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(self.NativeChecksComplete):
+                self.native_checks(root, selected_tools=True)
+            calls = [json.loads(line) for line in (root / 'compiler-calls.jsonl').read_text().splitlines()]
+            self.assertEqual(len(calls), 2, 'both TLS modes must compile through the selected CXX command')
+            self.assertTrue(all('-fsyntax-only' in call for call in calls))
+
+    @unittest.skipIf(os.name == 'nt', 'selected make fixture requires POSIX scripts and GNU make')
+    def test_native_fixture_uses_callers_selected_make_for_test_enumeration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            make = root / 'caller-make'
+            real_make = os.environ.get('MAKE') or shutil.which('gmake') or shutil.which('make')
+            calls = root / 'make-calls.jsonl'
+            make.write_text('#!' + sys.executable + '\nimport json, os, sys\n' +
+                'with open(' + repr(str(calls)) + ', "a") as stream: stream.write(json.dumps(sys.argv[1:]) + "\\n")\n' +
+                'os.execv(' + repr(real_make) + ', [' + repr(real_make) + '] + sys.argv[1:])\n')
+            make.chmod(0o755)
+            with patch.dict(os.environ, MAKE=str(make)), self.assertRaises(self.NativeChecksComplete):
+                self.native_checks(root)
+            self.assertTrue(calls.is_file(), 'native fixture bypassed the caller-selected make')
+            invocations = [json.loads(line) for line in calls.read_text().splitlines()]
+            self.assertEqual(sum('--eval' in argv for argv in invocations), 2)
+
+    @unittest.skipIf(os.name == 'nt', 'selected tool retention fixture uses POSIX executable aliases')
+    def test_archive_retains_compound_compilers_and_spaced_make_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.native_checks(root, selected_tools=True, retain_tools=True)
+            sys.path.insert(0, str(ROOT / 'scripts/lib'))
+            from release_platform import Catalog
+            catalog = Catalog(root / 'output/bundle/FreeBSD')
+            for path in (root / 'selected python', root / 'compiler alias.py', root / 'selected compiler.py',
+                         root / 'selected cc', root / 'selected make'):
+                with self.subTest(path=path):
+                    self.assertEqual(catalog.path(str(path)).read_bytes(), path.read_bytes())
+                    self.assertEqual(catalog.path(str(path.resolve())).read_bytes(), path.read_bytes())
 
     @unittest.skipIf(os.name == 'nt', 'FreeBSD audit fixtures require POSIX scripts and GNU make')
     def test_explicit_sdk_reaches_both_later_make_checks(self):
@@ -356,6 +458,7 @@ sys.exit(int(os.environ['COMPILER_STATUS']))
                     self.assertEqual(argv[argv.index('--toolchain-prefix') + 1] if '--toolchain-prefix' in argv else None, str(llvm))
                     self.assertEqual(argv[argv.index('--compiler') + 1], selected['V3_CXX'])
                     self.assertEqual(argv[argv.index('--cc') + 1], selected['V3_CC'])
+                    self.assertEqual(argv[argv.index('--make') + 1] if '--make' in argv else None, 'gmake')
                     if privileged:
                         self.assertIsNone(captured['toolchain_environment'])
 
@@ -386,6 +489,30 @@ sys.exit(int(os.environ['COMPILER_STATUS']))
 
 @unittest.skipIf(os.name == 'nt', 'competing compiler and symlink fixtures use POSIX paths')
 class InstalledPackageFixtureEnvironment(unittest.TestCase):
+    def test_quoted_fixture_preserves_callers_compound_compiler(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            compiler = root / 'caller compiler.py'
+            compiler.write_text(textwrap.dedent('''\
+                import json, os, shlex, sys
+                assert sys.argv[1:3] == ['--caller-selection', 'argument with spaces'], sys.argv
+                with open(os.environ['CALLER_INVOCATIONS'], 'a') as stream:
+                    stream.write(json.dumps(sys.argv[3:]) + '\\n')
+                command = shlex.split(os.environ['CALLER_CXX']) + sys.argv[3:]
+                os.execvp(command[0], command)
+                '''))
+            env = dict(os.environ, CXX=shlex.join([sys.executable, str(compiler), '--caller-selection', 'argument with spaces']),
+                       CALLER_CXX=os.environ.get('CXX') or shlex.join([shutil.which('c++')]),
+                       CALLER_INVOCATIONS=str(root / 'calls.jsonl'))
+            result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
+                                    'InstalledPackageFixtureEnvironment.test_fixture_entrypoint_honors_quoted_cxx_command'],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue((root / 'calls.jsonl').exists(), 'quoted fixture bypassed the caller-selected compiler')
+            calls = [json.loads(line) for line in (root / 'calls.jsonl').read_text().splitlines()]
+            self.assertTrue(any('-fsyntax-only' in call for call in calls))
+            self.assertTrue(any('-E' in call for call in calls))
+
     def test_fixture_entrypoint_honors_quoted_cxx_command(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -395,14 +522,18 @@ if sys.argv[1] != '--selected-toolchain':
     sys.exit(72)
 with open(os.environ['INVOCATIONS'], 'a') as stream:
     stream.write(json.dumps(sys.argv[2:]) + '\\n')
-os.execv(os.environ['REAL_CXX'], [os.environ['REAL_CXX']] + sys.argv[2:])
+import shlex
+command = shlex.split(os.environ['REAL_CXX']) + sys.argv[2:]
+os.execvp(command[0], command)
 """)
             competing = root / 'c++'
             competing.write_text('#!/bin/sh\nprintf "unselected compiler invoked\\n" >&2\nexit 71\n')
             competing.chmod(0o755)
+            real_cxx = shlex.split(os.environ.get('CXX', 'c++'))
+            real_cxx[0] = shutil.which(real_cxx[0]) or real_cxx[0]
             env = dict(os.environ, CXX=shlex.join([sys.executable, str(selected), '--selected-toolchain']),
                        PATH=str(root) + os.pathsep + os.environ['PATH'],
-                       INVOCATIONS=str(root / 'calls.jsonl'), REAL_CXX=shutil.which('c++'))
+                       INVOCATIONS=str(root / 'calls.jsonl'), REAL_CXX=shlex.join(real_cxx))
             result = subprocess.run([sys.executable, str(ROOT / 'scripts/test-v3-installed-package.py'),
                                      'AuditTest.test_native_public_api_is_available_through_umbrella',
                                      'AuditTest.test_current_umbrella_has_no_backend_types'],
