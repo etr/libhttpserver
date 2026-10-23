@@ -88,7 +88,7 @@ class AuditTest(unittest.TestCase):
         os.environ.pop('V3_PACKAGE_TOOLCHAIN', None)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.policy = audit.load_policy()
 
     def graph(self, links):
@@ -504,6 +504,29 @@ class AuditTest(unittest.TestCase):
         result = audit.run(shlex.split(CXX) + ['-std=c++20', '-E', '-x', 'c++', '-I' + str(source / 'src'), '-'],
                            input='#include <httpserver.hpp>\n')
         self.assertEqual([], audit.header_violations(result, []))
+
+
+class AuditFixturePathTest(unittest.TestCase):
+    def test_unwind_contract_under_symlinked_temporary_root(self):
+        original_tempdir = tempfile.tempdir
+        original_environment = dict(os.environ)
+        with patch.object(tempfile, 'tempdir', original_tempdir), tempfile.TemporaryDirectory() as outer:
+            target = Path(outer).resolve() / 'real-temp'
+            target.mkdir()
+            alias = target.parent / 'alias-temp'
+            alias.symlink_to(target, target_is_directory=True)
+            case = AuditTest('test_selected_unwind_still_inspects_hashes_and_rejects_transitive_provider')
+            result = unittest.TestResult()
+            with patch.object(tempfile, 'tempdir', str(alias)):
+                case.run(result)
+            self.assertEqual(1, result.testsRun)
+            self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+            self.assertFalse(result.skipped)
+            self.assertNotEqual(Path(case.tmp.name), Path(case.tmp.name).resolve())
+            self.assertFalse(Path(case.tmp.name).exists())
+            self.assertTrue(alias.is_dir())
+        self.assertIs(original_tempdir, tempfile.tempdir)
+        self.assertEqual(original_environment, dict(os.environ))
 
 
 if __name__ == '__main__':
