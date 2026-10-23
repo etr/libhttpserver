@@ -85,6 +85,7 @@ class AuditTest(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         os.environ.pop('V3_PACKAGE_PREREQUISITES', None)
+        os.environ.pop('V3_PACKAGE_TOOLCHAIN', None)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -211,6 +212,84 @@ class AuditTest(unittest.TestCase):
         self.assertEqual([], self.violations(graph, mode='strict', tls='yes', surface='aggregate'))
         self.assertTrue(self.violations(graph, tls='no', surface='native'))
         self.assertTrue(audit.graph_violations(graph, 'strict', 'yes', 'native', self.policy, self.root / 'other-provider'))
+
+    def test_selected_darwin_unwind_accepts_observed_llvm_closure_only(self):
+        prefix = Path('/opt/homebrew/Cellar/llvm/23.1.0')
+        cxx = str(prefix / 'lib/c++/libc++.1.0.dylib')
+        abi = str(prefix / 'lib/c++/libc++abi.1.0.dylib')
+        unwind = str(prefix / 'lib/unwind/libunwind.1.0.dylib')
+        graph = {'nodes': [{'id': path} for path in ('consumer', cxx, abi, unwind)],
+                 'edges': [{'parent': parent, 'name': child, 'child': child} for parent, child in
+                           [('consumer', cxx), (cxx, abi), (cxx, unwind), (abi, unwind)]]}
+        with patch.object(audit.platform, 'system', return_value='Darwin'):
+            for selected in ('', str(prefix.parent / '22.0.0'), str(prefix)):
+                with self.subTest(selected=selected), patch.dict(os.environ, V3_PACKAGE_TOOLCHAIN=selected):
+                    errors = self.violations(graph)
+                    if selected == str(prefix):
+                        self.assertEqual([], errors)
+                    else:
+                        self.assertEqual([f'undeclared dependency (aggregate/strict): {parent} -> {unwind}'
+                                          for parent in (cxx, abi)], errors)
+
+    def test_selected_darwin_unwind_requires_canonical_directory_and_numeric_name(self):
+        prefix = self.root / 'llvm/23.1.0'
+        directory = prefix / 'lib/unwind'
+        directory.mkdir(parents=True)
+        target = directory / 'libunwind.1.0.dylib'
+        target.write_text('selected runtime')
+        alias = self.root / 'selected llvm'
+        alias.symlink_to(prefix, target_is_directory=True)
+        link = directory / 'libunwind.dylib'
+        link.symlink_to(target.name)
+        with patch.object(audit.platform, 'system', return_value='Darwin'), \
+                patch.dict(os.environ, V3_PACKAGE_TOOLCHAIN=str(alias)):
+            self.assertTrue(audit.runtime(str(target)))
+            self.assertTrue(audit.runtime(str(link)))
+            for path in (prefix / 'lib/libunwind.1.0.dylib', prefix / 'lib/c++/libunwind.1.0.dylib',
+                         prefix.parent / 'other/lib/unwind/libunwind.1.0.dylib',
+                         directory / '../libunwind.1.0.dylib', '/usr/lib/libunwind.1.dylib',
+                         directory / 'libunwind.bad.dylib',
+                         directory / 'libunwind.1.dylib.extra', directory / 'libunwind.1..0.dylib',
+                         directory / 'libcurl.4.dylib'):
+                with self.subTest(path=str(path)):
+                    self.assertFalse(audit.runtime(str(path)))
+            outside = self.root / 'libunwind.2.dylib'
+            outside.touch()
+            escape = directory / 'libunwind.2.dylib'
+            escape.symlink_to(outside)
+            self.assertFalse(audit.runtime(str(escape)))
+            target.unlink()
+            directory.rename(prefix / 'lib/sibling')
+            directory.symlink_to(prefix / 'lib/sibling', target_is_directory=True)
+            (directory / target.name).touch()
+            self.assertFalse(audit.runtime(str(directory / target.name)))
+
+    def test_selected_unwind_still_inspects_hashes_and_rejects_transitive_provider(self):
+        prefix = self.root / 'llvm'
+        directory = prefix / 'lib/unwind'
+        directory.mkdir(parents=True)
+        consumer, unwind, forbidden = self.root / 'consumer', directory / 'libunwind.1.dylib', self.root / 'libcrypto.dylib'
+        links = {str(consumer): [str(unwind)], str(unwind): [str(forbidden)], str(forbidden): []}
+        for path in links:
+            Path(path).write_text('inspected ' + path)
+        inspected = []
+        def inspect(path):
+            inspected.append(path)
+            return [(child, child) for child in links[path]]
+        with patch.object(audit.platform, 'system', return_value='Darwin'), \
+                patch.dict(os.environ, V3_PACKAGE_TOOLCHAIN=str(prefix)):
+            graph = audit.dependency_graph([str(consumer)], inspect)
+            self.assertEqual(set(links), set(inspected))
+            self.assertEqual({path: hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in links},
+                             {node['id']: node['sha256'] for node in graph['nodes']})
+            self.assertEqual(['unselected native provider: ' + str(forbidden)], audit.graph_violations(
+                                 graph, 'strict', 'yes', 'aggregate', self.policy, self.root / 'provider'))
+            forbidden.rename(self.root / 'libmicrohttpd.dylib')
+            with self.assertRaisesRegex(audit.AuditError, 'unresolved dependency'):
+                audit.dependency_graph([str(consumer)], inspect)
+        with patch.object(audit.platform, 'system', return_value='Linux'), \
+                patch.dict(os.environ, V3_PACKAGE_TOOLCHAIN=str(prefix)):
+            self.assertFalse(audit.runtime(str(unwind)))
 
     def test_unknown_system_library_is_not_allowed(self):
         graph = {'nodes': [{'id': 'consumer'}, {'id': '/usr/lib/libsurprise.dylib'}],

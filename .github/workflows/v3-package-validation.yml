@@ -72,7 +72,7 @@ jobs:
           if ! python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",443)); s.close()'; then
             prefix=(sudo env "PATH=$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD")
           fi
-          "${prefix[@]}" python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" --pkg-config-dir "$(brew --prefix)/share/pkgconfig" --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --compiler "$V3_CXX" --cc "$V3_CC" --jobs 2
+          "${prefix[@]}" python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" --pkg-config-dir "$(brew --prefix)/share/pkgconfig" --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --jobs 2
       - name: Make privileged proof readable by artifact upload
         if: always()
         run: |

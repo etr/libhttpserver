@@ -4,12 +4,14 @@ import json
 import argparse
 import importlib.util
 import os
+import re
 import shlex
 import shutil
 import sys
 from pathlib import Path
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -31,7 +33,7 @@ class SelectedPlatformEnvironment(unittest.TestCase):
             args = argparse.Namespace(selection=selection, output=root / 'output',
                 archive=root / 'source.tar.gz', provider_prefix=root / 'provider',
                 compiler='clang++', cc='clang', make='make', jobs=2,
-                client_python='selected-python', node='node', pkg_config_dir=[], toolchain_prefix=None)
+                client_python='selected-python', node='node', pkg_config_dir=[], toolchain_prefix=root / 'selected llvm')
             observed = []
 
             class MatrixBoundary(Exception):
@@ -51,6 +53,8 @@ class SelectedPlatformEnvironment(unittest.TestCase):
                 with self.assertRaises(MatrixBoundary):
                     entrypoint.platform_proof(args)
             self.assertEqual(len(observed), 1)
+            argv = observed[0][0]
+            self.assertEqual(argv[argv.index('--toolchain-prefix') + 1], root / 'selected llvm')
             cli = 'openssl.exe' if os.name == 'nt' else 'openssl'
             self.assertEqual(observed[0][1]['V3_OPENSSL'], str(root / 'provider/bin' / cli))
             self.assertEqual(observed[0][1]['LD_LIBRARY_PATH'], str(root / 'provider/lib'))
@@ -97,6 +101,7 @@ sys.exit(int(os.environ['COMPILER_STATUS']))
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             selected = dict(line.split('=', 1) for line in Path(env['GITHUB_ENV']).read_text().splitlines())
             self.assertEqual(selected['V3_CC'], str(llvm / 'bin/clang'))
+            self.assertEqual(selected.get('V3_PACKAGE_TOOLCHAIN'), str(llvm))
             result = subprocess.run([selected['V3_CXX'], 'path with spaces.cpp', '-o', str(root / 'consumer')], env=env)
             self.assertEqual(result.returncode, 0)
             calls = [json.loads(line) for line in Path(env['INVOCATIONS']).read_text().splitlines()]
@@ -109,6 +114,47 @@ sys.exit(int(os.environ['COMPILER_STATUS']))
             calls = [json.loads(line) for line in Path(env['INVOCATIONS']).read_text().splitlines()]
             self.assertIn('-L' + str(llvm / 'lib/c++'), calls[-1])
             self.assertIn('-Wl,-rpath,' + str(llvm / 'lib/c++'), calls[-1])
+
+    def test_workflows_pass_selected_prefix_even_when_sudo_cleans_environment(self):
+        for workflow, job, entrypoint in (
+                ('v3-package-validation.yml', 'macos', 'scripts/check-v3-installed-consumer.py'),
+                ('v3-release-acceptance.yml', 'darwin', 'scripts/run-v3-release-ci.py')):
+            text = (ROOT / '.github/workflows' / workflow).read_text()
+            job_text = re.split(r'^  [a-z0-9_-]+:', text.split('  ' + job + ':', 1)[1], maxsplit=1, flags=re.M)[0]
+            lines = job_text.splitlines()
+            invocation = next(i for i, line in enumerate(lines) if entrypoint in line and '${prefix[@]}' in line)
+            start = next(i for i in range(invocation, -1, -1) if 'run: |' in lines[i])
+            block = textwrap.dedent('\n'.join(lines[start + 1:invocation + 1]))
+            for privileged in (False, True):
+                with self.subTest(workflow=workflow, privileged=privileged), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    result, env, llvm = self.prepare(root)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    selected = dict(line.split('=', 1) for line in Path(env['GITHUB_ENV']).read_text().splitlines())
+                    # Exercise the workflow's shell and argv; only native tools are substituted.
+                    python = root / 'tools/python3'
+                    python.write_text('#!' + sys.executable + '\n' + textwrap.dedent("""\
+                        import json, os, sys
+                        if sys.argv[1] == '-c':
+                            sys.exit(int(os.environ['PRIVILEGED']))
+                        with open(os.environ['CAPTURE'], 'w') as stream:
+                            json.dump({'argv': sys.argv[1:], 'toolchain_environment': os.environ.get('V3_PACKAGE_TOOLCHAIN')}, stream)
+                        """))
+                    python.chmod(0o755)
+                    sudo = root / 'tools/sudo'
+                    sudo.write_text('#!/bin/sh\nexec env -i CAPTURE="$CAPTURE" "$@"\n')
+                    sudo.chmod(0o755)
+                    result = subprocess.run(['bash', '-e', '-c', block], cwd=ROOT,
+                        env=dict(env, **selected, PRIVILEGED=str(int(privileged)), CAPTURE=str(root / 'captured.json')),
+                        capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    captured = json.loads((root / 'captured.json').read_text())
+                    argv = captured['argv']
+                    self.assertEqual(argv[argv.index('--toolchain-prefix') + 1] if '--toolchain-prefix' in argv else None, str(llvm))
+                    self.assertEqual(argv[argv.index('--compiler') + 1], selected['V3_CXX'])
+                    self.assertEqual(argv[argv.index('--cc') + 1], selected['V3_CC'])
+                    if privileged:
+                        self.assertIsNone(captured['toolchain_environment'])
 
     def test_nonfinal_modes_do_not_receive_runtime_linker_flags(self):
         with tempfile.TemporaryDirectory() as directory:
