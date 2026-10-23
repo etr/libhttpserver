@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-toolchain-env: retain selected SDK identity through archive native checks
 
-Status: In Progress — implementation ready for caller validation and finalization.
+Status: Complete — local implementation and validation complete; native execution remains CI/v3-PR owned.
 Base: `v3` at `831aad155b9c4f0350b6376e2f589379039022d2`.
 Plan: `.groundwork-plans/FEATURE-ci-freebsd-toolchain-env-plan.md` in the primary checkout.
 Journal: `.debug/ci-freebsd-toolchain-env-b_nxofo9/journal.md` in the primary checkout.
@@ -23,7 +23,7 @@ Action items:
 - [x] Retain compiler/C compiler CLI selection, strict audits, complete archive
   checks and process-local SDK selection without Node/provider C flag changes.
 - [x] Run affected existing tests, Python syntax and whitespace checks.
-- [ ] Caller: full Groundwork validation, finalization, merge and cleanup.
+- [x] Caller: full Groundwork validation, finalization, merge and cleanup.
 - [ ] Native FreeBSD post-repair execution: CI/v3-PR owned, not executed locally.
 
 The sourced FreeBSD `toolchain.env` supplies shell assignments, while the workflow
@@ -68,3 +68,7 @@ LLVM20 cancellation/compiler/runtime evidence remains valid without rebuilding
 the SDK. No full baseline, old validation restart, unrelated failure investigation,
 new native CI run, publication, push or merge was performed. Previously closed
 Darwin/Linux/Windows uncertainty batches remain closed.
+
+Final local validation/finalization (2026-10-23):
+
+Groundwork sealed exact clean implementation `f7326d37b4553c4dbe526379317390da86bfa41b` / tree `e95f2b2316eb055ff356476079eadbcb4b7fe82d`: 1 iteration, 0 fixed, 0 unworked. Eight current reviewers approved; the unchanged performance approval was carried from the sealed SDK predecessor, accounting for all nine applicable profiles. Durable receipt: `.git/groundwork/validation/cdb4ee2aea69cc6a/dc47aaed14db8e41/groundwork-validation-0f8a5a6aee0724d7cb9cc71ce24b8aec`. The earlier implementation-only paragraph is superseded for local validation/finalization. Caller changes only this bookkeeping before serial merge/cleanup. The concrete archive environment defect identified in the predecessor SDK review is repaired here; its historical sealed report and other unworked observations remain unchanged. Native FreeBSD/libcxxrt and post-repair platform outcomes remain unexecuted locally and assigned to CI/v3 PR. Overall CI-green work remains open pending fresh CI.
