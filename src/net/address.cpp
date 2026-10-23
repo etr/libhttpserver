@@ -44,6 +44,7 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <sys/socket.h>
 #endif
 
 #include <httpserver/detail/net_address.hpp>
