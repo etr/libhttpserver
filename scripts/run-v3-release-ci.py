@@ -60,6 +60,8 @@ def platform_proof(args):
     env = dict(os.environ, V3_RELEASE_IDENTITY=str(identity_path),
         V3_TLS_CFLAGS='-I' + (args.provider_prefix / 'include').as_posix(),
         V3_TLS_LIBS='-L' + (args.provider_prefix / 'lib').as_posix() + ' -lssl -lcrypto')
+    if args.toolchain_prefix:
+        env['V3_PACKAGE_TOOLCHAIN'] = str(args.toolchain_prefix)
     env['LD_LIBRARY_PATH'] = str(args.provider_prefix / 'lib')
     env['DYLD_LIBRARY_PATH'] = str(args.provider_prefix / 'lib')
     env['PATH'] = str(args.provider_prefix / 'bin') + os.pathsep + env['PATH']
