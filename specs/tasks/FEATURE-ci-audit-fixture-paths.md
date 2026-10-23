@@ -1,6 +1,6 @@
 # FEATURE-ci-audit-fixture-paths: canonical audit fixture roots
 
-Status: Implemented; caller Groundwork validation and finalization pending.
+Status: Complete (local implementation, Groundwork validation and finalization).
 Base: `v3` at `54fa6aae23ee91db861a9802f27d2dac9c28ed2c`.
 
 Mac package job120420002071 and archiveDarwin job120420935245 both failed
@@ -28,7 +28,7 @@ Action items:
   focused alias cases; run changed-file Python compilation and diff checks.
 - [x] Retain raw RED/GREEN commands, logs and journal under root
   `.debug/FEATURE-ci-audit-fixture-paths/`.
-- [ ] Caller: Groundwork validation and local finalization into v3.
+- [x] Caller: Groundwork validation and local finalization into v3; three reviewers approved with zero findings.
 - [ ] CI / v3 PR: native Mac package and selected-archive execution.
 
 Local verification: all 41 affected module tests pass (all original 40 plus
