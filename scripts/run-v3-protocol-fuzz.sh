@@ -196,9 +196,10 @@ PYTHON
     fi
     link_flags=()
     if [ "$target" = quic_tls_callbacks ]; then link_flags+=("${provider_libs[@]}"); fi
-    printf '%q ' "$compiler" "${flags[@]}" "${target_flags[@]}" "${sources[@]}" "${link_flags[@]}" -o "$build/$target/fuzz" > "$build/$target/compile.sh"
+    # Bash 3.2 nounset needs guarded empty arrays; absent flags must add zero arguments.
+    printf '%q ' "$compiler" "${flags[@]}" ${target_flags[@]+"${target_flags[@]}"} "${sources[@]}" ${link_flags[@]+"${link_flags[@]}"} -o "$build/$target/fuzz" > "$build/$target/compile.sh"
     printf '\n' >> "$build/$target/compile.sh"
-    "$compiler" "${flags[@]}" "${target_flags[@]}" "${sources[@]}" "${link_flags[@]}" -o "$build/$target/fuzz" > "$build/$target/build.log" 2>&1
+    "$compiler" "${flags[@]}" ${target_flags[@]+"${target_flags[@]}"} "${sources[@]}" ${link_flags[@]+"${link_flags[@]}"} -o "$build/$target/fuzz" > "$build/$target/build.log" 2>&1
     printf '%q ' "$build/$target/fuzz" "$target_corpus" -runs="$runs" -max_total_time="$seconds" -max_len="$max_len" -timeout=5 -rss_limit_mb=512 -seed="$seed" -artifact_prefix="$build/$target/artifacts/" > "$build/$target/reproduce.sh"
     printf '\n' >> "$build/$target/reproduce.sh"
     "$build/$target/fuzz" "$target_corpus" -runs="$runs" -max_total_time="$seconds" -max_len="$max_len" -timeout=5 -rss_limit_mb=512 -seed="$seed" -artifact_prefix="$build/$target/artifacts/" > "$build/$target/run.log" 2>&1 || { echo "fuzz failure: $target; see $build/$target/run.log and artifacts" >&2; exit 1; }

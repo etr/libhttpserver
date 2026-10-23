@@ -96,9 +96,10 @@ class FuzzRunnerTest(unittest.TestCase):
         # This probe verifies shell arguments; the real sanitizer runs are separate.
         import json
         import os
+        import shlex
         with tempfile.TemporaryDirectory() as directory:
             location = pathlib.Path(directory)
-            compiler = location / 'compiler.py'
+            compiler = location / 'compiler with spaces.py'
             compiler.write_text('''#!/usr/bin/env python3
 import json, os, pathlib, sys
 if '--version' in sys.argv:
@@ -110,15 +111,15 @@ output.write_text("#!/usr/bin/env python3\\nimport json, os, sys\\nwith open(os.
 output.chmod(0o755)
 ''')
             compiler.chmod(0o755)
-            config = location / 'native'
+            config = location / 'native config'
             config.mkdir()
             (config / 'config.h').write_text('/* TLS disabled */\n')
-            build = location / 'fuzz'
+            build = location / 'fuzz output'
             environment = dict(os.environ, FUZZ_ARGUMENT_LOG=str(location / 'compile.jsonl'),
                                FUZZ_RUN_LOG=str(location / 'run.jsonl'))
             result = subprocess.run([
                 'bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
-                '--build-dir', str(build), '--targets', 'http3_engine qpack',
+                '--build-dir', str(build), '--targets', 'http3_engine qpack http1_head',
                 '--compiler', str(compiler), '--native-config-dir', str(config),
                 '--runs', '9', '--seconds', '2'], env=environment,
                 capture_output=True, text=True, timeout=15)
@@ -128,8 +129,13 @@ output.chmod(0o755)
             for target, macro, length in [('http3_engine', '-DHTTP3_ENGINE_LIBFUZZER', 4096),
                                           ('qpack', '-DQPACK_LIBFUZZER', 512)]:
                 arguments = next(args for args in builds if macro in args)
+                self.assertNotIn('', arguments)
                 self.assertIn('-fsanitize=fuzzer,address,undefined', arguments)
+                self.assertIn('-I' + str(config), arguments)
                 self.assertIn(str(ROOT / 'src/detail/http3_connection.cpp'), arguments)
+                self.assertEqual(arguments[-2:], ['-o', str(build / target / 'fuzz')])
+                self.assertEqual(shlex.split((build / target / 'compile.sh').read_text()),
+                                 [str(compiler)] + arguments)
                 self.assertTrue((build / target / 'sources.list').is_file())
                 invocation = next(args for args in runs if args[0] == str(build / target / 'fuzz'))
                 for flag in ('-runs=9', '-max_total_time=2', '-timeout=5', '-rss_limit_mb=512',
@@ -138,6 +144,57 @@ output.chmod(0o755)
                 self.assertEqual(invocation[1], str(build / target / 'seeds'))
                 self.assertTrue(list((build / target / 'seeds').glob('*.seed')))
                 self.assertTrue((build / target / 'reproduce.sh').is_file())
+            head = next(args for args in builds if str(ROOT / 'test/fuzz/http1_head_fuzz.cpp') in args)
+            self.assertNotIn('', head)
+            self.assertIn('-fsanitize=fuzzer,address,undefined', head)
+            self.assertEqual(head[-2:], ['-o', str(build / 'http1_head/fuzz')])
+            self.assertEqual(shlex.split((build / 'http1_head/compile.sh').read_text()),
+                             [str(compiler)] + head)
+            self.assertEqual(len(builds), 4)  # Instrumentation probe and three selected targets.
+
+    def test_callback_provider_arguments_preserve_boundaries_and_link_order(self):
+        import json
+        import os
+        import shlex
+        with tempfile.TemporaryDirectory() as directory:
+            location = pathlib.Path(directory)
+            compiler = location / 'compiler with spaces'
+            compiler.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+if '--version' in sys.argv:
+    print('test argument recorder'); sys.exit(0)
+with open(os.environ['FUZZ_ARGUMENT_LOG'], 'a') as log:
+    log.write(json.dumps(sys.argv[1:]) + '\\n')
+output = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
+output.write_text('#!/bin/sh\\nexit 0\\n')
+output.chmod(0o755)
+''')
+            compiler.chmod(0o755)
+            config = location / 'native config'
+            (config / 'src').mkdir(parents=True)
+            (config / 'config.h').write_text('#define NATIVE_V3_TLS 1\n')
+            cflags = ['-I' + str(location / 'provider headers'), '-DPROVIDER_VALUE=two words']
+            libs = ['-L' + str(location / 'provider libs'), '-lssl', '-lcrypto']
+            (config / 'src/Makefile').write_text('V3_TLS_CFLAGS = ' + shlex.join(cflags)
+                + '\nV3_TLS_LIBS = ' + shlex.join(libs) + '\n')
+            build = location / 'fuzz output'
+            log = location / 'compile.jsonl'
+            result = subprocess.run(['bash', str(ROOT / 'scripts/run-v3-protocol-fuzz.sh'),
+                '--build-dir', str(build), '--targets', 'quic_tls_callbacks',
+                '--compiler', str(compiler), '--native-config-dir', str(config),
+                '--runs', '1', '--seconds', '1'],
+                env=dict(os.environ, FUZZ_ARGUMENT_LOG=str(log)),
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            arguments = json.loads(log.read_text().splitlines()[-1])
+            self.assertNotIn('', arguments)
+            start = arguments.index('-DQUIC_TLS_CALLBACKS_LIBFUZZER')
+            self.assertEqual(arguments[start:start + 5],
+                ['-DQUIC_TLS_CALLBACKS_LIBFUZZER', '-I' + str(ROOT / 'test'), '-I' + str(config)] + cflags)
+            self.assertEqual(arguments[-5:], libs + ['-o', str(build / 'quic_tls_callbacks/fuzz')])
+            self.assertEqual(shlex.split((build / 'quic_tls_callbacks/compile.sh').read_text()),
+                             [str(compiler)] + arguments)
+            self.assertEqual((build / 'quic_tls_callbacks/provider.log').read_text().splitlines(), cflags + libs)
 
     def test_seed_and_corpus_arguments_reject_invalid_inputs_before_compilation(self):
         for seed in ('0', '-1', '4294967296', '$(touch marker)', '12x'):
