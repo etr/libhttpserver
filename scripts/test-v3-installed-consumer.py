@@ -46,6 +46,8 @@ class InstalledShellTest(unittest.TestCase):
         self.conversion_requests = []
 
     def create_process(self, argv, **options):
+        if str(argv[0]) not in ('bash', 'bash.exe', str(self.bash)):
+            return self.popen(argv, **options)
         if argv[1:3] == ['-c', 'cygpath -u "$1"']:
             self.conversion_requests.append(argv[-1])
             return self.popen([sys.executable, '-c', f'print({self.converted_configure!r})'], **options)
@@ -90,6 +92,16 @@ class InstalledShellTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'bash.*PATH'):
                 self.runner.package_lane(self.args, self.root, self.output, 'no', matrix.load())
         self.assertFalse((self.output / 'tls-no/commands.json').exists())
+
+
+@unittest.skipIf(os.name == 'nt', 'ps observation uses POSIX process groups; Windows exercises native jobs')
+class InstalledShellPSTest(InstalledShellTest):
+    """Replay the shell contracts through real ps observation on POSIX hosts."""
+    def setUp(self):
+        super().setUp()
+        observation = patch.object(commands.sys, 'platform', 'darwin')
+        observation.start()
+        self.addCleanup(observation.stop)
 
 
 class MatrixTest(unittest.TestCase):
