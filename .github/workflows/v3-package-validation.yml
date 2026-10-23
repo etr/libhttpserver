@@ -5,17 +5,10 @@ on:
   pull_request:
     branches: [v3, master]
   workflow_dispatch:
-    # Temporary diagnostic selector; remove before merging this task into v3.
-    inputs:
-      windows_only:
-        description: 'Capture Windows diagnostics; other platform jobs are skipped'
-        type: boolean
-        default: false
 permissions:
   contents: read
 jobs:
   linux:
-    if: github.event_name != 'workflow_dispatch' || !inputs.windows_only
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -51,7 +44,6 @@ jobs:
           retention-days: 14
           if-no-files-found: error
   macos:
-    if: github.event_name != 'workflow_dispatch' || !inputs.windows_only
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -156,7 +148,6 @@ jobs:
           retention-days: 14
           if-no-files-found: error
   freebsd:
-    if: github.event_name != 'workflow_dispatch' || !inputs.windows_only
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
