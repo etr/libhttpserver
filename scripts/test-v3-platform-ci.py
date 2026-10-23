@@ -101,6 +101,130 @@ class FreeBSDToolchain(unittest.TestCase):
 
 
 class SelectedPlatformEnvironment(unittest.TestCase):
+    class NativeChecksComplete(Exception):
+        pass
+
+    def native_checks(self, root, inherited_prefix=None, selected=True, dependency_selected=True):
+        """Run the archive orchestrator, real child/make and the production audit.
+
+        Only archive identity, the expensive package producer and native inspectors
+        are fixtures; this does not establish native FreeBSD ABI compatibility.
+        """
+        spec = importlib.util.spec_from_file_location('platform_native_checks', ROOT / 'scripts/run-v3-release-ci.py')
+        entrypoint = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(entrypoint)
+        sdk = root / 'selected sdk'
+        (sdk / 'lib').mkdir(parents=True)
+        (sdk / 'lib/libc++.so.1.0').touch()
+        source = root / 'source'
+        (source / 'scripts').mkdir(parents=True)
+        producer = source / 'scripts/check-v3-installed-consumer.py'
+        producer.write_text(textwrap.dedent('''\
+            import json, os, pathlib, shutil, sys
+            output = pathlib.Path(sys.argv[sys.argv.index('--output') + 1])
+            shutil.copytree(pathlib.Path(__file__).parents[2] / 'fixture', output)
+            (output / 'child.json').write_text(json.dumps({'argv': sys.argv[1:],
+                'prefix': os.environ.get('V3_PACKAGE_TOOLCHAIN')}))
+            # Like the package producer, selecting a runtime in this child cannot
+            # update the archive orchestrator's later make environment.
+            if '--toolchain-prefix' in sys.argv:
+                os.environ['V3_PACKAGE_TOOLCHAIN'] = sys.argv[sys.argv.index('--toolchain-prefix') + 1]
+            '''))
+        recipe = (ROOT / 'Makefile.am').read_text().split(
+            '\ncheck-v3-native-linkage:\n', 1)[1].split('\n\n', 1)[0]
+        for mode in ('no', 'yes'):
+            build = root / 'fixture' / ('tls-' + mode) / 'build'
+            (build / 'src/.libs').mkdir(parents=True)
+            (build / 'test').mkdir()
+            (build / 'src/.libs/libhttpserver_v3core.a').touch()
+            (build / 'test/native_linkage').write_text('#!/bin/sh\nexit 0\n')
+            (build / 'test/native_linkage').chmod(0o755)
+            (build / 'test/Makefile').write_text('TEST_LOGS = native_linkage.log\nnative_linkage:;@:\n')
+            (build / 'src/Makefile').write_text(
+                'libhttpserver.la:\n\tlibtool --tag=CXX --mode=link -o libhttpserver.la archive\n')
+            (build / 'Makefile').write_text(
+                'all:;@:\ncheck: check-v3-native-linkage\n'
+                'top_srcdir := ' + str(ROOT) + '\ntop_builddir := .\nabs_top_builddir := $(CURDIR)\n'
+                'enable_v3_tls := ' + mode + '\ncheck-v3-native-linkage:\n' + recipe + '\n')
+        tools = root / 'tools'
+        tools.mkdir()
+        # ldd uses whitespace-delimited paths; the alias resolves to the quoted SDK.
+        (root / 'sdk').symlink_to(sdk, target_is_directory=True)
+        dependency = root / ('sdk/lib/libc++.so.1.0' if dependency_selected else 'other/libc++.so.1.0')
+        for name, output in (('uname', 'FreeBSD'), ('nm', ''), ('ldd',
+                'libc++.so.1 => ' + str(dependency) + ' (0x1)\nlibcxxrt.so.1 => /lib/libcxxrt.so.1 (0x2)')):
+            tool = tools / name
+            tool.write_text("#!/bin/sh\ncat <<'OUTPUT'\n" + output + '\nOUTPUT\n')
+            tool.chmod(0o755)
+        if not dependency_selected:
+            dependency.parent.mkdir()
+            dependency.touch()
+        selection = root / 'selected.json'
+        selection.write_text(json.dumps(dict(commit='a' * 40, version='3.0.0', sha256='b' * 64,
+                                            source={}, files_sha256={})))
+        args = argparse.Namespace(selection=selection, output=root / 'output', archive=root / 'source.tar.gz',
+            provider_prefix=root / 'provider', compiler=str(sdk / 'bin/clang++'), cc='/llvm/bin/clang',
+            make=shutil.which('gmake') or shutil.which('make'), jobs=2, client_python=sys.executable,
+            node='node', pkg_config_dir=[], toolchain_prefix=sdk if selected else None)
+        release = dict(source_root=str(source), source={}, files_sha256={})
+        counts = dict(tests=1, checks=1)
+        gate = argparse.Namespace(expected_identity=lambda *args: {}, read_json=None)
+        env = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ['PATH'])
+        env.pop('V3_PACKAGE_TOOLCHAIN', None)
+        if inherited_prefix is not None:
+            env['V3_PACKAGE_TOOLCHAIN'] = str(inherited_prefix)
+        with patch.object(entrypoint.platform, 'system', return_value='FreeBSD'), \
+                patch.object(entrypoint, 'validate_request'), \
+                patch.object(entrypoint.identity, 'source_identity', return_value={}), \
+                patch.object(entrypoint, 'selected_archive', return_value=release), \
+                patch.object(entrypoint, 'gate_runner', return_value=gate), \
+                patch.object(entrypoint.checks, 'validate_package', return_value=counts), \
+                patch.object(entrypoint.checks, 'automake_result', side_effect=[counts, self.NativeChecksComplete()]), \
+                patch.dict(os.environ, env, clear=True):
+            try:
+                entrypoint.platform_proof(args)
+            finally:
+                self.assertEqual(os.environ, env, 'archive proof must keep its selected SDK environment local')
+
+    @unittest.skipIf(os.name == 'nt', 'FreeBSD audit fixtures require POSIX scripts and GNU make')
+    def test_explicit_sdk_reaches_both_later_make_checks(self):
+        for inherited in (None, '/unselected/sdk'):
+            with self.subTest(inherited=inherited), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                with self.assertRaises(self.NativeChecksComplete):
+                    self.native_checks(root, inherited_prefix=inherited)
+                commands = json.loads((root / 'output/commands.json').read_text())
+                checks = [command for command in commands if 'check' in command['argv']]
+                self.assertEqual(len(checks), 2)
+                for command in checks:
+                    self.assertEqual(command['exit'], 0)
+                    self.assertEqual(command['environment']['V3_PACKAGE_TOOLCHAIN'], str(root / 'selected sdk'))
+                    self.assertIn('A2 PASS', Path(command['log']).read_text())
+                child = json.loads((root / 'output/matrix/child.json').read_text())
+                self.assertEqual(child['prefix'], str(root / 'selected sdk'))
+                self.assertEqual(child['argv'][child['argv'].index('--toolchain-prefix') + 1], str(root / 'selected sdk'))
+                self.assertEqual(child['argv'][child['argv'].index('--compiler') + 1], str(root / 'selected sdk/bin/clang++'))
+                self.assertEqual(child['argv'][child['argv'].index('--cc') + 1], '/llvm/bin/clang')
+
+    @unittest.skipIf(os.name == 'nt', 'FreeBSD audit fixtures require POSIX scripts and GNU make')
+    def test_archive_checks_preserve_inherited_sdk_without_cli_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(self.NativeChecksComplete):
+                self.native_checks(root, inherited_prefix=root / 'selected sdk', selected=False)
+
+    @unittest.skipIf(os.name == 'nt', 'FreeBSD audit fixtures require POSIX scripts and GNU make')
+    def test_archive_checks_reject_runtime_outside_explicit_sdk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, 'unselected FreeBSD C[+][+] runtime'):
+                self.native_checks(Path(directory), dependency_selected=False)
+
+    @unittest.skipIf(os.name == 'nt', 'FreeBSD audit fixtures require POSIX scripts and GNU make')
+    def test_archive_checks_reject_missing_sdk_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, 'selected FreeBSD C[+][+] runtime prefix missing'):
+                self.native_checks(Path(directory), selected=False)
+
     def test_native_platform_matrix_receives_matching_provider_cli(self):
         spec = importlib.util.spec_from_file_location('platform_ci_entrypoint', ROOT / 'scripts/run-v3-release-ci.py')
         entrypoint = importlib.util.module_from_spec(spec)
