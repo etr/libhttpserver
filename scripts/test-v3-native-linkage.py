@@ -1,12 +1,94 @@
 #!/usr/bin/env python3
-"""Adversarial inspector-output fixtures; real binary proof runs separately."""
+"""Make gate and inspector-output fixtures; real binary proof runs separately."""
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
 
 SOURCE = Path(__file__).resolve().parent.parent
+
+class MakeGateFixtures(unittest.TestCase):
+    """Run the production recipe with GNU make and controlled build/inspector outputs."""
+
+    def gate(self, suffix='', mode='no', linker='CXX', dependency=None,
+             symbols='', build_fails=False):
+        make = shutil.which('gmake') or shutil.which('make')
+        self.assertIsNotNone(make, 'GNU make is required for native linkage gate tests')
+        recipe = (SOURCE / 'Makefile.am').read_text().split(
+            '\ncheck-v3-native-linkage:\n', 1)[1].split('\n\n', 1)[0]
+        if dependency is None:
+            dependency = 'KERNEL32.dll' if suffix else '/usr/lib/libc++.1.dylib'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            for name in ['src', 'test', 'tools']:
+                (root / name).mkdir()
+            (root / 'src/Makefile').write_text(
+                'libhttpserver.la:\n'
+                f'\tlibtool --tag={linker} --mode=link -o libhttpserver.la archive\n')
+            # Like Automake, expose only the configured executable target.
+            (root / 'test/Makefile').write_text(
+                'native_linkage$(EXEEXT):\n'
+                + ('\t@exit 1\n' if build_fails else
+                   '\t@mkdir -p .libs ../src/.libs\n'
+                   '\t@printf "#!/bin/sh\\nexit 0\\n" > .libs/$@\n'
+                   '\t@chmod +x .libs/$@\n'
+                   '\t@touch ../src/.libs/libhttpserver_v3core.a\n'))
+            inspectors = {'nm': symbols}
+            if suffix:
+                inspectors.update(uname='MINGW64_NT-10.0', objdump=(
+                    'fixture.exe: file format pei-x86-64\n'
+                    + '\n'.join(' DLL Name: ' + n for n in dependency.splitlines())))
+            else:
+                inspectors['otool'] = 'fixture:\n' + dependency
+            for name, output in inspectors.items():
+                path = root / 'tools' / name
+                path.write_text("#!/bin/sh\ncat <<'OUTPUT'\n" + output + '\nOUTPUT\n')
+                path.chmod(0o755)
+            env = dict(os.environ, PATH=str(root / 'tools') + os.pathsep + os.environ['PATH'])
+            return subprocess.run(
+                [make, '--no-print-directory', '-f', '-', 'check-v3-native-linkage',
+                 'top_srcdir=' + str(SOURCE), 'top_builddir=' + str(root),
+                 'abs_top_builddir=' + str(root), 'EXEEXT=' + suffix,
+                 'enable_v3_tls=' + mode],
+                input='check-v3-native-linkage:\n' + recipe + '\n', cwd=root,
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    def test_configured_executable_suffix_reaches_real_audit(self):
+        for suffix in ['', '.exe']:
+            with self.subTest(suffix=suffix):
+                result = self.gate(suffix=suffix)
+                self.assertEqual(0, result.returncode, result.stdout)
+                self.assertIn('A1 PASS', result.stdout)
+                self.assertIn('A2 PASS', result.stdout)
+
+    def test_configured_tls_mode_reaches_real_audit(self):
+        for suffix, dependency in [('', '/tmp/libssl.3.dylib'), ('.exe', 'libssl-3.dll')]:
+            for mode in ['yes', 'no']:
+                with self.subTest(suffix=suffix, mode=mode):
+                    result = self.gate(suffix=suffix, dependency=dependency, mode=mode)
+                    self.assertEqual(mode == 'yes', result.returncode == 0, result.stdout)
+                    self.assertIn('A2 PASS' if mode == 'yes' else 'TLS-off load dependency',
+                                  result.stdout)
+
+    def test_cxx_linker_gate_stops_before_audit(self):
+        result = self.gate(linker='CC')
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('aggregate must use the C++ linker', result.stdout)
+        self.assertNotIn('A1 PASS', result.stdout)
+
+    def test_build_failure_stops_before_audit(self):
+        result = self.gate(build_fails=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertNotIn('A1 PASS', result.stdout)
+
+    def test_static_provider_rejection_propagates(self):
+        result = self.gate(symbols=' U _SSL_set_quic_tls_cbs')
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('A1 PASS', result.stdout)
+        self.assertIn('TLS-off provider symbols', result.stdout)
+        self.assertNotIn('A2 PASS', result.stdout)
 
 class AuditFixtures(unittest.TestCase):
     def audit(self, dependency=None, symbols='', mode='no', binary=True, archive=True, windows=False):

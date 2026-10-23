@@ -306,7 +306,7 @@ check-v3-native-linkage:
 	@$(MAKE) -n -C src -W libhttpserver_v3core.la libhttpserver.la AM_LDFLAGS= >check-v3-cxx-link.log
 	@grep -E -- '--tag=CXX.*--mode=link.*-o libhttpserver.la ' check-v3-cxx-link.log >/dev/null || { cat check-v3-cxx-link.log; echo "FAIL: aggregate must use the C++ linker"; exit 1; }
 	@echo "=== check-v3-native-linkage: native provider surface audit ==="
-	@$(MAKE) $(AM_MAKEFLAGS) -C "$(top_builddir)/test" native_linkage >/dev/null
+	@$(MAKE) $(AM_MAKEFLAGS) -C "$(top_builddir)/test" native_linkage$(EXEEXT) >/dev/null
 	@BUILD_DIR="$(abs_top_builddir)" SRC_DIR="$(top_srcdir)" V3_TLS_MODE="$(enable_v3_tls)" $(top_srcdir)/scripts/audit-v3-native-linkage.sh
 
 # Enforce the explicit native v3 example source/build inventory.
