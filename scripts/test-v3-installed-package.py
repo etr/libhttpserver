@@ -1,20 +1,82 @@
 #!/usr/bin/env python3
 """Adversarial policy fixtures; these are not installed-package proof."""
+import hashlib
 import importlib.util
 import json
 import os
 import shlex
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).parent / 'lib'))
+import package_integration as integration
 
 CXX = os.environ.get('CXX', 'c++')
 
 spec = importlib.util.spec_from_file_location('audit', Path(__file__).with_name('audit-v3-installed-package.py'))
 audit = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(audit)
+
+
+class CompileProbeTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.source, self.build, self.prefix = (self.root / name for name in ('source', 'build', 'prefix'))
+        self.unit = self.root / 'consumer.cpp'
+        self.unit.write_text('int main() { return 0; }\n')
+        self.header = self.prefix / 'include/httpserver.hpp'
+        self.header.parent.mkdir(parents=True)
+        self.header.write_text('struct installed_server {};\n')
+        self.executable = self.root / 'consumer'
+        self.calls = []
+
+    def command(self, argv, cwd, env):
+        self.calls.append((argv, cwd, env))
+        if '-MF' in argv:
+            Path(argv[argv.index('-MF') + 1]).write_text(
+                'consumer.o: ' + shlex.join([str(self.unit), str(self.header)]) + '\n')
+        Path(argv[argv.index('-o') + 1]).write_text('compiled artifact')
+
+    def test_compile_probe_uses_host_link_map_syntax_preserving_arguments_and_receipt(self):
+        compiler = 'cache-wrapper "compiler path/c++" --driver-mode=g++'
+        flags = ['-I' + str(self.prefix / 'include'), '-DFIXTURE=1']
+        libraries = ['-L' + str(self.prefix / 'lib'), '-lhttpserver', '-pthread', '-lssl', '-lcrypto']
+        env = {'PATH': 'selected-toolchain'}
+        map_path = str(self.executable) + '.map'
+        for host, option in (('Darwin', '-Wl,-map,'), ('Linux', '-Wl,-Map,'),
+                             ('FreeBSD', '-Wl,-Map,'), ('Windows', '-Wl,-Map,')):
+            for options in (None, ['-O2', '-DNDEBUG']):
+                with self.subTest(host=host, compile_options=options), patch('platform.system', return_value=host):
+                    self.calls.clear()
+                    receipt = integration.compile_probe(compiler, [self.unit], flags, libraries,
+                        self.executable, self.command, env, self.source, self.build, self.prefix, False,
+                        compile_options=options)
+                    obj = str(self.root / 'consumer-0.o')
+                    expected_options = ['-O0', '-g'] if options is None else options
+                    self.assertEqual(self.calls, [
+                        (shlex.split(compiler) + ['-std=c++20'] + expected_options + flags +
+                         ['-MMD', '-MF', str(self.root / 'consumer-0.d'), '-c', str(self.unit), '-o', obj], self.root, env),
+                        (shlex.split(compiler) + [obj] + libraries + [option + map_path, '-o', str(self.executable)], self.root, env)])
+                    self.assertEqual(receipt['link_map'], map_path)
+                    self.assertEqual(receipt['compile_options'], expected_options)
+                    self.assertEqual(receipt['sources'], {str(self.unit): hashlib.sha256(self.unit.read_bytes()).hexdigest()})
+                    self.assertEqual(receipt['dependency_sha256'], {
+                        str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in (self.unit, self.header)})
+                    self.assertEqual(receipt['dependencies'], sorted([str(self.unit), str(self.header)]))
+                    self.assertEqual(receipt['artifact_sha256'], hashlib.sha256(self.executable.read_bytes()).hexdigest())
+                    self.assertFalse(receipt['private_test_headers'])
+
+    def test_compile_probe_rejects_source_header_before_linking(self):
+        with patch('platform.system', return_value='Darwin'), self.assertRaisesRegex(ValueError, 'source public header contamination'):
+            integration.compile_probe('c++', [self.unit], [], [], self.executable, self.command,
+                {}, self.root, self.build, self.prefix, False)
+        self.assertEqual(len(self.calls), 1)
 
 
 class AuditTest(unittest.TestCase):
