@@ -73,6 +73,12 @@ flags. The build stage asserts EUID 0 and token absence. A final assert-and-exec
 launcher records the actual test process UID/GID, cwd and selected runtime
 search environment before replacing itself with the unchanged test executable;
 its EUID must be 0 and its environment must exclude both token variables.
+Immediately before native exec, that launcher restores each available SIGPIPE,
+SIGXFZ and SIGXFSZ to SIG_DFL. This preserves the original direct subprocess
+signal setup after Python startup would otherwise reintroduce ignored
+signals. [Python subprocess documentation](https://docs.python.org/3/library/subprocess.html#subprocess.Popen)
+defines this default `restore_signals` behavior. This is an execution comparator
+correction, not an established explanation of the deadline failure.
 
 Buffered runner-context run `39978609885`, job `120499691522`, subsequently
 finishes successfully with four tests, 52 checks and zero failures/skips. It
@@ -176,8 +182,14 @@ original required gate remain incomplete. For the privilege-only follow-up,
 YAML, both Python stages and all macOS shell syntax pass; artifact/overlay code,
 permissions, other jobs and all C++ files are unchanged. An actual local env
 check proves both token variables are stripped while ordinary context survives;
-the literal test launcher rejects local EUID 1000 before exec. These are setup
-checks; native sudo/build/test EUID 0 execution remains pending.
+the literal test launcher rejects local EUID 1000 before exec. A real tiny C
+signal-report helper then demonstrated RED: direct Popen starts with available
+SIGPIPE/SIGXFSZ defaults, while the prior Python exec fragment inherits ignored
+dispositions. GREEN: the corrected literal signal/exec fragment yields identical
+native defaults. SIGXFZ is checked when available. This proves the focused signal
+correction locally, without claiming root execution; all native code and archive
+bindings remain unchanged. These are setup checks; native sudo/build/test EUID 0
+execution remains pending.
 
 The caller reviews/publishes only this task branch and dispatches the existing
 workflow, then resumes this same worktree with actual native evidence. No root

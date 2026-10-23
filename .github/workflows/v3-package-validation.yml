@@ -221,11 +221,14 @@ jobs:
               graph = audit.dependency_graph([str(executable)])
               matrix.check_linkage(graph, 'shared', prefix)
               receipt['dependencies'] = graph
-              launch = ('import json,os,sys; assert os.geteuid() == 0; '
+              launch = ('import json,os,signal,sys; assert os.geteuid() == 0; '
                   'assert not any(key in os.environ for key in ("GH_TOKEN", "GITHUB_TOKEN")); '
                   'context=dict(uid=os.getuid(),euid=os.geteuid(),gid=os.getgid(),egid=os.getegid(),cwd=os.getcwd(),'
                   'runtime={key:os.environ.get(key) for key in ("PATH","DYLD_LIBRARY_PATH","LD_LIBRARY_PATH","V3_PACKAGE_TOOLCHAIN")}); '
                   'print("V3_DIAGNOSTIC_CONTEXT " + json.dumps(context),flush=True); '
+                  'signal.signal(signal.SIGPIPE, signal.SIG_DFL) if hasattr(signal, "SIGPIPE") else None; '
+                  'signal.signal(signal.SIGXFZ, signal.SIG_DFL) if hasattr(signal, "SIGXFZ") else None; '
+                  'signal.signal(signal.SIGXFSZ, signal.SIG_DFL) if hasattr(signal, "SIGXFSZ") else None; '
                   'os.execvpe(sys.argv[1],sys.argv[1:],os.environ)')
               result = command([sys.executable, '-c', launch, str(executable)], source / 'test', runtime, timeout=180, allow_failure=True)
               print(result, end='', flush=True)
