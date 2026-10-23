@@ -1,7 +1,7 @@
 # FEATURE-ci-iocp-close
 
-Status: Implementation complete; caller Groundwork validation and finalization
-pending. Native Windows results remain CI / v3 PR owned.
+Status: Complete (local implementation, Groundwork validation and finalization).
+Native Windows results remain CI / v3 PR owned; no release readiness claimed.
 
 Scope: repair the IOCP socket retirement call rejected by the Windows compiler.
 Base: v3 at `b5cd6cf06e39a1b0727c2614e5236ff00a59dbf1`.
@@ -16,7 +16,8 @@ Base: v3 at `b5cd6cf06e39a1b0727c2614e5236ff00a59dbf1`.
 - [x] Build and run the focused existing local socket helper suite; run cpplint
       on the changed production file and check the diff.
 - [x] Retain commands, raw results, original failure and causal assessment on disk.
-- [ ] Caller: complete Groundwork validation and finalization.
+- [x] Caller: complete Groundwork validation and finalization.
+      Three focused reviewers approved with no findings; matching evidence reused.
 - [ ] CI / v3 PR: obtain fresh native Windows compile and IOCP runtime results.
 
 ## Failure evidence and causal assessment
