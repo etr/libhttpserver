@@ -1,6 +1,6 @@
 # FEATURE-ci-bash-empty-arrays: preserve optional compiler arguments on legacy Bash
 
-Status: InProgress — implemented and locally verified; caller validation pending.
+Status: Complete — local implementation and validation complete; native confirmation remains CI/v3-PR owned.
 Base: `v3` at `103b11222e547f60471f6d43daad2759b08a8922`.
 Plan: `.groundwork-plans/FEATURE-ci-bash-empty-arrays-plan.md` in the primary checkout.
 Journal: `.debug/ci-bash-empty-arrays-q9c5zit7/journal.md` in the primary checkout.
@@ -23,7 +23,7 @@ Action items:
 - [x] Run focused tests with legacy/current Bash and real SDK compile/link/run
   cancellation checks using the existing private libc++20 SDK.
 - [x] Check shell/Python syntax and whitespace; review the complete owned diff.
-- [ ] Caller: perform full Groundwork validation, finalization and merge.
+- [x] Caller: perform full Groundwork validation, finalization and merge.
 - [ ] Native Darwin/FreeBSD post-repair execution: CI/v3-PR owned, not local.
 
 Other closed or queued Darwin fixture and C++ failures remain outside this
@@ -84,3 +84,7 @@ primary checkout's `.debug/ci-bash-empty-arrays-q9c5zit7/implementation/`.
 The task-local build and SDK probes remain in `/tmp/ci-bash-empty-arrays-proof`.
 All other failure assessments remain closed with their prior uncertainty.
 Post-repair native execution belongs to CI/v3 PR; overall CI is not green.
+
+Final local validation/finalization (2026-10-23):
+
+Groundwork sealed exact clean implementation `118db3bf3ba3eed0dcfb2b202ba76a2323f99dbe` / tree `ea89ccad7217f2861864c91d98bb052741c39dcd`: nine fresh independent profiles approved, 1 iteration, 0 fixed, 0 unworked. Durable receipt: `.git/groundwork/validation/cdb4ee2aea69cc6a/e0be2ef7dab5001c/groundwork-validation-3cefc1a6aa3b8eb2c15f656700685e35`. Existing hash-matched interpreter, regression, real fuzz and SDK receipts were reused; no broader suite or unrelated diagnostic was repeated. The initial spec-artifact automatic approval rejection was resolved with an evidence-based approval explicitly limited to local acceptance, preserving historical failures and native limits; no approval blocker remains. Caller changes only this bookkeeping before serial merge/cleanup. Native Darwin/FreeBSD remains unexecuted after this repair and assigned to CI/v3 PR. Other established selected-tool/fixture-path setup repairs follow serially; the five C++ causes remain uncertain and closed to further probes pending a later decision after independent work. Overall CI is not green.
