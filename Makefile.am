@@ -642,7 +642,7 @@ EXTRA_DIST += .github/workflows/codeql-analysis.yml .github/workflows/verify-bui
 
 EXTRA_DIST += docs/v3-ci.md
 
-EXTRA_DIST += scripts/ci-macos-toolchain.sh scripts/test-v3-platform-ci.py
+EXTRA_DIST += scripts/ci-macos-toolchain.sh scripts/ci-freebsd-toolchain.py scripts/test-v3-platform-ci.py
 
 # Real independent certificate fixtures must satisfy strict client verification.
 EXTRA_DIST += scripts/test-v3-tls-fixtures.py

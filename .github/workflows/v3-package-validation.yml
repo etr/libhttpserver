@@ -158,7 +158,7 @@ jobs:
           release: '14.3'
           mem: 8192
           cpu: 2
-          prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm19 git node24
+          prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm19 git node24 cmake ninja
           run: |
             set -eu
             export RUNNER_TEMP=/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}
@@ -196,13 +196,15 @@ jobs:
             fi
             test "$(node --version)" = v24.15.0
             python3 -c 'import subprocess; subprocess.run(["git", "--version"], check=True)'
+            python3 scripts/ci-freebsd-toolchain.py --output "$RUNNER_TEMP/package-evidence/toolchain"
+            . "$RUNNER_TEMP/package-evidence/toolchain/toolchain.env"
             python3 -m venv "$RUNNER_TEMP/package-evidence/clients"
             "$RUNNER_TEMP/package-evidence/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
             python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/package-evidence/prerequisites" --make gmake
             ./bootstrap
             python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" \
               --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" \
-              --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --pkg-config-dir /usr/local/share/pkgconfig --compiler clang++ --cc clang --make gmake --jobs 2
+              --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --pkg-config-dir /usr/local/share/pkgconfig --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --make gmake --jobs 2
       - name: Recover FreeBSD evidence
         if: always()
         run: |

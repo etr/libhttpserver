@@ -34,6 +34,53 @@ def workflow_shell(lane, job, step):
 class FreeBSDNodePrerequisites(unittest.TestCase):
     workflows = ('v3-package-validation.yml', 'v3-release-acceptance.yml')
 
+    def test_complete_sdk_reaches_package_and_archive_without_changing_other_builds(self):
+        for name in self.workflows:
+            with self.subTest(workflow=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                env = self.checkout(root)
+                tools = root / 'tools'
+                tools.mkdir()
+                node = tools / 'node'
+                node.write_text('#!/bin/sh\necho v24.15.0\n')
+                node.chmod(0o755)
+                python = tools / 'python3'
+                python.write_text('#!' + sys.executable + '''
+import json, os, pathlib, shlex, sys
+args = sys.argv[1:]
+with open(os.environ['CAPTURE'], 'a') as stream:
+    stream.write(json.dumps({'argv': args, 'flags': {key: os.environ.get(key) for key in ('CC', 'CXX', 'CPPFLAGS', 'LDFLAGS')}}) + '\\n')
+if args[0] == 'scripts/ci-freebsd-toolchain.py':
+    output = pathlib.Path(args[args.index('--output') + 1])
+    output.mkdir(parents=True)
+    values = {'V3_CXX': str(output / 'bin/clang++'), 'V3_CC': '/usr/local/llvm19/bin/clang', 'V3_PACKAGE_TOOLCHAIN': str(output)}
+    (output / 'toolchain.env').write_text(''.join(key + '=' + shlex.quote(value) + '\\n' for key, value in values.items()))
+if args[:2] == ['-m', 'venv']:
+    executable = pathlib.Path(args[2]) / 'bin/python'
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(pathlib.Path(__file__).read_bytes())
+    executable.chmod(0o755)
+''')
+                python.chmod(0o755)
+                (root / 'bootstrap').write_text('#!/bin/sh\nexit 0\n')
+                (root / 'bootstrap').chmod(0o755)
+                run, _ = self.guest_run(name, root / 'runner')
+                env.update(PATH=str(tools) + os.pathsep + env['PATH'], CAPTURE=str(root / 'calls.jsonl'))
+                for key in ('CC', 'CXX', 'CPPFLAGS', 'LDFLAGS'):
+                    env.pop(key, None)
+                result = subprocess.run(['sh', '-eu', '-c', run], cwd=root, env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                calls = [json.loads(line) for line in (root / 'calls.jsonl').read_text().splitlines()]
+                selected = next((call for call in calls if call['argv'][0] == 'scripts/ci-freebsd-toolchain.py'), None)
+                self.assertIsNotNone(selected, 'FreeBSD job did not provision a complete SDK')
+                prefix = selected['argv'][selected['argv'].index('--output') + 1]
+                matrix = next(call['argv'] for call in calls if call['argv'][0] in
+                              ('scripts/check-v3-installed-consumer.py', 'scripts/run-v3-release-ci.py'))
+                for option, value in (('--compiler', prefix + '/bin/clang++'), ('--cc', '/usr/local/llvm19/bin/clang'),
+                                      ('--toolchain-prefix', prefix)):
+                    self.assertEqual(matrix[matrix.index(option) + 1], value)
+                self.assertTrue(all(not any(call['flags'].values()) for call in calls), calls)
+
     def checkout(self, root):
         root.mkdir(exist_ok=True)
         env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}

@@ -3,6 +3,8 @@
 import json
 import argparse
 import importlib.util
+import hashlib
+import io
 import os
 import re
 import shlex
@@ -11,12 +13,91 @@ import sys
 from pathlib import Path
 import subprocess
 import tempfile
+import tarfile
 import textwrap
 import unittest
 from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class FreeBSDToolchain(unittest.TestCase):
+    def selector(self):
+        path = ROOT / 'scripts/ci-freebsd-toolchain.py'
+        self.assertTrue(path.is_file(), 'FreeBSD complete C++20 SDK selector is missing')
+        spec = importlib.util.spec_from_file_location('freebsd_toolchain', path)
+        selector = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(selector)
+        return selector
+
+    def test_vendor_build_keeps_freebsd_stable_abi_and_private_install(self):
+        selector = self.selector()
+        argv = selector.configure_command(Path('/source'), Path('/build'), Path('/sdk'), '/llvm/clang', '/llvm/clang++')
+        for argument in ('-DLLVM_ENABLE_RUNTIMES=libcxx', '-DLIBCXX_CXX_ABI=libcxxrt',
+                         '-DLIBCXX_CXX_ABI_INCLUDE_PATHS=/usr/include/c++/v1',
+                         '-DLIBCXX_ABI_VERSION=1', '-DLIBCXX_ABI_UNSTABLE=OFF',
+                         '-DLIBCXX_ENABLE_NEW_DELETE_DEFINITIONS=ON',
+                         '-DLIBCXXABI_USE_LLVM_UNWINDER=OFF',
+                         '-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF',
+                         '-DCMAKE_INSTALL_PREFIX=/sdk', '-DCMAKE_C_COMPILER=/llvm/clang',
+                         '-DCMAKE_CXX_COMPILER=/llvm/clang++'):
+            self.assertIn(argument, argv)
+        self.assertNotIn('-fexperimental-library', ' '.join(argv))
+
+    def test_source_digest_failure_stops_before_extraction(self):
+        selector = self.selector()
+        self.assertTrue(callable(getattr(selector, 'download_source', None)), 'verified source fetcher is missing')
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(selector.urllib.request, 'urlopen', return_value=io.BytesIO(b'tampered source')):
+            with self.assertRaisesRegex(RuntimeError, 'SHA256 mismatch'):
+                selector.download_source(Path(directory))
+            self.assertEqual(['source.tar.xz'], [path.name for path in Path(directory).iterdir()])
+
+    def test_verified_source_contains_all_runtime_build_inputs(self):
+        selector = self.selector()
+        self.assertTrue(callable(getattr(selector, 'download_source', None)), 'verified source fetcher is missing')
+        data = io.BytesIO()
+        root = 'llvm-project-' + selector.VERSION + '.src'
+        with tarfile.open(fileobj=data, mode='w:xz') as archive:
+            for part in ('cmake', 'llvm/cmake', 'runtimes', 'libcxx', 'libc', 'clang'):
+                member = tarfile.TarInfo(root + '/' + part + '/input')
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b'x'))
+        content = data.getvalue()
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(selector.urllib.request, 'urlopen', return_value=io.BytesIO(content)), \
+                patch.object(selector, 'SOURCE_SHA256', hashlib.sha256(content).hexdigest()):
+            source = selector.download_source(Path(directory))
+            for part in ('cmake', 'llvm/cmake', 'runtimes', 'libcxx', 'libc'):
+                self.assertEqual((source / part / 'input').read_bytes(), b'x')
+            self.assertFalse((source / 'clang').exists())
+
+    def test_compiler_wrapper_keeps_headers_and_runtime_through_clean_environment(self):
+        selector = self.selector()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            compiler = root / 'compiler'
+            compiler.write_text('#!' + sys.executable + '\nimport json, sys\nprint(json.dumps(sys.argv[1:]))\n')
+            compiler.chmod(0o755)
+            prefix = root / 'selected sdk'
+            wrapper = selector.write_compiler(prefix, str(compiler))
+            for mode in ('', '-c', '-E', '-S', '-fsyntax-only', '-r', '-Wl,-r', '-static'):
+                with self.subTest(mode=mode):
+                    args = ([mode] if mode else []) + ['path with spaces.cpp', '-o', 'path with spaces.o']
+                    result = subprocess.run([str(wrapper)] + args, env={'PATH': os.defpath}, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    actual = json.loads(result.stdout)
+                    self.assertIn('-nostdinc++', actual)
+                    self.assertEqual(actual[actual.index('-isystem') + 1], str(prefix / 'include/c++/v1'))
+                    self.assertIn('path with spaces.cpp', actual)
+                    if mode in ('-c', '-E', '-S', '-fsyntax-only', '-r', '-Wl,-r'):
+                        self.assertNotIn('-lc++', actual)
+                        self.assertFalse(any(flag.startswith('-Wl,-rpath,') for flag in actual))
+                    else:
+                        self.assertIn('-L' + str(prefix / 'lib'), actual)
+                        self.assertIn('-lc++', actual)
+                        self.assertEqual(any(flag.startswith('-Wl,-rpath,') for flag in actual), mode != '-static')
 
 
 class SelectedPlatformEnvironment(unittest.TestCase):

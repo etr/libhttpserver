@@ -231,6 +231,55 @@ class AuditTest(unittest.TestCase):
                         self.assertEqual([f'undeclared dependency (aggregate/strict): {parent} -> {unwind}'
                                           for parent in (cxx, abi)], errors)
 
+    def test_freebsd_runtime_requires_selected_sdk_and_exact_system_abi_owner(self):
+        prefix = self.root / 'sdk'
+        directory = prefix / 'lib'
+        directory.mkdir(parents=True)
+        runtime = directory / 'libc++.so.1.0'
+        runtime.touch()
+        link = directory / 'libc++.so.1'
+        link.symlink_to(runtime.name)
+        with patch.object(audit.platform, 'system', return_value='FreeBSD'), \
+                patch.dict(os.environ, V3_PACKAGE_TOOLCHAIN=str(prefix)):
+            self.assertTrue(audit.runtime(str(link)))
+            self.assertTrue(audit.runtime('/lib/libcxxrt.so.1'))
+            for path in (directory / 'libc++.so.2', directory / 'libc++.so.1.0.extra',
+                         directory / 'libcxxrt.so.1', '/usr/local/lib/libcxxrt.so.1',
+                         '/lib/libcxxrt.so.1.extra', '/lib/libcxxrt.so.2',
+                         self.root / 'other/lib/libc++.so.1.0'):
+                with self.subTest(path=str(path)):
+                    self.assertFalse(audit.runtime(str(path)))
+            runtime.unlink()
+            runtime.symlink_to(self.root / 'outside/libc++.so.1.0')
+            self.assertFalse(audit.runtime(str(link)))
+        with patch.object(audit.platform, 'system', return_value='Linux'), \
+                patch.dict(os.environ, V3_PACKAGE_TOOLCHAIN=str(prefix)):
+            self.assertFalse(audit.runtime('/lib/libcxxrt.so.1'))
+
+    def test_freebsd_selected_runtime_graph_still_hashes_and_inspects_every_dependency(self):
+        prefix = self.root / 'sdk'
+        (prefix / 'lib').mkdir(parents=True)
+        consumer, runtime = self.root / 'consumer', prefix / 'lib/libc++.so.1.0'
+        forbidden = self.root / 'libcrypto.so.3'
+        links = {str(consumer): [str(runtime)], str(runtime): [], str(forbidden): []}
+        for path in links:
+            Path(path).write_text('inspected ' + path)
+        inspected = []
+        def inspect(path):
+            inspected.append(path)
+            return [(child, child) for child in links[path]]
+        with patch.object(audit.platform, 'system', return_value='FreeBSD'), \
+                patch.dict(os.environ, V3_PACKAGE_TOOLCHAIN=str(prefix)):
+            graph = audit.dependency_graph([str(consumer)], inspect)
+            self.assertEqual([], self.violations(graph))
+            links[str(runtime)] = [str(forbidden)]
+            graph = audit.dependency_graph([str(consumer)], inspect)
+            self.assertEqual(set(links), set(inspected))
+            self.assertTrue(all(node['sha256'] == hashlib.sha256(Path(node['id']).read_bytes()).hexdigest()
+                                for node in graph['nodes']))
+            self.assertEqual(['unselected native provider: ' + str(forbidden)], audit.graph_violations(
+                graph, 'strict', 'yes', 'aggregate', self.policy, self.root / 'provider'))
+
     def test_selected_darwin_unwind_requires_canonical_directory_and_numeric_name(self):
         prefix = self.root / 'llvm/23.1.0'
         directory = prefix / 'lib/unwind'
