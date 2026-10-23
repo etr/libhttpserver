@@ -1,6 +1,6 @@
 # FEATURE-ci-native-linkage-exeext: respect configured executable suffix
 
-Status: Implemented and locally verified; caller validation/finalization pending.
+Status: Complete (local implementation, validation and finalization).
 Base: `v3` at `794ecc08f86e72469eed791c6b13d5a5490cefb4`.
 
 Windows package job `120420001573` in run `39955436208` and archive job
@@ -28,7 +28,7 @@ Action items:
   generated-target dry runs for both suffixes, Python syntax and diff checks.
 - [x] Retain raw commands, results, source bindings and journal under main
   `.debug/FEATURE-ci-native-linkage-exeext/`.
-- [ ] Caller: Groundwork validation and local finalization into v3.
+- [x] Caller: Groundwork validation and local finalization into v3.
 - [ ] CI / v3 PR: native Windows package and archive builds and audits.
 
 Local verification: the five new make-gate tests and all 12 existing inspector
