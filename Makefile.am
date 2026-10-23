@@ -627,3 +627,5 @@ EXTRA_DIST += .github/workflows/v3-native.yml .github/workflows/changelog-check.
 EXTRA_DIST += .github/workflows/codeql-analysis.yml .github/workflows/verify-build.yml .github/workflows/release.yml
 
 EXTRA_DIST += docs/v3-ci.md
+
+EXTRA_DIST += scripts/ci-macos-toolchain.sh scripts/test-v3-platform-ci.py

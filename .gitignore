@@ -173,5 +173,6 @@ __pycache__/
 # v3 CI selected-archive publication and portable platform contracts.
 !scripts/run-v3-release-ci.py
 !scripts/test-v3-ci-workflows.py
+!scripts/test-v3-platform-ci.py
 !test/integ/release_ci_test.py
 !test/integ/release_platform_bundle_test.py

@@ -18,7 +18,18 @@ Git on Windows and FreeBSD. Selected clients are hyper-h2 4.4.1 and Node 24.15.0
 FreeBSD builds the checksummed Node source if its ports package differs. Linux
 and macOS package jobs probe actual loopback TCP443 binding for ACME witnesses;
 when privileges require it, they run the producer with sudo and an exact
-checkout-scoped Git ownership exception.
+checkout-scoped Git ownership exception. They restore artifact ownership before
+uploading privileged proof, including on failure.
+
+macOS uses the bottled Homebrew LLVM toolchain on macOS 15. A generated compiler
+wrapper explicitly selects its matching libc++ library and runtime search path,
+so installed-consumer audit environments can continue removing ambient compiler
+flags. An actual C++20 cancellation/jthread compile-and-run probe gates the
+matrix. The wrapper, compiler version and probe source are retained. Windows
+inherits the host tool paths into MSYS2 for GitHub CLI and Node and uses the
+MSYS2 Python virtual environment's `bin/python.exe` layout. FreeBSD uses the
+Python package's bundled `ensurepip` through standard-library `venv`, without
+requiring retired version-specific pip or virtualenv ports.
 
 ## Fuzz smoke and campaigns
 

@@ -254,8 +254,7 @@ class PublicationContracts(unittest.TestCase):
         ci=self.ci()
         with self.assertRaises(ValueError): ci.validate_request(self.directory,'e'*40,'3.0.0')
 
-    def test_selected_archive_relocation_preserves_source_and_rejects_tampering(self):
-        import io
+    def selected_archive_fixture(self):
         import tarfile
         ci = self.ci()
         checkout = self.directory / 'checkout'; checkout.mkdir()
@@ -270,22 +269,49 @@ class PublicationContracts(unittest.TestCase):
         identity = ci.selected_archive(checkout, source, archive, self.gate.digest(archive), self.directory / 'relocated')
         self.assertEqual(identity['files_sha256'], source['files_sha256'])
         self.assertEqual((Path(identity['source_root']) / 'specs/product.md').read_text(), 'tooling')
+        return ci, checkout, source, archive
+
+    def test_selected_archive_rejects_changed_source(self):
+        ci, checkout, source, archive = self.selected_archive_fixture()
         (checkout / 'configure.ac').write_text('another commit')
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, '^selected source snapshot changed$'):
             ci.selected_archive(checkout, source, archive, self.gate.digest(archive), self.directory / 'wrong-source')
-        with self.assertRaises(ValueError):
+
+    def test_selected_archive_rejects_changed_archive_digest(self):
+        ci, checkout, source, archive = self.selected_archive_fixture()
+        with self.assertRaisesRegex(ValueError, '^selected archive digest mismatch$'):
             ci.selected_archive(checkout, source, archive, 'a' * 64, self.directory / 'wrong-archive')
-        for kind in ('symlink', 'hardlink', 'absolute', 'traversal', 'duplicate'):
-            bad = self.directory / (kind + '.tar.gz')
-            with tarfile.open(bad, 'w:gz') as stream:
-                item = tarfile.TarInfo('root/configure.ac'); item.size = 1
-                stream.addfile(item, io.BytesIO(b'x'))
-                item = tarfile.TarInfo({'absolute':'/outside', 'traversal':'../outside'}.get(kind, 'root/configure.ac'))
-                if kind == 'symlink': item.type=tarfile.SYMTYPE; item.linkname='/outside'
-                if kind == 'hardlink': item.type=tarfile.LNKTYPE; item.linkname='root/configure.ac'
-                stream.addfile(item)
-            with self.subTest(kind=kind), self.assertRaises(ValueError):
-                ci.selected_archive(checkout, source, bad, self.gate.digest(bad), self.directory / kind)
+
+    def assert_unsafe_selected_archive(self, kind):
+        import io
+        import tarfile
+        ci, checkout, source, _ = self.selected_archive_fixture()
+        bad = self.directory / (kind + '.tar.gz')
+        with tarfile.open(bad, 'w:gz') as stream:
+            item = tarfile.TarInfo('root/configure.ac'); item.size = 1
+            stream.addfile(item, io.BytesIO(b'x'))
+            item = tarfile.TarInfo({'absolute':'/outside', 'traversal':'../outside'}.get(kind, 'root/configure.ac'))
+            if kind == 'symlink': item.type=tarfile.SYMTYPE; item.linkname='/outside'
+            if kind == 'hardlink': item.type=tarfile.LNKTYPE; item.linkname='root/configure.ac'
+            stream.addfile(item)
+        reason = '^duplicate archive member$' if kind == 'duplicate' else '^archive path traversal/link$'
+        with self.assertRaisesRegex(ValueError, reason):
+            ci.selected_archive(checkout, source, bad, self.gate.digest(bad), self.directory / kind)
+
+    def test_selected_archive_rejects_symlinks(self):
+        self.assert_unsafe_selected_archive('symlink')
+
+    def test_selected_archive_rejects_hardlinks(self):
+        self.assert_unsafe_selected_archive('hardlink')
+
+    def test_selected_archive_rejects_absolute_paths(self):
+        self.assert_unsafe_selected_archive('absolute')
+
+    def test_selected_archive_rejects_traversal(self):
+        self.assert_unsafe_selected_archive('traversal')
+
+    def test_selected_archive_rejects_duplicate_members(self):
+        self.assert_unsafe_selected_archive('duplicate')
 
 
 if __name__ == '__main__':

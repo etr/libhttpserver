@@ -41,6 +41,10 @@ qpack_fuzz_report replay(std::span<const std::uint8_t> input) {
     const hd::qpack_section_limits limits{profile == 3 ? 2U : 128U,
         profile == 1 ? 41U : profile == 6 ? 42U : 256U, profile == 2 ? 0U : 8U};
     const hd::qpack_instruction_limits instruction_limits{128, 128, 128};
+    // Uncompressed roundtrips need space for both bounded strings and prefixes.
+    const hd::qpack_instruction_limits roundtrip_limits{
+        instruction_limits.max_name_bytes + instruction_limits.max_value_bytes + 16,
+        instruction_limits.max_name_bytes, instruction_limits.max_value_bytes};
     hs::budget_limits capacity; capacity.set(hs::resource::qpack_table_bytes, 256);
     const auto budget = hs::resource_budget::root(capacity);
     {
@@ -56,9 +60,9 @@ qpack_fuzz_report replay(std::span<const std::uint8_t> input) {
                 require(!decoded.consumed, "failed encoder consumption"); break;
             }
             require(decoded.consumed > 0, "encoder progress");
-            auto encoded = hd::qpack_encode_encoder_instruction(decoded.instruction, instruction_limits);
+            auto encoded = hd::qpack_encode_encoder_instruction(decoded.instruction, roundtrip_limits);
             require(encoded.status.ok(), "encoder instruction roundtrip encode");
-            auto roundtrip = hd::qpack_decode_encoder_instruction(hd::qpack_octets(encoded.value), instruction_limits);
+            auto roundtrip = hd::qpack_decode_encoder_instruction(hd::qpack_octets(encoded.value), roundtrip_limits);
             require(roundtrip.status.ok() && roundtrip.instruction.kind == decoded.instruction.kind &&
                 roundtrip.instruction.index == decoded.instruction.index && roundtrip.instruction.static_name == decoded.instruction.static_name &&
                 roundtrip.instruction.name == decoded.instruction.name && roundtrip.instruction.value == decoded.instruction.value,

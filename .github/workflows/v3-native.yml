@@ -38,6 +38,9 @@ jobs:
             export V3_TLS_CFLAGS="-I$RUNNER_TEMP/prerequisites/provider/include"
             export V3_TLS_LIBS="-L$RUNNER_TEMP/prerequisites/provider/lib -lssl -lcrypto"
             export LD_LIBRARY_PATH="$RUNNER_TEMP/prerequisites/provider/lib"
+            export V3_OPENSSL="$RUNNER_TEMP/prerequisites/provider/bin/openssl"
+            "$V3_OPENSSL" version -a > openssl-provenance.log
+            ldd "$V3_OPENSSL" >> openssl-provenance.log
           fi
           CXX=clang++ CC=clang "$GITHUB_WORKSPACE/configure" --enable-v3-tls="$TLS_MODE"
           make -j2
@@ -70,19 +73,21 @@ jobs:
         if: matrix.target == 'quic_tls_callbacks'
         run: python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites"
       - name: Configure genuine native sources
+        shell: bash
         env:
           TARGET: ${{ matrix.target }}
         run: |
-          ./bootstrap
           mkdir "$RUNNER_TEMP/native"
+          ./bootstrap 2>&1 | tee "$RUNNER_TEMP/native/bootstrap.log"
           cd "$RUNNER_TEMP/native"
           mode=no
           if [ "$TARGET" = quic_tls_callbacks ]; then
             mode=yes
             export V3_TLS_CFLAGS="-I$RUNNER_TEMP/prerequisites/provider/include"
             export V3_TLS_LIBS="-L$RUNNER_TEMP/prerequisites/provider/lib -lssl -lcrypto"
+            export LD_LIBRARY_PATH="$RUNNER_TEMP/prerequisites/provider/lib"
           fi
-          CXX=clang++ CC=clang "$GITHUB_WORKSPACE/configure" --enable-v3-tls="$mode" --disable-examples
+          CXX=clang++ CC=clang "$GITHUB_WORKSPACE/configure" --enable-v3-tls="$mode" --disable-examples 2>&1 | tee "$RUNNER_TEMP/native/configure-output.log"
       - uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
         with:
           path: ${{ runner.temp }}/corpus
@@ -113,6 +118,7 @@ jobs:
           name: fuzz-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/fuzz
+            ${{ runner.temp }}/native
             ${{ runner.temp }}/prerequisites/preparation.json
             ${{ runner.temp }}/prerequisites/*.log
           retention-days: 30

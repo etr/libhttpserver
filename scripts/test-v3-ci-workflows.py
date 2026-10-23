@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Workflow dependencies and trust boundaries; execution contracts live beside runners."""
 from pathlib import Path
+import glob
+import json
 import os
 import re
 import subprocess
@@ -14,6 +16,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def workflow(name):
     return yaml.safe_load((ROOT / '.github/workflows' / name).read_text())
+
+
+def workflow_shell(lane, job, step):
+    shell = step.get('shell', job.get('defaults', {}).get('run', {}).get('shell',
+                lane.get('defaults', {}).get('run', {}).get('shell')))
+    if shell is None:
+        return ['bash', '-e', '-c']
+    if shell == 'bash':
+        return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c']
+    raise AssertionError('unsupported workflow fixture shell: ' + shell)
 
 
 class CIWorkflows(unittest.TestCase):
@@ -66,6 +78,106 @@ class CIWorkflows(unittest.TestCase):
         self.assertIn('github.event.repository.default_branch', save['if'])
         self.assertIn('run_attempt', save['with']['key'])
         self.assertTrue(any(step.get('if') == 'always()' and '/upload-artifact@' in step.get('uses', '') for step in fuzz['steps']))
+
+    def callback_configure(self, root, fail_stage=''):
+        lane = workflow('v3-native.yml')
+        job = lane['jobs']['fuzz']
+        steps = job['steps']
+        step = next(step for step in steps if step.get('name') == 'Configure genuine native sources')
+        source = root / 'source'; source.mkdir()
+        runner = root / 'runner'; runner.mkdir()
+        bootstrap = source / 'bootstrap'
+        bootstrap.write_text('#!/bin/sh\necho bootstrap-diagnostic\n[ "$FAIL_STAGE" != bootstrap ]\n')
+        configure = source / 'configure'
+        configure.write_text("""#!/usr/bin/env python3
+import json, os, pathlib, sys
+pathlib.Path('config.log').write_text('provider-probe-diagnostic')
+pathlib.Path('observed.json').write_text(json.dumps(dict(os.environ)))
+print('configure-diagnostic', flush=True)
+expected = os.environ['RUNNER_TEMP'] + '/prerequisites/provider/lib'
+sys.exit(23 if os.environ.get('LD_LIBRARY_PATH') != expected or os.environ['FAIL_STAGE'] == 'configure' else 0)
+""")
+        for path in (bootstrap, configure): path.chmod(0o755)
+        env = dict(os.environ, RUNNER_TEMP=str(runner), GITHUB_WORKSPACE=str(source),
+                   TARGET='quic_tls_callbacks', FAIL_STAGE=fail_stage)
+        env.pop('LD_LIBRARY_PATH', None)
+        result = subprocess.run(workflow_shell(lane, job, step) + [step['run']],
+                                cwd=source, env=env, capture_output=True, text=True, timeout=10)
+        upload = next(step for step in steps if '/upload-artifact@' in step.get('uses', ''))
+        self.assertEqual(upload['if'], 'always()')
+        retained = set()
+        for pattern in upload['with']['path'].splitlines():
+            for name in glob.glob(pattern.replace('${{ runner.temp }}', str(runner)), recursive=True):
+                path = Path(name)
+                if path.is_dir():
+                    retained.update(p for p in path.rglob('*') if p.is_file())
+                else:
+                    retained.add(path)
+        return result, runner / 'native', retained
+
+    def test_callback_configure_receives_selected_provider_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, native, _ = self.callback_configure(Path(directory))
+            observed = json.loads((native / 'observed.json').read_text())
+            self.assertEqual(observed.get('LD_LIBRARY_PATH'), str(native.parent / 'prerequisites/provider/lib'))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_callback_configure_failure_retains_probe_and_command_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, native, retained = self.callback_configure(Path(directory), 'configure')
+            self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
+            self.assertIn(native / 'config.log', retained)
+            self.assertEqual((native / 'config.log').read_text(), 'provider-probe-diagnostic')
+            self.assertIn(native / 'configure-output.log', retained)
+            self.assertIn('configure-diagnostic', (native / 'configure-output.log').read_text())
+            self.assertIn(native / 'bootstrap.log', retained)
+
+    def test_callback_bootstrap_failure_retains_command_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, native, retained = self.callback_configure(Path(directory), 'bootstrap')
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertFalse((native / 'observed.json').exists(), 'Configure ran after failed bootstrap')
+            self.assertFalse((native / 'configure-output.log').exists())
+            self.assertIn(native / 'bootstrap.log', retained)
+            self.assertIn('bootstrap-diagnostic', (native / 'bootstrap.log').read_text())
+
+    def test_native_tls_check_uses_selected_provider_cli(self):
+        lane = workflow('v3-native.yml')
+        job = lane['jobs']['native']
+        step = next(step for step in job['steps'] if 'make check' in step.get('run', ''))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'source'; source.mkdir()
+            runner = root / 'runner'; runner.mkdir()
+            tools = root / 'bin'; tools.mkdir()
+            provider = runner / 'prerequisites/provider'
+            (provider / 'bin').mkdir(parents=True)
+            cli = provider / 'bin/openssl'
+            cli.write_text('#!/bin/sh\nprintf "selected-cli %s\\n" "$*"\n')
+            (source / 'bootstrap').write_text('#!/bin/sh\nexit 0\n')
+            (source / 'configure').write_text('#!/bin/sh\nexit 0\n')
+            (tools / 'make').write_text("""#!/usr/bin/env python3
+import json, os, pathlib, sys
+if 'check' in sys.argv:
+    pathlib.Path('check-environment.json').write_text(json.dumps(dict(os.environ)))
+""")
+            # The shell fixture has no ELF dependencies; actual shared linkage is checked by the native gate.
+            (tools / 'ldd').write_text('#!/bin/sh\necho "selected-cli-linkage $1"\n')
+            for path in (cli, source / 'bootstrap', source / 'configure', tools / 'make', tools / 'ldd'):
+                path.chmod(0o755)
+            env = dict(os.environ, RUNNER_TEMP=str(runner), GITHUB_WORKSPACE=str(source),
+                       TLS_MODE='yes', PATH=str(tools) + os.pathsep + os.environ['PATH'])
+            for name in ('V3_OPENSSL', 'LD_LIBRARY_PATH'):
+                env.pop(name, None)
+            result = subprocess.run(workflow_shell(lane, job, step) + [step['run']],
+                                    cwd=source, env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            observed = json.loads((runner / 'native/check-environment.json').read_text())
+            self.assertEqual(observed.get('V3_OPENSSL'), str(cli))
+            self.assertEqual(observed.get('LD_LIBRARY_PATH'), str(provider / 'lib'))
+            provenance = (runner / 'native/openssl-provenance.log').read_text()
+            self.assertIn('selected-cli version -a', provenance)
+            self.assertIn('selected-cli-linkage ' + str(cli), provenance)
 
     def test_package_paths_do_not_contaminate_checkout_and_native_git_is_installed(self):
         lane = workflow('v3-package-validation.yml')

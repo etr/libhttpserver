@@ -63,6 +63,7 @@ def platform_proof(args):
     env['LD_LIBRARY_PATH'] = str(args.provider_prefix / 'lib')
     env['DYLD_LIBRARY_PATH'] = str(args.provider_prefix / 'lib')
     env['PATH'] = str(args.provider_prefix / 'bin') + os.pathsep + env['PATH']
+    env['V3_OPENSSL'] = str(args.provider_prefix / 'bin' / ('openssl.exe' if os.name == 'nt' else 'openssl'))
     cmd = Commands(args.output)
     package = args.output / 'matrix'
     argv = [sys.executable, source / 'scripts/check-v3-installed-consumer.py', '--output', package,
