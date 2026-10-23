@@ -87,7 +87,11 @@ void append_decimal(std::string& out, std::uint64_t value) {
 std::string format_imf_fixdate(std::chrono::system_clock::time_point when) {
     const std::time_t t = std::chrono::system_clock::to_time_t(when);
     std::tm tm_value{};
+#if defined(_WIN32)
+    gmtime_s(&tm_value, &t);
+#else
     gmtime_r(&t, &tm_value);
+#endif
     char buf[32];
     const std::size_t n = std::strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S GMT", &tm_value);
     return n > 0 ? std::string(buf, n) : std::string();
