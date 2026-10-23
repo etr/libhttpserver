@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-stage-fixture: execute the real staging fixture through MSYS
 
-Status: In Progress — implementation committed; caller validation/finalization pending.
+Status: Complete (local) — validated and finalized into v3; native Windows confirmation pending.
 Base: local `v3` at `337f6161be9897e590fa5155658582f3dca7cd34`.
 
 Native Windows job `120582231736` fails the new staged-install fixture during
@@ -22,8 +22,8 @@ Action items:
   and all original negative assertions without skips or mock configure.
 - [x] Run the real eight-case local regression and source-bound executed boundary
   proof; check syntax, unchanged test bodies/production sources and diff whitespace.
-- [ ] Caller: full required Groundwork validation and finalization into v3.
-- [ ] Caller: composed conventions review of `c0cfdabc..final-task-HEAD` against
+- [x] Caller: full required Groundwork validation and finalization into v3.
+- [x] Caller: composed conventions review of `c0cfdabc..final-task-HEAD` against
   primary checkout CLAUDE.md; carry other cleared profiles unless disturbed.
 - [ ] CI / v3 PR: fresh native Windows checkout/archive installed matrices.
 
@@ -55,3 +55,9 @@ limits are in the primary checkout's literal journal
 No full baseline, runtime/provider/dependency change, old platform diagnostic,
 CI retry/cancellation, validation loop, merge or publication ran. Native Windows
 checks remain incomplete and CI/v3-PR owned under AGENTS.md.
+
+Groundwork validation passed at `929324c216ff713e5232773589d82dfddfb37af5`
+(1 iteration, 0 fixed, 0 unworked): seven fresh approvals plus justified spec and
+architecture carries cover all applicable profiles. The conventions approval
+covers all CI repair changes since c0 against primary checkout CLAUDE.md.
+Corrected native Windows execution remains incomplete and CI/v3-PR owned.
