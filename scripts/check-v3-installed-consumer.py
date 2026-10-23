@@ -45,13 +45,17 @@ def package_lane(args, source, output, mode, inventory):
         env['V3_TLS_CFLAGS'] = '-I' + (args.provider_prefix / 'include').as_posix()
         env['V3_TLS_LIBS'] = '-L' + (args.provider_prefix / 'lib').as_posix() + ' -lssl -lcrypto'
     bash = 'bash'
+    configure = (source / 'configure').as_posix()
     if platform.system() == 'Windows':
         # CreateProcess searches System32 before PATH for an unqualified name.
         bash = shutil.which('bash', path=env.get('PATH', ''))
         if not bash:
             raise ValueError('bash is unavailable on the selected PATH')
         bash = str(Path(bash).resolve())
-    command([bash, (source / 'configure').as_posix(), '--enable-v3-tls=' + mode, '--disable-examples',
+        # Autoconf splits auxiliary-file search directories on ':', so its
+        # source path must use MSYS notation rather than a Windows drive name.
+        configure = command([bash, '-c', 'cygpath -u "$1"', 'configure-path', configure], build, env).strip()
+    command([bash, configure, '--enable-v3-tls=' + mode, '--disable-examples',
              '--prefix=' + prefix.as_posix()], build, env)
     command([args.make, '-j' + str(args.jobs)], build, env)
     command([args.make, 'install'], build, env)

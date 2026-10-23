@@ -4,6 +4,9 @@ import json
 import argparse
 import importlib.util
 import os
+import shlex
+import shutil
+import sys
 from pathlib import Path
 import subprocess
 import tempfile
@@ -65,6 +68,9 @@ class MacOSToolchain(unittest.TestCase):
 import json, os, pathlib, sys
 with open(os.environ['INVOCATIONS'], 'a') as stream:
     stream.write(json.dumps(sys.argv[1:]) + '\\n')
+if any(mode in sys.argv for mode in ('-r', '-Wl,-r', '-c', '-S', '-E', '-fsyntax-only', '-static')) and any(arg.startswith('-Wl,-rpath,') for arg in sys.argv):
+    sys.stderr.write('rpath requires a final dynamic link\\n')
+    sys.exit(73)
 if '-o' in sys.argv:
     output = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
     output.write_text('#!/bin/sh\\nexit 0\\n')
@@ -91,19 +97,83 @@ sys.exit(int(os.environ['COMPILER_STATUS']))
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             selected = dict(line.split('=', 1) for line in Path(env['GITHUB_ENV']).read_text().splitlines())
             self.assertEqual(selected['V3_CC'], str(llvm / 'bin/clang'))
-            result = subprocess.run([selected['V3_CXX'], '-c', 'path with spaces.cpp'], env=env)
+            result = subprocess.run([selected['V3_CXX'], 'path with spaces.cpp', '-o', str(root / 'consumer')], env=env)
             self.assertEqual(result.returncode, 0)
             calls = [json.loads(line) for line in Path(env['INVOCATIONS']).read_text().splitlines()]
             self.assertIn('-std=c++20', calls[1])
             self.assertIn('-L' + str(llvm / 'lib/c++'), calls[1])
             self.assertIn('-Wl,-rpath,' + str(llvm / 'lib/c++'), calls[1])
-            self.assertEqual(calls[-1][-2:], ['-c', 'path with spaces.cpp'])
+            self.assertEqual(calls[-1][-3:], ['path with spaces.cpp', '-o', str(root / 'consumer')])
+            result = subprocess.run([selected['V3_CXX'], '-dynamiclib', 'input.o'], env=env)
+            self.assertEqual(result.returncode, 0)
+            calls = [json.loads(line) for line in Path(env['INVOCATIONS']).read_text().splitlines()]
+            self.assertIn('-L' + str(llvm / 'lib/c++'), calls[-1])
+            self.assertIn('-Wl,-rpath,' + str(llvm / 'lib/c++'), calls[-1])
+
+    def test_nonfinal_modes_do_not_receive_runtime_linker_flags(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result, env, llvm = self.prepare(root)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            selected = dict(line.split('=', 1) for line in Path(env['GITHUB_ENV']).read_text().splitlines())
+            for mode in ('-r', '-Wl,-r', '-c', '-S', '-E', '-fsyntax-only', '-static'):
+                with self.subTest(mode=mode):
+                    result = subprocess.run([selected['V3_CXX'], mode, 'path with spaces.cpp'],
+                                            env=env, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    calls = [json.loads(line) for line in Path(env['INVOCATIONS']).read_text().splitlines()]
+                    self.assertIn('-stdlib=libc++', calls[-1])
+                    self.assertIn('-D_LIBCPP_DISABLE_AVAILABILITY', calls[-1])
+                    self.assertNotIn('-L' + str(llvm / 'lib/c++'), calls[-1])
+                    self.assertNotIn('-Wl,-rpath,' + str(llvm / 'lib/c++'), calls[-1])
+                    self.assertEqual(calls[-1][-2:], [mode, 'path with spaces.cpp'])
 
     def test_missing_cancellation_support_stops_before_exporting_toolchain(self):
         with tempfile.TemporaryDirectory() as directory:
             result, env, _ = self.prepare(Path(directory), 19)
             self.assertEqual(result.returncode, 19, result.stdout + result.stderr)
             self.assertFalse(Path(env['GITHUB_ENV']).exists())
+
+
+@unittest.skipIf(os.name == 'nt', 'competing compiler and symlink fixtures use POSIX paths')
+class InstalledPackageFixtureEnvironment(unittest.TestCase):
+    def test_fixture_entrypoint_honors_quoted_cxx_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            selected = root / 'selected compiler.py'
+            selected.write_text("""import json, os, sys
+if sys.argv[1] != '--selected-toolchain':
+    sys.exit(72)
+with open(os.environ['INVOCATIONS'], 'a') as stream:
+    stream.write(json.dumps(sys.argv[2:]) + '\\n')
+os.execv(os.environ['REAL_CXX'], [os.environ['REAL_CXX']] + sys.argv[2:])
+""")
+            competing = root / 'c++'
+            competing.write_text('#!/bin/sh\nprintf "unselected compiler invoked\\n" >&2\nexit 71\n')
+            competing.chmod(0o755)
+            env = dict(os.environ, CXX=shlex.join([sys.executable, str(selected), '--selected-toolchain']),
+                       PATH=str(root) + os.pathsep + os.environ['PATH'],
+                       INVOCATIONS=str(root / 'calls.jsonl'), REAL_CXX=shutil.which('c++'))
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/test-v3-installed-package.py'),
+                                     'AuditTest.test_native_public_api_is_available_through_umbrella',
+                                     'AuditTest.test_current_umbrella_has_no_backend_types'],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            calls = [json.loads(line) for line in Path(env['INVOCATIONS']).read_text().splitlines()]
+            self.assertTrue(any('-fsyntax-only' in call for call in calls))
+            self.assertTrue(any('-E' in call for call in calls))
+
+    def test_pe_fixture_accepts_canonical_path_under_symlinked_tmpdir(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / 'real'
+            target.mkdir()
+            alias = root / 'alias'
+            alias.symlink_to(target, target_is_directory=True)
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/test-v3-installed-package.py'),
+                                     'AuditTest.test_pe_resolution_uses_explicit_roots_and_rejects_msys'],
+                                    env=dict(os.environ, TMPDIR=str(alias)), capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == '__main__':

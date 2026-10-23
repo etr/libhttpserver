@@ -3,11 +3,14 @@
 import importlib.util
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+
+CXX = os.environ.get('CXX', 'c++')
 
 spec = importlib.util.spec_from_file_location('audit', Path(__file__).with_name('audit-v3-installed-package.py'))
 audit = importlib.util.module_from_spec(spec)
@@ -85,7 +88,7 @@ class AuditTest(unittest.TestCase):
         with patch.object(audit, '__file__', str(source / 'scripts/audit-v3-installed-package.py')), \
                 patch.object(audit.platform, 'system', return_value='Darwin'), \
                 patch.object(subprocess, 'run', side_effect=inspect):
-            return audit.audit(prefix, build, consumer, 'no', mode, self.root / 'provider')
+            return audit.audit(prefix, build, consumer, 'no', mode, self.root / 'provider', compiler=CXX)
 
     def test_strict_rejects_configure_flags_probes_and_generated_definitions(self):
         for text in ('AC_CHECK_HEADER([microhttpd.h])', 'AC_CHECK_LIB([microhttpd], [MHD_start_daemon])',
@@ -231,7 +234,7 @@ class AuditTest(unittest.TestCase):
         (include / 'httpserver.hpp').write_text('#define _HTTPSERVER_HPP_INSIDE_\n#include <httpserver/fragment.hpp>\n#undef _HTTPSERVER_HPP_INSIDE_\n')
         (include / 'httpserverpp').symlink_to('httpserver.hpp')
         (include / 'httpserver/fragment.hpp').write_text('#ifndef _HTTPSERVER_HPP_INSIDE_\n#error umbrella required\n#endif\nstruct fragment {};\n')
-        headers, violations = audit.audit_headers(self.root / 'prefix', self.root / 'source', self.root / 'build', 'c++')
+        headers, violations = audit.audit_headers(self.root / 'prefix', self.root / 'source', self.root / 'build', CXX)
         self.assertEqual([], violations)
         self.assertIn('httpserver/fragment.hpp', headers['declaration_sha256'])
         self.assertIn('httpserver.hpp', headers['include_traces'])
@@ -241,7 +244,7 @@ class AuditTest(unittest.TestCase):
 
     def test_native_public_api_is_available_through_umbrella(self):
         source = Path(__file__).resolve().parent.parent
-        audit.run(['c++', '-std=c++20', '-fsyntax-only', '-x', 'c++', '-I' + str(source / 'src'), '-'],
+        audit.run(shlex.split(CXX) + ['-std=c++20', '-fsyntax-only', '-x', 'c++', '-I' + str(source / 'src'), '-'],
                   input='#include <httpserver.hpp>\nhttpserver::server::server_options options;\n')
 
     def test_named_static_suite_rejects_legacy_metadata_closure(self):
@@ -263,7 +266,7 @@ class AuditTest(unittest.TestCase):
         (include / 'httpserver.hpp').symlink_to(external)
         (include / 'httpserverpp').symlink_to('httpserver.hpp')
         with self.assertRaises(audit.AuditError):
-            audit.audit_headers(self.root / 'prefix', self.root / 'source', self.root / 'build', 'c++')
+            audit.audit_headers(self.root / 'prefix', self.root / 'source', self.root / 'build', CXX)
 
     def test_runtime_name_outside_platform_location_is_rejected(self):
         graph = self.graph({'consumer': ['libc++.1.dylib'], 'libc++.1.dylib': []})
@@ -339,7 +342,7 @@ class AuditTest(unittest.TestCase):
         (root / 'libstdc++-6.dll').touch()
         with patch.object(audit.platform, 'system', return_value='Windows'), \
                 patch.dict('os.environ', {'V3_PACKAGE_DLL_DIRS': str(root), 'V3_PACKAGE_TOOLCHAIN': str(root)}):
-            self.assertEqual(str(root / 'libstdc++-6.dll'), audit.resolve_pe('LIBSTDC++-6.DLL'))
+            self.assertEqual(str((root / 'libstdc++-6.dll').resolve()), audit.resolve_pe('LIBSTDC++-6.DLL'))
             self.assertTrue(audit.runtime(str(root / 'libstdc++-6.dll')))
             with self.assertRaises(audit.AuditError):
                 audit.resolve_pe('unresolved.dll')
@@ -357,7 +360,7 @@ class AuditTest(unittest.TestCase):
     def test_current_umbrella_has_no_backend_types(self):
         # Compile the real current umbrella as a consumer, comments removed by cpp.
         source = Path(__file__).resolve().parent.parent
-        result = audit.run(['c++', '-std=c++20', '-E', '-x', 'c++', '-I' + str(source / 'src'), '-'],
+        result = audit.run(shlex.split(CXX) + ['-std=c++20', '-E', '-x', 'c++', '-I' + str(source / 'src'), '-'],
                            input='#include <httpserver.hpp>\n')
         self.assertEqual([], audit.header_violations(result, []))
 

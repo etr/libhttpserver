@@ -42,8 +42,13 @@ class InstalledShellTest(unittest.TestCase):
         self.args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc',
             prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=self.root, optimized=False)
         self.popen = subprocess.Popen
+        self.converted_configure = (self.root / 'configure').as_posix()
+        self.conversion_requests = []
 
     def create_process(self, argv, **options):
+        if argv[1:3] == ['-c', 'cygpath -u "$1"']:
+            self.conversion_requests.append(argv[-1])
+            return self.popen([sys.executable, '-c', f'print({self.converted_configure!r})'], **options)
         # Model only executable lookup at the OS boundary: unqualified bash
         # selects the competing Windows system shell before the selected PATH.
         selected = str(argv[0]) == str(self.bash)
@@ -56,13 +61,26 @@ class InstalledShellTest(unittest.TestCase):
                 patch.object(subprocess, 'Popen', side_effect=self.create_process):
             with self.assertRaisesRegex(RuntimeError, 'selected MSYS shell'):
                 self.runner.package_lane(self.args, self.root, self.output, 'no', matrix.load())
-        record = json.loads((self.output / 'tls-no/commands.json').read_text())[0]
+        record = json.loads((self.output / 'tls-no/commands.json').read_text())[-1]
         self.assertEqual(record['argv'][0], str(self.bash))
         self.assertEqual(record['argv'][1], (self.root / 'configure').as_posix())
         self.assertEqual(record['environment']['PATH'], str(self.selected))
         self.assertEqual(record['environment']['CXX'], 'selected-cxx')
         self.assertEqual(record['environment']['CC'], 'selected-cc')
         self.assertEqual(record['environment']['CPPFLAGS'], '')
+
+    def test_windows_configure_uses_msys_source_path_without_changing_native_prefix(self):
+        source = self.root / 'D:' / 'selected source'
+        self.converted_configure = '/d/selected source/configure'
+        with patch.object(self.runner.platform, 'system', return_value='Windows'), \
+                patch.dict(os.environ, PATH=str(self.selected)), \
+                patch.object(subprocess, 'Popen', side_effect=self.create_process):
+            with self.assertRaisesRegex(RuntimeError, 'selected MSYS shell'):
+                self.runner.package_lane(self.args, source, self.output, 'no', matrix.load())
+        records = json.loads((self.output / 'tls-no/commands.json').read_text())
+        self.assertEqual(records[-1]['argv'][1], self.converted_configure)
+        self.assertEqual(self.conversion_requests, [(source / 'configure').as_posix()])
+        self.assertEqual(records[-1]['argv'][-1], '--prefix=' + (self.output / 'tls-no/prefix').as_posix())
 
     def test_windows_missing_path_bash_fails_before_launching_competing_shell(self):
         self.bash.unlink()
