@@ -1,6 +1,6 @@
 # FEATURE-ci-darwin-selected-tools: use selected tools throughout native archive checks
 
-Status: In Progress — implementation and focused local checks complete; caller validation and finalization pending.
+Status: Complete — local implementation and validation complete; native confirmation remains CI/v3-PR owned.
 Base: `v3` at `f37e7c79c042568b3f4b2bc9244c328c1fda1088`.
 Plan: `.groundwork-plans/FEATURE-ci-darwin-selected-tools-plan.md` in the primary checkout.
 Journal: `.debug/ci-darwin-selected-tools-bwzz0bjg/journal.md` in the primary checkout.
@@ -28,7 +28,7 @@ Action items:
 - [x] Verify focused platform/workflow/retention regressions, actual public
   header compilation through the existing private SDK, Python/shell syntax,
   actionlint and whitespace; inspect the complete owned diff.
-- [ ] Caller: perform full Groundwork validation, finalization and merge.
+- [x] Caller: perform full Groundwork validation, finalization and merge.
 - [ ] Native Darwin/FreeBSD/Windows post-repair execution: CI/v3-PR owned,
   not a local acceptance gate.
 
@@ -87,3 +87,7 @@ paths. That assertion was corrected without expanding production retention.
 These task-local setup failures are preserved; no incidental subsystem failure
 was investigated or repaired. Native post-repair gates remain unexecuted and
 overall CI is not green.
+
+Final local validation/finalization (2026-10-23):
+
+Groundwork sealed exact clean implementation `243d65e032849df5f711d6e1575b97b1979fbc55` / tree `024e4575b9825f69dad1ddf0ca9dc30b98265ba6`: all nine profiles approved, 1 iteration, 0 fixed, 0 unworked. Durable receipt: `.git/groundwork/validation/cdb4ee2aea69cc6a/5408d8c223cf81ea/groundwork-validation-b99f8c8d655a90cbebf1cf610d67c362`. The spec-artifact automatic approval rejection was resolved by an evidence-backed local-scope clarification; historical native failures and skipped publication remain recorded, with no remaining approval blocker. Caller changes only this bookkeeping before serial merge/cleanup. Native post-repair checks remain unexecuted and CI/v3-PR owned. The published `0cbf1811` CI batch is now fully terminal and failed; its newly reached FreeBSD `AF_INET`/`AF_INET6` compile errors require a separate narrow header repair, followed by known fixture portability work. The five uncertain C++ causes and prior closed assessments remain outside this task. Overall CI is not green.
