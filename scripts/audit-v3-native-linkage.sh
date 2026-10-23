@@ -363,7 +363,7 @@ while IFS= read -r library; do
             fail "unexpected third-party load dependency: $library" ;;
         *)
             case "$name" in
-                linux-vdso.*|ld-linux*|ld-musl*|ld-elf*.so*|libc.so*|libm.so*|libstdc++.*|libstdc++-*|libgcc_s.*|libgcc_s-*|libwinpthread-*|libpthread.*|libthr.*|libexecinfo.*|libatomic.*|libdl.*|librt.*|libresolv.*|libc++.*|libc++abi.*|libsystem.*|kernel32.dll|ws2_32.dll|msvcrt.dll|ucrtbase.dll|api-ms-win-*.dll|advapi32.dll|bcrypt.dll|bcryptprimitives.dll|crypt32.dll|secur32.dll|user32.dll|kernelbase.dll|ntdll.dll) ;;
+                linux-vdso.*|ld-linux*|ld-musl*|ld-elf*.so*|libc.so*|libm.so*|libstdc++.*|libstdc++-*|libgcc_s.*|libgcc_s-*|libgcc_s_seh-1.dll|libwinpthread-*|libpthread.*|libthr.*|libexecinfo.*|libatomic.*|libdl.*|librt.*|libresolv.*|libc++.*|libc++abi.*|libsystem.*|kernel32.dll|ws2_32.dll|msvcrt.dll|ucrtbase.dll|api-ms-win-*.dll|advapi32.dll|bcrypt.dll|bcryptprimitives.dll|crypt32.dll|secur32.dll|user32.dll|kernelbase.dll|ntdll.dll) ;;
                 *) fail "unexpected third-party load dependency: $library" ;;
             esac ;;
     esac

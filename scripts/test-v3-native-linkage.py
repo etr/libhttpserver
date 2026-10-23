@@ -72,6 +72,15 @@ class MakeGateFixtures(unittest.TestCase):
                     self.assertIn('A2 PASS' if mode == 'yes' else 'TLS-off load dependency',
                                   result.stdout)
 
+    def test_windows_seh_compiler_runtime_reaches_real_audit(self):
+        for mode in ['yes', 'no']:
+            with self.subTest(mode=mode):
+                result = self.gate(suffix='.exe', mode=mode,
+                                   dependency='KERNEL32.dll\nlibgcc_s_seh-1.dll')
+                self.assertEqual(0, result.returncode, result.stdout)
+                self.assertIn('A1 PASS', result.stdout)
+                self.assertIn('A2 PASS', result.stdout)
+
     def test_cxx_linker_gate_stops_before_audit(self):
         result = self.gate(linker='CC')
         self.assertNotEqual(0, result.returncode)
@@ -144,6 +153,17 @@ class AuditFixtures(unittest.TestCase):
 
     def test_native_windows_executable_and_readiness_runtime(self):
         self.assertEqual(0, self.audit('KERNEL32.dll\nWS2_32.dll\nlibstdc++-6.dll', windows=True).returncode)
+
+    def test_windows_seh_runtime_lookalikes_are_rejected(self):
+        for dependency in ['libgcc_s_seh-1.dll.extra', 'libgcc_s_seh-2.dll',
+                           'libgcc_s_unknown-1.dll']:
+            for mode in ['yes', 'no']:
+                with self.subTest(dependency=dependency, mode=mode):
+                    result = self.audit(dependency, mode=mode, windows=True)
+                    self.assertNotEqual(0, result.returncode, result.stdout)
+                    self.assertIn('unexpected third-party load dependency: ' + dependency,
+                                  result.stdout)
+                    self.assertNotIn('A2 PASS', result.stdout)
 
     def test_windows_import_symbols_and_msys_are_rejected(self):
         self.assertNotEqual(0, self.audit('KERNEL32.dll', symbols=' U __imp_SSL_new', windows=True).returncode)
