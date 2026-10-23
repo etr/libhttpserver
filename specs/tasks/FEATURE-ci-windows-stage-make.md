@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-stage-make: retain the caller's staging make frontend
 
-Status: In Progress — implementation ready; caller-owned validation pending.
+Status: Complete — local implementation and validation complete; native confirmation remains CI/v3-PR owned.
 Base: `v3` at `0cbf18116f63e0762aaad19b16358e6f61dddf04`.
 
 The installed-package driver selects `MAKE=make` for configure and runtime.
@@ -23,7 +23,7 @@ Action items:
 - [x] Preserve every original fixture method, DOS-prefix/MSYS handoff,
   configure-failure diagnostic and production staging/driver rule.
 - [x] Run affected Python syntax and diff-whitespace checks.
-- [ ] Caller: complete Groundwork validation and finalization into `v3`.
+- [x] Caller: complete Groundwork validation and finalization into `v3`.
 - [ ] CI/v3 PR: execute post-repair native Windows and other nonlocal checks.
 
 Native evidence and causal assessment (2026-10-23):
@@ -84,3 +84,7 @@ literal journal records the bounded assessment. No new native CI, broad suite,
 publication, merge or full validation was performed. Previous unrelated failure
 assessments remain closed with their existing uncertainty. Missing post-repair
 native evidence remains assigned to CI/v3 PR under AGENTS.md.
+
+Final local validation/finalization (2026-10-23):
+
+Groundwork sealed exact clean implementation `c194b1b8b778b5122c6e74a3a7b396f98ac48a04` / tree `a584f0c3ac1c405db9f30d2871d29b7392e29c75`: all nine independent profiles approved, 1 iteration, 0 fixed, 0 unworked. Durable receipt: `.git/groundwork/validation/cdb4ee2aea69cc6a/d83f80f13681e192/groundwork-validation-0956b8c54706a55af09c304478b08fc8`. Superseded reused-context reviews were excluded; fresh independent reviews supplied the final batch. Existing current GREEN probe bytes were verified and copied into that receipt directory; the original RED probe script version was not separately preserved, while its actual execution records and the corrected pre-edit contract assertion remain retained. No reconstructed script or additional full RED execution is claimed. The earlier implementation-only paragraph is superseded for local validation/finalization. Caller changes only this task bookkeeping before serial merge/cleanup. Post-repair native Windows remains pending CI/v3 PR, and overall CI is not green. Known independent Darwin shell/tooling setup repairs follow before publishing the next batch; five uncertain C++ causes remain outside this task.
