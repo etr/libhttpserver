@@ -4,7 +4,8 @@
 namespace httpserver::detail::entropy {
 #if defined(_WIN32)
 bool draw_via_bcrypt(std::byte* out, std::size_t count) noexcept {
-    return ::BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(out), static_cast<ULONG>(count), BCRYPT_USE_SYSTEM_PREFERRED_RNG) == STATUS_SUCCESS;
+    // MS-ERREF defines STATUS_SUCCESS as zero; avoid depending on ntstatus.h.
+    return ::BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(out), static_cast<ULONG>(count), BCRYPT_USE_SYSTEM_PREFERRED_RNG) == NTSTATUS{0};
 }
 #endif
 
