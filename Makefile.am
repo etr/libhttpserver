@@ -87,12 +87,20 @@ check-headers:
 # when invoking standalone outside of `make check`.
 CHECK_INSTALL_STAGE = $(abs_top_builddir)/.install-stage
 
+# DESTDIR cannot precede a DOS drive specification: MSYS would pass an
+# embedded "D:" to native install tools. Map D:/path to /D/path only in
+# these private stages. Keep configured paths (including pkg-config) intact.
+check_stage_dir = $(shell printf '%s\n' '$(1)' | sed 's,^\([A-Za-z]\):/,/\1/,')
+CHECK_STAGE_INCLUDEDIR = $(call check_stage_dir,$(includedir))
+CHECK_STAGE_INSTALL_DIRS = bindir libdir includedir pkgconfigdir cmakemoduledir mandir $(if $(man3dir),man3dir)
+CHECK_STAGE_INSTALL_FLAGS = $(foreach dir,$(CHECK_STAGE_INSTALL_DIRS),$(dir)="$(call check_stage_dir,$($(dir)))")
+
 check-install-layout:
 	@echo "=== check-install-layout: staged install must hide detail/ and *_impl.hpp ==="
 	@if test "$(CHECK_INSTALL_SHARED)" != "yes"; then \
 	    rm -rf $(CHECK_INSTALL_STAGE); \
 	    mkdir -p $(CHECK_INSTALL_STAGE); \
-	    $(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_INSTALL_STAGE) >$(CHECK_INSTALL_STAGE)/install.log 2>&1 || { \
+	    $(MAKE) $(AM_MAKEFLAGS) install $(CHECK_STAGE_INSTALL_FLAGS) DESTDIR=$(CHECK_INSTALL_STAGE) >$(CHECK_INSTALL_STAGE)/install.log 2>&1 || { \
 	        echo "FAIL: staged install failed"; \
 	        cat $(CHECK_INSTALL_STAGE)/install.log; \
 	        rm -rf $(CHECK_INSTALL_STAGE); \
@@ -125,12 +133,12 @@ check-install-layout:
 	@# `ln -s` falls back to a file copy unless MSYS=winsymlinks is set).
 	@# Either form satisfies the "includes #include <httpserverpp> resolve to
 	@# the umbrella" property the install hook is establishing.
-	@if ! test -e $(CHECK_INSTALL_STAGE)$(includedir)/httpserverpp; then \
+	@if ! test -e $(CHECK_INSTALL_STAGE)$(CHECK_STAGE_INCLUDEDIR)/httpserverpp; then \
 	    echo "FAIL: httpserverpp alias not installed under $(includedir)"; \
 	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi
-	@$(CXX) -std=c++20 -I$(CHECK_INSTALL_STAGE)$(includedir) -c $(top_srcdir)/test/headers/consumer_v3_readiness.cpp -o /dev/null
+	@$(CXX) -std=c++20 -I$(CHECK_INSTALL_STAGE)$(CHECK_STAGE_INCLUDEDIR) -c $(top_srcdir)/test/headers/consumer_v3_readiness.cpp -o /dev/null
 	@if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi
 	@echo "  PASS: staged install layout and standalone readiness consumer are clean"
 
@@ -145,7 +153,7 @@ check-install-layout:
 #      pristine public include tree -- exactly what packagers and
 #      downstream consumers see.
 #   2. Preprocess test/headers/consumer_umbrella_no_backend.cpp using
-#      ONLY -I$(CHECK_HYGIENE_STAGE)$(includedir) plus $(CPPFLAGS) (so
+#      ONLY -I$(CHECK_HYGIENE_STAGE)$(CHECK_STAGE_INCLUDEDIR) plus $(CPPFLAGS) (so
 #      e.g. /opt/homebrew/include is on the search path -- the grep
 #      below NEEDS to resolve <microhttpd.h> if the umbrella pulls it
 #      in, otherwise we couldn't detect the leak).
@@ -185,7 +193,7 @@ check-install-layout:
 # sync with the #ifdef ladder in test/unit/header_hygiene_test.cpp.
 HEADER_HYGIENE_FORBIDDEN = microhttpd\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h
 CHECK_HYGIENE_STAGE = $(abs_top_builddir)/.hygiene-stage
-CHECK_HYGIENE_CXX = $(CXX) -std=c++20 -E -I$(CHECK_HYGIENE_STAGE)$(includedir) $(CPPFLAGS)
+CHECK_HYGIENE_CXX = $(CXX) -std=c++20 -E -I$(CHECK_HYGIENE_STAGE)$(CHECK_STAGE_INCLUDEDIR) $(CPPFLAGS)
 # Override on the command line to run against an in-flight umbrella:
 #   make check-hygiene HEADER_HYGIENE_STRICT=no
 HEADER_HYGIENE_STRICT ?= yes
@@ -207,7 +215,7 @@ $(HYGIENE_STAMP): $(wildcard $(top_srcdir)/src/httpserver/*.hpp) \
                   $(top_srcdir)/Makefile.am \
                   $(top_srcdir)/test/headers/consumer_umbrella_no_backend.cpp
 	@rm -rf $(CHECK_HYGIENE_STAGE)
-	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_HYGIENE_STAGE) >check-hygiene-install.log 2>&1 || { \
+	@$(MAKE) $(AM_MAKEFLAGS) install $(CHECK_STAGE_INSTALL_FLAGS) DESTDIR=$(CHECK_HYGIENE_STAGE) >check-hygiene-install.log 2>&1 || { \
 	    echo "FAIL: staged install failed"; cat check-hygiene-install.log; \
 	    rm -f check-hygiene-install.log; rm -rf $(CHECK_HYGIENE_STAGE); exit 1; }
 	@rm -f check-hygiene-install.log
@@ -223,7 +231,7 @@ check-hygiene:
 	        echo "  Always pair CHECK_HYGIENE_SHARED=yes with CHECK_HYGIENE_STAGE=<valid-dir>."; \
 	        exit 1; \
 	    fi; \
-	    if ! test -f "$(CHECK_HYGIENE_STAGE)$(includedir)/httpserver.hpp"; then \
+	    if ! test -f "$(CHECK_HYGIENE_STAGE)$(CHECK_STAGE_INCLUDEDIR)/httpserver.hpp"; then \
 	        echo "FAIL: CHECK_HYGIENE_STAGE exists but does not contain $(includedir)/httpserver.hpp"; \
 	        echo "  Was the staged install complete before invoking check-hygiene?"; \
 	        exit 1; \
@@ -278,7 +286,7 @@ check-hygiene:
 # still runs the full test suite plus the header / example / lint gates, but
 # skips the source-only doc gates whose inputs it cannot satisfy. Release runners
 # may provide a verified specs/ tooling bundle; it is not a source checkout.
-check-local: check-v3-compiled-operations check-headers check-examples lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage
+check-local: check-v3-compiled-operations check-headers check-examples lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage check-v3-stage-install
 	@if test -d "$(top_srcdir)/specs" && test -e "$(top_srcdir)/.git"; then \
 		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen ; \
 	else \
@@ -286,7 +294,7 @@ check-local: check-v3-compiled-operations check-headers check-examples lint-warn
 	fi
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
-	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
+	@$(MAKE) $(AM_MAKEFLAGS) install $(CHECK_STAGE_INSTALL_FLAGS) DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
 	    echo "FAIL: shared staged install failed"; cat check-shared-install.log; \
 	    rm -f check-shared-install.log; rm -rf "$(abs_top_builddir)/.shared-check-stage"; exit 1; }
 	@rm -f check-shared-install.log
@@ -490,7 +498,7 @@ EXTRA_DIST += scripts/run-v3-http2-gates.py docs/task-145-http2-evidence.md
 
 # TASK-148: policy fixtures are local; the fresh installed matrix is opt-in.
 EXTRA_DIST += scripts/audit-v3-installed-package.py scripts/check-v3-installed-consumer.py scripts/test-v3-installed-package.py scripts/v3-installed-dependency-policy.json docs/task-148-installed-consumer-evidence.md
-check-v3-installed-package-fixtures:
+check-v3-installed-package-fixtures: check-v3-stage-install
 	@python3 $(top_srcdir)/scripts/test-v3-installed-package.py
 	@python3 $(top_srcdir)/scripts/test-v3-installed-consumer.py
 	@python3 $(top_srcdir)/scripts/test-v3-package-workflow.py
@@ -501,6 +509,12 @@ check-v3-installed-consumer:
 	@python3 $(top_srcdir)/scripts/check-v3-installed-consumer.py $(INSTALL_AUDIT_ARGS)
 
 .PHONY: check-v3-installed-package-fixtures check-v3-installed-consumer
+
+EXTRA_DIST += scripts/test-v3-stage-install.py
+check-v3-stage-install:
+	@CXX="$(CXX)" python3 $(top_srcdir)/scripts/test-v3-stage-install.py
+
+.PHONY: check-v3-stage-install
 
 EXTRA_DIST += docs/task-151-quic-codecs.md
 EXTRA_DIST += docs/task-176-quic-stateful-evidence.md
