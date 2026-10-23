@@ -2,6 +2,8 @@
 #include <httpserver/detail/io_poll_sys.hpp>
 #include <string>
 
+#include <httpserver/detail/deadline_trace.hpp>
+
 namespace httpserver::detail::pollsys {
 
 int poll_call(poll_slot* slots, std::size_t count, int timeout_ms) {
@@ -37,7 +39,10 @@ bool close_socket(native_socket_t& socket) {
 #if defined(_WIN32)
     return ::closesocket(closing) == 0;
 #else
-    return ::close(closing) == 0;
+    const int result = ::close(closing);
+    V3_DEADLINE_TRACE("native_close socket=%llu result=%d errno=%d now_ns=%lld\n",
+        static_cast<deadline_trace_id>(closing), result, result == 0 ? 0 : errno, deadline_trace_ns(std::chrono::steady_clock::now()));
+    return result == 0;
 #endif
 }
 

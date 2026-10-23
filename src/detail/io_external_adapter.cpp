@@ -31,6 +31,8 @@
 #include <utility>
 #include <vector>
 
+#include <httpserver/detail/deadline_trace.hpp>
+
 namespace httpserver {
 namespace detail {
 namespace {
@@ -161,6 +163,7 @@ http::outcome io_poll_backend::dispatch(
         close();
         return status;
     }
+    V3_DEADLINE_TRACE("dispatch backend=%p events=%zu now_ns=%lld\n", static_cast<void*>(this), events.size(), deadline_trace_ns(now));
     for (const auto& event : events) dispatch_event(event);
     expire_due_timers(now);
     return ready();

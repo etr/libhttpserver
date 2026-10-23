@@ -31,6 +31,9 @@
 #include <vector>
 
 #include <httpserver/server/server.hpp>
+#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
+#include <httpserver/detail/deadline_trace.hpp>
+#endif
 #include "../../examples/host_poll.hpp"
 #include "./raw_http_client.hpp"
 #include "./littletest.hpp"
@@ -81,7 +84,21 @@ struct host_server {
                         }
                         for (const auto& socket : snapshot.sockets) retained.push_back(socket);
                     }
+#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
+                    V3_DEADLINE_TRACE("host_snapshot sockets=%zu has_deadline=%d deadline_ns=%lld now_ns=%lld failure_ns=%lld\n",
+                        snapshot.sockets.size(), snapshot.next_deadline.has_value(),
+                        httpserver::detail::deadline_trace_ns(snapshot.next_deadline.value_or(clock_type::time_point{})),
+                        httpserver::detail::deadline_trace_ns(clock_type::now()), httpserver::detail::deadline_trace_ns(failure_deadline));
+                    for (const auto& socket : snapshot.sockets) {
+                        V3_DEADLINE_TRACE("host_socket socket=%llu generation=%llu read=%d write=%d\n",
+                            static_cast<httpserver::detail::deadline_trace_id>(socket.handle.value),
+                            static_cast<httpserver::detail::deadline_trace_id>(socket.generation), socket.readable, socket.writable);
+                    }
+#endif
                     auto events = v3_host::wait(snapshot, failure_deadline);
+#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
+                    V3_DEADLINE_TRACE("host_wait events=%zu now_ns=%lld\n", events.size(), httpserver::detail::deadline_trace_ns(clock_type::now()));
+#endif
                     if (clock_type::now() >= failure_deadline) {
                         failed.store(true);
                         break;
@@ -208,6 +225,9 @@ LT_BEGIN_AUTO_TEST(external_http1_suite, delayed_worker_response_uses_wake_witho
 LT_END_AUTO_TEST(delayed_worker_response_uses_wake_without_periodic_poll)
 
 LT_BEGIN_AUTO_TEST(external_http1_suite, published_header_deadline_drives_empty_dispatch)
+#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
+    V3_DEADLINE_TRACE("case published_header_deadline_drives_empty_dispatch begin\n");
+#endif
     host_server fx;
     LT_ASSERT(fx.start());
     raw_http::connection client;

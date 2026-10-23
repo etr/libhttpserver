@@ -31,6 +31,8 @@
 #include <memory>
 #include <utility>
 
+#include <httpserver/detail/deadline_trace.hpp>
+
 namespace httpserver {
 namespace detail {
 
@@ -109,6 +111,13 @@ void op_state::apply(io_result result) {
         witness = std::move(witness_);
         resume_ex = std::exchange(resume_ex_, nullptr);
     }
+#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
+    if (kind_ == io_op_kind::timer) {
+        V3_DEADLINE_TRACE("apply conn=%llu token=%p seq=%llu result=%d frame=%d executor=%d now_ns=%lld\n",
+            static_cast<deadline_trace_id>(connection_), static_cast<void*>(this), static_cast<deadline_trace_id>(sequence()),
+            static_cast<int>(result.code), static_cast<bool>(frame), resume_ex != nullptr, deadline_trace_ns(std::chrono::steady_clock::now()));
+    }
+#endif
     if (frame) {
         resume_guarded(resume_ex, witness, frame);
     }

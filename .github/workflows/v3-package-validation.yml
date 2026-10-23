@@ -9,6 +9,7 @@ permissions:
   contents: read
 jobs:
   linux:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -44,6 +45,9 @@ jobs:
           retention-days: 14
           if-no-files-found: error
   macos:
+    permissions:
+      contents: read
+      actions: read
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -67,12 +71,125 @@ jobs:
       - name: Bootstrap
         run: ./bootstrap
       - name: Installed matrix
+        if: github.event_name != 'workflow_dispatch'
         run: |
           prefix=()
           if ! python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",443)); s.close()'; then
             prefix=(sudo env "PATH=$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD")
           fi
           "${prefix[@]}" python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" --pkg-config-dir "$(brew --prefix)/share/pkgconfig" --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --jobs 2
+      # Branch-only checkpoint: remove before merging to v3. This is not matrix proof.
+      - name: Diagnose installed shared TLS-off external HTTP1 on Darwin
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY_DIAGNOSTIC'
+          import hashlib, importlib.util, json, os, platform, shlex, shutil, subprocess, sys
+          from pathlib import Path
+          checkout = Path.cwd().resolve()
+          sys.path.insert(0, str(checkout / 'scripts/lib'))
+          import package_matrix as matrix
+          from package_commands import Commands, runtime_environment
+          from package_integration import compile_probe
+          import release_artifact as identity
+          from release_checks import extract_archive
+          from release_ci import verify_download
+          spec = importlib.util.spec_from_file_location('audit', checkout / 'scripts/audit-v3-installed-package.py')
+          audit = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(audit)
+          assert platform.system() == 'Darwin'
+          output = Path(os.environ['RUNNER_TEMP']) / 'package-evidence/header-deadline-diagnostic'
+          output.mkdir()
+          build, prefix, integration = [output / name for name in ('build', 'prefix', 'integration-shared')]
+          for directory in (build, prefix, integration):
+              directory.mkdir()
+          command = Commands(output)
+          provider = output.parent / 'prerequisites/provider'
+          compiler, cc = os.environ['V3_CXX'], os.environ['V3_CC']
+          toolchain = Path(os.environ['V3_PACKAGE_TOOLCHAIN'])
+          env = audit.clean_environment()
+          for key in ('GH_TOKEN', 'GITHUB_TOKEN', 'V3_RELEASE_IDENTITY'):
+              env.pop(key, None)
+          env.update(CXX=compiler, CC=cc, CXXFLAGS='-O0 -g',
+                     CPPFLAGS='-DHTTPSERVER_DIAG_HEADER_DEADLINE',
+                     LDFLAGS='-Wl,-rpath,' + str(provider / 'lib'))
+          receipt = dict(kind='diagnostic-only; not complete package validation', tls='no', linkage='shared',
+                         revision=command(['git', 'rev-parse', 'HEAD'], checkout, env).strip(),
+                         compiler=command([compiler, '--version'], checkout, env),
+                         provider_header_sha256=hashlib.sha256((provider / 'include/openssl/opensslv.h').read_bytes()).hexdigest())
+          try:
+              expected = dict(repository=os.environ['GITHUB_REPOSITORY'], run_id='39969790346', run_attempt='1',
+                              workflow_head='c0cfdabc8040273d60c610269a93d1c687ed8517', artifact_id='12508482722')
+              endpoint = 'repos/' + expected['repository'] + '/actions/artifacts/' + expected['artifact_id']
+              metadata = json.loads(subprocess.check_output(['gh', 'api', endpoint], text=True))
+              run = json.loads(subprocess.check_output(['gh', 'api', 'repos/' + expected['repository'] +
+                  '/actions/runs/' + expected['run_id'] + '/attempts/' + expected['run_attempt']], text=True))
+              (output / 'selected-artifact-metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
+              (output / 'selected-run-metadata.json').write_text(json.dumps(run, indent=2) + '\n')
+              downloaded = output / 'selected-archive.zip'
+              with downloaded.open('xb') as destination:
+                  subprocess.run(['gh', 'api', endpoint + '/zip'], stdout=destination, check=True)
+              zip_digest = 'sha256:a08eb79186b13cf12ac8c639f424e13a7de1ee09df5547aab2b4200a951a5f05'
+              verify_download(downloaded, metadata, run, expected, zip_digest, output / 'selected')
+              selected = json.loads((output / 'selected/selected.json').read_text())
+              archive = output / 'selected/libhttpserver-3.0.0.tar.gz'
+              assert selected['commit'] == selected['source']['head'] == expected['workflow_head']
+              assert selected['archive'] == archive.name and archive.stat().st_size == 3053890
+              assert identity.sha256(archive) == selected['sha256'] == '43124552f20bd00fceddc714856d605ca9caf017a849a991c34f16f437fcab83'
+              source = extract_archive(archive, output / 'source')
+              originals = identity.source_files(source)
+              assert originals and all(selected['files_sha256'].get(name) == digest for name, digest in originals.items())
+              (output / 'original-source-hashes.json').write_text(json.dumps(originals, indent=2) + '\n')
+              overlay = {}
+              names = ['src/detail/' + name + '.cpp' for name in ('connection_engine', 'connection_engine_websocket',
+                  'io_external_adapter', 'io_operation', 'io_poll_backend', 'io_poll_sys', 'io_timer_sweep')]
+              names += ['test/integ/external_http1_e2e_test.cpp', 'src/httpserver/detail/deadline_trace.hpp']
+              for name in names:
+                  original = originals.get(name)
+                  if name.endswith('/deadline_trace.hpp'):
+                      assert original is None and name not in selected['source']['files_sha256']
+                  else:
+                      assert original == selected['source']['files_sha256'][name]
+                  overlay[name] = dict(original_sha256=original, diagnostic_sha256=identity.sha256(checkout / name))
+                  shutil.copyfile(checkout / name, source / name)
+              modified = identity.source_files(source)
+              assert set(modified) - set(originals) == {'src/httpserver/detail/deadline_trace.hpp'}
+              assert {name for name in originals if modified[name] != originals[name]} == set(names[:-1])
+              (output / 'diagnostic-source-hashes.json').write_text(json.dumps(modified, indent=2) + '\n')
+              receipt['source_archive'] = dict(**expected, artifact_zip_sha256=zip_digest,
+                  archive_sha256=selected['sha256'], source_root=str(source), overlay=overlay,
+                  provenance='verified original archive plus explicit diagnostic overlay; not immutable release proof')
+              command(['bash', source / 'configure', '--enable-v3-tls=no', '--disable-examples', '--prefix=' + str(prefix)], build, env)
+              command(['make', '-j2'], build, env)
+              command(['make', 'install'], build, env)
+              runtime = runtime_environment({key: value for key, value in audit.clean_environment().items()
+                  if key not in ('GH_TOKEN', 'GITHUB_TOKEN', 'V3_RELEASE_IDENTITY')}, prefix, provider, [], toolchain)
+              runtime.update(PKG_CONFIG_PATH='', PKG_CONFIG_LIBDIR=str(prefix / 'lib/pkgconfig'))
+              os.environ.update({key: runtime[key] for key in ('LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'V3_PACKAGE_TOOLCHAIN')})
+              cflags = shlex.split(command(['pkg-config', '--cflags', 'libhttpserver'], integration, runtime))
+              libraries = shlex.split(command(['pkg-config', '--libs', 'libhttpserver'], integration, runtime))
+              libraries += ['-pthread', '-Wl,-rpath,' + str(prefix / 'lib'), '-Wl,-rpath,' + str(provider / 'lib')]
+              flags = cflags + ['-DHTTPSERVER_COMPILATION', '-DHTTPSERVER_DIAG_HEADER_DEADLINE',
+                                '-I' + str(source / 'src'), '-I' + str(source / 'test')]
+              definition = matrix.load()['suites']['external_http1_e2e']
+              units = [source / 'test' / name for name in definition['sources']]
+              executable = integration / 'external_http1_e2e'
+              receipt['compile'] = compile_probe(compiler, units, flags, libraries, executable, command, runtime, source, build, prefix, True)
+              graph = audit.dependency_graph([str(executable)])
+              matrix.check_linkage(graph, 'shared', prefix)
+              receipt['dependencies'] = graph
+              result = command([str(executable)], source / 'test', runtime, timeout=180, allow_failure=True)
+              print(result, end='', flush=True)
+              receipt['exit'] = command.records[-1]['exit']
+              receipt['suite'] = matrix.suite_result(result, receipt['exit'])
+              receipt['status'] = 'diagnostic suite passed; full matrix not run'
+          except Exception as error:
+              receipt.update(status='diagnostic failed', error=str(error))
+              raise
+          finally:
+              (output / 'diagnostic.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY_DIAGNOSTIC
       - name: Make privileged proof readable by artifact upload
         if: always()
         run: |
@@ -89,6 +206,7 @@ jobs:
           retention-days: 14
           if-no-files-found: error
   mingw64:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -148,6 +266,7 @@ jobs:
           retention-days: 14
           if-no-files-found: error
   freebsd:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:

@@ -43,6 +43,8 @@
 #include "httpserver/detail/io_connection_owner.hpp"
 #include "httpserver/detail/io_timer_sweep.hpp"
 
+#include <httpserver/detail/deadline_trace.hpp>
+
 namespace httpserver {
 namespace detail {
 namespace {
@@ -122,6 +124,13 @@ void io_poll_backend::submit(op_state& op) {
             registered = true;
         }
     }
+#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
+    if (op.kind() == io_op_kind::timer) {
+        V3_DEADLINE_TRACE("submit conn=%llu token=%p seq=%llu registered=%d rejected=%d admission=%d deadline_ns=%lld\n",
+            static_cast<deadline_trace_id>(op.connection()), static_cast<void*>(&op), static_cast<deadline_trace_id>(op.sequence()),
+            registered, rejected, static_cast<int>(admission), deadline_trace_ns(std::get<timer_payload>(op.payload()).deadline));
+    }
+#endif
     if (rejected) {
         finish_now(state, closed_result());
         return;
@@ -277,6 +286,7 @@ pollsys::native_socket_t io_poll_backend::native_handle(
 }
 
 void io_poll_backend::release_connection(std::uint64_t id) {
+    V3_DEADLINE_TRACE("release conn=%llu now_ns=%lld\n", static_cast<deadline_trace_id>(id), deadline_trace_ns(std::chrono::steady_clock::now()));
     hangup_connection(id);
 }
 
@@ -316,6 +326,10 @@ void io_poll_backend::hangup_connection(std::uint64_t id,
         if (expected && (cit == connections_.end()
                          || cit->second.lifetime != expected)) return;
         if (cit != connections_.end() && cit->second.lifetime) {
+            V3_DEADLINE_TRACE("retire conn=%llu socket=%llu lease=%p generation=%llu leases=%ld\n",
+                static_cast<deadline_trace_id>(id), static_cast<deadline_trace_id>(cit->second.socket),
+                static_cast<void*>(cit->second.lifetime.get()),
+                static_cast<deadline_trace_id>(cit->second.lifetime->generation), cit->second.lifetime.use_count());
             cit->second.dead = true;
             cit->second.lifetime->retired.store(true, std::memory_order_release);
             cit->second.lifetime.reset();
@@ -355,6 +369,9 @@ std::uint64_t io_poll_backend::register_accepted_socket(
     connection_record record;
     record.socket = socket;
     record.lifetime = make_lifetime_locked(socket);
+    V3_DEADLINE_TRACE("accepted conn=%llu socket=%llu lease=%p generation=%llu\n",
+        static_cast<deadline_trace_id>(id), static_cast<deadline_trace_id>(socket),
+        static_cast<void*>(record.lifetime.get()), static_cast<deadline_trace_id>(record.lifetime->generation));
     connections_[id] = std::move(record);
     return id;
 }
