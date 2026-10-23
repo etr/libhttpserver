@@ -15,7 +15,8 @@ def violations(text):
             errors.append('missing platform: ' + platform)
     if text.count('scripts/check-v3-installed-consumer.py') != 4:
         errors.append('each platform must invoke the same complete matrix')
-    if text.count('if: always()') != 4 or text.count('actions/upload-artifact@') != 4:
+    always_uploads = re.findall(r'if: always\(\)\s+uses: actions/upload-artifact@', text)
+    if len(always_uploads) != 4 or text.count('actions/upload-artifact@') != 4:
         errors.append('failure receipts must be uploaded on every platform')
     if 'mingw-w64-x86_64-python' not in text or 'msystem: MINGW64' not in text:
         errors.append('native Windows Python and readiness host required')

@@ -11,7 +11,8 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
 jobs:
   validate:
@@ -20,43 +21,43 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      commit: ${{ steps.version.outputs.commit }}
+      native: ${{ steps.version.outputs.native }}
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        fetch-depth: 0
 
-    - name: Determine version
+    - name: Resolve existing tag and source version
       id: version
+      env:
+        REQUEST_TAG: ${{ inputs.tag || github.ref_name }}
       run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          VERSION="${{ github.event.inputs.tag }}"
-        else
-          VERSION="${GITHUB_REF#refs/tags/}"
-        fi
-        VERSION="${VERSION#v}"
-        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-        if echo "$VERSION" | grep -qE '-(rc|alpha|beta)'; then
-          echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-        fi
-
-        echo "Version: $VERSION"
-
-    - name: Validate version consistency
-      run: |
-        chmod +x scripts/validate-version.sh
-        scripts/validate-version.sh "${{ steps.version.outputs.version }}"
+        python3 - <<'PYTHON'
+        import os,re,subprocess
+        from pathlib import Path
+        version=os.environ['REQUEST_TAG']
+        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-(?:rc|alpha|beta)[0-9]+)?',version): raise SystemExit('invalid version tag')
+        commit=subprocess.check_output(['git','rev-parse','--verify','refs/tags/'+version+'^{commit}'],text=True).strip()
+        subprocess.run(['git','checkout','--detach',commit],check=True)
+        subprocess.run(['bash','scripts/validate-version.sh',version],check=True)
+        native='true' if 'libhttpserver_v3core_la_SOURCES' in Path('src/Makefile.am').read_text() else 'false'
+        with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+            out.write('version='+version+'\ncommit='+commit+'\nnative='+native+'\nis_prerelease='+str('-' in version).lower()+'\n')
+        PYTHON
 
     - name: Extract release notes
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
         chmod +x scripts/extract-release-notes.sh
-        scripts/extract-release-notes.sh "${{ steps.version.outputs.version }}" > release-notes.md
+        scripts/extract-release-notes.sh "$VERSION" > release-notes.md
         echo "--- Release notes ---"
         cat release-notes.md
 
     - name: Upload release notes
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: release-notes
         path: release-notes.md
@@ -65,9 +66,12 @@ jobs:
     name: Build distribution tarball
     runs-on: ubuntu-latest
     needs: validate
+    if: needs.validate.outputs.native == 'false'
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ needs.validate.outputs.commit }}
 
     - name: Install dependencies
       run: |
@@ -89,7 +93,7 @@ jobs:
         make dist
 
     - name: Upload tarball
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: dist-tarball
         path: build/libhttpserver-*.tar.gz
@@ -105,7 +109,7 @@ jobs:
         sudo apt-get install -y libcurl4-openssl-dev
 
     - name: Download tarball
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
       with:
         name: dist-tarball
 
@@ -135,7 +139,7 @@ jobs:
 
     - name: Fetch curl from cache
       id: cache-curl
-      uses: actions/cache@v4
+      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
       with:
         path: curl-7.75.0
         key: macos-latest-CURL-pre-built-v3
@@ -155,7 +159,7 @@ jobs:
         sudo make install
 
     - name: Download tarball
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
       with:
         name: dist-tarball
 
@@ -184,7 +188,7 @@ jobs:
         shell: msys2 {0}
     steps:
     - name: Setup MSYS2
-      uses: msys2/setup-msys2@v2
+      uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c
       with:
         msystem: MINGW64
         update: true
@@ -197,7 +201,7 @@ jobs:
         pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,doxygen,graphviz,curl,python}
 
     - name: Download tarball
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
       with:
         name: dist-tarball
 
@@ -221,14 +225,17 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [validate, verify-dist-linux, verify-dist-macos, verify-dist-windows]
+    if: needs.validate.outputs.native == 'false'
+    permissions:
+      contents: write
     steps:
     - name: Download tarball
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
       with:
         name: dist-tarball
 
     - name: Download release notes
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
       with:
         name: release-notes
 
@@ -236,9 +243,9 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         GH_REPO: ${{ github.repository }}
+        VERSION: ${{ needs.validate.outputs.version }}
+        IS_PRERELEASE: ${{ needs.validate.outputs.is_prerelease }}
       run: |
-        VERSION="${{ needs.validate.outputs.version }}"
-        IS_PRERELEASE="${{ needs.validate.outputs.is_prerelease }}"
 
         PRERELEASE_FLAG=""
         if [ "$IS_PRERELEASE" = "true" ]; then
@@ -250,3 +257,15 @@ jobs:
           --notes-file release-notes.md \
           $PRERELEASE_FLAG \
           libhttpserver-*.tar.gz
+
+  v3-acceptance:
+    needs: validate
+    if: needs.validate.outputs.native == 'true'
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/v3-release-acceptance.yml
+    with:
+      source_commit: ${{ needs.validate.outputs.commit }}
+      source_version: ${{ needs.validate.outputs.version }}
+      publication: true

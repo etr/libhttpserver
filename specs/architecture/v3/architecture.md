@@ -460,3 +460,20 @@ necessary detail declarations. An installed header never includes a noninstalled
 private header. Normal library linkage supplies compiled operations; standalone
 header compilation does not imply link-free runtime behavior. Extraction preserves
 API, representation, suspension points, resource accounting and protocol behavior.
+
+### Selected-archive CI release acceptance
+
+CI keeps the existing TASK-185 18-gate validator authoritative. One selected
+archive and source/tooling snapshot feed native/installed platform producers,
+then the Linux full inventory. Linux evidence remains on its original
+filesystem; only fixed FreeBSD/Darwin/Windows receipts cross the platform seam.
+A bounded namespaced logical-path catalog preserves original receipt bytes and
+retains every referenced package input. Import reruns origin validators and
+normalizes foreign paths only for lookup/comparison, never binary execution.
+
+The final job consumes content-bound authorization, same-run immutable artifact
+IDs/digests and the exact archive. It rechecks manifest/source/tag bindings and
+executes no downloaded candidate code. Only that job receives publication
+permission. PR/validation-only execution cannot publish. This design accepts a
+serial release critical path to avoid moving the complete Linux evidence tree
+or broadening existing protocol validators. See [v3 CI](../../../docs/v3-ci.md).

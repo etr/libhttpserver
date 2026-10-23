@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
 import package_matrix as matrix
@@ -22,12 +23,100 @@ import package_process as process
 import package_traffic as traffic
 
 
+class InstalledShellTest(unittest.TestCase):
+    """Controlled process boundary; these are not native Windows receipts."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.selected = self.root / 'MSYS tools'
+        self.selected.mkdir()
+        self.bash = self.selected / ('bash.exe' if os.name == 'nt' else 'bash')
+        self.bash.write_text('selected shell fixture')
+        self.bash.chmod(0o755)
+        self.output = self.root / 'evidence'
+        self.output.mkdir()
+        spec = importlib.util.spec_from_file_location('installed_shell_runner', Path(__file__).with_name('check-v3-installed-consumer.py'))
+        self.runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.runner)
+        self.args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc',
+            prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=self.root, optimized=False)
+        self.popen = subprocess.Popen
+        self.converted_configure = (self.root / 'configure').as_posix()
+        self.conversion_requests = []
+
+    def create_process(self, argv, **options):
+        if str(argv[0]) not in ('bash', 'bash.exe', str(self.bash)):
+            return self.popen(argv, **options)
+        if argv[1:3] == ['-c', 'cygpath -u "$1"']:
+            self.conversion_requests.append(argv[-1])
+            return self.popen([sys.executable, '-c', f'print({self.converted_configure!r})'], **options)
+        # Model only executable lookup at the OS boundary: unqualified bash
+        # selects the competing Windows system shell before the selected PATH.
+        selected = str(argv[0]) == str(self.bash)
+        message = 'selected MSYS shell' if selected else 'Windows Subsystem for Linux has no installed distributions.'
+        return self.popen([sys.executable, '-c', f'print({message!r}); raise SystemExit(23)'], **options)
+
+    def test_windows_configure_uses_absolute_bash_from_selected_path(self):
+        with patch.object(self.runner.platform, 'system', return_value='Windows'), \
+                patch.dict(os.environ, PATH=str(self.selected), CPPFLAGS='unselected-includes'), \
+                patch.object(subprocess, 'Popen', side_effect=self.create_process):
+            with self.assertRaisesRegex(RuntimeError, 'selected MSYS shell'):
+                self.runner.package_lane(self.args, self.root, self.output, 'no', matrix.load())
+        record = json.loads((self.output / 'tls-no/commands.json').read_text())[-1]
+        self.assertEqual(record['argv'][0], str(self.bash))
+        self.assertEqual(record['argv'][1], (self.root / 'configure').as_posix())
+        self.assertEqual(record['environment']['PATH'], str(self.selected))
+        self.assertEqual(record['environment']['CXX'], 'selected-cxx')
+        self.assertEqual(record['environment']['CC'], 'selected-cc')
+        self.assertEqual(record['environment']['CPPFLAGS'], '')
+
+    def test_windows_configure_uses_msys_source_path_without_changing_native_prefix(self):
+        source = self.root / 'D:' / 'selected source'
+        self.converted_configure = '/d/selected source/configure'
+        with patch.object(self.runner.platform, 'system', return_value='Windows'), \
+                patch.dict(os.environ, PATH=str(self.selected)), \
+                patch.object(subprocess, 'Popen', side_effect=self.create_process):
+            with self.assertRaisesRegex(RuntimeError, 'selected MSYS shell'):
+                self.runner.package_lane(self.args, source, self.output, 'no', matrix.load())
+        records = json.loads((self.output / 'tls-no/commands.json').read_text())
+        self.assertEqual(records[-1]['argv'][1], self.converted_configure)
+        self.assertEqual(self.conversion_requests, [(source / 'configure').as_posix()])
+        self.assertEqual(records[-1]['argv'][-1], '--prefix=' + (self.output / 'tls-no/prefix').as_posix())
+
+    def test_windows_missing_path_bash_fails_before_launching_competing_shell(self):
+        self.bash.unlink()
+        with patch.object(self.runner.platform, 'system', return_value='Windows'), \
+                patch.dict(os.environ, PATH=str(self.selected)), \
+                patch.object(subprocess, 'Popen', side_effect=self.create_process):
+            with self.assertRaisesRegex(ValueError, 'bash.*PATH'):
+                self.runner.package_lane(self.args, self.root, self.output, 'no', matrix.load())
+        self.assertFalse((self.output / 'tls-no/commands.json').exists())
+
+
+@unittest.skipIf(os.name == 'nt', 'ps observation uses POSIX process groups; Windows exercises native jobs')
+class InstalledShellPSTest(InstalledShellTest):
+    """Replay shell contracts with a temporary path alias and real ps observation."""
+    def setUp(self):
+        outer = tempfile.TemporaryDirectory()
+        self.addCleanup(outer.cleanup)
+        root = Path(outer.name).resolve()
+        real = root / 'real'
+        real.mkdir()
+        alias = root / 'alias'
+        alias.symlink_to(real, target_is_directory=True)
+        with patch.object(tempfile, 'tempdir', str(alias)):
+            super().setUp()
+        observation = patch.object(commands.sys, 'platform', 'darwin')
+        observation.start()
+        self.addCleanup(observation.stop)
+
+
 class MatrixTest(unittest.TestCase):
     def setUp(self):
         self.inventory = matrix.load()
 
     def test_optimized_package_configure_selects_release_flags_without_changing_default(self):
-        from types import SimpleNamespace
         spec = importlib.util.spec_from_file_location('installed_runner', Path(__file__).with_name('check-v3-installed-consumer.py'))
         runner = importlib.util.module_from_spec(spec); spec.loader.exec_module(runner)
         with tempfile.TemporaryDirectory() as temp:

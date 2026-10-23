@@ -82,9 +82,11 @@ observation replay(std::span<const std::uint8_t> input, std::size_t fragment) {
 void http2_engine_fuzz_input(std::span<const std::uint8_t> bytes) {
     bytes = bytes.first(std::min<std::size_t>(65536, bytes.size()));
     auto whole = replay(bytes, 65536), fragmented = replay(bytes, 17);
-    require(whole.consumed == fragmented.consumed && whole.output == fragmented.output);
+    require(whole.output == fragmented.output);
     require(whole.error.has_value() == fragmented.error.has_value());
     if (whole.error) require(whole.error->wire_code == fragmented.error->wire_code && whole.error->scope == fragmented.error->scope);
+    // A failed feed may admit more ignored-frame bytes before reporting failure.
+    else require(whole.consumed == fragmented.consumed);
 }
 #ifdef HTTP2_ENGINE_LIBFUZZER
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* bytes, std::size_t size) {

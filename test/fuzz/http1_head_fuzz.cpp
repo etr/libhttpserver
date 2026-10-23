@@ -47,7 +47,7 @@ std::string run(std::string_view wire, std::size_t chunk, std::size_t cap) {
         result += head.raw_target + head.route_path + std::to_string(static_cast<int>(mode.kind))
             + std::to_string(d::valid_http1_host(head)) + std::to_string(residue);
     }
-    return result + ":" + std::to_string(static_cast<int>(parser.state()));
+    return "ok:" + result + ":" + std::to_string(static_cast<int>(parser.state()));
 }
 }  // namespace
 void fuzz_http1_head(std::span<const std::byte> input) {
@@ -56,7 +56,11 @@ void fuzz_http1_head(std::span<const std::byte> input) {
     // Wide admission excludes prospective whole-feed budget differences;
     // a separate tight run covers that intentional parser contract.
     auto whole = run(wire, std::max<std::size_t>(1, input.size()), input.size() + 32);
-    fuzz_check(whole == run(wire, 1, input.size() + 32));
+    auto fragmented = run(wire, 1, input.size() + 32);
+    // Whole-feed field admission can reject before a fragmented syntax check.
+    // Both must reject; successful parsing still requires the exact same result.
+    if (whole.starts_with("error:")) fuzz_check(fragmented.starts_with("error:"));
+    else fuzz_check(whole == fragmented);
     run(wire, 7, 128);
 }
 #ifdef PROTOCOL_LIBFUZZER

@@ -1647,3 +1647,8 @@ protocol_limits_SOURCES = unit/protocol_limits_test.cpp
 check_PROGRAMS += protocol_compression
 TESTS += protocol_compression
 protocol_compression_SOURCES = unit/protocol_compression_test.cpp
+
+TESTS += integ/release_ci_test.py integ/release_platform_bundle_test.py
+EXTRA_DIST += integ/release_ci_test.py integ/release_platform_bundle_test.py
+
+TESTS += ../scripts/test-v3-platform-ci.py

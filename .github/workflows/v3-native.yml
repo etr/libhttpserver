@@ -1,0 +1,125 @@
+name: v3 native and protocol fuzz
+on:
+  push:
+    branches: [v3, master]
+  pull_request:
+    branches: [v3, master]
+  workflow_dispatch:
+  # Activates only when this workflow reaches the repository default branch.
+  schedule:
+    - cron: '17 3 * * *'
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        tls: ['no', 'yes']
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prerequisites
+        run: sudo apt-get update && sudo apt-get install -y autoconf automake libtool pkg-config clang perl doxygen graphviz python3-yaml
+      - name: Private provider
+        if: matrix.tls == 'yes'
+        run: python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites"
+      - name: C++20 native suites, all deterministic replays, headers, examples and hygiene
+        env:
+          TLS_MODE: ${{ matrix.tls }}
+        run: |
+          ./bootstrap
+          mkdir "$RUNNER_TEMP/native"
+          cd "$RUNNER_TEMP/native"
+          if [ "$TLS_MODE" = yes ]; then
+            export V3_TLS_CFLAGS="-I$RUNNER_TEMP/prerequisites/provider/include"
+            export V3_TLS_LIBS="-L$RUNNER_TEMP/prerequisites/provider/lib -lssl -lcrypto"
+            export LD_LIBRARY_PATH="$RUNNER_TEMP/prerequisites/provider/lib"
+            export V3_OPENSSL="$RUNNER_TEMP/prerequisites/provider/bin/openssl"
+            "$V3_OPENSSL" version -a > openssl-provenance.log
+            ldd "$V3_OPENSSL" >> openssl-provenance.log
+          fi
+          CXX=clang++ CC=clang "$GITHUB_WORKSPACE/configure" --enable-v3-tls="$TLS_MODE"
+          make -j2
+          make check -j2
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-${{ matrix.tls }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/native/**/*.log
+            ${{ runner.temp }}/native/**/*.trs
+            ${{ runner.temp }}/prerequisites/preparation.json
+            ${{ runner.temp }}/prerequisites/*.log
+          retention-days: 14
+          if-no-files-found: error
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [http1_head, http1_body, websocket_codec, hpack, http2_engine, quic_parser, quic_state, quic_recovery, http3_engine, qpack, quic_tls_callbacks]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang autoconf automake libtool pkg-config perl
+      - name: Private provider for TLS callback instrumentation
+        if: matrix.target == 'quic_tls_callbacks'
+        run: python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites"
+      - name: Configure genuine native sources
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir "$RUNNER_TEMP/native"
+          ./bootstrap 2>&1 | tee "$RUNNER_TEMP/native/bootstrap.log"
+          cd "$RUNNER_TEMP/native"
+          mode=no
+          if [ "$TARGET" = quic_tls_callbacks ]; then
+            mode=yes
+            export V3_TLS_CFLAGS="-I$RUNNER_TEMP/prerequisites/provider/include"
+            export V3_TLS_LIBS="-L$RUNNER_TEMP/prerequisites/provider/lib -lssl -lcrypto"
+            export LD_LIBRARY_PATH="$RUNNER_TEMP/prerequisites/provider/lib"
+          fi
+          CXX=clang++ CC=clang "$GITHUB_WORKSPACE/configure" --enable-v3-tls="$mode" --disable-examples 2>&1 | tee "$RUNNER_TEMP/native/configure-output.log"
+      - uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ${{ runner.temp }}/corpus
+          key: corpus-v1-${{ runner.os }}-${{ matrix.target }}-clang-asan-ubsan-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: corpus-v1-${{ runner.os }}-${{ matrix.target }}-clang-asan-ubsan-
+      - name: Bounded smoke or campaign
+        env:
+          TARGET: ${{ matrix.target }}
+          EVENT: ${{ github.event_name }}
+          LD_LIBRARY_PATH: ${{ runner.temp }}/prerequisites/provider/lib
+        run: |
+          runs=2000; seconds=30; seed=128
+          if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
+            runs=1000000000; seconds=600
+            seed=$(python3 -c 'import secrets; print(secrets.randbelow(4294967295)+1)')
+          fi
+          bash scripts/run-v3-protocol-fuzz.sh --compiler clang++ --build-dir "$RUNNER_TEMP/fuzz" \
+            --native-config-dir "$RUNNER_TEMP/native" --targets "$TARGET" \
+            --runs "$runs" --seconds "$seconds" --seed "$seed" --corpus-dir "$RUNNER_TEMP/corpus"
+      - uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684
+        if: success() && github.event_name != 'pull_request' && (github.ref_name == 'v3' || github.ref_name == github.event.repository.default_branch)
+        with:
+          path: ${{ runner.temp }}/corpus
+          key: corpus-v1-${{ runner.os }}-${{ matrix.target }}-clang-asan-ubsan-${{ github.run_id }}-${{ github.run_attempt }}
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fuzz-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/fuzz
+            ${{ runner.temp }}/native
+            ${{ runner.temp }}/prerequisites/preparation.json
+            ${{ runner.temp }}/prerequisites/*.log
+          retention-days: 30
+          if-no-files-found: error

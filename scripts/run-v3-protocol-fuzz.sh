@@ -2,13 +2,15 @@
 # Native, sequential libFuzzer lane. Explicit requests never silently skip.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-compiler=clang++ build= runs=2000 seconds=30 targets='http1_head http1_body websocket_codec' native_config=
+compiler=clang++ build= runs=2000 seconds=30 targets='http1_head http1_body websocket_codec' native_config= seed=128 corpus=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --compiler) compiler=$2; shift 2 ;;
         --build-dir) build=$2; shift 2 ;;
         --native-config-dir) native_config=$2; shift 2 ;;
         --targets) targets=$2; shift 2 ;;
+        --seed) seed=$2; shift 2 ;;
+        --corpus-dir) corpus=$2; shift 2 ;;
         --runs) runs=$2; shift 2 ;;
         --seconds) seconds=$2; shift 2 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -19,6 +21,21 @@ done
 for target in $targets; do
     case "$target" in http1_head|http1_body|websocket_codec|hpack|http2_engine|quic_parser|quic_state|quic_recovery|quic_tls_callbacks|http3_engine|qpack) ;; *) echo "unknown fuzz target: $target" >&2; exit 2 ;; esac
 done
+case "$seed" in ''|*[!0-9]*) echo 'invalid fuzz seed' >&2; exit 2 ;; esac
+[ "${#seed}" -le 10 ] && [ "$seed" -gt 0 ] && [ "$seed" -le 4294967295 ] || { echo 'invalid fuzz seed' >&2; exit 2; }
+if [ -n "$corpus" ]; then
+    python3 - "$corpus" "$root" <<'PYTHON'
+from pathlib import Path
+import sys
+corpus, root = Path(sys.argv[1]), Path(sys.argv[2])
+if corpus.is_symlink() or any(p.is_symlink() for p in corpus.parents) or any(p.is_symlink() for p in corpus.rglob('*')):
+    raise SystemExit('corpus symlink rejected')
+if corpus.resolve() == root or root in corpus.resolve().parents:
+    raise SystemExit('writable corpus must be outside source checkout')
+corpus.mkdir(parents=True, exist_ok=True)
+PYTHON
+    corpus=$(cd "$corpus" && pwd)
+fi
 command -v "$compiler" >/dev/null || { echo 'libFuzzer compiler unavailable' >&2; exit 1; }
 provider_cflags=() provider_libs=()
 for target in $targets; do
@@ -92,6 +109,26 @@ PY
             ;;
     esac
     [ -n "$(find "$build/$target/seeds" -type f -print -quit)" ] || { echo "empty corpus: $target" >&2; exit 1; }
+    target_corpus="$build/$target/seeds"
+    if [ -n "$corpus" ]; then
+        target_corpus="$corpus/$target"
+        python3 - "$build/$target/seeds" "$target_corpus" <<'PYTHON'
+import hashlib
+from pathlib import Path
+import sys
+source, destination = map(Path, sys.argv[1:])
+destination.mkdir(parents=True, exist_ok=True)
+for fixture in source.iterdir():
+    data = fixture.read_bytes()
+    path = destination / hashlib.sha256(data).hexdigest()
+    if path.exists():
+        if path.read_bytes() != data:
+            raise SystemExit('corpus content-address collision')
+    else:
+        with path.open('xb') as output:
+            output.write(data)
+PYTHON
+    fi
     sources=("$root/test/fuzz/${target}_fuzz.cpp")
     if [ "$target" = http1_head ] || [ "$target" = http1_body ] || [ "$target" = hpack ]; then
         sources+=("$root/src/http/fields.cpp" "$root/src/http/method.cpp"
@@ -162,8 +199,8 @@ PYTHON
     printf '%q ' "$compiler" "${flags[@]}" "${target_flags[@]}" "${sources[@]}" "${link_flags[@]}" -o "$build/$target/fuzz" > "$build/$target/compile.sh"
     printf '\n' >> "$build/$target/compile.sh"
     "$compiler" "${flags[@]}" "${target_flags[@]}" "${sources[@]}" "${link_flags[@]}" -o "$build/$target/fuzz" > "$build/$target/build.log" 2>&1
-    printf '%q ' "$build/$target/fuzz" "$build/$target/seeds" -runs="$runs" -max_total_time="$seconds" -max_len="$max_len" -timeout=5 -rss_limit_mb=512 -seed=128 -artifact_prefix="$build/$target/artifacts/" > "$build/$target/reproduce.sh"
+    printf '%q ' "$build/$target/fuzz" "$target_corpus" -runs="$runs" -max_total_time="$seconds" -max_len="$max_len" -timeout=5 -rss_limit_mb=512 -seed="$seed" -artifact_prefix="$build/$target/artifacts/" > "$build/$target/reproduce.sh"
     printf '\n' >> "$build/$target/reproduce.sh"
-    "$build/$target/fuzz" "$build/$target/seeds" -runs="$runs" -max_total_time="$seconds" -max_len="$max_len" -timeout=5 -rss_limit_mb=512 -seed=128 -artifact_prefix="$build/$target/artifacts/" > "$build/$target/run.log" 2>&1 || { echo "fuzz failure: $target; see $build/$target/run.log and artifacts" >&2; exit 1; }
+    "$build/$target/fuzz" "$target_corpus" -runs="$runs" -max_total_time="$seconds" -max_len="$max_len" -timeout=5 -rss_limit_mb=512 -seed="$seed" -artifact_prefix="$build/$target/artifacts/" > "$build/$target/run.log" 2>&1 || { echo "fuzz failure: $target; see $build/$target/run.log and artifacts" >&2; exit 1; }
     echo "PASS fuzz $target"
 done
