@@ -77,27 +77,25 @@ class FreeBSDToolchain(unittest.TestCase):
         selector = self.selector()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            compiler = root / 'compiler'
+            compiler = root / 'compiler with spaces'
             compiler.write_text('#!' + sys.executable + '\nimport json, sys\nprint(json.dumps(sys.argv[1:]))\n')
             compiler.chmod(0o755)
             prefix = root / 'selected sdk'
             wrapper = selector.write_compiler(prefix, str(compiler))
-            for mode in ('', '-c', '-E', '-S', '-fsyntax-only', '-r', '-Wl,-r', '-static'):
+            # The wrapper's env shebang must use the selected Bash even in the clean environment.
+            environment = {'PATH': str(Path(shutil.which('bash')).parent) + os.pathsep + os.defpath}
+            for mode in ('', '-c', '-E', '-S', '-fsyntax-only', '-r', '-Wl,-r', '--version', '-static', '-shared'):
                 with self.subTest(mode=mode):
                     args = ([mode] if mode else []) + ['path with spaces.cpp', '-o', 'path with spaces.o']
-                    result = subprocess.run([str(wrapper)] + args, env={'PATH': os.defpath}, capture_output=True, text=True)
+                    result = subprocess.run([str(wrapper)] + args, env=environment, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     actual = json.loads(result.stdout)
-                    self.assertIn('-nostdinc++', actual)
-                    self.assertEqual(actual[actual.index('-isystem') + 1], str(prefix / 'include/c++/v1'))
-                    self.assertIn('path with spaces.cpp', actual)
-                    if mode in ('-c', '-E', '-S', '-fsyntax-only', '-r', '-Wl,-r'):
-                        self.assertNotIn('-lc++', actual)
-                        self.assertFalse(any(flag.startswith('-Wl,-rpath,') for flag in actual))
-                    else:
-                        self.assertIn('-L' + str(prefix / 'lib'), actual)
-                        self.assertIn('-lc++', actual)
-                        self.assertEqual(any(flag.startswith('-Wl,-rpath,') for flag in actual), mode != '-static')
+                    expected = ['-nostdinc++', '-isystem', str(prefix / 'include/c++/v1')] + args
+                    if mode not in ('-c', '-E', '-S', '-fsyntax-only', '-r', '-Wl,-r', '--version'):
+                        expected += ['-nostdlib++', '-L' + str(prefix / 'lib'), '-lc++']
+                        if mode != '-static':
+                            expected += ['-Wl,-rpath,' + str(prefix / 'lib')]
+                    self.assertEqual(actual, expected)
 
 
 class SelectedPlatformEnvironment(unittest.TestCase):

@@ -63,8 +63,9 @@ for argument in "$@"; do
     -static) rpath=() ;;
   esac
 done
+# Bash 3.2 nounset needs guarded empty arrays; absent flags must add zero arguments.
 exec ''' + shlex.join([cxx, '-nostdinc++', '-isystem', str(prefix / 'include/c++/v1')])
-                       + ' "$@" "${link_flags[@]}" "${rpath[@]}"\n')
+                       + ' "$@" ${link_flags[@]+"${link_flags[@]}"} ${rpath[@]+"${rpath[@]}"}\n')
     wrapper.chmod(0o755)
     return wrapper
 
