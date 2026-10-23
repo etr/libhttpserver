@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-staging: keep DOS drives out of private staged paths
 
-Status: In Progress — implementation complete; caller validation/finalization pending.
+Status: Complete (local) — validated and finalized into v3; native Windows CI remains pending.
 Base: local `v3` at `71008fd7fa0e5e2af00feb3c1e619ab7a13a4aaa`.
 
 Windows checkout job `120468733874` (run `39969683050`) and archive job
@@ -31,7 +31,7 @@ Action items:
 - [x] Register/distribute the focused regression; run bootstrap, configure,
   a real TLS-off library build, actual standalone install gates, Python syntax
   and diff checks. Record execution limits and failed setup evidence.
-- [ ] Caller: Groundwork validation and finalization into v3.
+- [x] Caller: Groundwork validation and finalization into v3.
 - [ ] CI / v3 PR: native Windows checkout/archive installed matrices.
 
 The change stays in the private staging recipes in Makefile.am. One shared
@@ -90,3 +90,8 @@ evidence are retained under the primary checkout's
 the task's diagnosis record. No full baseline/runtime suite, nonlocal platform
 execution, old Darwin/Linux diagnostic, validation loop, merge or publication ran.
 The native Windows gates remain incomplete and CI/v3-PR owned under AGENTS.
+
+Groundwork validation passed at `fa1f76c7a106e5b8fde6749307ee8690fe4e09a0`
+(1 iteration, 0 fixed, 0 unworked; three reviewers approved). Native Windows
+receipts remain incomplete. The extra concurrent invocation remains failed and
+causality uncertain; the separate passing gates do not establish independence.
