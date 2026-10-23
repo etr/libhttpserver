@@ -14,6 +14,67 @@ sys.path.insert(0, str(ROOT / 'scripts/lib'))
 import release_gate_runner_test as release_contracts
 
 
+class RequestShellContracts(unittest.TestCase):
+    """Execute validation with a controlled Windows executable-lookup boundary."""
+    def setUp(self):
+        import os
+        import subprocess
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.selected = self.root / 'MSYS tools'
+        self.selected.mkdir()
+        self.bash = self.selected / ('bash.exe' if os.name == 'nt' else 'bash')
+        self.bash.write_text('selected shell fixture')
+        self.bash.chmod(0o755)
+        self.marker = self.root / 'version-validated'
+        self.popen = subprocess.Popen
+        spec = importlib.util.spec_from_file_location('release_ci_shell', ROOT / 'scripts/lib/release_ci.py')
+        self.ci = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.ci)
+
+    def create_process(self, argv, **options):
+        if argv[0] == 'git':
+            text = 'd' * 40 if 'rev-parse' in argv else ''
+            code = f'print({text!r}, end="")'
+        elif str(argv[0]) == str(self.bash):
+            code = f'from pathlib import Path; Path({str(self.marker)!r}).write_text("3.0.0")'
+        else:
+            code = 'print("Windows Subsystem for Linux has no installed distributions."); raise SystemExit(23)'
+        return self.popen([sys.executable, '-c', code], **options)
+
+    def test_windows_version_validation_uses_selected_path_bash(self):
+        import os
+        from unittest.mock import patch
+        with patch('platform.system', return_value='Windows'), \
+                patch.dict(os.environ, PATH=str(self.selected)), \
+                patch('subprocess.Popen', side_effect=self.create_process):
+            self.ci.validate_request(self.root, 'd' * 40, '3.0.0')
+        self.assertEqual(self.marker.read_text(), '3.0.0')
+
+    def test_windows_missing_path_bash_rejects_request_without_wsl_fallback(self):
+        import os
+        from unittest.mock import patch
+        self.bash.unlink()
+        with patch('platform.system', return_value='Windows'), \
+                patch.dict(os.environ, PATH=str(self.selected)), \
+                patch('subprocess.Popen', side_effect=self.create_process):
+            with self.assertRaisesRegex(ValueError, 'bash.*PATH'):
+                self.ci.validate_request(self.root, 'd' * 40, '3.0.0')
+        self.assertFalse(self.marker.exists())
+
+    def test_git_rev_parse_failure_reports_bounded_actual_stderr(self):
+        import subprocess
+        from unittest.mock import patch
+        diagnostic = 'x' * 8000 + '\nfatal: selected checkout diagnostic'
+        failure = subprocess.CalledProcessError(128, ['git', 'rev-parse'], stderr=diagnostic)
+        with patch('subprocess.check_output', side_effect=failure):
+            with self.assertRaises(ValueError) as caught:
+                self.ci.validate_request(self.root, 'd' * 40, '3.0.0')
+        self.assertIn('fatal: selected checkout diagnostic', str(caught.exception))
+        self.assertLess(len(str(caught.exception)), 2300)
+
+
 class PublicationContracts(unittest.TestCase):
     def setUp(self):
         import hashlib

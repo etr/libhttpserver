@@ -180,19 +180,32 @@ jobs:
         node-version: 24.15.0
     - name: Verify native Git and download immutable selected archive
       run: |-
+        exec > >(tee "$RUNNER_TEMP/git-provenance.log") 2>&1
         export PATH="/c/Program Files/Git/cmd:$PATH"
-        /mingw64/bin/python -c 'import subprocess; subprocess.run(["git","--version"],check=True)'
+        /mingw64/bin/python - <<'GIT_PROBE'
+        import shutil, subprocess
+        print('selected native Git:', shutil.which('git'), flush=True)
+        for arguments in (['--version'], ['rev-parse', '--verify', 'HEAD^{commit}']):
+            result = subprocess.run(['git'] + arguments, capture_output=True, text=True)
+            print('git', *arguments, 'exit=' + str(result.returncode), flush=True)
+            print(result.stdout[-2048:], end='', flush=True)
+            print(result.stderr[-2048:], end='', flush=True)
+            result.check_returncode()
+        GIT_PROBE
         /mingw64/bin/python scripts/run-v3-release-ci.py download --artifact-id "$SELECTED_ID" --digest "$SELECTED_DIGEST" --output "$RUNNER_TEMP/selected"
     - name: Selected provider and clients
       run: |-
         exec > >(tee "$RUNNER_TEMP/prerequisites-ci.log") 2>&1
+        export PATH="/c/Program Files/Git/cmd:$PATH"
         /mingw64/bin/python scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites"
         /mingw64/bin/python -m venv "$RUNNER_TEMP/clients"
         "$(cygpath -m "$RUNNER_TEMP/clients/bin/python.exe")" -m pip install -r test/integ/http2-client-requirements.txt
     - name: Complete native and installed TLS off/on proof
-      run: /mingw64/bin/python scripts/run-v3-release-ci.py platform --selection "$RUNNER_TEMP/selected/selected.json" --archive "$RUNNER_TEMP/selected/"libhttpserver-*.tar.gz
-        --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$(cygpath -m "$RUNNER_TEMP/clients/bin/python.exe")"
-        --node node --output "$RUNNER_TEMP/platform" --toolchain-prefix "$(cygpath -m /mingw64)"
+      run: |-
+        export PATH="/c/Program Files/Git/cmd:$PATH"
+        /mingw64/bin/python scripts/run-v3-release-ci.py platform --selection "$RUNNER_TEMP/selected/selected.json" --archive "$RUNNER_TEMP/selected/"libhttpserver-*.tar.gz \
+          --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$(cygpath -m "$RUNNER_TEMP/clients/bin/python.exe")" \
+          --node node --output "$RUNNER_TEMP/platform" --toolchain-prefix "$(cygpath -m /mingw64)"
     - id: proof
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
@@ -209,6 +222,7 @@ jobs:
           ${{ runner.temp }}/prerequisites/preparation.json
           ${{ runner.temp }}/prerequisites/*.log
           ${{ runner.temp }}/prerequisites-ci.log
+          ${{ runner.temp }}/git-provenance.log
         retention-days: 30
         if-no-files-found: warn
         compression-level: 0
@@ -241,23 +255,32 @@ jobs:
         release: '14.3'
         mem: 8192
         cpu: 2
-        prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm git
+        prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm19 git
           node24
         run: |-
           set -eu
           export RUNNER_TEMP=/tmp/v3-release-${{ github.run_id }}-${{ github.run_attempt }}
-          mkdir -p "$RUNNER_TEMP"
-          trap 'mkdir -p platform-evidence; cp -R "$RUNNER_TEMP/platform" platform-evidence/ 2>/dev/null || true; cp -R "$RUNNER_TEMP/prerequisites" platform-evidence/ 2>/dev/null || true' EXIT
+          mkdir -p "$RUNNER_TEMP/platform-evidence"
+          trap 'cp -R "$RUNNER_TEMP/platform" "$RUNNER_TEMP/platform-evidence/" 2>/dev/null || true; cp -R "$RUNNER_TEMP/prerequisites" "$RUNNER_TEMP/platform-evidence/" 2>/dev/null || true; cp -R "$RUNNER_TEMP/platform-evidence" ./platform-evidence' EXIT
           if [ "$(node --version)" != v24.15.0 ]; then
             mkdir -p "$RUNNER_TEMP/node-source"
+            node_logs="$RUNNER_TEMP/platform-evidence/node-source"
+            mkdir -p "$node_logs"
             curl --fail --location https://nodejs.org/dist/v24.15.0/node-v24.15.0.tar.gz -o "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz"
             test "$(sha256 -q "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz")" = 729de494dd2872e5a3a6c32a1cd156a5413d4aca2772b2d873ee86bb5531bcd9
             tar -xzf "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz" -C "$RUNNER_TEMP/node-source"
             (
               cd "$RUNNER_TEMP/node-source/node-v24.15.0"
-              ./configure --prefix="$RUNNER_TEMP/node"
-              gmake -j2 > "$RUNNER_TEMP/node-source/build.log" 2>&1
-              gmake install >> "$RUNNER_TEMP/node-source/build.log" 2>&1
+              {
+                node_llvm_bin="$(llvm-config19 --bindir)"
+                export CC="$node_llvm_bin/clang" CXX="$node_llvm_bin/clang++"
+                printf 'CC=%s\nCXX=%s\n' "$CC" "$CXX"
+                "$CC" --version
+                "$CXX" --version
+              } > "$node_logs/compiler.log" 2>&1
+              ./configure --prefix="$RUNNER_TEMP/node" > "$node_logs/configure.log" 2>&1
+              gmake -j2 > "$node_logs/build.log" 2>&1
+              gmake install >> "$node_logs/build.log" 2>&1
             )
             export PATH="$RUNNER_TEMP/node/bin:$PATH"
           fi
@@ -267,6 +290,11 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/clients"
           "$RUNNER_TEMP/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
           python3 scripts/run-v3-release-ci.py platform --selection build/ci-selected-input/selected.json --archive build/ci-selected-input/libhttpserver-*.tar.gz --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$RUNNER_TEMP/clients/bin/python" --node node --make gmake --pkg-config-dir /usr/local/share/pkgconfig --output "$RUNNER_TEMP/platform"
+    - name: Recover FreeBSD evidence
+      if: always()
+      run: |
+        mkdir -p platform-evidence
+        scp -O -r freebsd:/tmp/v3-release-${{ github.run_id }}-${{ github.run_attempt }}/platform-evidence/. platform-evidence/
     - id: proof
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:

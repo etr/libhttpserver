@@ -116,18 +116,30 @@ jobs:
           mkdir -p "$RUNNER_TEMP/package-evidence"
           exec > >(tee "$RUNNER_TEMP/package-evidence/clients.log") 2>&1
           export PATH="/c/Program Files/Git/cmd:$PATH"
-          /mingw64/bin/python -c 'import subprocess; subprocess.run(["git", "--version"], check=True)'
+          /mingw64/bin/python - <<'GIT_PROBE'
+          import shutil, subprocess
+          print('selected native Git:', shutil.which('git'), flush=True)
+          for arguments in (['--version'], ['rev-parse', '--verify', 'HEAD^{commit}']):
+              result = subprocess.run(['git'] + arguments, capture_output=True, text=True)
+              print('git', *arguments, 'exit=' + str(result.returncode), flush=True)
+              print(result.stdout[-2048:], end='', flush=True)
+              print(result.stderr[-2048:], end='', flush=True)
+              result.check_returncode()
+          GIT_PROBE
           /mingw64/bin/python -m venv "$RUNNER_TEMP/package-evidence/clients"
           "$(cygpath -m "$RUNNER_TEMP/package-evidence/clients/bin/python.exe")" -m pip install -r test/integ/http2-client-requirements.txt
       - name: Build selected prerequisites
-        run: /mingw64/bin/python scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/package-evidence/prerequisites"
+        run: |
+          export PATH="/c/Program Files/Git/cmd:$PATH"
+          /mingw64/bin/python scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/package-evidence/prerequisites"
       - name: Bootstrap
         run: ./bootstrap
       - name: Installed matrix (native Python; IOCP and WSAPoll)
-        run: >-
-          /mingw64/bin/python scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix"
-          --provider-prefix "$(cygpath -m "$RUNNER_TEMP/package-evidence/prerequisites/provider")" --toolchain-prefix "$(cygpath -m /mingw64)"
-          --client-python "$(cygpath -m "$RUNNER_TEMP/package-evidence/clients/bin/python.exe")" --node node --compiler clang++ --cc clang --jobs 2
+        run: |
+          export PATH="/c/Program Files/Git/cmd:$PATH"
+          /mingw64/bin/python scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" \
+            --provider-prefix "$(cygpath -m "$RUNNER_TEMP/package-evidence/prerequisites/provider")" --toolchain-prefix "$(cygpath -m /mingw64)" \
+            --client-python "$(cygpath -m "$RUNNER_TEMP/package-evidence/clients/bin/python.exe")" --node node --compiler clang++ --cc clang --jobs 2
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -146,21 +158,30 @@ jobs:
           release: '14.3'
           mem: 8192
           cpu: 2
-          prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm git node24
+          prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm19 git node24
           run: |
             export RUNNER_TEMP=/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}
             mkdir -p "$RUNNER_TEMP/package-evidence"
             trap 'cp -R "$RUNNER_TEMP/package-evidence" ./package-evidence' EXIT
             if [ "$(node --version)" != v24.15.0 ]; then
               mkdir -p "$RUNNER_TEMP/node-source"
+              node_logs="$RUNNER_TEMP/package-evidence/node-source"
+              mkdir -p "$node_logs"
               curl --fail --location https://nodejs.org/dist/v24.15.0/node-v24.15.0.tar.gz -o "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz"
               test "$(sha256 -q "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz")" = 729de494dd2872e5a3a6c32a1cd156a5413d4aca2772b2d873ee86bb5531bcd9
               tar -xzf "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz" -C "$RUNNER_TEMP/node-source"
               (
                 cd "$RUNNER_TEMP/node-source/node-v24.15.0"
-                ./configure --prefix="$RUNNER_TEMP/node"
-                gmake -j2 > "$RUNNER_TEMP/node-source/build.log" 2>&1
-                gmake install >> "$RUNNER_TEMP/node-source/build.log" 2>&1
+                {
+                  node_llvm_bin="$(llvm-config19 --bindir)"
+                  export CC="$node_llvm_bin/clang" CXX="$node_llvm_bin/clang++"
+                  printf 'CC=%s\nCXX=%s\n' "$CC" "$CXX"
+                  "$CC" --version
+                  "$CXX" --version
+                } > "$node_logs/compiler.log" 2>&1
+                ./configure --prefix="$RUNNER_TEMP/node" > "$node_logs/configure.log" 2>&1
+                gmake -j2 > "$node_logs/build.log" 2>&1
+                gmake install >> "$node_logs/build.log" 2>&1
               )
               export PATH="$RUNNER_TEMP/node/bin:$PATH"
             fi
@@ -173,6 +194,11 @@ jobs:
             python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" \
               --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" \
               --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --pkg-config-dir /usr/local/share/pkgconfig --compiler clang++ --cc clang --make gmake --jobs 2
+      - name: Recover FreeBSD evidence
+        if: always()
+        run: |
+          mkdir -p package-evidence
+          scp -O -r freebsd:/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}/package-evidence/. package-evidence/
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

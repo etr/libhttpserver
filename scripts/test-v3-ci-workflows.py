@@ -28,6 +28,148 @@ def workflow_shell(lane, job, step):
     raise AssertionError('unsupported workflow fixture shell: ' + shell)
 
 
+@unittest.skipIf(os.name == 'nt', 'FreeBSD VM commands use a POSIX shell')
+class FreeBSDNodePrerequisites(unittest.TestCase):
+    workflows = ('v3-package-validation.yml', 'v3-release-acceptance.yml')
+
+    def execute_prerequisite(self, root, name, fail_stage):
+        steps = yaml.safe_load((ROOT / '.github/workflows' / name).read_text())['jobs']['freebsd']['steps']
+        vm = next(step for step in steps if 'freebsd-vm@' in step.get('uses', ''))
+        runner = root / 'runner'
+        tools = root / 'tools'
+        tools.mkdir()
+        llvm = root / 'selected-llvm19'
+        llvm.mkdir()
+        scripts = {
+            'node': '#!/bin/sh\necho v24.21.0\n',
+            'llvm-config19': '#!/bin/sh\necho "$SELECTED_LLVM"\n',
+            'curl': '#!/bin/sh\nexit 0\n',
+            'sha256': '#!/bin/sh\necho 729de494dd2872e5a3a6c32a1cd156a5413d4aca2772b2d873ee86bb5531bcd9\n',
+            # Download/extraction is the external boundary; execute the workflow's
+            # actual configure invocation and capture what reaches its subprocess.
+            'tar': '''#!/usr/bin/env python3
+import os, pathlib
+source = pathlib.Path(os.environ['FIXTURE_RUNNER']) / 'node-source/node-v24.15.0'
+source.mkdir(parents=True)
+configure = source / 'configure'
+configure.write_text(''' + repr('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+pathlib.Path(os.environ['OBSERVED']).write_text(json.dumps({key: os.environ.get(key) for key in ('CC', 'CXX')}))
+print('node-configure-diagnostic', flush=True)
+sys.exit(43 if os.environ['FAIL_STAGE'] == 'configure' else 0)
+''') + ''')
+configure.chmod(0o755)
+''',
+            'gmake': '#!/bin/sh\necho node-build-diagnostic\nexit 47\n',
+        }
+        for name_, source in scripts.items():
+            path = tools / name_
+            path.write_text(source)
+            path.chmod(0o755)
+        for compiler in ('clang', 'clang++'):
+            path = llvm / compiler
+            path.write_text('#!/bin/sh\necho "selected clang version 19.1.7"\n')
+            path.chmod(0o755)
+        run = vm['with']['run']
+        run = '\n'.join('export RUNNER_TEMP="' + str(runner) + '"' if line.startswith('export RUNNER_TEMP=') else line for line in run.splitlines())
+        env = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ['PATH'],
+                   FIXTURE_RUNNER=str(runner), SELECTED_LLVM=str(llvm),
+                   OBSERVED=str(root / 'observed.json'), FAIL_STAGE=fail_stage)
+        env.pop('CC', None)
+        env.pop('CXX', None)
+        result = subprocess.run(['sh', '-eu', '-c', run], cwd=root, env=env,
+                                capture_output=True, text=True, timeout=10)
+        return result, steps, runner, llvm, env
+
+    def test_pinned_node_configure_receives_selected_llvm_compilers(self):
+        for name in self.workflows:
+            with self.subTest(workflow=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                result, _, _, llvm, _ = self.execute_prerequisite(root, name, 'build')
+                self.assertEqual(result.returncode, 47, result.stdout + result.stderr)
+                observed = json.loads((root / 'observed.json').read_text())
+                self.assertEqual(observed, dict(CC=str(llvm / 'clang'), CXX=str(llvm / 'clang++')))
+
+    def test_node_failure_diagnostics_survive_failed_vm_copyback(self):
+        for name in self.workflows:
+            for stage, status in (('configure', 43), ('build', 47)):
+                with self.subTest(workflow=name, stage=stage), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    result, steps, runner, llvm, env = self.execute_prerequisite(root, name, stage)
+                    self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                    recovery = next((step for step in steps if step.get('name') == 'Recover FreeBSD evidence'), None)
+                    self.assertIsNotNone(recovery, 'Failed VM commands skip the action copyback; recover evidence on the host')
+                    self.assertEqual(recovery['if'], 'always()')
+                    # Emulate only the SSH transport boundary after failed action
+                    # copyback: the evidence must come from the VM temp directory.
+                    scp = root / 'tools/scp'
+                    scp.write_text('''#!/usr/bin/env python3
+import os, pathlib, shutil, sys
+remote, destination = sys.argv[-2:]
+assert remote.startswith('freebsd:/tmp/v3-'), remote
+folder = 'package-evidence' if '/package-evidence/' in remote else 'platform-evidence'
+source = pathlib.Path(os.environ['FIXTURE_RUNNER']) / folder
+shutil.copytree(source, destination, dirs_exist_ok=True)
+''')
+                    scp.chmod(0o755)
+                    host = root / 'host'
+                    host.mkdir()
+                    recovery_run = recovery['run'].replace('${{ github.run_id }}', '123').replace('${{ github.run_attempt }}', '1')
+                    recovered = subprocess.run(['bash', '-eu', '-c', recovery_run], cwd=host,
+                                               env=env, capture_output=True, text=True, timeout=10)
+                    self.assertEqual(recovered.returncode, 0, recovered.stdout + recovered.stderr)
+                    upload = next(step for step in steps if step.get('if') == 'always()' and '/upload-artifact@' in step.get('uses', ''))
+                    logs = host / upload['with']['path'] / 'node-source'
+                    provenance = (logs / 'compiler.log').read_text()
+                    self.assertIn(str(llvm / 'clang++'), provenance)
+                    self.assertIn('clang version 19', provenance)
+                    self.assertIn('node-configure-diagnostic', (logs / 'configure.log').read_text())
+                    if stage == 'build':
+                        self.assertIn('node-build-diagnostic', (logs / 'build.log').read_text())
+                    self.assertFalse((logs / 'node-v24.15.0').exists(), 'Do not upload the Node source/build tree')
+
+
+class WindowsGitPreflight(unittest.TestCase):
+    def test_native_git_checkout_diagnostic_runs_before_provider_build(self):
+        from contextlib import redirect_stdout
+        import io
+        from unittest.mock import patch
+        for name, job in (('v3-package-validation.yml', 'mingw64'), ('v3-release-acceptance.yml', 'windows')):
+            with self.subTest(workflow=name):
+                steps = workflow(name)['jobs'][job]['steps']
+                preflight = next((step for step in steps if "<<'GIT_PROBE'" in step.get('run', '')), None)
+                self.assertIsNotNone(preflight, 'native Git checkout preflight missing')
+                provider = next(step for step in steps if 'prepare-v3-package-ci.py' in step.get('run', ''))
+                self.assertLess(steps.index(preflight), steps.index(provider))
+                script = preflight['run'].split("<<'GIT_PROBE'\n", 1)[1].split('\nGIT_PROBE', 1)[0]
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    git = root / ('git.exe' if os.name == 'nt' else 'git')
+                    git.write_text('selected native Git fixture')
+                    git.chmod(0o755)
+                    popen = subprocess.Popen
+                    code = '''
+import sys
+if sys.argv[1:] == ['--version']:
+    print('git version selected-native-fixture')
+else:
+    assert sys.argv[1:] == ['rev-parse', '--verify', 'HEAD^{commit}'], sys.argv
+    print('fatal: native checkout diagnostic fixture', file=sys.stderr)
+    sys.exit(128)
+'''
+                    def create_process(argv, **options):
+                        self.assertEqual(argv[0], 'git')
+                        return popen([sys.executable, '-c', code] + argv[1:], **options)
+                    output = io.StringIO()
+                    with patch.dict(os.environ, PATH=str(root)), redirect_stdout(output), \
+                            patch.object(subprocess, 'Popen', side_effect=create_process):
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            exec(compile(script, 'native-git-preflight', 'exec'), {})
+                    self.assertIn(str(git), output.getvalue())
+                    self.assertIn('git version selected-native-fixture', output.getvalue())
+                    self.assertIn('fatal: native checkout diagnostic fixture', output.getvalue())
+
+
 class CIWorkflows(unittest.TestCase):
     def test_artifact_api_head_is_bound_to_trusted_event_head(self):
         lane = workflow('v3-release-acceptance.yml')

@@ -97,7 +97,8 @@ class peer_policy_impl {
         }
         {
             std::lock_guard<std::mutex> lock(writers_);
-            auto next = std::make_shared<generation>(*current_.load(std::memory_order_acquire));
+            auto next = std::make_shared<generation>(*std::atomic_load_explicit(
+                &current_, std::memory_order_acquire));
             insert_aware(denying ? next->deny : next->allow, *parsed);
             publish(std::move(next));
         }
@@ -116,7 +117,8 @@ class peer_policy_impl {
         }
         {
             std::lock_guard<std::mutex> lock(writers_);
-            auto next = std::make_shared<generation>(*current_.load(std::memory_order_acquire));
+            auto next = std::make_shared<generation>(*std::atomic_load_explicit(
+                &current_, std::memory_order_acquire));
             std::vector<net::address_pattern>& list =
                 denying ? next->deny : next->allow;
             for (std::size_t i = 0; i < list.size(); ++i) {
@@ -133,24 +135,28 @@ class peer_policy_impl {
 
     void set_mode(peer_policy_mode mode) noexcept {
         std::lock_guard<std::mutex> lock(writers_);
-        auto next = std::make_shared<generation>(*current_.load(std::memory_order_acquire));
+        auto next = std::make_shared<generation>(*std::atomic_load_explicit(
+            &current_, std::memory_order_acquire));
         next->mode = mode;
         publish(std::move(next));
     }
 
     peer_policy_mode mode() const noexcept {
-        return current_.load(std::memory_order_acquire)->mode;
+        return std::atomic_load_explicit(
+            &current_, std::memory_order_acquire)->mode;
     }
 
     void set_enabled(bool enabled) noexcept {
         std::lock_guard<std::mutex> lock(writers_);
-        auto next = std::make_shared<generation>(*current_.load(std::memory_order_acquire));
+        auto next = std::make_shared<generation>(*std::atomic_load_explicit(
+            &current_, std::memory_order_acquire));
         next->enabled = enabled;
         publish(std::move(next));
     }
 
     bool enabled() const noexcept {
-        return current_.load(std::memory_order_acquire)->enabled;
+        return std::atomic_load_explicit(
+            &current_, std::memory_order_acquire)->enabled;
     }
 
     bool armed() const noexcept {
@@ -159,7 +165,8 @@ class peer_policy_impl {
 
     peer_verdict classify(const net::peer_address& peer) {
         if (!armed()) return peer_verdict{};
-        const auto snapshot = current_.load(std::memory_order_acquire);
+        const auto snapshot = std::atomic_load_explicit(
+            &current_, std::memory_order_acquire);
         // A concurrent disarm may have published after the gate was observed.
         if (!snapshot->armed) return peer_verdict{};
         const bool denied = matches(snapshot->deny, peer.address);
@@ -192,12 +199,16 @@ class peer_policy_impl {
         // Publish ownership before releasing the scalar gate. Readers arriving
         // during publication may use an older complete generation; readers
         // synchronized after a mutation see its gate and generation together.
-        current_.store(std::move(next), std::memory_order_release);
+        std::atomic_store_explicit(&current_,
+            std::shared_ptr<const generation>(std::move(next)),
+            std::memory_order_release);
         armed_.store(armed, std::memory_order_release);
     }
 
     std::mutex writers_;
-    std::atomic<std::shared_ptr<const generation>> current_{
+    // Use the C++20 shared_ptr atomic functions: libc++ does not yet provide
+    // atomic<shared_ptr>. Every concurrent access must stay atomic.
+    std::shared_ptr<const generation> current_{
         std::make_shared<const generation>()};
     std::atomic<bool> armed_{false};
 };

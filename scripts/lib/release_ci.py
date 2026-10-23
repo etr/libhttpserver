@@ -2,8 +2,11 @@
 from datetime import datetime
 import hashlib
 import json
+import os
+import platform
 import re
-from pathlib import PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
+import shutil
 import stat
 import subprocess
 import zipfile
@@ -76,11 +79,19 @@ def validate_request(root, commit, version):
     try:
         actual = subprocess.check_output(['git', 'rev-parse', '--verify', 'HEAD^{commit}'], cwd=root, text=True, stderr=subprocess.PIPE).strip()
     except (OSError, subprocess.CalledProcessError) as error:
-        raise ValueError('selected request requires executable Git and a checkout') from error
+        diagnostic = error.stderr if isinstance(error, subprocess.CalledProcessError) else str(error)
+        detail = ': ' + diagnostic[-2048:].strip() if diagnostic else ''
+        raise ValueError('selected request requires executable Git and a checkout' + detail) from error
     require(actual == commit, 'selected commit differs from checkout')
     status = subprocess.check_output(['git', 'status', '--porcelain=v1', '--untracked-files=all'], cwd=root, text=True)
     require(not status, 'selected checkout has modified/untracked source inputs')
-    subprocess.run(['bash', str(root / 'scripts/validate-version.sh'), version], cwd=root, check=True)
+    bash = 'bash'
+    if platform.system() == 'Windows':
+        # CreateProcess searches System32 before PATH for an unqualified name.
+        bash = shutil.which('bash', path=os.environ.get('PATH', ''))
+        require(bash, 'bash is unavailable on the selected PATH')
+        bash = str(Path(bash).resolve())
+    subprocess.run([bash, str(root / 'scripts/validate-version.sh'), version], cwd=root, check=True)
 
 
 def verify_download(archive, metadata, run, expected, expected_digest, destination):

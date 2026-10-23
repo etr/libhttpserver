@@ -44,7 +44,14 @@ def package_lane(args, source, output, mode, inventory):
     if mode == 'yes':
         env['V3_TLS_CFLAGS'] = '-I' + (args.provider_prefix / 'include').as_posix()
         env['V3_TLS_LIBS'] = '-L' + (args.provider_prefix / 'lib').as_posix() + ' -lssl -lcrypto'
-    command(['bash', (source / 'configure').as_posix(), '--enable-v3-tls=' + mode, '--disable-examples',
+    bash = 'bash'
+    if platform.system() == 'Windows':
+        # CreateProcess searches System32 before PATH for an unqualified name.
+        bash = shutil.which('bash', path=env.get('PATH', ''))
+        if not bash:
+            raise ValueError('bash is unavailable on the selected PATH')
+        bash = str(Path(bash).resolve())
+    command([bash, (source / 'configure').as_posix(), '--enable-v3-tls=' + mode, '--disable-examples',
              '--prefix=' + prefix.as_posix()], build, env)
     command([args.make, '-j' + str(args.jobs)], build, env)
     command([args.make, 'install'], build, env)
