@@ -243,8 +243,9 @@ class http1_response_outbox {
 
     // Preallocate the whole candidate before serialization and keep the
     // old allocation charged until its replacement has copied the bytes.
-    // Geometric growth preserves amortized append cost. An allocator that
-    // exceeds this admitted bound is refused before publishing its buffer.
+    // Geometric growth preserves amortized append cost. Allocator-rounded
+    // excess must also be admitted before copying or publishing the buffer;
+    // refusal or an exception destroys the candidate and rolls back its charge.
     // Inline capacity is conservatively included for nonempty buffers.
     bool reserve_buffer_locked(http1_response_sink& sink, std::size_t size);
 
