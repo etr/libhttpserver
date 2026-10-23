@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import shlex
 import time
 from package_commands import dependencies
@@ -19,7 +20,8 @@ def compile_probe(compiler, sources, flags, libraries, executable, command, env,
         included.update(dependencies(depfile))
         objects.append(str(obj))
     matrix.check_dependencies(included, prefix, source, build, private)
-    command(shlex.split(compiler) + objects + libraries + ['-Wl,-Map,' + str(executable) + '.map', '-o', str(executable)],
+    map_option = '-Wl,-map,' if platform.system() == 'Darwin' else '-Wl,-Map,'
+    command(shlex.split(compiler) + objects + libraries + [map_option + str(executable) + '.map', '-o', str(executable)],
             executable.parent, env)
     return {'compile_options': ['-O0', '-g'] if compile_options is None else list(compile_options), 'dependencies': sorted(included), 'sources': {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources},
             'artifact_sha256': hashlib.sha256(executable.read_bytes()).hexdigest(), 'private_test_headers': private,
