@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-entropy: portable Windows CNG success status
 
-Status: Implemented locally; caller validation/finalization pending. Native
+Status: Complete (local implementation, Groundwork validation and finalization). Native
 Windows execution remains CI / v3 PR owned. Base: `v3` at
 `a68ba478e967988331c167af102189c905b6fe95`.
 
@@ -32,7 +32,7 @@ Action items:
 - [x] Run changed-file cpplint and diff checks.
 - [x] Retain commands, logs, docs and doubts at root
   `.debug/FEATURE-ci-windows-entropy/`.
-- [ ] Caller: Groundwork validation and local finalization into v3.
+- [x] Caller: Groundwork validation and local finalization into v3; four reviewers approved with zero findings.
 - [ ] CI / v3 PR: genuine native Windows SDK compilation/execution.
 
 Local verification: the unchanged Linux entropy executable passes 5 tests and
