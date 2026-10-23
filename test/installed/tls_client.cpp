@@ -78,6 +78,46 @@ struct socket_owner {
     ~socket_owner() { if (fd >= 0) close(fd); }
 #endif
 };
+// Add or replace one extension using the actual issuer for key identifiers.
+void fixture_extension(X509* cert, X509* issuer, int nid, const char* value) {
+    X509V3_CTX context;
+    X509V3_set_ctx(&context, issuer, cert, nullptr, nullptr, 0);
+    std::unique_ptr<X509_EXTENSION, decltype(&X509_EXTENSION_free)> extension(
+        X509V3_EXT_conf_nid(nullptr, &context, nid, value), X509_EXTENSION_free);
+    require(static_cast<bool>(extension), "fixture extension");
+    const int index = X509_get_ext_by_NID(cert, nid, -1);
+    if (index >= 0) X509_EXTENSION_free(X509_delete_ext(cert, index));
+    require(X509_add_ext(cert, extension.get(), -1) == 1, "fixture extension write");
+}
+// Original CA private keys were not retained. Reissue only server certificates,
+// retaining leaf keys and all template identities, validity dates and serials.
+void regenerate_server_fixtures(const std::string& directory) {
+    std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> root_key(EVP_RSA_gen(2048), EVP_PKEY_free),
+        intermediate_key(EVP_RSA_gen(2048), EVP_PKEY_free);
+    require(root_key && intermediate_key, "server fixture CA keys");
+    const std::array<std::string, 4> names{"root", "intermediate", "a", "b"};
+    std::vector<std::unique_ptr<X509, decltype(&X509_free)>> certs;
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        std::unique_ptr<FILE, int (*)(FILE*)> input(fopen((directory + "/" + names[index] + ".pem").c_str(), "r"), fclose);
+        require(static_cast<bool>(input), "server fixture template");
+        certs.emplace_back(PEM_read_X509(input.get(), nullptr, nullptr, nullptr), X509_free);
+        auto* cert = certs.back().get();
+        require(cert != nullptr, "server fixture certificate");
+        auto* issuer = certs[index > 1 ? 1 : 0].get();
+        auto* signing_key = index > 1 ? intermediate_key.get() : root_key.get();
+        if (index < 2) {
+            require(X509_set_pubkey(cert, index == 0 ? root_key.get() : intermediate_key.get()) == 1, "server fixture CA public key");
+            fixture_extension(cert, issuer, NID_subject_key_identifier, "hash");
+            fixture_extension(cert, issuer, NID_key_usage, "critical,keyCertSign,cRLSign");
+        }
+        if (index > 0) fixture_extension(cert, issuer, NID_authority_key_identifier, "keyid:always");
+        require(X509_sign(cert, signing_key, EVP_sha256()) > 0, "server fixture signing");
+    }
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        std::unique_ptr<FILE, int (*)(FILE*)> output(fopen((directory + "/" + names[index] + ".pem").c_str(), "w"), fclose);
+        require(output && PEM_write_X509(output.get(), certs[index].get()) == 1, "server fixture write");
+    }
+}
 void fixtures(const std::string& directory) {
     std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key(EVP_RSA_gen(2048), EVP_PKEY_free);
     require(static_cast<bool>(key), "fixture key generation");
@@ -135,15 +175,18 @@ void fixtures(const std::string& directory) {
     require(X509_set_issuer_name(root.get(), root_name) == 1 && X509_set_pubkey(root.get(), root_key.get()) == 1, "rotation root identity");
     std::unique_ptr<X509_EXTENSION, decltype(&X509_EXTENSION_free)> constraints(
         X509V3_EXT_conf_nid(nullptr, nullptr, NID_basic_constraints, "critical,CA:TRUE"), X509_EXTENSION_free);
-    require(constraints && X509_add_ext(root.get(), constraints.get(), -1) == 1
-        && X509_sign(root.get(), root_key.get(), EVP_sha256()) > 0, "rotation root signing");
+    require(constraints && X509_add_ext(root.get(), constraints.get(), -1) == 1, "rotation root constraints");
+    fixture_extension(root.get(), root.get(), NID_key_usage, "critical,keyCertSign,cRLSign");
+    fixture_extension(root.get(), root.get(), NID_subject_key_identifier, "hash");
+    require(X509_sign(root.get(), root_key.get(), EVP_sha256()) > 0, "rotation root signing");
     X509_NAME_add_entry_by_txt(X509_get_subject_name(leaf.get()), "CN", MBSTRING_ASC,
         reinterpret_cast<const unsigned char*>("a.example"), -1, -1, 0);
     require(X509_set_issuer_name(leaf.get(), root_name) == 1 && X509_set_pubkey(leaf.get(), key.get()) == 1, "rotation leaf identity");
     std::unique_ptr<X509_EXTENSION, decltype(&X509_EXTENSION_free)> san(
         X509V3_EXT_conf_nid(nullptr, nullptr, NID_subject_alt_name, "DNS:a.example"), X509_EXTENSION_free);
-    require(san && X509_add_ext(leaf.get(), san.get(), -1) == 1
-        && X509_sign(leaf.get(), root_key.get(), EVP_sha256()) > 0, "rotation leaf signing");
+    require(san && X509_add_ext(leaf.get(), san.get(), -1) == 1, "rotation leaf SAN");
+    fixture_extension(leaf.get(), root.get(), NID_authority_key_identifier, "keyid:always");
+    require(X509_sign(leaf.get(), root_key.get(), EVP_sha256()) > 0, "rotation leaf signing");
     output.reset(fopen((directory + "/rotation-root.pem").c_str(), "w"));
     require(output && PEM_write_X509(output.get(), root.get()) == 1, "rotation root write");
     output.reset(fopen((directory + "/root.pem").c_str(), "a"));
@@ -157,6 +200,9 @@ void fixtures(const std::string& directory) {
 }
 int main(int argc, char** argv) {
     try {
+        if (argc == 3 && std::string(argv[1]) == "regenerate-server") {
+            regenerate_server_fixtures(argv[2]); return 0;
+        }
         if (argc == 3 && std::string(argv[1]) == "fixtures") {
             fixtures(argv[2]); return 0;
         }

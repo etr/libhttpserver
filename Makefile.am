@@ -286,7 +286,7 @@ check-hygiene:
 # still runs the full test suite plus the header / example / lint gates, but
 # skips the source-only doc gates whose inputs it cannot satisfy. Release runners
 # may provide a verified specs/ tooling bundle; it is not a source checkout.
-check-local: check-v3-compiled-operations check-headers check-examples lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage check-v3-stage-install
+check-local: check-v3-compiled-operations check-headers check-examples lint-warning-suppressions lint-littletest-skip-exit-code lint-fence-balance check-v3-native-linkage check-v3-stage-install $(V3_TLS_FIXTURE_CHECK)
 	@if test -d "$(top_srcdir)/specs" && test -e "$(top_srcdir)/.git"; then \
 		$(MAKE) $(AM_MAKEFLAGS) check-readme check-release-notes check-doxygen ; \
 	else \
@@ -643,3 +643,15 @@ EXTRA_DIST += .github/workflows/codeql-analysis.yml .github/workflows/verify-bui
 EXTRA_DIST += docs/v3-ci.md
 
 EXTRA_DIST += scripts/ci-macos-toolchain.sh scripts/test-v3-platform-ci.py
+
+# Real independent certificate fixtures must satisfy strict client verification.
+EXTRA_DIST += scripts/test-v3-tls-fixtures.py
+if NATIVE_V3_TLS
+V3_TLS_FIXTURE_CHECK = check-v3-tls-fixtures
+check-v3-tls-fixtures:
+	@CXX="$(CXX)" V3_TLS_CFLAGS="$(V3_TLS_CFLAGS)" V3_TLS_LIBS="$(V3_TLS_LIBS)" python3 $(top_srcdir)/scripts/test-v3-tls-fixtures.py
+else
+check-v3-tls-fixtures:
+	@echo "check-v3-tls-fixtures: requires the TLS-on provider lane"
+endif
+.PHONY: check-v3-tls-fixtures

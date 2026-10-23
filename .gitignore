@@ -177,3 +177,5 @@ __pycache__/
 !scripts/test-v3-platform-ci.py
 !test/integ/release_ci_test.py
 !test/integ/release_platform_bundle_test.py
+
+!scripts/test-v3-tls-fixtures.py
