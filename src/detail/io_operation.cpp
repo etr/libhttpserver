@@ -27,44 +27,9 @@
 
 #include "httpserver/detail/io_operation.hpp"
 
-#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
-#include <algorithm>
-#include <array>
-#endif
 #include <exception>
 #include <memory>
 #include <utility>
-
-#include <httpserver/detail/deadline_trace.hpp>
-
-#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
-namespace httpserver::detail {
-namespace {
-constinit std::array<deadline_trace_record, 2048> deadline_records{};
-constinit std::atomic<std::size_t> deadline_record_count{0};
-}  // namespace
-
-deadline_trace_record* deadline_trace_reserve(long long monotonic_ns) noexcept {  // NOLINT(runtime/int)
-    const auto index = deadline_record_count.fetch_add(1, std::memory_order_relaxed);
-    if (index >= deadline_records.size()) return nullptr;
-    auto& record = deadline_records[index];
-    record.monotonic_ns = monotonic_ns;
-    return &record;
-}
-
-void deadline_trace_flush() noexcept {
-    const int saved_errno = errno;
-    const auto count = std::min(deadline_record_count.load(std::memory_order_relaxed), deadline_records.size());
-    for (std::size_t index = 0; index < count; ++index) {
-        const auto& record = deadline_records[index];
-        if (!record.ready.load(std::memory_order_acquire)) continue;
-        std::fprintf(stderr, "V3_DEADLINE event_ns=%lld ", record.monotonic_ns);  // NOLINT(build/include_what_you_use)
-        record.write(record);
-    }
-    errno = saved_errno;
-}
-}  // namespace httpserver::detail
-#endif
 
 namespace httpserver {
 namespace detail {
@@ -144,13 +109,6 @@ void op_state::apply(io_result result) {
         witness = std::move(witness_);
         resume_ex = std::exchange(resume_ex_, nullptr);
     }
-#if defined(HTTPSERVER_DIAG_HEADER_DEADLINE)
-    if (kind_ == io_op_kind::timer) {
-        V3_DEADLINE_TRACE("apply conn=%llu token=%p seq=%llu result=%d frame=%d executor=%d now_ns=%lld\n",
-            static_cast<deadline_trace_id>(connection_), static_cast<void*>(this), static_cast<deadline_trace_id>(sequence()),
-            static_cast<int>(result.code), static_cast<bool>(frame), resume_ex != nullptr, deadline_trace_ns(std::chrono::steady_clock::now()));
-    }
-#endif
     if (frame) {
         resume_guarded(resume_ex, witness, frame);
     }

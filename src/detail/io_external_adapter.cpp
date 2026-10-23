@@ -31,8 +31,6 @@
 #include <utility>
 #include <vector>
 
-#include <httpserver/detail/deadline_trace.hpp>
-
 namespace httpserver {
 namespace detail {
 namespace {
@@ -94,13 +92,10 @@ void io_poll_backend::notify() {
     bool failed = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        V3_DEADLINE_TRACE("notify backend=%p pending=%d failed=%d\n", static_cast<void*>(this), wake_pending_, wake_failed_);
         if (wake_failed_ || wake_pending_) return;
         if (wake_.signal()) {
-            V3_DEADLINE_TRACE("signal backend=%p result=1\n", static_cast<void*>(this));
             wake_pending_ = true;
         } else {
-            V3_DEADLINE_TRACE("signal backend=%p result=0\n", static_cast<void*>(this));
             wake_failed_ = true;
             active_ = false;
             failed = true;
@@ -112,10 +107,8 @@ void io_poll_backend::notify() {
 }
 
 void io_poll_backend::acknowledge_wake() {
-    V3_DEADLINE_TRACE("acknowledge backend=%p pending=%d failed=%d\n", static_cast<void*>(this), wake_pending_, wake_failed_);
     if (!wake_.acknowledge()) wake_failed_ = true;
     wake_pending_ = false;
-    V3_DEADLINE_TRACE("acknowledged backend=%p failed=%d\n", static_cast<void*>(this), wake_failed_);
 }
 
 server::interest_snapshot io_poll_backend::interests() const {
@@ -168,7 +161,6 @@ http::outcome io_poll_backend::dispatch(
         close();
         return status;
     }
-    V3_DEADLINE_TRACE("dispatch backend=%p events=%zu now_ns=%lld\n", static_cast<void*>(this), events.size(), deadline_trace_ns(now));
     for (const auto& event : events) dispatch_event(event);
     expire_due_timers(now);
     return ready();

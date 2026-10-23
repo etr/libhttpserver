@@ -25,8 +25,6 @@
 #include <utility>
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/http1_websocket_handshake.hpp>
-
-#include <httpserver/detail/deadline_trace.hpp>
 namespace httpserver::detail {
 namespace {
 bool retire_completed_front(http1_response_outbox& outbox) {
@@ -238,15 +236,9 @@ bool connection_engine::transport_output_pending_locked() const {
 bool connection_engine::arm_watchdog(timer_operation& timer, const watchdog_plan& plan) {
     std::lock_guard lock(mu_);
     const auto current = plan_watchdog_locked();
-    V3_DEADLINE_TRACE("arm_check conn=%llu planned_ns=%lld current_ns=%lld exit=%d defer=%d current_defer=%d\n",
-        static_cast<deadline_trace_id>(id_), deadline_trace_ns(plan.deadline), deadline_trace_ns(current.deadline),
-        current.exit, plan.defer, current.defer);
     if (current.exit) return false;
     if (current.defer != plan.defer || current.deadline != plan.deadline) return false;
     pending_timer_ = timer.state();
-    V3_DEADLINE_TRACE("arm conn=%llu token=%p deadline_ns=%lld now_ns=%lld header_ms=%lld\n",
-        static_cast<deadline_trace_id>(id_), static_cast<void*>(timer.state().get()), deadline_trace_ns(timer.deadline()),
-        deadline_trace_ns(std::chrono::steady_clock::now()), deadline_trace_ms(config_.timeouts.header));
     timer.submit(backend_);
     return true;
 }

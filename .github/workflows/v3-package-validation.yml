@@ -9,7 +9,6 @@ permissions:
   contents: read
 jobs:
   linux:
-    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -45,15 +44,10 @@ jobs:
           retention-days: 14
           if-no-files-found: error
   macos:
-    permissions:
-      contents: read
-      actions: read
     runs-on: macos-15
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'c0cfdabc8040273d60c610269a93d1c687ed8517' || github.sha }}
       - name: Prerequisites
         run: brew install autoconf automake libtool pkg-config python curl llvm
       - name: Select complete C++20 compiler and runtime
@@ -73,226 +67,12 @@ jobs:
       - name: Bootstrap
         run: ./bootstrap
       - name: Installed matrix
-        if: github.event_name != 'workflow_dispatch'
         run: |
           prefix=()
           if ! python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",443)); s.close()'; then
             prefix=(sudo env "PATH=$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD")
           fi
           "${prefix[@]}" python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" --pkg-config-dir "$(brew --prefix)/share/pkgconfig" --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --jobs 2
-      # Branch-only checkpoint: remove before merging to v3. This is not matrix proof.
-      - name: Diagnose installed shared TLS-off external HTTP1 on Darwin
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PY_DIAGNOSTIC'
-          import hashlib, importlib.util, json, os, platform, subprocess, sys
-          from pathlib import Path
-          checkout = Path.cwd().resolve()
-          sys.path.insert(0, str(checkout / 'scripts/lib'))
-          from package_commands import Commands
-          import release_artifact as identity
-          from release_ci import selected_archive, verify_download
-          spec = importlib.util.spec_from_file_location('audit', checkout / 'scripts/audit-v3-installed-package.py')
-          audit = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(audit)
-          assert platform.system() == 'Darwin'
-          output = Path(os.environ['RUNNER_TEMP']) / 'package-evidence/header-deadline-diagnostic'
-          output.mkdir()
-          runner_commands = output / 'runner'
-          runner_commands.mkdir()
-          command = Commands(runner_commands)
-          provider = output.parent / 'prerequisites/provider'
-          compiler = os.environ['V3_CXX']
-          env = audit.clean_environment()
-          for key in ('GH_TOKEN', 'GITHUB_TOKEN', 'V3_RELEASE_IDENTITY'):
-              env.pop(key, None)
-          receipt = dict(kind='diagnostic-only; not complete package validation', tls='no', linkage='shared',
-                         control='unmodified c0 package_lane prefix through first two private shared TLS-off suites',
-                         driver_revision=os.environ['GITHUB_SHA'],
-                         runner_context=dict(uid=os.getuid(), euid=os.geteuid(), gid=os.getgid(), egid=os.getegid(), cwd=str(checkout)),
-                         revision=command(['git', 'rev-parse', 'HEAD'], checkout, env).strip(),
-                         compiler=command([compiler, '--version'], checkout, env),
-                         provider_header_sha256=hashlib.sha256((provider / 'include/openssl/opensslv.h').read_bytes()).hexdigest())
-          try:
-              expected = dict(repository=os.environ['GITHUB_REPOSITORY'], run_id='39969790346', run_attempt='1',
-                              workflow_head='c0cfdabc8040273d60c610269a93d1c687ed8517', artifact_id='12508482722')
-              endpoint = 'repos/' + expected['repository'] + '/actions/artifacts/' + expected['artifact_id']
-              metadata = json.loads(subprocess.check_output(['gh', 'api', endpoint], text=True))
-              run = json.loads(subprocess.check_output(['gh', 'api', 'repos/' + expected['repository'] +
-                  '/actions/runs/' + expected['run_id'] + '/attempts/' + expected['run_attempt']], text=True))
-              (output / 'selected-artifact-metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
-              (output / 'selected-run-metadata.json').write_text(json.dumps(run, indent=2) + '\n')
-              downloaded = output / 'selected-archive.zip'
-              with downloaded.open('xb') as destination:
-                  subprocess.run(['gh', 'api', endpoint + '/zip'], stdout=destination, check=True)
-              zip_digest = 'sha256:a08eb79186b13cf12ac8c639f424e13a7de1ee09df5547aab2b4200a951a5f05'
-              verify_download(downloaded, metadata, run, expected, zip_digest, output / 'selected')
-              selected = json.loads((output / 'selected/selected.json').read_text())
-              archive = output / 'selected/libhttpserver-3.0.0.tar.gz'
-              assert selected['commit'] == selected['source']['head'] == expected['workflow_head']
-              assert selected['archive'] == archive.name and archive.stat().st_size == 3053890
-              assert identity.sha256(archive) == selected['sha256'] == '43124552f20bd00fceddc714856d605ca9caf017a849a991c34f16f437fcab83'
-              snapshot = identity.source_identity(checkout)
-              assert snapshot == selected['source']
-              release = selected_archive(checkout, snapshot, archive, selected['sha256'], output / 'source')
-              assert release['source'] == selected['source'] and release['files_sha256'] == selected['files_sha256']
-              source = Path(release['source_root'])
-              (output / 'artifact-identity.json').write_text(json.dumps(release, indent=2) + '\n')
-              identity.verified(source, output / 'artifact-identity.json')
-              assert not (source / 'src/httpserver/detail/deadline_trace.hpp').exists()
-              receipt['source_archive'] = dict(**expected, artifact_zip_sha256=zip_digest,
-                  archive_sha256=selected['sha256'], source_root=str(source),
-                  provenance='original selected c0 extraction via existing selected_archive; no trace overlay')
-              receipt['status'] = 'unmodified extraction ready; privileged prefix control pending'
-          except Exception as error:
-              receipt.update(status='diagnostic failed', error=str(error))
-              raise
-          finally:
-              (output / 'diagnostic.json').write_text(json.dumps(receipt, indent=2) + '\n')
-          PY_DIAGNOSTIC
-          diagnostic_script="$RUNNER_TEMP/package-evidence/header-deadline-build.py"
-          cat > "$diagnostic_script" <<'PY_PRIVILEGED'
-          import argparse, importlib.util, json, os, sys, time
-          from pathlib import Path
-          checkout = Path.cwd().resolve()
-          output = Path(os.environ['RUNNER_TEMP']) / 'package-evidence/header-deadline-diagnostic'
-          receipt = json.loads((output / 'diagnostic.json').read_text())
-          source = Path(receipt['source_archive']['source_root'])
-          sys.path.insert(0, str(source / 'scripts/lib'))
-          import package_commands as commands
-          import package_integration as integration
-          import package_matrix as matrix
-          import package_traffic
-          import package_process
-          import release_artifact as identity
-          spec = importlib.util.spec_from_file_location('installed_control', source / 'scripts/check-v3-installed-consumer.py')
-          installed = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(installed)
-          os.environ['V3_RELEASE_IDENTITY'] = str(output / 'artifact-identity.json')
-          release = identity.verified(source)
-          provider = output.parent / 'prerequisites/provider'
-          os.environ.update(V3_TLS_CFLAGS='-I' + str(provider / 'include'),
-              V3_TLS_LIBS='-L' + str(provider / 'lib') + ' -lssl -lcrypto',
-              V3_OPENSSL=str(provider / 'bin/openssl'), LD_LIBRARY_PATH=str(provider / 'lib'),
-              DYLD_LIBRARY_PATH=str(provider / 'lib'), PATH=str(provider / 'bin') + os.pathsep + os.environ['PATH'])
-          args = argparse.Namespace(compiler=os.environ['V3_CXX'], cc=os.environ['V3_CC'], make='make', jobs=2,
-              optimized=False, provider_prefix=provider.resolve(), prerequisite_prefix=[],
-              pkg_config_dir=[Path(os.environ['V3_DIAGNOSTIC_PKG_CONFIG_DIR']).resolve()],
-              toolchain_prefix=Path(os.environ['V3_PACKAGE_TOOLCHAIN']).resolve(),
-              client_python=str(output.parent / 'clients/bin/python'), node='node')
-          receipt['privileged_context'] = dict(uid=os.getuid(), euid=os.geteuid(), gid=os.getgid(), egid=os.getegid(),
-              cwd=str(checkout), compiler=args.compiler, cc=args.cc, toolchain=str(args.toolchain_prefix),
-              provider_prefix=str(provider), path=os.environ['PATH'], git_safe_directory=os.environ['GIT_CONFIG_VALUE_0'])
-          modules = (installed, installed.audit, commands, integration, matrix, package_traffic, package_process, identity)
-          receipt['helper_bindings'] = {str(Path(module.__file__).relative_to(source)): identity.sha256(module.__file__)
-              for module in modules}
-          assert all(release['files_sha256'].get(name) == digest for name, digest in receipt['helper_bindings'].items())
-          prefix_names = ('native_http1_e2e', 'external_http1_e2e')
-          original_suites = matrix.suites
-          original_run_suites = installed.run_suites
-          original_tree = commands._CommandTree
-          matrix_output = output / 'matrix'
-          matrix_output.mkdir()
-          target_argv = [str(matrix_output / 'tls-no/integration-shared/external_http1_e2e/external_http1_e2e')]
-          sampling = dict(triggered=False, status='not-triggered', threshold_seconds=3.0)
-          sample_delay_seconds = 3.0
-
-          class PrefixComplete(Exception):
-              pass
-
-          def selected_suites(inventory, host, mode):
-              suites = original_suites(inventory, host, mode)
-              return {name: suites[name] for name in prefix_names}
-
-          def stop_after_prefix(*arguments, **keywords):
-              assert arguments[2:4] == ('no', 'shared')
-              result = original_run_suites(*arguments, **keywords)
-              stored = json.loads((arguments[4] / 'suites.json').read_text())
-              assert list(result) == list(prefix_names) and stored == result
-              assert all(row['status'] == 'passed' for row in stored.values())
-              receipt['validated_prefix'] = stored
-              raise PrefixComplete()
-
-          def retain_sampling():
-              (output / 'sampling.json').write_text(json.dumps(sampling, indent=2) + '\n')
-
-          def collect_sample(pid, cwd, env, deadline):
-              tool = Path('/usr/bin/sample')
-              if not tool.is_file():
-                  sampling.update(status='unavailable', error='required native /usr/bin/sample collector absent')
-                  return
-              directory = output / 'sampler'
-              directory.mkdir()
-              command = commands.Commands(directory)
-              command([str(tool), str(pid), '1', '10', '-file', str(output / 'stalled-external.sample.txt')],
-                  cwd, env, timeout=min(5.0, max(0.1, deadline - time.monotonic())))
-              dump = output / 'stalled-external.sample.txt'
-              if not dump.is_file() or not 0 < dump.stat().st_size <= 8 * 1024 * 1024:
-                  raise RuntimeError('native sample output missing, empty or exceeds 8 MiB')
-              sampling.update(status='collected; sampling may alter the target outcome',
-                  sample_file=str(dump), bytes=dump.stat().st_size, sha256=identity.sha256(dump))
-
-          class ObservedTree(original_tree):
-              def __init__(self, argv, cwd, env):
-                  super().__init__(argv, cwd, env)
-                  self.is_target = argv == target_argv
-                  self.started = time.monotonic()
-                  self.sample_cwd, self.sample_env = cwd, dict(env)
-                  if self.is_target:
-                      receipt['target_launch_context'] = dict(pid=self.child.pid, uid=os.getuid(), euid=os.geteuid(),
-                          gid=os.getgid(), egid=os.getegid(), cwd=str(cwd), direct_original_popen=True,
-                          runtime={key: env.get(key) for key in ('PATH', 'DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH', 'V3_PACKAGE_TOOLCHAIN')})
-
-              def exited(self, deadline=None):
-                  exited = super().exited(deadline)
-                  if self.is_target and not exited and not sampling['triggered'] and time.monotonic() - self.started >= sample_delay_seconds:
-                      assert self.job is None and self.child.returncode is None
-                      sampling.update(triggered=True, status='started', pid=self.child.pid,
-                          ownership='original non-reaping anchor; synchronous hook owns cleanup')
-                      retain_sampling()
-                      try:
-                          collect_sample(self.child.pid, self.sample_cwd, self.sample_env, deadline)
-                      except Exception as error:
-                          sampling.update(status='collection-failed', error=str(error))
-                      assert self.child.returncode is None
-                      exited = super().exited(deadline)
-                      sampling['anchor_reserved_after_collection'] = True
-                      retain_sampling()
-                  return exited
-
-          try:
-              assert os.geteuid() == 0 and sys.platform == 'darwin'
-              assert not any(key in os.environ for key in ('GH_TOKEN', 'GITHUB_TOKEN'))
-              matrix.suites = selected_suites
-              installed.run_suites = stop_after_prefix
-              commands._CommandTree = ObservedTree
-              installed.package_lane(args, source, matrix_output, 'no', matrix.load())
-              raise AssertionError('bounded prefix did not stop before remaining matrix work')
-          except PrefixComplete:
-              identity.verified(source)
-              receipt['status'] = 'partial original prefix passed; not a package matrix gate or behavior fix'
-              if sampling['triggered'] and sampling['status'] != 'collected; sampling may alter the target outcome':
-                  receipt.update(status='original prefix passed; required native collection incomplete', error=sampling.get('error'))
-                  raise RuntimeError('required native collection incomplete')
-          except Exception as error:
-              receipt.update(status='original prefix failed; propagated unchanged', error=str(error))
-              raise
-          finally:
-              matrix.suites = original_suites
-              installed.run_suites = original_run_suites
-              commands._CommandTree = original_tree
-              receipt['sampling'] = sampling
-              receipt['source_unchanged'] = identity.source_files(source) == release['files_sha256']
-              retain_sampling()
-              (output / 'diagnostic.json').write_text(json.dumps(receipt, indent=2) + '\n')
-          PY_PRIVILEGED
-          diagnostic_python=$(command -v python3)
-          env -u GH_TOKEN -u GITHUB_TOKEN sudo env "PATH=$PATH" \
-            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD" \
-            "RUNNER_TEMP=$RUNNER_TEMP" "V3_CXX=$V3_CXX" "V3_CC=$V3_CC" "V3_PACKAGE_TOOLCHAIN=$V3_PACKAGE_TOOLCHAIN" \
-            "V3_DIAGNOSTIC_PKG_CONFIG_DIR=$(brew --prefix)/share/pkgconfig" "$diagnostic_python" "$diagnostic_script"
       - name: Make privileged proof readable by artifact upload
         if: always()
         run: |
@@ -309,7 +89,6 @@ jobs:
           retention-days: 14
           if-no-files-found: error
   mingw64:
-    if: github.event_name != 'workflow_dispatch'
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -369,7 +148,6 @@ jobs:
           retention-days: 14
           if-no-files-found: error
   freebsd:
-    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:

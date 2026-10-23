@@ -41,8 +41,6 @@
 #include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/http/outcome.hpp>
 
-#include <httpserver/detail/deadline_trace.hpp>
-
 namespace httpserver {
 
 namespace detail {
@@ -717,9 +715,6 @@ bool connection_engine::watchdog_due(
     std::chrono::steady_clock::time_point deadline) {
     std::lock_guard<std::mutex> lock(mu_);
     const watchdog_plan plan = plan_watchdog_locked();
-    V3_DEADLINE_TRACE("due conn=%llu planned_ns=%lld current_ns=%lld now_ns=%lld exit=%d defer=%d equal=%d\n",
-        static_cast<deadline_trace_id>(id_), deadline_trace_ns(deadline), deadline_trace_ns(plan.deadline),
-        deadline_trace_ns(std::chrono::steady_clock::now()), plan.exit, plan.defer, plan.deadline == deadline);
     return !plan.exit && !plan.defer && plan.deadline == deadline
         && std::chrono::steady_clock::now() >= deadline;
 }
@@ -745,8 +740,6 @@ void connection_engine::note_transport_activity(bool written) {
 }
 
 void connection_engine::enforce_timeout(std::chrono::steady_clock::time_point deadline) noexcept {
-    V3_DEADLINE_TRACE("enforce conn=%llu deadline_ns=%lld now_ns=%lld\n",
-        static_cast<deadline_trace_id>(id_), deadline_trace_ns(deadline), deadline_trace_ns(std::chrono::steady_clock::now()));
     bool global_expiry = false, close_expiry = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
@@ -783,9 +776,6 @@ task<void> connection_engine::watchdog_loop(
             std::lock_guard<std::mutex> lock(self->mu_);
             plan = self->plan_watchdog_locked();
         }
-        V3_DEADLINE_TRACE("plan conn=%llu deadline_ns=%lld now_ns=%lld exit=%d defer=%d\n",
-            static_cast<deadline_trace_id>(self->id_), deadline_trace_ns(plan.deadline),
-            deadline_trace_ns(std::chrono::steady_clock::now()), plan.exit, plan.defer);
         if (plan.exit) co_return;
         const auto deadline = plan.defer
             ? std::chrono::steady_clock::now() + k_watchdog_tick
@@ -793,9 +783,6 @@ task<void> connection_engine::watchdog_loop(
         timer_operation op(self->owner_, self->id_, deadline);
         if (!self->arm_watchdog(op, plan)) continue;
         const io_result r = co_await std::move(op);
-        V3_DEADLINE_TRACE("watchdog_resume conn=%llu seq=%llu result=%d now_ns=%lld\n",
-            static_cast<deadline_trace_id>(self->id_), static_cast<deadline_trace_id>(op.sequence()),
-            static_cast<int>(r.code), deadline_trace_ns(std::chrono::steady_clock::now()));
         {
             std::lock_guard<std::mutex> lock(self->mu_);
             self->pending_timer_.reset();

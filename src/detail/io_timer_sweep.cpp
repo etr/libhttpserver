@@ -7,8 +7,6 @@
 #include <httpserver/detail/io_connection_owner.hpp>
 #include <httpserver/detail/io_timer_sweep.hpp>
 
-#include <httpserver/detail/deadline_trace.hpp>
-
 namespace httpserver::detail {
 
 std::size_t sweep_due_timers(std::unordered_map<op_state*, std::shared_ptr<op_state>>& pending, std::mutex& mu, std::chrono::steady_clock::time_point now) {
@@ -33,9 +31,6 @@ std::size_t sweep_due_timers(std::unordered_map<op_state*, std::shared_ptr<op_st
     });
     std::size_t expired = 0;
     for (const auto& entry : due) {
-        V3_DEADLINE_TRACE("expire conn=%llu token=%p seq=%llu deadline_ns=%lld dispatch_ns=%lld terminal=%d\n",
-            static_cast<deadline_trace_id>(entry.second->connection()), static_cast<void*>(entry.second.get()),
-            static_cast<deadline_trace_id>(entry.second->sequence()), deadline_trace_ns(entry.first), deadline_trace_ns(now), entry.second->is_terminal());
         if (entry.second->claim_terminal()) {
             entry.second->owner()->enqueue(entry.second, io_result{});
             ++expired;
