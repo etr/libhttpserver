@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-pid-zero: accept the FreeBSD kernel process snapshot
 
-Status: Implemented; caller validation and finalization pending.
+Status: Complete (local implementation, validation and finalization).
 Base: `v3` at `48e4d0208dd0d319e388571481263fb009878d28`.
 
 FreeBSD package job `120396472458` in run `39948363870`, source
@@ -39,7 +39,7 @@ Action items:
 - [x] Run the affected installed-consumer module, Python syntax and diff checks.
 - [x] Save raw RED/GREEN evidence, source binding and journal in main
   `.debug/FEATURE-ci-freebsd-pid-zero/`.
-- [ ] Caller: Groundwork validation and local finalization into v3.
+- [x] Caller: Groundwork validation and local finalization into v3.
 - [ ] CI / v3 PR: native FreeBSD package execution and nonlocal checks.
 
 Verification: three existing ps validation/ownership checks passed before
