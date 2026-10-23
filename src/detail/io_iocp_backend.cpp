@@ -254,13 +254,9 @@ void io_iocp_backend::retire_locked(std::uint64_t id, completions& done) {
         const auto record = found->second;
         connections_.erase(found);  // invalidate before socket reuse
         ::CancelIoEx(reinterpret_cast<HANDLE>(record->socket), nullptr);
-        if (record->datagram) {
-            // The completion lease survives closure; do not let its destructor
-            // close a descriptor reused by a newly adopted UDP socket.
-            pollsys::close_socket(std::exchange(record->socket, pollsys::k_invalid_socket));
-        } else {
-            pollsys::close_socket(record->socket);
-        }
+        // close_socket invalidates the handle before closing; a surviving
+        // completion lease must not close a descriptor reused by a new socket.
+        pollsys::close_socket(record->socket);
     }
     std::vector<std::shared_ptr<op_state>> swept;
     for (const auto& entry : pending_) {
