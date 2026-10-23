@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-selected-make: propagate the selected make into package configure
 
-Status: In Progress (implementation ready; caller Groundwork validation and finalization pending).
+Status: Complete (local) — validated and finalized into v3; native CI remains pending.
 Base: local `v3` at `c2d5c626f456f218676a6d840c8ed1442aa28438`.
 
 FreeBSD package job `120468733763` and archive job `120469466638` passed
@@ -27,7 +27,7 @@ Action items:
 - [x] Verify actual generated dependency fragments and compile/header dependencies, plus make selection inside build/install/check recipes.
 - [x] Keep the regression in the existing installed-consumer test script and fixture/distribution registration.
 - [x] Run the affected Python preservation tests, syntax and diff checks; retain raw configure evidence and source bindings.
-- [ ] Caller: complete Groundwork validation and local finalization into `v3`.
+- [x] Caller: complete Groundwork validation and local finalization into `v3`.
 - [ ] CI / v3 PR: fresh native FreeBSD package/archive execution; other nonlocal execution remains CI owned.
 
 Acceptance evidence: the original driver and the repaired driver execute the
@@ -65,3 +65,7 @@ Commands runner without mocking configure or make. Git metadata mutations
 need the existing sandbox escalation; Groundwork's identity helper resolves
 the task worktree/branch. The installed fixture target and EXTRA_DIST already
 include this test script, so no build-system registration change is needed.
+
+Groundwork validation passed at `2e5beffbb8acf227356ea4e9528a949e4b1887ae`
+(1 iteration, 0 fixed, 0 unworked; all eight applicable reviewers approved).
+Native FreeBSD and other nonlocal checks remain incomplete and CI/v3-PR owned.
