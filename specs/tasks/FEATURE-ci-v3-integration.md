@@ -1,7 +1,8 @@
 # FEATURE-ci-v3-integration
 
-Status: locally implemented and tested; local verification recorded in the task evidence;
-actual GitHub PR verification and final validation remain root-owned.
+Status: Complete (local implementation, validation and finalization).
+Current-source GitHub platform and full release receipts remain CI / v3 PR owned;
+completion does not claim release readiness.
 
 Scope: native CI/replay, installed platform prerequisites, bounded fuzz campaigns,
 selected-archive release acceptance and publication enforcement. No production
@@ -41,3 +42,12 @@ focused public TLS run using the existing isolated network path passed all four
 shared/static and managed/external cells (82 checks each). This proves the
 affected prerequisite correction; it does not turn the failed whole matrix into
 a passing receipt. The fresh complete 18-gate release run remains pending CI.
+
+Final local validation (2026-10-23): six Groundwork iterations closed 18 blocking
+findings. The final real symlink-root and real ps regression passed 22 focused
+and 55 affected-module tests. Earlier source-bound native TLS, sanitizer replay,
+workflow and release-contract evidence is retained in the durable validation
+record. Current source c794aaac is pushed to PR #381; Verify Build and ChangeLog
+pass, while native/fuzz, CodeQL and platform/archive workflows remain pending.
+Prior failed receipts remain unsuccessful. Two approved unworked observations
+are persisted under specs/unworked_review_issues/. No tags or releases created.
