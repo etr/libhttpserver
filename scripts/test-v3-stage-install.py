@@ -12,7 +12,8 @@ import unittest
 
 
 SOURCE = Path(__file__).resolve().parent.parent
-MAKE = shutil.which('gmake') or shutil.which('make')
+# Keep the caller's make frontend: MSYS and native Windows paths differ.
+MAKE = os.environ.get('MAKE') or shutil.which('gmake') or shutil.which('make')
 
 
 class StagedInstallRecipes(unittest.TestCase):
