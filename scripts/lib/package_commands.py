@@ -267,7 +267,8 @@ def _process_snapshot(deadline):
                 or any(flag not in '+<>ACEJLNSsVWX' for flag in fields[3][1:])):
             raise RuntimeError('malformed command process snapshot')
         pid, parent, group = map(int, fields[:3])
-        if pid <= 0 or pid in members:
+        # FreeBSD exposes kernel PID 0 in parent/group 0; it is observation only.
+        if pid in members or (pid == 0 and (parent != 0 or group != 0)):
             raise RuntimeError('invalid command process snapshot PID')
         members[pid] = (parent, group, fields[3][0])
     if not members:

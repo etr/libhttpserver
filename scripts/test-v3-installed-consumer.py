@@ -604,6 +604,50 @@ class CommandsTest(unittest.TestCase):
             return popen(argv, *args, **kwargs)
         return patch.object(subprocess, 'Popen', launch)
 
+    @unittest.skipUnless(os.name == 'posix', 'FreeBSD kernel process observation')
+    def test_ps_kernel_pid_zero_preserves_owned_leader_and_live_descendant(self):
+        data = '0 0 0 DLs\n2255 2178 2255 Z\n2258 2255 2255 S\n'
+        with patch.object(sys, 'platform', 'freebsd14'), self.ps_output(data):
+            members = commands._process_snapshot(time.monotonic() + 2)
+        self.assertEqual({0: (0, 0, 'D'), 2255: (2178, 2255, 'Z'),
+                          2258: (2255, 2255, 'S')}, members)
+
+    @unittest.skipUnless(os.name == 'posix', 'FreeBSD kernel process validation')
+    def test_ps_kernel_pid_zero_keeps_snapshot_validation_fail_closed(self):
+        for data in ('', '0 0 0 DLs\n0 0 0 DLs', '0 1 0 DLs', '0 0 1 DLs',
+                     '-1 0 0 DLs', '0 -1 0 DLs', '0 0 -1 DLs',
+                     '0 0 0 !', '0 0 0 DQ', '0 0 DLs', '0 0 0 DLs command'):
+            with self.subTest(data=data):
+                with patch.object(sys, 'platform', 'freebsd14'), self.ps_output(data):
+                    with self.assertRaisesRegex(RuntimeError, 'snapshot'):
+                        commands._process_snapshot(time.monotonic() + 2)
+
+    @unittest.skipUnless(os.name == 'posix', 'FreeBSD kernel row during real group cleanup')
+    def test_ps_kernel_pid_zero_does_not_prevent_owned_descendant_retirement(self):
+        popen, killpg = subprocess.Popen, os.killpg
+        groups = []
+        def launch(argv, *args, **kwargs):
+            if argv[0] in ('/bin/ps', '/usr/bin/ps'):
+                code = ("import subprocess,sys; "
+                        f"data=subprocess.check_output({argv!r}); "
+                        "kernel=any(line.split()[0] == b'0' for line in data.splitlines()); "
+                        "sys.stdout.buffer.write((b'' if kernel else b'0 0 0 DLs\\n') + data)")
+                argv = self.command(code)
+            return popen(argv, *args, **kwargs)
+        def signal_group(group, sig):
+            self.assertGreater(group, 0, 'kernel PID/group zero must never be signalled')
+            groups.append(group)
+            return killpg(group, sig)
+        with patch.object(sys, 'platform', 'freebsd14'), patch.object(os, 'waitid', None, create=True), \
+                patch.object(subprocess, 'Popen', launch), patch.object(os, 'killpg', signal_group):
+            self.assert_success_retires_socket_owner()
+        self.assertTrue(groups, 'real owned group must be retired')
+        record = json.loads((self.root / 'commands.json').read_text())[-1]
+        data = Path(record['log']).read_bytes()
+        self.assertEqual(0, record['exit'])
+        self.assertEqual(hashlib.sha256(data).hexdigest(), record['sha256'])
+        self.assertNotIn('error', record)
+
     @unittest.skipUnless(os.name == 'posix', 'Darwin unknown scheduling state')
     def test_ps_unknown_state_preserves_complete_numeric_membership(self):
         # Captured native rows: the unknown process belongs to a different group.
