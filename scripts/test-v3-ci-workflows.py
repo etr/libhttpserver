@@ -319,6 +319,15 @@ else:
 
 
 class CIWorkflows(unittest.TestCase):
+    def test_macos_provisions_gnu_make_before_selecting_it(self):
+        for filename, job in (('v3-package-validation.yml', 'macos'), ('v3-release-acceptance.yml', 'darwin')):
+            with self.subTest(workflow=filename):
+                steps = workflow(filename)['jobs'][job]['steps']
+                provision = next(i for i, step in enumerate(steps) if 'brew install ' in step.get('run', ''))
+                self.assertIn('make', shlex.split(steps[provision]['run'])[2:])
+                invocation = next(i for i, step in enumerate(steps) if '"${prefix[@]}" python3' in step.get('run', ''))
+                self.assertLess(provision, invocation)
+
     def test_artifact_api_head_is_bound_to_trusted_event_head(self):
         lane = workflow('v3-release-acceptance.yml')
         self.assertEqual(lane.get('env', {}).get('WORKFLOW_HEAD_SHA'),

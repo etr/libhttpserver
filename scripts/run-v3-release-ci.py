@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shlex
 import shutil
 import sys
 import tarfile
@@ -57,7 +58,8 @@ def platform_proof(args):
     require(release['source'] == selected['source'] and release['files_sha256'] == selected['files_sha256'], 'selected snapshot/tooling differs')
     source = Path(release['source_root'])
     identity_path = args.output / 'artifact-identity.json'; identity_path.write_text(json.dumps(release))
-    env = dict(os.environ, V3_RELEASE_IDENTITY=str(identity_path),
+    env = dict(os.environ, CXX=args.compiler, CC=args.cc, MAKE=args.make,
+        V3_RELEASE_IDENTITY=str(identity_path),
         V3_TLS_CFLAGS='-I' + (args.provider_prefix / 'include').as_posix(),
         V3_TLS_LIBS='-L' + (args.provider_prefix / 'lib').as_posix() + ' -lssl -lcrypto')
     if args.toolchain_prefix:
@@ -94,9 +96,16 @@ def platform_proof(args):
     files += [args.provider_prefix / 'include/openssl/opensslv.h', args.archive]
     for receipt_path in package.rglob('*.json'):
         files += list(referenced_files(json.loads(receipt_path.read_text())))
-    for tool in (args.compiler, args.cc, args.make, args.client_python, args.node, 'git'):
-        selected_tool = shutil.which(str(tool)); require(selected_tool, 'selected tool unavailable: ' + str(tool))
+    compiler_tools = []
+    for compiler in (args.compiler, args.cc):
+        compiler_tools.append([compiler] if shutil.which(compiler, path=env['PATH']) else shlex.split(compiler))
+    for command in compiler_tools + [[args.make], [args.client_python], [args.node], ['git']]:
+        require(command, 'empty selected tool command')
+        selected_tool = shutil.which(str(command[0]), path=env['PATH'])
+        require(selected_tool, 'selected tool unavailable: ' + str(command[0]))
         files.append(Path(selected_tool))
+        # Interpreter/cache-wrapper arguments can name the compiler script.
+        files += [source / argument for argument in command[1:] if (source / argument).is_file()]
     files = sorted(set(files))
     artifacts = [gate.artifact(path) for path in files]
     row = dict(id=platform.system(), status='passed', archive_sha256=selected['sha256'], identity=expected,
