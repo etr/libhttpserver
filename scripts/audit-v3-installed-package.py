@@ -63,6 +63,14 @@ TLS_SYMBOL = re.compile(r'^(SSL_|TLS_|DTLS_|OPENSSL_|OpenSSL_|CRYPTO_|EVP_|BIO_|
 
 
 def runtime(path):
+    if platform.system() == 'FreeBSD':
+        location = Path(path).resolve()
+        if location == Path('/lib/libcxxrt.so.1').resolve():
+            return True
+        if location.name.startswith('libc++.so'):
+            toolchain = os.environ.get('V3_PACKAGE_TOOLCHAIN')
+            return bool(toolchain and location.parent == Path(toolchain).resolve() / 'lib'
+                        and location.name in ('libc++.so.1', 'libc++.so.1.0'))
     if platform.system() == 'Windows':
         location = Path(path).resolve()
         system = Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32'

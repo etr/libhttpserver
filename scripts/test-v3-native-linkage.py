@@ -100,7 +100,7 @@ class MakeGateFixtures(unittest.TestCase):
         self.assertNotIn('A2 PASS', result.stdout)
 
 class AuditFixtures(unittest.TestCase):
-    def audit(self, dependency=None, symbols='', mode='no', binary=True, archive=True, windows=False):
+    def audit(self, dependency=None, symbols='', mode='no', binary=True, archive=True, windows=False, freebsd=False):
         if dependency is None:
             dependency = '/usr/lib/libc++.1.dylib'
         with tempfile.TemporaryDirectory() as directory:
@@ -116,6 +116,12 @@ class AuditFixtures(unittest.TestCase):
             if archive:
                 (root / 'src/.libs/libhttpserver_v3core.a').touch()
             tools = [('otool', 'fixture:\n' + dependency), ('nm', symbols)]
+            if freebsd:
+                sdk = root / 'sdk'
+                (sdk / 'lib').mkdir(parents=True)
+                (sdk / 'lib/libc++.so.1.0').touch()
+                dependency = dependency.replace('SELECTED', str(sdk))
+                tools = [('uname', 'FreeBSD'), ('ldd', dependency), ('nm', symbols)]
             if windows:
                 tools += [('uname', 'MINGW64_NT-10.0'), ('objdump', 'fixture.exe: file format pei-x86-64\n' + '\n'.join(' DLL Name: ' + n for n in dependency.splitlines()))]
             for tool, output in tools:
@@ -124,6 +130,8 @@ class AuditFixtures(unittest.TestCase):
                 path.chmod(0o755)
             env = dict(os.environ, BUILD_DIR=str(root), SRC_DIR=str(SOURCE),
                        V3_TLS_MODE=mode, PATH=str(root / 'tools') + ':' + os.environ['PATH'])
+            if freebsd:
+                env['V3_PACKAGE_TOOLCHAIN'] = str(sdk)
             return subprocess.run(['bash', str(SOURCE / 'scripts/audit-v3-native-linkage.sh')],
                                   env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
@@ -171,6 +179,21 @@ class AuditFixtures(unittest.TestCase):
 
     def test_freebsd_loader_is_platform_runtime(self):
         self.assertEqual(0, self.audit('/libexec/ld-elf.so.1\n/lib/libc.so.7').returncode)
+
+    def test_freebsd_sdk_and_exact_system_cxxrt_are_accepted(self):
+        result = self.audit('libc++.so.1 => SELECTED/lib/libc++.so.1.0 (0x123)\n'
+                            'libcxxrt.so.1 => /lib/libcxxrt.so.1 (0x456)', freebsd=True)
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_freebsd_lookalike_or_unselected_runtime_is_rejected(self):
+        for dependency in ('libcxxrt.so.1 => /usr/local/lib/libcxxrt.so.1 (0x123)',
+                           'libcxxrt.so.2 => /lib/libcxxrt.so.2 (0x123)',
+                           'libc++.so.1 => /usr/lib/libc++.so.1 (0x123)',
+                           'libc++.so.1 => SELECTED/lib/libc++.so.1.0.extra (0x123)',
+                           'libcrypto.so.3 => SELECTED/lib/libcrypto.so.3 (0x123)'):
+            with self.subTest(dependency=dependency):
+                result = self.audit(dependency, freebsd=True)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
 
     def test_only_selected_provider_is_allowed_on(self):
         self.assertEqual(self.audit('/tmp/libssl.3.dylib\n/tmp/libcrypto.3.dylib',

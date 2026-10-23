@@ -323,7 +323,8 @@ MODE="${V3_TLS_MODE:-no}"
 case "$MODE" in yes|no) ;; *) fail "invalid native TLS mode: $MODE" ;; esac
 # Libtool programs can be shell wrappers. Inspect their real executable.
 SUFFIX=""
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) SUFFIX=".exe" ;; esac
+HOST_SYSTEM="$(uname -s)"
+case "$HOST_SYSTEM" in MINGW*|MSYS*|CYGWIN*) SUFFIX=".exe" ;; esac
 BIN="$BUILD_DIR/test/native_linkage$SUFFIX"
 if [[ -x "$BUILD_DIR/test/.libs/native_linkage$SUFFIX" ]]; then
     BIN="$BUILD_DIR/test/.libs/native_linkage$SUFFIX"
@@ -338,6 +339,10 @@ if [[ "$SUFFIX" == .exe ]]; then
     deps="$(objdump -p "$BIN")" || fail "objdump failed"
     [[ "$deps" == *"file format pei"* ]] || fail "malformed PE inspection"
     libraries="$(printf '%s\n' "$deps" | awk '/DLL Name:/ {print $3}')"
+elif [[ "$HOST_SYSTEM" == FreeBSD ]]; then
+    deps="$(ldd "$BIN" 2>&1)" || fail "ldd failed"
+    # Retain resolved paths so the selected C++ runtime and system ABI stay distinct.
+    libraries="$(printf '%s\n' "$deps" | awk '/=>/ {print $3} /^[[:space:]]*\/libexec\// {print $1}')"
 elif command -v otool >/dev/null 2>&1; then
     deps="$(otool -L "$BIN")" || fail "otool failed"
     libraries="$(printf '%s\n' "$deps" | tail -n +2 | awk '{print $1}')"
@@ -356,6 +361,21 @@ fi
 while IFS= read -r library; do
     [[ -z "$library" ]] && continue
     name="$(basename "$library" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$HOST_SYSTEM" == FreeBSD ]]; then
+        case "$name" in
+            libc++.so*)
+                [[ -n "${V3_PACKAGE_TOOLCHAIN:-}" ]] || fail "selected FreeBSD C++ runtime prefix missing"
+                toolchain="$(cd "$V3_PACKAGE_TOOLCHAIN" && pwd -P)" || fail "invalid C++ runtime prefix"
+                resolved="$(realpath "$library")" || fail "unresolved C++ runtime: $library"
+                case "$resolved" in
+                    "$toolchain/lib/libc++.so.1"|"$toolchain/lib/libc++.so.1.0") continue ;;
+                    *) fail "unselected FreeBSD C++ runtime: $library" ;;
+                esac ;;
+            libcxxrt.*)
+                [[ "$library" == /lib/libcxxrt.so.1 ]] || fail "unselected FreeBSD ABI runtime: $library"
+                continue ;;
+        esac
+    fi
     case "$name" in
         libssl.*|libcrypto.*|libssl-*|libcrypto-*)
             [[ "$MODE" == yes ]] || fail "TLS-off load dependency: $library" ;;

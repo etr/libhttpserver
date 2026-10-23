@@ -256,7 +256,7 @@ jobs:
         mem: 8192
         cpu: 2
         prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm19 git
-          node24
+          node24 cmake ninja
         run: |-
           set -eu
           export RUNNER_TEMP=/tmp/v3-release-${{ github.run_id }}-${{ github.run_attempt }}
@@ -294,10 +294,12 @@ jobs:
           fi
           test "$(node --version)" = v24.15.0
           python3 -c 'import subprocess; subprocess.run(["git","--version"],check=True)'
+          python3 scripts/ci-freebsd-toolchain.py --output "$RUNNER_TEMP/platform-evidence/toolchain"
+          . "$RUNNER_TEMP/platform-evidence/toolchain/toolchain.env"
           python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites" --make gmake
           python3 -m venv "$RUNNER_TEMP/clients"
           "$RUNNER_TEMP/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
-          python3 scripts/run-v3-release-ci.py platform --selection build/ci-selected-input/selected.json --archive build/ci-selected-input/libhttpserver-*.tar.gz --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$RUNNER_TEMP/clients/bin/python" --node node --make gmake --pkg-config-dir /usr/local/share/pkgconfig --output "$RUNNER_TEMP/platform"
+          python3 scripts/run-v3-release-ci.py platform --selection build/ci-selected-input/selected.json --archive build/ci-selected-input/libhttpserver-*.tar.gz --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$RUNNER_TEMP/clients/bin/python" --node node --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --make gmake --pkg-config-dir /usr/local/share/pkgconfig --output "$RUNNER_TEMP/platform"
     - name: Recover FreeBSD evidence
       if: always()
       run: |
