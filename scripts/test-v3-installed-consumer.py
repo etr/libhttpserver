@@ -28,7 +28,7 @@ class InstalledShellTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.selected = self.root / 'MSYS tools'
         self.selected.mkdir()
         self.bash = self.selected / ('bash.exe' if os.name == 'nt' else 'bash')
@@ -96,9 +96,17 @@ class InstalledShellTest(unittest.TestCase):
 
 @unittest.skipIf(os.name == 'nt', 'ps observation uses POSIX process groups; Windows exercises native jobs')
 class InstalledShellPSTest(InstalledShellTest):
-    """Replay the shell contracts through real ps observation on POSIX hosts."""
+    """Replay shell contracts with a temporary path alias and real ps observation."""
     def setUp(self):
-        super().setUp()
+        outer = tempfile.TemporaryDirectory()
+        self.addCleanup(outer.cleanup)
+        root = Path(outer.name).resolve()
+        real = root / 'real'
+        real.mkdir()
+        alias = root / 'alias'
+        alias.symlink_to(real, target_is_directory=True)
+        with patch.object(tempfile, 'tempdir', str(alias)):
+            super().setUp()
         observation = patch.object(commands.sys, 'platform', 'darwin')
         observation.start()
         self.addCleanup(observation.stop)
