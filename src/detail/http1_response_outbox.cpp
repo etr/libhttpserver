@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -142,19 +143,30 @@ auto http1_response_outbox::reserve_buffer_locked(http1_response_sink& sink, std
         sink.storage_units_ = sink.bytes_.capacity();
         return true;
     }
-    const auto bound = std::max(size, 2 * sink.bytes_.capacity());
-    if (!storage_charge_.grow(bound)) return false;
+    const auto maximum = sink.bytes_.max_size();
+    if (size > maximum) return false;
+    const auto capacity = sink.bytes_.capacity();
+    const auto bound = std::max(size, capacity > maximum / 2 ? maximum : 2 * capacity);
+    if (bound > std::numeric_limits<std::size_t>::max() - storage_charge_.units() ||
+        !storage_charge_.grow(bound)) return false;
+    // Destroy the private candidate before rolling back its admission.
+    struct provisional_charge {
+        resource_charge& charge;
+        std::size_t units;
+        ~provisional_charge() { charge.shrink(units); }
+    } pending{storage_charge_, bound};
     std::string replacement;
     replacement.reserve(bound);
-    if (replacement.capacity() > bound) {
-        std::string().swap(replacement);
-        storage_charge_.shrink(bound);
-        return false;
-    }
+    const auto actual = replacement.capacity();
+    const auto excess = actual - bound;
+    if (excess > std::numeric_limits<std::size_t>::max() - storage_charge_.units() ||
+        !storage_charge_.grow(excess)) return false;
+    pending.units = actual;
     replacement.append(sink.bytes_);
     sink.bytes_.swap(replacement);
     std::string().swap(replacement);
-    storage_charge_.shrink(std::exchange(sink.storage_units_, bound));
+    storage_charge_.shrink(std::exchange(sink.storage_units_, actual));
+    pending.units = 0;
     return true;
 }
 
@@ -319,23 +331,33 @@ http::outcome http1_response_sink::start(const http::request_head& request, cons
     // candidate allocation before returning any of its shared capacity.
     std::string previous = std::move(bytes_);
     const auto previous_units = std::exchange(storage_units_, 0);
-    const auto rollback = [this, &previous, previous_units](http::outcome failure) {
+    bool restored = false;
+    const auto restore = [this, &previous, previous_units, &restored] {
+        if (std::exchange(restored, true)) return;
         owner_->release_buffer_locked(*this);
         bytes_ = std::move(previous);
         storage_units_ = previous_units;
+    };
+    const auto rollback = [this, &restore](http::outcome failure) {
+        restore();
         return fail_locked(failure);
     };
-    std::size_t bound = 0;
-    if (!owner_->field_bound(f, 256, bound) || !owner_->reserve_buffer_locked(*this, before_head + bound)) {
-        return rollback({http::outcome_code::limit_exceeded, "shared response head capacity exhausted"});
-    }
-    bytes_.append(previous);
-    const http::outcome head = framer_->start_head(bytes_, request, s, f);
-    if (!head.ok()) return rollback(head);
-    if (bytes_.size() > owner_->budget_.max_head_bytes) {
-        return rollback(http::outcome(http::outcome_code::limit_exceeded,
-                                      "http1_response_sink: serialized response head exceeds the"
-                                      " head budget"));
+    try {
+        std::size_t bound = 0;
+        if (!owner_->field_bound(f, 256, bound) || !owner_->reserve_buffer_locked(*this, before_head + bound)) {
+            return rollback({http::outcome_code::limit_exceeded, "shared response head capacity exhausted"});
+        }
+        bytes_.append(previous);
+        const http::outcome head = framer_->start_head(bytes_, request, s, f);
+        if (!head.ok()) return rollback(head);
+        if (bytes_.size() > owner_->budget_.max_head_bytes) {
+            return rollback(http::outcome(http::outcome_code::limit_exceeded,
+                                          "http1_response_sink: serialized response head exceeds the"
+                                          " head budget"));
+        }
+    } catch (...) {
+        restore();
+        throw;
     }
     std::string().swap(previous);
     owner_->storage_charge_.shrink(previous_units);

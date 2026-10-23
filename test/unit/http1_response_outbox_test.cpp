@@ -38,9 +38,11 @@
 // Tests parse drained bytes through the parity response-frame parser
 // (compiled into this program per the Makefile block).
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 #include <span>
 #include <string>
 #include <thread>
@@ -60,6 +62,14 @@
 #include <parity/response_frame.hpp>
 
 #include "./littletest.hpp"
+
+namespace httpserver::detail {
+struct http1_outbox_test_access {
+    static std::size_t capacity(const http1_response_sink& sink) {
+        return sink.bytes_.capacity();
+    }
+};
+}  // namespace httpserver::detail
 
 namespace {
 
@@ -185,6 +195,240 @@ LT_BEGIN_AUTO_TEST(outbox_suite, budget_defaults_project_from_server)
     LT_CHECK_EQ(projected.max_queue_bytes, 8192u);
     LT_CHECK_EQ(projected.max_head_bytes, 512u);
 LT_END_AUTO_TEST(budget_defaults_project_from_server)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, rounded_head_capacity_is_charged_to_every_scope)
+    namespace hs = httpserver::server;
+    hs::budget_limits limits;
+    const auto root = hs::resource_budget::root(limits);
+    hs::resource_budget child;
+    LT_ASSERT(root.child(limits, child).ok());
+    http1_response_outbox outbox({}, child);
+    auto& sink = outbox.open(0, {});
+    http::fields fields;
+    fields.append("Content-Length", "16");
+
+    LT_ASSERT(sink.start(request(http::method_id::get, http::protocol::http_1_0),
+                         http::status::from_code(200), fields).ok());
+
+    const auto capacity = hd::http1_outbox_test_access::capacity(sink);
+    LT_CHECK_EQ(child.in_use(hs::resource::response_queue_bytes), capacity);
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), capacity);
+    LT_CHECK(drain_buffered(outbox).find("Content-Length: 16\r\n") != std::string::npos);
+    LT_CHECK_EQ(child.in_use(hs::resource::response_queue_bytes), 0u);
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(rounded_head_capacity_is_charged_to_every_scope)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, refused_replacement_preserves_interim_and_ancestor_charge)
+    namespace hs = httpserver::server;
+    hs::budget_limits limits;
+    limits.set(hs::resource::response_queue_bytes, 4096);
+    const auto root = hs::resource_budget::root(limits);
+    hs::resource_budget child;
+    LT_ASSERT(root.child(limits, child).ok());
+    http1_response_outbox outbox({}, child);
+    auto& sink = outbox.open(0, {});
+    LT_ASSERT(sink.interim(100).ok());
+    const auto retained = child.in_use(hs::resource::response_queue_bytes);
+    const auto queued = outbox.queued_bytes();
+    hs::reservation sibling;
+    LT_ASSERT(root.reserve(hs::resource::response_queue_bytes, 4096 - retained - 1, sibling).ok());
+
+    LT_CHECK(sink.start(get_11(), http::status::from_code(200), length_fields(0)).code()
+             == http::outcome_code::limit_exceeded);
+
+    LT_CHECK(outbox.front_failed());
+    LT_CHECK_EQ(outbox.queued_bytes(), queued);
+    LT_CHECK_EQ(child.in_use(hs::resource::response_queue_bytes), retained);
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 4095u);
+    LT_CHECK_EQ(drain_buffered(outbox), "HTTP/1.1 100 Continue\r\n\r\n");
+    sibling.release();
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(refused_replacement_preserves_interim_and_ancestor_charge)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, replacement_requires_old_and_new_capacity_together)
+    namespace hs = httpserver::server;
+    hs::budget_limits limits;
+    limits.set(hs::resource::response_queue_bytes, 8192);
+    const auto root = hs::resource_budget::root(limits);
+    http1_response_outbox outbox({}, root);
+    auto& sink = outbox.open(0, {});
+    LT_ASSERT(start_ok(sink, 4096).ok());
+    const auto retained = root.in_use(hs::resource::response_queue_bytes);
+    const auto queued = outbox.queued_bytes();
+    std::vector<std::byte> before(queued);
+    LT_ASSERT(outbox.copy_front(before) == queued);
+    hs::reservation sibling;
+    // Room for a replacement on its own, but never old plus replacement.
+    LT_ASSERT(root.reserve(hs::resource::response_queue_bytes, 8192 - retained * 2, sibling).ok());
+    const std::string payload(retained, 'x');
+
+    LT_CHECK(sink.push(as_bytes(payload)).kind == body_push::failed);
+
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 8192 - retained);
+    LT_CHECK_EQ(outbox.queued_bytes(), queued);
+    std::vector<std::byte> after(queued);
+    LT_CHECK_EQ(outbox.copy_front(after), queued);
+    LT_CHECK(before == after);
+    outbox.retire();
+    sibling.release();
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(replacement_requires_old_and_new_capacity_together)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, rounded_capacity_excess_refuses_without_publishing)
+    namespace hs = httpserver::server;
+    // Discover actual allocation behavior without assuming a vendor's rounding.
+    std::string allocation;
+    allocation.reserve(276);
+    hs::budget_limits limits;
+    limits.set(hs::resource::response_queue_bytes, allocation.capacity() - 1);
+    const auto root = hs::resource_budget::root(limits);
+    hs::resource_budget child;
+    LT_ASSERT(root.child(limits, child).ok());
+    http1_response_outbox outbox({}, child);
+    auto& sink = outbox.open(0, {});
+    http::fields fields;
+    fields.append("Content-Length", "16");
+
+    LT_CHECK(sink.start(get_11(), http::status::from_code(200), fields).code()
+             == http::outcome_code::limit_exceeded);
+
+    LT_CHECK(outbox.front_failed());
+    LT_CHECK_EQ(outbox.queued_bytes(), 0u);
+    LT_CHECK_EQ(child.in_use(hs::resource::response_queue_bytes), 0u);
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(rounded_capacity_excess_refuses_without_publishing)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, accepted_replacement_releases_old_capacity_after_copy)
+    namespace hs = httpserver::server;
+    hs::budget_limits limits;
+    const auto root = hs::resource_budget::root(limits);
+    http1_response_outbox outbox({}, root);
+    auto& sink = outbox.open(0, {});
+    LT_ASSERT(sink.interim(100).ok());
+    LT_ASSERT(start_ok(sink, 4096).ok());
+    const auto initial_capacity = hd::http1_outbox_test_access::capacity(sink);
+    const std::string payload(initial_capacity, 'x');
+
+    LT_ASSERT(sink.push(as_bytes(payload)).kind == body_push::accepted);
+
+    const auto capacity = hd::http1_outbox_test_access::capacity(sink);
+    LT_CHECK(capacity > initial_capacity);
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), capacity);
+    const auto wire = drain_buffered(outbox);
+    LT_CHECK(wire.find("HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\n") == 0);
+    LT_CHECK(wire.ends_with(payload));
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(accepted_replacement_releases_old_capacity_after_copy)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, oversized_final_head_restores_interim_capacity)
+    namespace hs = httpserver::server;
+    const auto root = hs::resource_budget::root(hs::budget_limits{});
+    http1_response_outbox outbox({4096, 64}, root);
+    auto& sink = outbox.open(0, {});
+    LT_ASSERT(sink.interim(100).ok());
+    const auto retained = root.in_use(hs::resource::response_queue_bytes);
+
+    LT_CHECK(start_ok(sink, 0).code() == http::outcome_code::limit_exceeded);
+
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), retained);
+    LT_CHECK_EQ(drain_buffered(outbox), "HTTP/1.1 100 Continue\r\n\r\n");
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(oversized_final_head_restores_interim_capacity)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, throwing_head_serialization_restores_interim_capacity)
+    namespace hs = httpserver::server;
+    const auto root = hs::resource_budget::root(hs::budget_limits{});
+    http1_response_outbox outbox({}, root);
+    auto& sink = outbox.open(0, {});
+    LT_ASSERT(sink.interim(100).ok());
+    const auto retained = root.in_use(hs::resource::response_queue_bytes);
+    bool threw = false;
+
+    try {
+        sink.start(get_11(), http::status::from_code(200), length_fields(0),
+                   {[]() -> std::chrono::system_clock::time_point { throw std::bad_alloc(); }});
+    } catch (const std::bad_alloc&) {
+        threw = true;
+    }
+
+    LT_CHECK(threw);
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), retained);
+    LT_CHECK_EQ(drain_buffered(outbox), "HTTP/1.1 100 Continue\r\n\r\n");
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(throwing_head_serialization_restores_interim_capacity)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, rounded_capacity_refusal_at_parent_rolls_back_child)
+    namespace hs = httpserver::server;
+    std::string allocation;
+    allocation.reserve(276);
+    hs::budget_limits limits;
+    limits.set(hs::resource::response_queue_bytes, 4096);
+    const auto root = hs::resource_budget::root(limits);
+    hs::resource_budget child;
+    LT_ASSERT(root.child(limits, child).ok());
+    hs::reservation sibling;
+    const auto occupied = 4096 - allocation.capacity() + 1;
+    LT_ASSERT(root.reserve(hs::resource::response_queue_bytes, occupied, sibling).ok());
+    http1_response_outbox outbox({}, child);
+    auto& sink = outbox.open(0, {});
+    http::fields fields;
+    fields.append("Content-Length", "16");
+
+    LT_CHECK(sink.start(get_11(), http::status::from_code(200), fields).code()
+             == http::outcome_code::limit_exceeded);
+
+    LT_CHECK_EQ(outbox.queued_bytes(), 0u);
+    LT_CHECK_EQ(child.in_use(hs::resource::response_queue_bytes), 0u);
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), occupied);
+    sibling.release();
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(rounded_capacity_refusal_at_parent_rolls_back_child)
+
+LT_BEGIN_AUTO_TEST(outbox_suite, concurrent_sibling_heads_share_actual_capacity)
+    namespace hs = httpserver::server;
+    std::string allocation;
+    allocation.reserve(276);
+    hs::budget_limits limits;
+    limits.set(hs::resource::response_queue_bytes, allocation.capacity());
+    const auto root = hs::resource_budget::root(limits);
+    hs::resource_budget first_scope;
+    hs::resource_budget second_scope;
+    LT_ASSERT(root.child(limits, first_scope).ok());
+    LT_ASSERT(root.child(limits, second_scope).ok());
+    http1_response_outbox first({}, first_scope);
+    http1_response_outbox second({}, second_scope);
+    auto& first_sink = first.open(0, {});
+    auto& second_sink = second.open(0, {});
+    const auto head = get_11();
+    http::fields fields;
+    fields.append("Content-Length", "16");
+    std::atomic<bool> go{false};
+    bool first_ok = false;
+    bool second_ok = false;
+    std::thread a([&] {
+        while (!go.load()) std::this_thread::yield();
+        first_ok = first_sink.start(head, http::status::from_code(200), fields).ok();
+    });
+    std::thread b([&] {
+        while (!go.load()) std::this_thread::yield();
+        second_ok = second_sink.start(head, http::status::from_code(200), fields).ok();
+    });
+
+    go.store(true);
+    a.join();
+    b.join();
+
+    // Concurrent provisional charges may both refuse; they must never
+    // overcommit or leave a failed candidate charged.
+    LT_CHECK(!first_ok || !second_ok);
+    const auto retained = (first_ok + second_ok) * allocation.capacity();
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), retained);
+    LT_CHECK_EQ(first_scope.in_use(hs::resource::response_queue_bytes) +
+                 second_scope.in_use(hs::resource::response_queue_bytes), retained);
+    first.retire();
+    second.retire();
+    LT_CHECK_EQ(root.in_use(hs::resource::response_queue_bytes), 0u);
+LT_END_AUTO_TEST(concurrent_sibling_heads_share_actual_capacity)
 
 LT_BEGIN_AUTO_TEST(outbox_suite, bytes_emerge_in_request_order)
     http1_response_outbox outbox;
