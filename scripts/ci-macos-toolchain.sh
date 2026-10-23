@@ -36,4 +36,4 @@ CPP
 "$toolchain_dir/clang++" --version > "$toolchain_dir/compiler.log"
 "$toolchain_dir/clang++" -std=c++20 "$toolchain_dir/cancellation.cpp" -o "$toolchain_dir/cancellation"
 "$toolchain_dir/cancellation"
-printf 'V3_CXX=%s\nV3_CC=%s\n' "$toolchain_dir/clang++" "$llvm_prefix/bin/clang" >> "$GITHUB_ENV"
+printf 'V3_CXX=%s\nV3_CC=%s\nV3_PACKAGE_TOOLCHAIN=%s\n' "$toolchain_dir/clang++" "$llvm_prefix/bin/clang" "$llvm_prefix" >> "$GITHUB_ENV"

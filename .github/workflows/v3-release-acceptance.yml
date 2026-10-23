@@ -122,7 +122,7 @@ jobs:
         if ! python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",443)); s.close()'; then
           prefix=(sudo env "PATH=$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD")
         fi
-        "${prefix[@]}" python3 scripts/run-v3-release-ci.py platform --selection "$RUNNER_TEMP/selected/selected.json" --archive "$RUNNER_TEMP/selected/"libhttpserver-*.tar.gz --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$RUNNER_TEMP/clients/bin/python" --node node --compiler "$V3_CXX" --cc "$V3_CC" --output "$RUNNER_TEMP/platform" --pkg-config-dir "$(brew --prefix)/share/pkgconfig"
+        "${prefix[@]}" python3 scripts/run-v3-release-ci.py platform --selection "$RUNNER_TEMP/selected/selected.json" --archive "$RUNNER_TEMP/selected/"libhttpserver-*.tar.gz --provider-prefix "$RUNNER_TEMP/prerequisites/provider" --client-python "$RUNNER_TEMP/clients/bin/python" --node node --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --output "$RUNNER_TEMP/platform" --pkg-config-dir "$(brew --prefix)/share/pkgconfig"
     - name: Make privileged proof readable by artifact upload
       if: always()
       run: |

@@ -72,6 +72,12 @@ def runtime(path):
         return bool(toolchain and location.is_relative_to(Path(toolchain).resolve()) and
                     any(fnmatch.fnmatch(location.name.lower(), pattern) for pattern in
                         ('libstdc++-*.dll', 'libgcc_s_*.dll', 'libwinpthread-*.dll')))
+    if platform.system() == 'Darwin':
+        toolchain = os.environ.get('V3_PACKAGE_TOOLCHAIN')
+        location = Path(path).resolve()
+        if (toolchain and location.parent == Path(toolchain).resolve() / 'lib/unwind'
+                and re.fullmatch(r'libunwind(?:\.[0-9]+)+\.dylib', location.name)):
+            return True
     trusted_roots = ('/libexec', '/usr/lib', '/lib', '/lib64', '/usr/lib64', '/usr/local/lib/gcc', '/opt/homebrew/Cellar/gcc', '/opt/homebrew/Cellar/llvm')
     return (any(fnmatch.fnmatch(Path(path).name, pattern) for pattern in RUNTIME)
             and any(Path(path).is_relative_to(Path(root)) for root in trusted_roots))
