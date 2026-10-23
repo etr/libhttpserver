@@ -5,6 +5,8 @@ import glob
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,9 +34,60 @@ def workflow_shell(lane, job, step):
 class FreeBSDNodePrerequisites(unittest.TestCase):
     workflows = ('v3-package-validation.yml', 'v3-release-acceptance.yml')
 
-    def execute_prerequisite(self, root, name, fail_stage):
-        steps = yaml.safe_load((ROOT / '.github/workflows' / name).read_text())['jobs']['freebsd']['steps']
+    def checkout(self, root):
+        root.mkdir(exist_ok=True)
+        env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+        env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
+        for args in (['init', '-q'], ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid',
+                                     'commit', '-q', '--allow-empty', '-m', 'fixture']):
+            subprocess.run(['git'] + args, cwd=root, env=env, check=True, capture_output=True)
+        return env
+
+    def guest_run(self, name, runner):
+        steps = workflow(name)['jobs']['freebsd']['steps']
         vm = next(step for step in steps if 'freebsd-vm@' in step.get('uses', ''))
+        run = '\n'.join('export RUNNER_TEMP=' + shlex.quote(str(runner))
+                        if line.startswith('export RUNNER_TEMP=') else line
+                        for line in vm['with']['run'].splitlines())
+        return run, steps
+
+    def recover(self, root, steps, runner, env):
+        recovery = next(step for step in steps if step.get('name') == 'Recover FreeBSD evidence')
+        self.assertEqual(recovery['if'], 'always()')
+        tools = root / 'transport'
+        tools.mkdir()
+        # Replace only SSH transport: real OpenSSH scp runs both protocol peers,
+        # including the receiving client's strict filename validation.
+        ssh = tools / 'ssh'
+        ssh.write_text('''#!/usr/bin/env python3
+import os, pathlib, shlex, sys
+argv = shlex.split(sys.argv[-1])
+assert argv[:3] == ['scp', '-r', '-f'], argv
+remote = pathlib.PurePosixPath(argv[-1])
+assert str(remote).startswith(('/tmp/v3-package-123-1/', '/tmp/v3-release-123-1/')), remote
+relative = str(remote).split('/', 3)[3]
+source = os.environ['FIXTURE_RUNNER'] + '/' + relative
+if sys.argv[-1].endswith('/.'):
+    source += '/.'
+os.execv(os.environ['REAL_SCP'], ['scp', '-r', '-f', source])
+''')
+        ssh.chmod(0o755)
+        scp = tools / 'scp'
+        scp.write_text('#!/bin/sh\nfor arg do [ "$arg" != -T ] || exit 91; done\nexec "$REAL_SCP" -S "$FIXTURE_SSH" "$@"\n')
+        scp.chmod(0o755)
+        host = root / 'host'
+        host.mkdir(exist_ok=True)
+        run = recovery['run'].replace('${{ github.run_id }}', '123').replace('${{ github.run_attempt }}', '1')
+        transport_env = dict(env, PATH=str(tools) + os.pathsep + env['PATH'],
+                             REAL_SCP=shutil.which('scp'), FIXTURE_SSH=str(ssh), FIXTURE_RUNNER=str(runner))
+        result = subprocess.run(['bash', '-eu', '-c', run], cwd=host, env=transport_env,
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        upload = next(step for step in steps if step.get('if') == 'always()' and '/upload-artifact@' in step.get('uses', ''))
+        return host / upload['with']['path']
+
+    def execute_prerequisite(self, root, name, fail_stage):
+        env = self.checkout(root)
         runner = root / 'runner'
         tools = root / 'tools'
         tools.mkdir()
@@ -70,9 +123,8 @@ configure.chmod(0o755)
             path = llvm / compiler
             path.write_text('#!/bin/sh\necho "selected clang version 19.1.7"\n')
             path.chmod(0o755)
-        run = vm['with']['run']
-        run = '\n'.join('export RUNNER_TEMP="' + str(runner) + '"' if line.startswith('export RUNNER_TEMP=') else line for line in run.splitlines())
-        env = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ['PATH'],
+        run, steps = self.guest_run(name, runner)
+        env = dict(env, PATH=str(tools) + os.pathsep + os.environ['PATH'],
                    FIXTURE_RUNNER=str(runner), SELECTED_LLVM=str(llvm),
                    OBSERVED=str(root / 'observed.json'), FAIL_STAGE=fail_stage)
         env.pop('CC', None)
@@ -97,29 +149,7 @@ configure.chmod(0o755)
                     root = Path(directory)
                     result, steps, runner, llvm, env = self.execute_prerequisite(root, name, stage)
                     self.assertEqual(result.returncode, status, result.stdout + result.stderr)
-                    recovery = next((step for step in steps if step.get('name') == 'Recover FreeBSD evidence'), None)
-                    self.assertIsNotNone(recovery, 'Failed VM commands skip the action copyback; recover evidence on the host')
-                    self.assertEqual(recovery['if'], 'always()')
-                    # Emulate only the SSH transport boundary after failed action
-                    # copyback: the evidence must come from the VM temp directory.
-                    scp = root / 'tools/scp'
-                    scp.write_text('''#!/usr/bin/env python3
-import os, pathlib, shutil, sys
-remote, destination = sys.argv[-2:]
-assert remote.startswith('freebsd:/tmp/v3-'), remote
-folder = 'package-evidence' if '/package-evidence/' in remote else 'platform-evidence'
-source = pathlib.Path(os.environ['FIXTURE_RUNNER']) / folder
-shutil.copytree(source, destination, dirs_exist_ok=True)
-''')
-                    scp.chmod(0o755)
-                    host = root / 'host'
-                    host.mkdir()
-                    recovery_run = recovery['run'].replace('${{ github.run_id }}', '123').replace('${{ github.run_attempt }}', '1')
-                    recovered = subprocess.run(['bash', '-eu', '-c', recovery_run], cwd=host,
-                                               env=env, capture_output=True, text=True, timeout=10)
-                    self.assertEqual(recovered.returncode, 0, recovered.stdout + recovered.stderr)
-                    upload = next(step for step in steps if step.get('if') == 'always()' and '/upload-artifact@' in step.get('uses', ''))
-                    logs = host / upload['with']['path'] / 'node-source'
+                    logs = self.recover(root, steps, runner, env) / 'node-source'
                     provenance = (logs / 'compiler.log').read_text()
                     self.assertIn(str(llvm / 'clang++'), provenance)
                     self.assertIn('clang version 19', provenance)
@@ -127,6 +157,77 @@ shutil.copytree(source, destination, dirs_exist_ok=True)
                     if stage == 'build':
                         self.assertIn('node-build-diagnostic', (logs / 'build.log').read_text())
                     self.assertFalse((logs / 'node-v24.15.0').exists(), 'Do not upload the Node source/build tree')
+
+    def test_guest_git_trust_is_exact_checkout_and_inherited_by_provenance_calls(self):
+        for name in self.workflows:
+            with self.subTest(workflow=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                checkout = root / 'pinned checkout'
+                env = self.checkout(checkout)
+                other = root / 'other checkout'
+                self.checkout(other)
+                env['GIT_TEST_ASSUME_DIFFERENT_OWNER'] = '1'
+                refused = subprocess.run(['git', 'rev-parse', '--verify', 'HEAD^{commit}'],
+                                         cwd=checkout, env=env, capture_output=True, text=True)
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertIn('dubious ownership', refused.stderr)
+                runner = root / 'runner'
+                run, _ = self.guest_run(name, runner)
+                early = run.split('if [ "$(node --version)"', 1)[0]
+                # The child process uses the same Git contract as the real Python
+                # provenance validators; another checkout must remain untrusted.
+                probe = 'import subprocess; subprocess.run(["git", "rev-parse", "--verify", "HEAD^{commit}"], check=True)'
+                result = subprocess.run(['sh', '-eu', '-c', early + '\n' + shlex.join([sys.executable, '-c', probe]) +
+                    '\ngit -C ' + shlex.quote(str(other)) + ' rev-parse --verify HEAD'],
+                    cwd=checkout, env=env, capture_output=True, text=True, timeout=10)
+                self.assertIn('dubious ownership', result.stderr)
+                self.assertIn(str(other), result.stderr)
+                self.assertNotIn(str(checkout), result.stderr)
+                self.assertEqual(result.returncode, 128)
+                folder = 'package-evidence' if name == self.workflows[0] else 'platform-evidence'
+                provenance = (runner / folder / 'git-provenance.log').read_text()
+                head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=checkout, text=True).strip()
+                self.assertIn(str(checkout), provenance)
+                self.assertIn('git version', provenance)
+                self.assertIn(head, provenance)
+                self.assertIn(head, result.stdout)
+
+    def test_failed_early_git_probe_is_retained_and_recovered_before_node(self):
+        for name in self.workflows:
+            with self.subTest(workflow=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                env = self.checkout(root)
+                (root / '.git/HEAD').write_text('ref: refs/heads/missing\n')
+                runner = root / 'runner'
+                run, steps = self.guest_run(name, runner)
+                early = run.split('if [ "$(node --version)"', 1)[0]
+                result = subprocess.run(['sh', '-eu', '-c', early], cwd=root, env=env,
+                                        capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('Needed a single revision', result.stderr)
+                evidence = self.recover(root, steps, runner, env)
+                self.assertIn('Needed a single revision', (evidence / 'git-provenance.log').read_text())
+                self.assertFalse((evidence / 'node-source').exists())
+
+    def test_successful_evidence_recovery_merges_named_directory_in_place(self):
+        for name in self.workflows:
+            with self.subTest(workflow=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                runner = root / 'runner'
+                _, steps = self.guest_run(name, runner)
+                folder = 'package-evidence' if name == self.workflows[0] else 'platform-evidence'
+                source = runner / folder
+                (source / 'platform').mkdir(parents=True)
+                (source / 'platform/FreeBSD.tar.gz').write_bytes(b'platform proof')
+                (source / '.diagnostic').write_text('hidden diagnostic')
+                existing = root / 'host' / folder
+                existing.mkdir(parents=True)
+                (existing / 'kept.log').write_text('action copyback diagnostic')
+                evidence = self.recover(root, steps, runner, dict(os.environ))
+                self.assertEqual((evidence / 'kept.log').read_text(), 'action copyback diagnostic')
+                self.assertEqual((evidence / '.diagnostic').read_text(), 'hidden diagnostic')
+                self.assertEqual((evidence / 'platform/FreeBSD.tar.gz').read_bytes(), b'platform proof')
+                self.assertFalse((evidence / folder).exists())
 
 
 class WindowsGitPreflight(unittest.TestCase):

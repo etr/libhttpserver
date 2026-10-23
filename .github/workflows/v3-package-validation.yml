@@ -160,9 +160,18 @@ jobs:
           cpu: 2
           prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm19 git node24
           run: |
+            set -eu
             export RUNNER_TEMP=/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}
             mkdir -p "$RUNNER_TEMP/package-evidence"
             trap 'cp -R "$RUNNER_TEMP/package-evidence" ./package-evidence' EXIT
+            # Guest root must trust only the host checkout, including in Python's Git children.
+            export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD"
+            git_log="$RUNNER_TEMP/package-evidence/git-provenance.log"
+            {
+              printf 'checkout=%s\n' "$PWD" && command -v git && git --version &&
+                git rev-parse --verify 'HEAD^{commit}'
+            } > "$git_log" 2>&1 || { cat "$git_log" >&2; exit 1; }
+            cat "$git_log"
             if [ "$(node --version)" != v24.15.0 ]; then
               mkdir -p "$RUNNER_TEMP/node-source"
               node_logs="$RUNNER_TEMP/package-evidence/node-source"
@@ -198,7 +207,7 @@ jobs:
         if: always()
         run: |
           mkdir -p package-evidence
-          scp -O -r freebsd:/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}/package-evidence/. package-evidence/
+          scp -O -r "freebsd:/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}/package-evidence" ./
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

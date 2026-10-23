@@ -262,6 +262,14 @@ jobs:
           export RUNNER_TEMP=/tmp/v3-release-${{ github.run_id }}-${{ github.run_attempt }}
           mkdir -p "$RUNNER_TEMP/platform-evidence"
           trap 'cp -R "$RUNNER_TEMP/platform" "$RUNNER_TEMP/platform-evidence/" 2>/dev/null || true; cp -R "$RUNNER_TEMP/prerequisites" "$RUNNER_TEMP/platform-evidence/" 2>/dev/null || true; cp -R "$RUNNER_TEMP/platform-evidence" ./platform-evidence' EXIT
+          # Guest root must trust only the host checkout, including in Python's Git children.
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD"
+          git_log="$RUNNER_TEMP/platform-evidence/git-provenance.log"
+          {
+            printf 'checkout=%s\n' "$PWD" && command -v git && git --version &&
+              git rev-parse --verify 'HEAD^{commit}'
+          } > "$git_log" 2>&1 || { cat "$git_log" >&2; exit 1; }
+          cat "$git_log"
           if [ "$(node --version)" != v24.15.0 ]; then
             mkdir -p "$RUNNER_TEMP/node-source"
             node_logs="$RUNNER_TEMP/platform-evidence/node-source"
@@ -294,7 +302,7 @@ jobs:
       if: always()
       run: |
         mkdir -p platform-evidence
-        scp -O -r freebsd:/tmp/v3-release-${{ github.run_id }}-${{ github.run_attempt }}/platform-evidence/. platform-evidence/
+        scp -O -r "freebsd:/tmp/v3-release-${{ github.run_id }}-${{ github.run_attempt }}/platform-evidence" ./
     - id: proof
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
