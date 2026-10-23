@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-date: portable HTTP date conversion
 
-Status: Local implementation complete; caller validation and finalization pending. Base: `v3` at `1c7e490721802c74fe023f8c0ffd637f85a47c21`.
+Status: Complete (local implementation, Groundwork validation and finalization). Native execution remains CI / v3 PR owned. Base: `v3` at `1c7e490721802c74fe023f8c0ffd637f85a47c21`.
 
 Native Windows job120372343449 in run39941070929 failed to compile the actual framer because `gmtime_r` is unavailable. The compiler's MinGW header diagnostic declares `gmtime_s(struct tm*, const time_t*)`. The affected source is unchanged between failed CI commit56da7ec9 and this task's base. This actual native compiler failure is the accepted RED for the compile-only platform selection repair.
 
@@ -14,7 +14,7 @@ Action items:
 - [x] Run the existing focused framer/date tests against actual production translation units.
 - [x] Run changed-file cpplint and `git diff --check`.
 - [x] Preserve exact commands, raw outputs and verification limits in `.debug/FEATURE-ci-windows-date/` at the repository root.
-- [ ] Caller: Groundwork validation and local finalization into v3.
+- [x] Caller: Groundwork validation and local finalization into v3. Three focused reviewers approved with zero findings.
 - [ ] CI / v3 PR: fresh native Windows compilation/execution.
 
 Local verification: GNU C++20 compilation with `-Wall -Wextra` passes without warnings. The unchanged complete `http1_response_framer` executable passes64 tests/174 checks with `LC_ALL=C TZ=Pacific/Honolulu`, including exact RFC timestamp formatting, Date field order/omission/precedence and framing/corpus checks. cpplint and diff checks pass. No synthetic or source-text test was added. The first task-local link omitted actual parser dependencies; its failure is retained, and the corrected command links the real resource-charge, budget and target translation units. This was execution setup, not a production defect or native Windows GREEN.
