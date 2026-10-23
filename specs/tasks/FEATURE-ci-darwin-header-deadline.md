@@ -1,7 +1,7 @@
 # FEATURE-ci-darwin-header-deadline: Bounded native Darwin deadline diagnostic stage
 
-Status: In Progress — bounded diagnostic stage completed; documentation-only
-outcome awaits Groundwork validation and finalization. The defect is unresolved.
+Status: Complete — bounded diagnostic stage only. Groundwork validation passed
+(1 iteration, 0 fixed, 0 unworked); the defect and full CI gates remain unresolved.
 
 Base: `v3` at `c0cfdabc8040273d60c610269a93d1c687ed8517`.
 
@@ -24,7 +24,7 @@ Acceptance for this diagnostic stage:
 - [x] Restore source, existing tests and workflows to exact base bytes; remove the temporary header.
 - [x] Preserve unresolved assertions/budgets, evidence and limits in a separate pending task.
 - [x] Verify documentation-only final delta and `git diff --check`.
-- [ ] Caller: Groundwork validation and serial task finalization.
+- [x] Caller: Groundwork validation and serial task finalization.
 
 ## Original failure remains open
 
@@ -95,8 +95,10 @@ Cleanup evidence is in the primary checkout's
 `.debug/ci-darwin-native-69af4dxe/diagnostic-stage-cleanup.json` and
 `diagnostic-stage-cleanup-check.log`. Byte/blob equality, absent trace identifiers
 and the documentation-only diff were checked; `git diff --check` passes. With
-no production/test/workflow delta, no C++ build or broad suite was rerun. Final
-Groundwork audit and finalization remain caller-owned and pending.
+no production/test/workflow delta, no C++ build or broad suite was rerun. Groundwork
+validation passed at `31ccbeac65a37e85895163666281621fa726b51d` with three
+approvals (1 iteration, 0 fixed, 0 unworked); caller finalization records the
+diagnosis-only completion. Full CI-green acceptance remains incomplete.
 
 ## Evidence and boundaries
 
