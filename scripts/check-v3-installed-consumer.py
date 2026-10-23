@@ -34,6 +34,7 @@ def package_lane(args, source, output, mode, inventory):
     env.pop('V3_TLS_LIBS', None)
     env['CXX'] = args.compiler
     env['CC'] = args.cc
+    env['MAKE'] = args.make
     pkgdirs = [root / 'lib/pkgconfig' for root in args.prerequisite_prefix] + args.pkg_config_dir
     env.update(PKG_CONFIG_PATH='', PKG_CONFIG_LIBDIR=os.pathsep.join(path.as_posix() for path in pkgdirs))
     env['CPPFLAGS'] = shlex.join(['-I' + (root / 'include').as_posix() for root in args.prerequisite_prefix])
@@ -60,6 +61,7 @@ def package_lane(args, source, output, mode, inventory):
     command([args.make, '-j' + str(args.jobs)], build, env)
     command([args.make, 'install'], build, env)
     runtime_env = runtime_environment(audit.clean_environment(), prefix, args.provider_prefix, args.prerequisite_prefix, args.toolchain_prefix)
+    runtime_env['MAKE'] = args.make
     runtime_env.update(PKG_CONFIG_PATH='', PKG_CONFIG_LIBDIR=os.pathsep.join(path.as_posix() for path in [prefix / 'lib/pkgconfig'] + pkgdirs))
     runtime_env.update({key: env[key] for key in ('V3_TLS_CFLAGS', 'V3_TLS_LIBS') if key in env})
     runtime_env['V3_PROVIDER_PREFIX'] = str(args.provider_prefix)

@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import socket
 import subprocess
@@ -21,6 +22,87 @@ import package_matrix as matrix
 import package_commands as commands
 import package_process as process
 import package_traffic as traffic
+
+
+@unittest.skipIf(os.name == 'nt', 'POSIX make lookup fixture; native Windows is CI owned')
+class InstalledMakeTest(unittest.TestCase):
+    """Run the package lane through real Automake dependency bootstrapping."""
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.temp.cleanup)
+        cls.root = Path(cls.temp.name).resolve()
+        cls.gnu_make = shutil.which('gmake') or shutil.which('make')
+        version = subprocess.check_output([cls.gnu_make, '--version'], text=True)
+        if 'GNU Make' not in version:
+            raise RuntimeError('selected-make fixture requires GNU make')
+        cls.source = cls.root / 'source'
+        cls.source.mkdir()
+        (cls.source / 'configure.ac').write_text('''AC_INIT([selected-make], [1.0])
+AM_INIT_AUTOMAKE([foreign])
+AC_PROG_CC
+AC_ARG_ENABLE([v3-tls])
+AC_ARG_ENABLE([examples])
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
+''')
+        (cls.source / 'Makefile.am').write_text('''noinst_PROGRAMS = probe
+probe_SOURCES = probe.c probe.h
+all-local:
+\t@printf '%s\\n' "$$MAKE" > all-make
+install-exec-local:
+\t@printf '%s\\n' "$$MAKE" > install-make
+check-v3-native-linkage:
+\t@printf '%s\\n' "$$MAKE" > check-make
+\t@echo selected-make-fixture-complete
+\t@exit 23
+check-headers check-hygiene check-v3-installed-package-fixtures:
+\t@:
+''')
+        (cls.source / 'probe.c').write_text('#include "probe.h"\nint main(void) { return PROBE; }\n')
+        (cls.source / 'probe.h').write_text('#define PROBE 0\n')
+        subprocess.run(['autoreconf', '--install', '--force'], cwd=cls.source,
+                       check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        spec = importlib.util.spec_from_file_location('installed_make_runner',
+            Path(__file__).with_name('check-v3-installed-consumer.py'))
+        cls.runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.runner)
+
+    def exercise_selection(self, selection, *, broken_default=False, ambient_make=None):
+        root = self.root / self._testMethodName
+        root.mkdir()
+        tools = root / 'tools'
+        tools.mkdir()
+        bad_make = tools / 'unselected-make'
+        bad_make.write_text('#!/bin/sh\necho unselected-make >&2\nexit 1\n')
+        bad_make.chmod(0o755)
+        (tools / 'make').symlink_to(bad_make if broken_default else self.gnu_make)
+        (tools / 'gmake').symlink_to(self.gnu_make)
+        args = SimpleNamespace(make=selection, compiler=shutil.which('c++'), cc=shutil.which('cc'),
+            jobs=1, prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=root,
+            toolchain_prefix=None, optimized=False)
+        environment = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ['PATH'])
+        environment.pop('MAKE', None)
+        if ambient_make:
+            environment['MAKE'] = str(bad_make)
+        # Stop at the fixture's check target, after real configure/build/install.
+        with patch.dict(os.environ, environment, clear=True), \
+                self.assertRaisesRegex(RuntimeError, 'selected-make-fixture-complete'):
+            self.runner.package_lane(args, self.source, root, 'no', matrix.load())
+        build = root / 'tls-no/build'
+        self.assertTrue((build / '.deps/probe.Po').is_file())
+        self.assertIn('probe.h', (build / '.deps/probe.Po').read_text())
+        for phase in ('all', 'install', 'check'):
+            self.assertEqual((build / (phase + '-make')).read_text().strip(), selection)
+
+    def test_selected_make_bootstraps_dependencies_with_unusable_default(self):
+        self.exercise_selection('gmake', broken_default=True)
+
+    def test_absolute_make_overrides_ambient_make(self):
+        self.exercise_selection(self.gnu_make, broken_default=True, ambient_make=True)
+
+    def test_default_make_overrides_ambient_make(self):
+        self.exercise_selection('make', ambient_make=True)
 
 
 class InstalledShellTest(unittest.TestCase):
@@ -39,7 +121,7 @@ class InstalledShellTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('installed_shell_runner', Path(__file__).with_name('check-v3-installed-consumer.py'))
         self.runner = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.runner)
-        self.args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc',
+        self.args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc', make='make',
             prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=self.root, optimized=False)
         self.popen = subprocess.Popen
         self.converted_configure = (self.root / 'configure').as_posix()
@@ -125,7 +207,7 @@ class MatrixTest(unittest.TestCase):
             for optimized, flags in ((False, '-O0 -g'), (True, '-O3 -g')):
                 with self.subTest(optimized=optimized):
                     output = root / str(optimized); output.mkdir()
-                    args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc',
+                    args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc', make='make',
                         prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=root,
                         optimized=optimized)
                     with self.assertRaises(RuntimeError):
