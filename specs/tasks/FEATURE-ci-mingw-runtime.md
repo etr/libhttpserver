@@ -1,6 +1,6 @@
 # FEATURE-ci-mingw-runtime: recognize the MinGW SEH compiler runtime
 
-Status: Implemented; pending caller validation and finalization.
+Status: Complete (local implementation, validation and finalization).
 Base: `v3` at `f91dddf4faf21f33cf27e9e4ece3870e3a593e56`.
 
 Windows package job `120444167361` in run `39962619327` and archive job
@@ -30,7 +30,7 @@ Action items:
 - [x] Run the focused native-linkage module, Bash/Python syntax and diff checks.
 - [x] Retain raw RED/GREEN commands/results, source bindings, documentation
   reference and journal under main `.debug/FEATURE-ci-mingw-runtime/`.
-- [ ] Caller: Groundwork validation and local finalization into v3.
+- [x] Caller: Groundwork validation and local finalization into v3.
 - [ ] CI / v3 PR: native Windows package and archive build/audit evidence.
 
 Local verification: the original 17-test focused baseline passed. The new
