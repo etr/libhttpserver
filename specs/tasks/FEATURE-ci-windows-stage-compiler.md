@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-stage-compiler: keep libtool flags out of nested compiler checks
 
-Status: In Progress — native cause captured; minimal repair awaiting final Groundwork validation.
+Status: Complete — local implementation and validation complete; post-repair native checks remain CI/v3-PR owned.
 Base: `v3` at `6fc672326b9cad8f4aa068b9641fc03e21218e31`.
 
 The fresh native Windows package job `120607477636` and archive job
@@ -43,7 +43,7 @@ Action items:
 - [x] Resume this same task for a proven minimal repair with relevant TDD.
 - [x] Remove every temporary workflow change, restoring the exact base workflow
   before final validation and merge into v3.
-- [ ] Caller: complete required Groundwork validation and finalization.
+- [x] Caller: complete required Groundwork validation and finalization.
 
 Checkpoint verification:
 
@@ -110,3 +110,7 @@ native CI run, broad baseline, full validation, publication, merge or completion
 is claimed. The actual post-repair Windows/platform matrix remains CI/v3-PR
 owned under the local-completion policy. Earlier Darwin/Linux/Tpo assessments
 remain closed and uncertain where already recorded; none was reopened.
+
+Final local validation and finalization (2026-10-23):
+
+Groundwork validation sealed the exact clean implementation `8dbf125d8773a2992c0783759920b8ac110df2aa` / tree `0a518bb1cda6e423c6cfecfc50fc125ac3faaea7`: 1 iteration, 0 fixed, 0 unworked. All nine applicable profiles approved with zero findings. Durable receipt: `.git/groundwork/validation/cdb4ee2aea69cc6a/40279164a33d1334/groundwork-validation-e0a1595d573592ace505630478c35022`. The implementation-ready paragraph above describes the earlier checkpoint; this receipt supersedes its pending validation/completion items. Caller finalization changes only this task bookkeeping before the serial merge/cleanup. Post-repair native Windows, macOS and BSD results are not claimed passed; they remain assigned to CI/v3 PR under AGENTS. Overall CI-green work remains open.
