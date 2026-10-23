@@ -1,6 +1,6 @@
 # FEATURE-ci-macos-make-fixture: preserve make frontend identity in fixture aliases
 
-Status: In Progress — implementation ready; caller validation/finalization pending.
+Status: Complete (local) — validated and finalized into v3; native macOS confirmation pending.
 Base: local `v3` at `9b93ebe8eb355b6da6099f8ed7764cda8c23bb90`.
 
 Native macOS package job `120582231719` and archive Darwin job `120582524154`
@@ -29,7 +29,7 @@ Action items:
 - [x] Run the same three cases against the current unchanged driver as GREEN; retain actual dependency and exact MAKE receipts.
 - [x] Verify relevant preservation tests, launcher syntax/argument/status behavior, Python syntax and diff checks.
 - [x] Retain raw evidence, executed sources, source bindings, versions and verification limits.
-- [ ] Caller: complete required Groundwork validation and local finalization into `v3`.
+- [x] Caller: complete required Groundwork validation and local finalization into `v3`.
 - [ ] CI / v3 PR: confirm repaired fixture on native macOS package/archive jobs.
 
 Verification: 22 existing installed-shell, ps and matrix contracts pass before
@@ -76,3 +76,8 @@ Its existing script registration/distribution remains sufficient. Groundwork's
 identity helper resolves the worktree/branch; git metadata requires sandbox
 escalation. Preserve canonical frontend invocation names with exec launchers
 rather than renamed symlinks. No merge, push or CI cancellation by executor.
+
+Groundwork validation passed at `cbc63430d6c558abcc0611d294598fff53c05158`
+(1 iteration, 0 fixed, 0 unworked): six fresh approvals and three justified
+unchanged-profile carries cover all applicable profiles. Native repaired macOS
+execution remains incomplete and CI/v3-PR owned.
