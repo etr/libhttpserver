@@ -1,6 +1,6 @@
 # FEATURE-ci-tls-ca-fixture: make independent TLS fixture chains strictly valid
 
-Status: In Progress — implementation complete; caller validation/finalization pending.
+Status: Complete (local) — validated and finalized into v3; native CI remains pending.
 Base: local `v3` at `f3e01f9dddc07c5aa94051b89220095d05c47f53`.
 Evidence: `.debug/ci-tls-ca-fixture-a1jpmct9/journal.md` and its `implementation/` logs.
 
@@ -33,7 +33,7 @@ Action items:
   mTLS acceptance and rejection for expired, untrusted and wrong-purpose clients.
 - [x] Register/distribute the focused test in TLS-on check-local; run the configured
   standalone Make target, bootstrap, changed-file cpplint, syntax and diff checks.
-- [ ] Caller: Groundwork validation and finalization into v3.
+- [x] Caller: Groundwork validation and finalization into v3.
 - [ ] CI / v3 PR: native macOS/Python 3.14 checkout/archive public TLS matrices.
 
 Implementation and reproduction:
@@ -89,3 +89,9 @@ Local verification and limits:
   Native macOS/Python 3.14 execution remains CI / v3-PR owned, not passed locally.
   Prior Darwin deadline, old Linux parity and concurrent Windows install
   uncertainties remain closed to further diagnosis under this task.
+
+Groundwork validation passed at `77b1113fcb1dabc64c1563852764cfae08571e6a`
+(1 iteration, 0 fixed, 0 unworked; four approvals). Final seven-test Make evidence
+binds committed inputs by execution chronology and executor attestation; the older
+supplemental provider log is not claimed as a final Python gate. Native checks
+remain incomplete and CI/v3-PR owned.
