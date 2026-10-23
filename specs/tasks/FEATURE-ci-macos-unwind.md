@@ -1,7 +1,6 @@
 # FEATURE-ci-macos-unwind: selected Darwin LLVM unwind runtime
 
-Status: Implemented; local focused checks pass. Caller-owned Groundwork validation
-and finalization are pending. Native macOS package/archive execution remains
+Status: Complete (local implementation, Groundwork validation and finalization). Native macOS package/archive execution remains
 CI / v3 PR owned. Base: `v3` at
 `6a1709daf6d5b51dac18a85c50030aeddd4cc570`.
 
@@ -39,7 +38,7 @@ Action items:
   actionlint, Python compilation, Bash syntax and diff checks pass.
 - [x] Retain raw RED/GREEN logs, corrected fixture setup, doubts and command
   results under root `.debug/FEATURE-ci-macos-unwind/repair-selected-prefix/`.
-- [ ] Caller: Groundwork validation and local finalization into v3.
+- [x] Caller: Groundwork validation and local finalization into v3; five reviewers approved with zero findings.
 - [ ] CI / v3 PR: genuine native macOS package and selected-archive execution.
 
 Local verification: 40 installed-package policy/provenance tests, 7 platform
