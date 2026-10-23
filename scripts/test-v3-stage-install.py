@@ -2,6 +2,7 @@
 """Exercise configured staging recipes and real Automake/libtool installation."""
 import os
 from pathlib import Path
+import platform
 import shlex
 import shutil
 import subprocess
@@ -23,6 +24,13 @@ class StagedInstallRecipes(unittest.TestCase):
         cls.build = Path(cls.temporary.name).resolve()
         cls.environment = {key: value for key, value in os.environ.items()
                            if key not in ('MAKEFLAGS', 'MFLAGS', 'MAKELEVEL')}
+        cls.shell = 'sh'
+        if platform.system() == 'Windows':
+            # Bypass Windows system-shell lookup and use the selected MSYS tools.
+            shell = shutil.which('bash', path=cls.environment.get('PATH', ''))
+            if not shell:
+                raise RuntimeError('bash is unavailable on the selected PATH')
+            cls.shell = str(Path(shell).resolve())
         for tool in ('install', 'ranlib'):
             boundary = cls.build / f'native-{tool}-boundary.sh'
             boundary.write_text(
@@ -33,12 +41,12 @@ class StagedInstallRecipes(unittest.TestCase):
                 f'  /*[a-zA-Z]:/*) echo "native {tool} rejects embedded drive: $destination" >&2; exit 1 ;;\n'
                 'esac\n'
                 f'printf "%s\\n" "$destination" >> {tool}-destinations.log\n'
-                f'exec {shlex.quote(Path(shutil.which(tool)).as_posix())} "$@"\n')
+                f'exec {shlex.quote(cls.shell_path(Path(shutil.which(tool))))} "$@"\n')
             boundary.chmod(0o755)
         result = subprocess.run(
-            ['sh', (SOURCE / 'configure').as_posix(), '--disable-v3-tls',
+            [cls.shell, cls.shell_path(SOURCE / 'configure'), '--disable-v3-tls',
              '--disable-examples', '--prefix=D:/ci/prefix',
-             'RANLIB=' + (cls.build / 'native-ranlib-boundary.sh').as_posix()], cwd=cls.build,
+             'RANLIB=' + cls.shell_path(cls.build / 'native-ranlib-boundary.sh')], cwd=cls.build,
             env=cls.environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         if result.returncode:
             raise RuntimeError(result.stdout)
@@ -53,11 +61,20 @@ class StagedInstallRecipes(unittest.TestCase):
                 ['--mode=compile'] + compiler + ['-c', 'stagefixture.cpp', '-o', 'stagefixture.lo'],
                 ['--mode=link'] + compiler + ['-o', 'libstagefixture.la', 'stagefixture.lo',
                  '-rpath', '/stagefixture', '-no-undefined']]:
-            result = subprocess.run(['sh', '../libtool', '--tag=CXX'] + arguments,
+            result = subprocess.run([cls.shell, '../libtool', '--tag=CXX'] + arguments,
                                     cwd=cls.build / 'src', env=cls.environment, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True)
             if result.returncode:
                 raise RuntimeError(result.stdout)
+
+    @classmethod
+    def shell_path(cls, path):
+        if platform.system() != 'Windows':
+            return path.as_posix()
+        # Autoconf's ':'-separated source search requires MSYS drive notation.
+        return subprocess.check_output(
+            [cls.shell, '-c', 'cygpath -u "$1"', 'stage-path', path.as_posix()],
+            cwd=cls.build, env=cls.environment, text=True).strip()
 
     def setUp(self):
         for name in ('.hygiene-stage', '.install-stage', '.shared-check-stage', 'missing-stage'):
@@ -70,7 +87,7 @@ class StagedInstallRecipes(unittest.TestCase):
         # Only the fixture archive replaces the unrelated protocol engines.
         command = [MAKE, '--no-print-directory', target,
                    'lib_LTLIBRARIES=libstagefixture.la', 'noinst_LTLIBRARIES=', 'noinst_PROGRAMS=',
-                   'INSTALL=' + self.installer.as_posix()]
+                   'INSTALL=' + self.shell_path(self.installer)]
         if shared:
             # Only check-local's staged-install body is under test here.
             text = (SOURCE / 'Makefile.am').read_text()
