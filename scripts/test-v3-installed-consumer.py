@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import signal
 import socket
@@ -76,8 +77,12 @@ check-headers check-hygiene check-v3-installed-package-fixtures:
         bad_make = tools / 'unselected-make'
         bad_make.write_text('#!/bin/sh\necho unselected-make >&2\nexit 1\n')
         bad_make.chmod(0o755)
-        (tools / 'make').symlink_to(bad_make if broken_default else self.gnu_make)
-        (tools / 'gmake').symlink_to(self.gnu_make)
+        # Apple's developer-tool frontend dispatches by its invoked name.
+        for name, target in (('make', bad_make if broken_default else self.gnu_make),
+                             ('gmake', self.gnu_make)):
+            launcher = tools / name
+            launcher.write_text('#!/bin/sh\nexec ' + shlex.quote(str(target)) + ' "$@"\n')
+            launcher.chmod(0o755)
         args = SimpleNamespace(make=selection, compiler=shutil.which('c++'), cc=shutil.which('cc'),
             jobs=1, prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=root,
             toolchain_prefix=None, optimized=False)
