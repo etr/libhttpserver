@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-cxx20: select a complete supported C++20 SDK on FreeBSD
 
-Status: In Progress — implementation ready for caller-owned Groundwork validation.
+Status: Complete — local SDK provisioning validated; archive check environment follow-up is required before publication.
 Base: `v3` at `b2f7b33f7ec4857920bf5bd2fe28ad0f2f2e1e25`.
 Plan: `.groundwork-plans/FEATURE-ci-freebsd-cxx20-plan.md` in the primary checkout.
 Journal: `.debug/ci-freebsd-cxx20-mj9f7lkt/journal.md` in the primary checkout.
@@ -31,7 +31,7 @@ Action items:
 - [x] Demonstrate actual local stable20 source-build/compile/link/run semantics,
   compile-only selection, and expected RED when the old libc++19 is restored.
 - [x] Run affected tests, bootstrap, actionlint and syntax/whitespace checks.
-- [ ] Caller: perform full Groundwork validation, finalization and merge.
+- [x] Caller: perform full Groundwork validation, finalization and merge.
 - [ ] Native FreeBSD post-repair execution: CI/v3-PR owned, not executed locally.
 
 Causal evidence and checkpoint decision (2026-10-23):
@@ -135,3 +135,9 @@ explicitly. Tests use the existing Python unittest scripts; no new framework was
 introduced. No full baseline, new native CI dispatch, publication, validation loop
 or merge was run. Previously closed Darwin/Linux/Windows uncertainties remain
 closed. Overall CI-green status and caller validation remain incomplete.
+
+Final local validation and serial follow-up (2026-10-23):
+
+Groundwork sealed exact implementation `f91303f2850560a8d79de1f1cffd55cfda97f823` / tree `6df6ab711604b5de3c7b06a6f5a3795823e65ba0`: 1 iteration, 0 fixed, 3 unworked; all nine applicable profiles approved. Durable run: `.git/groundwork/validation/cdb4ee2aea69cc6a/8efc9fac2c9ecb40/groundwork-validation-0037d169109d3f37fd2e85bc9b88c3b6`. The helper-produced unworked findings report is preserved unchanged. No finding verdict was overridden or repaired by this validation. The earlier implementation-ready text above is superseded only for local validation/finalization. Native FreeBSD/libcxxrt execution remains unexecuted and CI/v3-PR owned.
+
+One concrete approved architecture finding identifies lost selected-toolchain environment between the archive workflow and platform proof later make checks. Caller will complete narrowly scoped serial `FEATURE-ci-freebsd-toolchain-env` before publishing this batch; this known CI defect is not waived or claimed repaired here. Earlier closed Darwin/Linux/Tpo uncertainty batches remain closed. Overall CI is not green.
