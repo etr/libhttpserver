@@ -104,7 +104,9 @@ jobs:
           build, prefix, integration = [output / name for name in ('build', 'prefix', 'integration-shared')]
           for directory in (build, prefix, integration):
               directory.mkdir()
-          command = Commands(output)
+          runner_commands = output / 'runner'
+          runner_commands.mkdir()
+          command = Commands(runner_commands)
           provider = output.parent / 'prerequisites/provider'
           compiler, cc = os.environ['V3_CXX'], os.environ['V3_CC']
           toolchain = Path(os.environ['V3_PACKAGE_TOOLCHAIN'])
@@ -116,6 +118,7 @@ jobs:
                      LDFLAGS='-Wl,-rpath,' + str(provider / 'lib'))
           receipt = dict(kind='diagnostic-only; not complete package validation', tls='no', linkage='shared',
                          trace_mode='bounded memory; stderr emitted after all suite fixtures stop',
+                         runner_context=dict(uid=os.getuid(), euid=os.geteuid(), gid=os.getgid(), egid=os.getegid(), cwd=str(checkout)),
                          revision=command(['git', 'rev-parse', 'HEAD'], checkout, env).strip(),
                          compiler=command([compiler, '--version'], checkout, env),
                          provider_header_sha256=hashlib.sha256((provider / 'include/openssl/opensslv.h').read_bytes()).hexdigest())
@@ -161,6 +164,44 @@ jobs:
               receipt['source_archive'] = dict(**expected, artifact_zip_sha256=zip_digest,
                   archive_sha256=selected['sha256'], source_root=str(source), overlay=overlay,
                   provenance='verified original archive plus explicit diagnostic overlay; not immutable release proof')
+              receipt['status'] = 'archive overlay ready; privileged execution pending'
+          except Exception as error:
+              receipt.update(status='diagnostic failed', error=str(error))
+              raise
+          finally:
+              (output / 'diagnostic.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY_DIAGNOSTIC
+          diagnostic_script="$RUNNER_TEMP/package-evidence/header-deadline-build.py"
+          cat > "$diagnostic_script" <<'PY_PRIVILEGED'
+          import importlib.util, json, os, shlex, sys
+          from pathlib import Path
+          checkout = Path.cwd().resolve()
+          sys.path.insert(0, str(checkout / 'scripts/lib'))
+          import package_matrix as matrix
+          from package_commands import Commands, runtime_environment
+          from package_integration import compile_probe
+          spec = importlib.util.spec_from_file_location('audit', checkout / 'scripts/audit-v3-installed-package.py')
+          audit = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(audit)
+          output = Path(os.environ['RUNNER_TEMP']) / 'package-evidence/header-deadline-diagnostic'
+          receipt = json.loads((output / 'diagnostic.json').read_text())
+          source = Path(receipt['source_archive']['source_root'])
+          build, prefix, integration = [output / name for name in ('build', 'prefix', 'integration-shared')]
+          provider = output.parent / 'prerequisites/provider'
+          os.environ['PATH'] = str(provider / 'bin') + os.pathsep + os.environ['PATH']
+          compiler, cc = os.environ['V3_CXX'], os.environ['V3_CC']
+          toolchain = Path(os.environ['V3_PACKAGE_TOOLCHAIN'])
+          env = audit.clean_environment()
+          env.update(CXX=compiler, CC=cc, CXXFLAGS='-O0 -g', CPPFLAGS='-DHTTPSERVER_DIAG_HEADER_DEADLINE',
+                     LDFLAGS='-Wl,-rpath,' + str(provider / 'lib'))
+          command = Commands(output)
+          receipt['privileged_context'] = dict(uid=os.getuid(), euid=os.geteuid(), gid=os.getgid(), egid=os.getegid(),
+              cwd=str(checkout), compiler=compiler, cc=cc, toolchain=str(toolchain), provider_prefix=str(provider),
+              path=env['PATH'], git_safe_directory=os.environ['GIT_CONFIG_VALUE_0'],
+              build_environment={key: env.get(key) for key in ('CXX', 'CC', 'CPPFLAGS', 'CXXFLAGS', 'LDFLAGS')})
+          try:
+              assert os.geteuid() == 0, 'diagnostic build/test must match the original root execution'
+              assert not any(key in os.environ for key in ('GH_TOKEN', 'GITHUB_TOKEN'))
               command(['bash', source / 'configure', '--enable-v3-tls=no', '--disable-examples', '--prefix=' + str(prefix)], build, env)
               command(['make', '-j2'], build, env)
               command(['make', 'install'], build, env)
@@ -180,9 +221,20 @@ jobs:
               graph = audit.dependency_graph([str(executable)])
               matrix.check_linkage(graph, 'shared', prefix)
               receipt['dependencies'] = graph
-              result = command([str(executable)], source / 'test', runtime, timeout=180, allow_failure=True)
+              launch = ('import json,os,sys; assert os.geteuid() == 0; '
+                  'assert not any(key in os.environ for key in ("GH_TOKEN", "GITHUB_TOKEN")); '
+                  'context=dict(uid=os.getuid(),euid=os.geteuid(),gid=os.getgid(),egid=os.getegid(),cwd=os.getcwd(),'
+                  'runtime={key:os.environ.get(key) for key in ("PATH","DYLD_LIBRARY_PATH","LD_LIBRARY_PATH","V3_PACKAGE_TOOLCHAIN")}); '
+                  'print("V3_DIAGNOSTIC_CONTEXT " + json.dumps(context),flush=True); '
+                  'os.execvpe(sys.argv[1],sys.argv[1:],os.environ)')
+              result = command([sys.executable, '-c', launch, str(executable)], source / 'test', runtime, timeout=180, allow_failure=True)
               print(result, end='', flush=True)
               receipt['exit'] = command.records[-1]['exit']
+              contexts = [line.removeprefix('V3_DIAGNOSTIC_CONTEXT ') for line in result.splitlines()
+                          if line.startswith('V3_DIAGNOSTIC_CONTEXT ')]
+              assert len(contexts) == 1
+              receipt['test_execution_context'] = json.loads(contexts[0])
+              assert receipt['test_execution_context']['euid'] == 0
               receipt['suite'] = matrix.suite_result(result, receipt['exit'])
               receipt['status'] = 'diagnostic suite passed; full matrix not run'
           except Exception as error:
@@ -190,7 +242,12 @@ jobs:
               raise
           finally:
               (output / 'diagnostic.json').write_text(json.dumps(receipt, indent=2) + '\n')
-          PY_DIAGNOSTIC
+          PY_PRIVILEGED
+          diagnostic_python=$(command -v python3)
+          env -u GH_TOKEN -u GITHUB_TOKEN sudo env "PATH=$PATH" \
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD" \
+            "RUNNER_TEMP=$RUNNER_TEMP" "V3_CXX=$V3_CXX" "V3_CC=$V3_CC" "V3_PACKAGE_TOOLCHAIN=$V3_PACKAGE_TOOLCHAIN" \
+            "$diagnostic_python" "$diagnostic_script"
       - name: Make privileged proof readable by artifact upload
         if: always()
         run: |

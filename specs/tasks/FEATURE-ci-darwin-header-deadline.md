@@ -51,6 +51,41 @@ was established from this successful trace. The next checkpoint reduces trace
 perturbation and records actual notify/signal/ack states to distinguish missing
 wake from retained lease when a failure is observed.
 
+## Required privilege context correction
+
+The original c0 archive log (lines 294–325) and package log (lines 287–303)
+show that binding port 443 failed for the runner, then the existing workflow
+invoked the matrix through `sudo env PATH=...` with the exact checkout marked
+Git-safe. Its build/test processes therefore ran as root. Both earlier
+diagnostic drivers lacked sudo and did not record UID/GID; their runner-context
+results are not like-for-like privilege evidence. Live tracing perturbation is
+not the only established context contrast.
+
+The existing artifact download/strict extraction/unchanged overlay remains in
+the runner stage with its read-only GitHub token. A generated, retained Python
+build script now runs through the existing sudo/env pattern, with both token
+variables removed **before sudo**. Explicit selected compiler/runtime/temp paths
+and exact Git safe.directory are passed; the provider bin directory follows the
+existing archive platform PATH setup. The entire build/compile/inspect/test
+command tree runs in that privileged stage. Its receipt records runner and
+privileged UID/EUID/GID/EGID, cwd, compiler, provider, toolchain, PATH and build
+flags. The build stage asserts EUID 0 and token absence. A final assert-and-exec
+launcher records the actual test process UID/GID, cwd and selected runtime
+search environment before replacing itself with the unchanged test executable;
+its EUID must be 0 and its environment must exclude both token variables.
+
+Buffered runner-context run `39978609885`, job `120499691522`, subsequently
+finishes successfully with four tests, 52 checks and zero failures/skips. It
+emits 677 deferred records after the suite statistics; the header timer again
+expires, resumes, enforces and closes normally around 303 ms with one retirement
+lease. This is useful buffered-trace evidence in the runner context, and remains
+incomplete comparison to the original root execution. It was allowed to finish
+without cancellation or an unchanged retry.
+
+The driver correction matches required execution setup and justifies an affected
+native check. The caller reviews this driver-only change before publishing or
+dispatching any further required run.
+
 ## Action items
 
 - [x] Preserve and read prior/current evidence without repeating the closed Linux probe.
@@ -64,7 +99,9 @@ wake from retained lease when a failure is observed.
   ordinary-build argument elision, workflow syntax and changed-file lint.
 - [x] Execute the first native diagnostic and retain actual installed-library provenance.
 - [x] Prepare bounded in-memory capture with deferred output and explicit event timestamps.
-- [ ] Execute one reviewed buffered-trace native diagnostic against the same exact archive.
+- [x] Retain the completed runner-context buffered diagnostic result without cancellation.
+- [x] Correct required privileged build/test execution and record/assert its context.
+- [ ] Execute the reviewed privileged buffered diagnostic when required after caller review.
 - [ ] Establish cause from native evidence, then write and observe a failing
   regression before applying a narrow repair.
 - [ ] Remove all temporary trace code/header and workflow edits before final merge.
@@ -108,7 +145,7 @@ archive. Original/modified source manifests and per-file overlay hashes are
 retained. The original archive is preserved separately; the overlaid source is
 explicitly a diagnostic modified snapshot, not immutable release proof, and does
 not set `V3_RELEASE_IDENTITY`. Build and test source paths/cwd use this extracted
-tree. No build command receives the download token.
+tree. No sudo, build or test process receives the download token.
 
 Compile/dependency hashes, commands, runtime selection and the failing suite log
 are retained in `package-evidence/header-deadline-diagnostic`. This partial run is
@@ -135,7 +172,12 @@ shared by executable/library events, and no diagnostic symbols or argument
 evaluation in ordinary builds. The updated literal archive overlay and
 workflow/test-preservation checks pass; both enabled/disabled extracted-source
 syntax checks and changed-file lint pass. Buffered native execution and the
-original required gate remain incomplete.
+original required gate remain incomplete. For the privilege-only follow-up,
+YAML, both Python stages and all macOS shell syntax pass; artifact/overlay code,
+permissions, other jobs and all C++ files are unchanged. An actual local env
+check proves both token variables are stripped while ordinary context survives;
+the literal test launcher rejects local EUID 1000 before exec. These are setup
+checks; native sudo/build/test EUID 0 execution remains pending.
 
 The caller reviews/publishes only this task branch and dispatches the existing
 workflow, then resumes this same worktree with actual native evidence. No root
