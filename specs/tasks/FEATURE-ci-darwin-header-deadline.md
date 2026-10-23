@@ -92,6 +92,58 @@ The driver correction matches required execution setup and justifies an affected
 native check. The caller reviews this driver-only change before publishing or
 dispatching any further required run.
 
+## Current checkpoint: unmodified original package prefix control
+
+The corrected privileged diagnostic run `39982282514`, job `120512379909`,
+passes four tests and 52 checks with zero failures/skips. The actual context
+record confirms UID/EUID/GID/EGID 0. Its 677 deferred records again show healthy
+header expiry, continuation, enforcement and native close around 303 ms, with
+one retirement lease. This matches privilege/signal setup but establishes no
+cause or fix: the core was still instrumented and the suite isolated from the
+original package prelude.
+
+The next single control uses the **unmodified** c0 source archive and original
+`package_lane` implementation. Manual macOS checkout selects c0; push/PR keeps
+its normal GitHub SHA. The inline driver remains bound to the diagnostic branch
+workflow SHA, recorded separately from actual source HEAD. Existing
+`selected_archive` reproduces the exact selected extraction, including its
+original supplemental tooling/doc files and identity. No trace source overlay,
+trace macro, test change or Python native-exec wrapper is used. Original core,
+test and helper hashes must match the selected c0 descriptor throughout.
+
+The privileged controller imports helpers from that extraction, records their
+source hashes, asserts root/token-free context, and calls the original
+`package_lane` directly for TLS-off. Original build/install, package checks,
+consumer traffic/configuration and compiled-operation prelude run unchanged.
+A driver-only suite selector retains the original first two private suite
+definitions: `native_http1_e2e` and `external_http1_e2e`. A wrapper stops only
+**after** original `run_suites` returns, including suite_result, required-case,
+status and persisted suites.json validation. Original errors propagate unchanged.
+The successful partial stop precedes static linkage, other suites and TLS-on;
+it is explicitly not matrix gate passage or a behavior fix.
+
+Only if the exact external-suite argv remains live after three seconds does a
+driver-only subclass of original `_CommandTree.exited` collect one native
+all-thread sample. It first uses the original non-reaping anchor, and samples
+synchronously while the original owner reserves the PID and cannot concurrently
+clean up/reap it. It never polls, waits, reaps, kills or replaces ownership of
+the target. The collector is a different argv through original `Commands`, so
+it cannot recursively trigger itself; original target stdout capture continues.
+`/usr/bin/sample` gets one second, a five-second command deadline and an 8 MiB
+output check. Triggering is recorded before sampling; sample interruption may
+change the observed result and is recorded as such. Missing/failed collection
+remains incomplete, even if the original prefix subsequently passes.
+
+Local real-process checks use actual archive helper code: a target exits during
+an independent collector command yet remains the owned, unreaped zombie through
+the synchronous hook; quick targets are not sampled; collector failure preserves
+the target's original exit 7 and stdout. Real compiled receipt fixtures exercise
+original `run_suites`: success stops after persisted validated receipts; a failed
+suite and missing required case propagate their original failures before any
+partial-stop marker. These are controller checks, not native product gate proof.
+The original-prefix Darwin run and actual native sampler execution remain
+pending for one caller-reviewed control, followed by evidence adjudication.
+
 ## Action items
 
 - [x] Preserve and read prior/current evidence without repeating the closed Linux probe.
@@ -107,13 +159,15 @@ dispatching any further required run.
 - [x] Prepare bounded in-memory capture with deferred output and explicit event timestamps.
 - [x] Retain the completed runner-context buffered diagnostic result without cancellation.
 - [x] Correct required privileged build/test execution and record/assert its context.
-- [ ] Execute the reviewed privileged buffered diagnostic when required after caller review.
+- [x] Retain the completed corrected privileged buffered diagnostic and actual root context.
+- [x] Prepare one bounded unmodified-c0 original-package-prefix control.
+- [ ] Execute that reviewed control once and adjudicate its original outcome/sample evidence.
 - [ ] Establish cause from native evidence, then write and observe a failing
   regression before applying a narrow repair.
 - [ ] Remove all temporary trace code/header and workflow edits before final merge.
 - [ ] Run task-relevant final checks and Groundwork validation/finalization.
 
-## Checkpoint scope and checks
+## Prior instrumented checkpoint scope and checks
 
 `HTTPSERVER_DIAG_HEADER_DEADLINE` enables temporary typed metadata capture,
 capped at 64 records per call site and 2,048 records overall. Each record stores
