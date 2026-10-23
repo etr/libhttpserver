@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-proof: FreeBSD checkout provenance and evidence recovery
 
-Status: Implemented locally; caller Groundwork validation and finalization pending. Native FreeBSD execution remains CI / v3 PR owned under AGENTS.md. Base: `v3` at `663c0eb390a5d0a9380b8c9002c67b0cf2af770e`.
+Status: Complete (local implementation, Groundwork validation and finalization). Native FreeBSD execution remains CI / v3 PR owned under AGENTS.md. Base: `v3` at `663c0eb390a5d0a9380b8c9002c67b0cf2af770e`.
 
 Archive FreeBSD job `120331982719` in run `39928823544` completed its pinned Node source build and client installation, then failed native Git provenance with `dubious ownership`. Its always-run recovery also failed: legacy SCP rejected the source basename `.`. The affected workflow sections were unchanged from `919fa6aa` to this task's base, as established by the caller's bounded comparison. Full original output is retained in the main repository's `.debug/FEATURE-ci-freebsd-proof/original-freebsd-job.log`.
 
@@ -18,7 +18,7 @@ Action items:
 - [x] Exercise actual OpenSSH SCP sender/receiver protocol with only SSH transport replaced locally; verify strict-basename RED, recovered diagnostics, hidden files and exact package/archive layout.
 - [x] Run all three affected Python workflow test scripts, actionlint, shell/Python syntax and diff checks.
 - [x] Preserve raw outputs, command journal and verification limits in the main repository's `.debug/FEATURE-ci-freebsd-proof/`.
-- [ ] Caller: Groundwork validation and local finalization into `v3`.
+- [x] Caller: Groundwork validation and local finalization into `v3`; five reviewers approved with zero findings.
 - [ ] CI / v3 PR: fresh native FreeBSD execution and hosted artifact recovery/upload.
 
 Local verification: all 20 workflow tests, 4 package-workflow tests and 6 platform-CI tests pass. Actionlint passes for both changed workflows. The pre-fix regression run failed in 10 subcases across both workflows, including real native Git checkout refusal and real SCP `unexpected filename: .`; the repaired commands pass. Local Git uses `GIT_TEST_ASSUME_DIFFERENT_OWNER=1` to exercise its actual ownership policy, with an independently initialized checkout still refused. The SCP fixture runs the installed OpenSSH client and server protocol; it replaces SSH transport only and uses no network credentials or daemon. These checks provide local command/protocol evidence, not native FreeBSD or hosted action proof.
