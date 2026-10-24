@@ -26,7 +26,7 @@ class ArchiveContracts(unittest.TestCase):
     def setUp(self):
         self.assertTrue(HELPER.is_file(), 'verified release-artifact identity helper missing')
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
-        self.directory = Path(self.tmp.name)
+        self.directory = Path(self.tmp.name).resolve()
         self.source = self.directory / 'source'; self.source.mkdir()
         (self.source / 'configure.ac').write_text('packaged source')
         self.archive = self.directory / 'release.tar.gz'; self.archive.write_bytes(b'archive identity')
@@ -109,6 +109,46 @@ class ArchiveContracts(unittest.TestCase):
                 self.assertEqual(module.release_identity.revision(self.source), 'd' * 40)
         for name in ('run-v3-protocol-fuzz.sh',):
             self.assertIn('release_artifact.py', (ROOT / 'scripts' / name).read_text())
+
+
+class CanonicalFixtureContracts(unittest.TestCase):
+    def check_fixture(self, script, *cases):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / 'native-tmp'; target.mkdir()
+            alias = root / 'tmp'; alias.symlink_to(target, target_is_directory=True)
+            self.assertNotEqual(alias, alias.resolve())
+            result = subprocess.run([sys.executable, str(ROOT / script), *cases],
+                                    env=dict(os.environ, TMPDIR=str(alias), TEMP=str(alias), TMP=str(alias)),
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_archive_parity_through_symlinked_tmpdir(self):
+        self.check_fixture('test/integ/release_artifact_test.py', 'ArchiveContracts')
+
+    def test_release_execution_through_symlinked_tmpdir(self):
+        self.check_fixture('test/integ/release_gate_runner_test.py',
+            'ReleaseContracts.test_packaged_families_execute_both_tls_lanes_and_independent_full_validation',
+            'ReleaseContracts.test_packaged_family_cannot_pass_when_independent_validation_rejects',
+            'ReleaseContracts.test_failed_stage_retains_its_original_command_log',
+            'ReleaseContracts.test_package_receipt_survives_later_native_build_and_check',
+            'ReleaseContracts.test_cxx_gate_bounds_each_native_test_before_waiting_for_aggregate')
+
+    def test_benchmark_provenance_through_symlinked_tmpdir(self):
+        self.check_fixture('scripts/test-v3-native-benchmark.py', 'ReceiptTest')
+
+    def test_public_compile_and_receipts_through_symlinked_tmpdir(self):
+        self.check_fixture('scripts/test-v3-packaged-adapters.py',
+            'AdapterContracts.test_real_public_compile_artifacts_are_rechecked',
+            'AdapterContracts.test_unused_selected_static_archive_cannot_supply_link_identity',
+            'AdapterContracts.test_h1_requires_exact_versions_and_two_persistent_pipeline_responses',
+            'AdapterContracts.test_unsafe_duplicate_and_symlink_archive_members_are_rejected')
+
+    def test_selected_windows_shell_through_symlinked_tmpdir(self):
+        self.check_fixture('test/integ/release_ci_test.py', 'RequestShellContracts')
+
+    def test_platform_origin_and_tool_aliases_through_symlinked_tmpdir(self):
+        self.check_fixture('test/integ/release_platform_bundle_test.py', 'PlatformBundles')
 
 
 if __name__ == '__main__': unittest.main()

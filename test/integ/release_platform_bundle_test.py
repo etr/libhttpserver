@@ -40,7 +40,7 @@ class PlatformBundles(unittest.TestCase):
     def test_original_and_resolved_tool_paths_both_retain_exact_bytes(self):
         module=self.module()
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory); binary=root/'binary'; binary.write_text('native selected compiler')
+            root=Path(directory).resolve(); binary=root/'binary'; binary.write_text('native selected compiler')
             alias=root/'compiler'; alias.symlink_to(binary)
             catalog=module.retain(root/'bundle','Windows',{'id':'Windows'},[alias])
             self.assertEqual(catalog.path(str(alias)).read_bytes(),catalog.path(str(binary)).read_bytes())
@@ -140,7 +140,7 @@ class PlatformBundles(unittest.TestCase):
         import hashlib
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        root = Path(directory.name); package = root / 'matrix'; package.mkdir()
+        root = Path(directory.name).resolve(); package = root / 'matrix'; package.mkdir()
         inventory = matrix.load()
         def write(path, value):
             path.parent.mkdir(parents=True, exist_ok=True)

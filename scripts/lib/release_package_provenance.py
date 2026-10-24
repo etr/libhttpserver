@@ -5,6 +5,7 @@ import importlib.util
 import re
 import shlex
 import os
+import platform
 from native_benchmark import require, verify_artifact, parse_json
 from package_commands import dependencies
 from package_matrix import check_dependencies, check_linkage
@@ -51,10 +52,18 @@ def validate_compile(compiled, linkage, identity, artifacts, commands):
                 row['argv'][row['argv'].index('-o') + 1] == executable]
     require(len(selected) == 1, 'missing actual link command')
     link = selected[0]['argv']
-    require('-Wl,-Map,' + str(linkmap) in link, 'wrong link map command')
+    map_option = '-Wl,-map,' if platform.system() == 'Darwin' else '-Wl,-Map,'
+    require(map_option + str(linkmap) in link, 'wrong link map command')
     if linkage == 'static':
         archive = str(prefix / 'lib/libhttpserver.a')
-        contributors = {str(Path(name).resolve()) for name in re.findall(r'([^\s()]+libhttpserver\.a)\([^()\n]+\)', linkmap.read_text())}
+        text = linkmap.read_text()
+        if platform.system() == 'Darwin':
+            # ld64 lists contributing archive members in its object-file table.
+            table = text.partition('# Object files:\n')[2].split('\n# ', 1)[0]
+            names = re.findall(r'^\[\s*\d+\]\s+(.+libhttpserver\.a)(?:\[\d+\])?\([^()\n]+\)\s*$', table, re.M)
+        else:
+            names = re.findall(r'([^\s()]+libhttpserver\.a)\([^()\n]+\)', text)
+        contributors = {str(Path(name).resolve()) for name in names}
         require(archive in link and contributors == {archive}, 'different or noncontributing installed static archive')
     compile_rows = [row for row in commands if '-c' in row['argv'] and '-o' in row['argv'] and
                     row['argv'][row['argv'].index('-o') + 1] in link and

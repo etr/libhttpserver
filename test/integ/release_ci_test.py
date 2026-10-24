@@ -21,7 +21,7 @@ class RequestShellContracts(unittest.TestCase):
         import subprocess
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.selected = self.root / 'MSYS tools'
         self.selected.mkdir()
         self.bash = self.selected / ('bash.exe' if os.name == 'nt' else 'bash')
