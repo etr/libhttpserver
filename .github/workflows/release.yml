@@ -195,7 +195,7 @@ jobs:
                           PKG_CONFIG_PATH='', CXXFLAGS='-O0 -g -DLHS_DARWIN_FOCUSED_DIAGNOSTICS')
           provider = root / 'prerequisites/provider'
           base_env['LDFLAGS'] = '-Wl,-rpath,' + str(provider / 'lib')
-          inferior_library_path = os.pathsep.join([str(provider / 'lib'), os.environ['V3_PACKAGE_TOOLCHAIN'] + '/lib/c++'])
+          inferior_library_path = str(provider / 'lib')
           try:
               save()
               if platform.system() != 'Darwin' or os.geteuid() != 0:

@@ -1,6 +1,6 @@
 # FEATURE-ci-darwin-focused-diagnostics
 
-Status: In Progress — first native attempt failed in launcher setup before all six programs; local environment correction passed focused checks and awaits caller review.
+Status: In Progress — corrected native attempt built all six programs, but every launch stopped in dyld before a test body; the second loader setup correction passed local checks and awaits caller delta review.
 
 Base: local `v3` at `a5a72356741300e5da16b94090f0f26a67a2d1f7`.
 Branch: `task/FEATURE-ci-darwin-focused-diagnostics`.
@@ -15,12 +15,15 @@ This is temporary diagnostic instrumentation. This branch, including its tempora
 - [x] Prepare manual-only, read-only native Darwin batch under existing default-branch dispatch-capable `release.yml` filename. The required `tag` is a fixed diagnostic sentinel; it never selects a ref, creates a tag or publishes anything.
 - [x] Compile syntax, diagnostic logger smoke checks, workflow/embedded Python/shell syntax, actionlint, changed-file cpplint and diff checks locally; no native tests or full suites in this phase.
 - [x] Caller independently validates the diagnostic diff and reviews the workflow before publishing this branch only.
-- [x] Caller dispatched the first attempt and retained its source-bound failed setup receipt and raw logs; all six selected programs remain not-executed.
+- [x] Caller dispatched the first attempt and retained its source-bound failed setup receipt and raw logs; that receipt records all six selected programs as not-executed.
 - [x] Correct the workflow host/debugger versus inferior environment boundary and verify it with real local subprocess checks, syntax and actionlint.
-- [ ] Caller reviews the narrow setup delta before publishing the correction and continuing the same authorized six-program batch.
+- [x] Caller reviewed the first setup delta, published the correction and dispatched the corrected continuation.
+- [x] Retain the corrected native receipt: both library builds and all six program compilations passed; six single launch attempts stopped before any test body in dyld.
+- [x] Remove the diagnostic's additional LLVM loader override while retaining actual build-or-prefix/provider library directories, host isolation and selected compiler/linkage metadata; verify the real local subprocess boundary.
+- [ ] Caller reviews the second narrow setup delta before publishing the correction and continuing the same authorized six-program batch.
 - [ ] Caller records actual native results, context differences and causal assessment without reopening closed probes.
 
-Corrected continuation after caller delta review/publication (no selected program execution budget was consumed):
+Corrected continuation after caller delta review/publication (six launch attempts have occurred; zero test bodies have been observed):
 
 ```bash
 gh workflow run release.yml --ref task/FEATURE-ci-darwin-focused-diagnostics -f tag=darwin-focused-once-a5a72356
@@ -46,7 +49,7 @@ This sealed validation is historical diagnostic readiness; it does not establish
 
 First native attempt `40052229400`, job `120747190075`, source `8f9722656397961dc9b5d1af360552541a6ff398`, failed before bootstrap/build: `xcrun lldb --version` exited `-6` under the workflow's global provider/Homebrew LLVM `DYLD_LIBRARY_PATH`. The retained log reports missing Apple libc++abi symbols, a pure virtual call and mutex fatal error. Artifact `12544022476` SHA-256 `269c9db7bb48f58be881c5aa700cfc74c73605b48969d1334730f3fae82ea31d` was verified; its original receipt remains unchanged at the journal's `first-native-evidence/receipt.json`. All six cases are `not-executed`; no C++ result or cause was established.
 
-The correction removes inferior-only loader/tracing variables from host compiler/build/inspection/debugger environments. It retains the existing selected compiler wrapper and provider linker rpath, and passes the complete build-or-installed-prefix, provider and selected toolchain library path explicitly through LLDB `target.env-vars`. Header/storage tracing stays in the relevant inferior environment. Each case records that target environment separately from the debugger command environment. No C++ instrumentation, test assertion, timeout or runtime decision changed.
+The correction removes inferior-only loader/tracing variables from host compiler/build/inspection/debugger environments. It retains the existing selected compiler wrapper and provider linker rpath, and passes the actual build-or-installed-prefix and provider library directories explicitly through LLDB `target.env-vars`. The selected C++ library remains bound by the compiler wrapper's existing absolute linkage/rpath, with toolchain/SDK metadata and actual `otool` evidence retained separately. Header/storage tracing stays in the relevant inferior environment. Each case records that target environment separately from the debugger command environment. No C++ instrumentation, test assertion, timeout or runtime decision changed.
 
 Focused proof lives in the primary journal's `setup-repair/test_environment_boundary.py`: the original workflow failed the boundary assertions; all six tests pass against the correction. Tests execute the actual embedded workflow environment construction, `run_case`, generated LLDB settings, inspection call sites and command logging/monitoring with real local Python child processes. Only unavailable `xcrun`/inspection executable argv are adapted to the local environment reporter; there is no simulated LLDB result, Darwin execution, selected program launch or native success claim. They verify clean host/debugger environments, both complete inferior library paths, trace isolation, selected compiler/provider flags and no mutation back into build/metadata environments. All five shell steps and both embedded Python scripts parse; actionlint 1.7.7 and diff whitespace checks pass. Native setup/compile/execution remain unverified locally and require the caller's corrected native continuation after delta review. No full suites, native execution, publication, dispatch, merge or cleanup were performed during this repair.
 
@@ -54,5 +57,36 @@ Narrow setup delta validation `8e28dc133b84fcaf143113acd67473a5` sealed PASS
 for `61a4647da4a85a4bf74759bc1cb11b7d828bf557`: one iteration, zero fixes,
 zero new unworked findings; eight fresh affected-domain approvals and explicit
 unchanged performance-invariant carry. Original sealed review/report preserved.
-Native setup and all six executions remain incomplete pending corrected dispatch.
+At that seal, native setup and all six executions remained incomplete pending corrected dispatch.
 The first workflow attempt ran zero selected programs.
+
+Corrected native attempt `40053955397`, job `120752645361`, source
+`2d6233d0d892d3e41f165c31851efcab8cc125ad`, passed host LLDB inspection,
+bootstrap, both TLS library builds and all six program compilations/links. Each
+program launched once and stopped in dyld before its first test body, reporting
+missing typed-allocation weak exports `__ZnwmSt19__type_descriptor_t` /
+`__ZnamSt19__type_descriptor_t`. No original assertion or scalar trace was
+observed; the six original failure causes remain unknown. Artifact `12545170653`
+SHA-256 `6b9bc155e41bac354446bcfc27399cb1ffe84f43717fb7a65c3a06c0e43d3507`
+was verified, and the original failed receipt and six selected logs remain
+unchanged in the journal's `corrected-native-evidence/` directory.
+
+The second setup correction removes only the extra LLVM `lib/c++` entry from
+the diagnostic inferior's `DYLD_LIBRARY_PATH`. The owning package runtime policy
+limits loader overrides to package/provider/prerequisite directories and keeps
+toolchain identity separately; this diagnostic retains its existing build-or-prefix
+`lib` and provider `lib` paths rather than reproducing every package `lib`/`bin`
+entry. All six actual `otool` logs already identify the selected libc++ absolute
+path. This is a required setup correction, not a proven C++ cause or repair.
+
+Updated existing task-local boundary tests failed exactly the two inferior search
+expectations against the prior workflow (`setup-repair/second-red.log`), then all
+six passed against the one-line workflow correction (`second-green.log`). They
+exercise real workflow subprocess environment selection and generated LLDB target
+settings, preserving build/prefix/provider paths, trace isolation, host isolation
+and compiler/SDK/provider/toolchain metadata. Native tools' argv alone is adapted
+to a local environment reporter; no native binary or simulated Darwin result is
+executed. Shell and embedded Python syntax, actionlint and diff checks pass.
+The original historical validations and unread helper reports remain untouched.
+The second correction requires fresh caller delta review before publication or
+native continuation; no native check has been rerun and its gates remain incomplete.
