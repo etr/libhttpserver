@@ -439,7 +439,11 @@ class AdapterContracts(unittest.TestCase):
         identity['archive']['members']['test/installed/consumer.cpp'] = compiled['sources'][str(unit)]
         identity['package'] = {p: bench.artifact(p)['sha256'] for p in identity['package']}
         artifacts = {str(p): bench.artifact(p) for p in directory.iterdir() if p.is_file()}
-        with self.assertRaisesRegex(ValueError, 'static archive'):
+        context = json.dumps(dict(compiled=compiled, identity=identity, artifacts=artifacts,
+            commands=commands, libraries=[bench.artifact(path) for path in libraries],
+            depfiles={str(path): path.read_text() for path in directory.glob('*.d')}),
+            indent=2, sort_keys=True)
+        with self.assertRaisesRegex(ValueError, 'static archive', msg=context):
             adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
         # The same real consumer succeeds when the selected archive contributes.
         commands[1]['argv'].remove(libraries[0])

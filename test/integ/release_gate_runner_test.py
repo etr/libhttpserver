@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -339,6 +340,39 @@ class ReleaseContracts(unittest.TestCase):
         manifest['stages'][0]['receipt']['gate'] = 'parity'
         with self.assertRaises(ValueError): self.gate.check_tag_ready(manifest)
 
+    def test_native_fixtures_do_not_require_a_host_timeout_installation(self):
+        from unittest.mock import patch
+        import release_execution
+        find_tool = shutil.which
+
+        def without_host_timeout(command, *args, **kwargs):
+            if command in ('/usr/bin/timeout', 'timeout', 'gtimeout'):
+                return None
+            return find_tool(command, *args, **kwargs)
+
+        cases = ('test_cxx_gate_bounds_each_native_test_before_waiting_for_aggregate',
+                 'test_package_receipt_survives_later_native_build_and_check')
+        for case in cases:
+            with self.subTest(case=case):
+                fixture = type(self)(case)
+                fixture.setUp()
+                self.addCleanup(fixture.doCleanups)
+                with patch.object(release_execution.shutil, 'which', side_effect=without_host_timeout):
+                    getattr(fixture, case)()
+
+    def test_native_check_rejects_missing_deadline_before_make(self):
+        from types import SimpleNamespace
+        from release_execution import ReleaseAttempt
+        args = SimpleNamespace(output=self.directory, compiler=sys.executable, cc=sys.executable,
+            make=sys.executable, provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1,
+            test_timeout_tool=str(self.directory / 'missing deadline'))
+        attempt = ReleaseAttempt(args, self.gate, {})
+        logs = self.directory / 'logs'; logs.mkdir()
+        commands = self.gate.Commands(logs)
+        with self.assertRaisesRegex(ValueError, 'required per-test deadline tool unavailable'):
+            attempt.native_check(commands, self.directory, attempt.env, 10)
+        self.assertEqual(commands.records, [])
+
     def test_cxx_gate_bounds_each_native_test_before_waiting_for_aggregate(self):
         from types import SimpleNamespace
         from release_execution import ReleaseAttempt
@@ -348,16 +382,20 @@ class ReleaseContracts(unittest.TestCase):
                         'Path("test/integ/native_case.log").write_text("actual failed case witness")\n'
                         'Path("test/integ/native_case.trs").write_text(":test-result: FAIL\\n")\n'
                         'raise SystemExit(2)\n'); make.chmod(0o755)
+        # This fixture checks command arguments; its make never executes LOG_COMPILER.
+        deadline = self.directory / 'selected deadline'
+        deadline.write_text('#!/bin/sh\nexit 99\n'); deadline.chmod(0o755)
         args = SimpleNamespace(output=self.directory / 'attempt', compiler=sys.executable, cc=sys.executable,
-            make=str(make), provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1, test_timeout_tool='/usr/bin/timeout')
+            make=str(make), provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1, test_timeout_tool=str(deadline))
         attempt = ReleaseAttempt(args, self.gate, {'stages': []}); attempt.source = ROOT
         lane = args.output / 'package/evidence/tls-no'; build = lane / 'build'
         (build / 'src').mkdir(parents=True); (build / 'config.h').write_text('/* TLS off */')
         (build / 'src/Makefile').write_text('abs_top_srcdir = ' + str(ROOT) + '\n')
         logs = self.directory / 'build-logs'; logs.mkdir()
         command = self.gate.Commands(logs)
-        with self.assertRaises(ValueError): attempt.cxx(command, 'no')
-        self.assertIn('LOG_COMPILER=/usr/bin/timeout --kill-after=5s 180s', command.records[0]['argv'])
+        with self.assertRaisesRegex(ValueError, 'command exited 2'): attempt.cxx(command, 'no')
+        self.assertIn('LOG_COMPILER=' + shlex.join([str(deadline), '--kill-after=5s', '180s']),
+                      command.records[0]['argv'])
         self.assertEqual((logs / 'native-tests/integ/native_case.log').read_text(), 'actual failed case witness')
         self.assertEqual((logs / 'native-tests/integ/native_case.trs').read_text(), ':test-result: FAIL\n')
 
@@ -740,10 +778,17 @@ else:
         make.write_text('#!' + sys.executable + '\nfrom pathlib import Path\n'
             'Path("test/.deps/case.Po").write_text("compiled dependencies")\n'
             'Path("test/test-suite.log").write_text("# TOTAL: 1\\n# PASS: 1\\n# SKIP: 0\\n# XFAIL: 0\\n# FAIL: 0\\n# XPASS: 0\\n# ERROR: 0\\n")\n')
-        make.chmod(0o755); args.make = str(make); args.test_timeout_tool = '/usr/bin/timeout'
+        make.chmod(0o755); args.make = str(make)
+        # Only availability and command construction are under test, not timeout timing.
+        deadline = self.directory / 'selected deadline'
+        deadline.write_text('#!/bin/sh\nexit 99\n'); deadline.chmod(0o755)
+        args.test_timeout_tool = str(deadline)
         logs = output / 'later-native'; logs.mkdir()
         native, _ = attempt.normal_build('no')
-        attempt.native_check(self.gate.Commands(logs), native, attempt.env, 10)
+        command = self.gate.Commands(logs)
+        attempt.native_check(command, native, attempt.env, 10)
+        self.assertIn('LOG_COMPILER=' + shlex.join([str(deadline), '--kill-after=5s', '180s']),
+                      command.records[0]['argv'])
         checks = self.gate.load_runner('lib/release_checks.py')
         self.assertEqual(checks.automake_result(native, 'Linux')['tests'], 1)
         self.assertEqual((build / 'test/.deps/case.Po').read_text(), 'compiled dependencies')
