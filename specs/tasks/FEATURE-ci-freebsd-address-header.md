@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-address-header: include the address-family declaration owner
 
-Status: In Progress (implementation; caller validation and finalization pending).
+Status: Complete (local implementation, validation and finalization; native CI pending).
 Base: `v3` at `98dfdc4de8d6be5355c0d2f9b94518ea53a6fc8d`.
 
 FreeBSD package run `40030060276` / job `120675819652` and archive run
@@ -34,7 +34,7 @@ Action items:
   address unit suite locally; run changed-C++ cpplint and diff checks.
 - [x] Record local checks, native evidence limits and implementation handoff
   in the existing journal.
-- [ ] Caller: Groundwork validation and local finalization into v3.
+- [x] Caller: Groundwork validation and local finalization into v3.
 - [ ] CI / v3 PR: post-fix native FreeBSD source/package/archive execution.
 
 No new source-text assertion is appropriate for this one-include repair:
@@ -63,3 +63,8 @@ Raw evidence and the journal remain in the primary checkout at
 remain incomplete and CI/v3-PR owned under AGENTS. The unknown five Darwin
 C++ causes and earlier closed investigations remain closed; no unrelated
 runtime, fixture, SDK, compiler or workflow repair is included.
+
+Groundwork validation `02b0951d488a1bcb1bf8efe5c421cd89` passed in one
+iteration, with all nine independent profiles approved, zero fixes and zero
+unworked findings. It sealed implementation HEAD `2ecf3875d72831688df7508f8a1443bc5a6cb4e5`.
+Overall CI remains unsuccessful until new native checks complete.
