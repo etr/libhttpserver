@@ -1,6 +1,6 @@
 # FEATURE-ci-darwin-python-host-fixtures
 
-Status: In Progress
+Status: Complete (local validation/finalization; native CI pending)
 Base: v3 `cf15f14590672c8fb461147635da3f535238692f`
 Plan: `.groundwork-plans/FEATURE-ci-darwin-python-host-fixtures-plan.md`
 Journal: `.debug/ci-6b2-darwin-python-assertions-wrzyeazd/journal.md` in the primary checkout.
@@ -25,7 +25,7 @@ The archive reported 232 passes, two skips and five Python module failures.
   hashes, source/package/archive identities, recorded commands, depfile contents
   and selected/foreign library artifact hashes for future required CI evidence.
 - [x] Complete bounded local fixture verification, Python compilation and diff checks.
-- [ ] Complete caller-owned validation/finalization.
+- [x] Complete caller-owned validation/finalization.
 
 ## Verification and limits
 
@@ -45,7 +45,8 @@ passed locally, without skips:
 All five changed Python modules passed `python3 -m py_compile` and
 `git diff --check` passed. No Python linter is documented; the project's cpplint
 command applies to C++ sources, which this task does not change. Logs are retained
-in the task worktree at `build/ci-darwin-python-host-fixtures/`. Local success is
+in primary `.debug/ci-6b2-darwin-python-assertions-wrzyeazd/implementation/`
+(copied byte-for-byte from task build receipts before worktree cleanup). Local success is
 not native Darwin evidence, and does not close its unknown adapter failure.
 
 The adapter's Darwin `private or foreign dependency` failure remains UNKNOWN and
@@ -62,3 +63,12 @@ implementation. The prior epoll batch exhausted its 64-execution budget, remains
 CLOSED with unknown causality, and receives no additional execution or probes.
 The older closed investigations remain closed. No production library, runner,
 workflow, build configuration, identity or deadline policy is changed.
+
+Groundwork validation `7f8572e3ad4da2c8fff59ca5b7f4dde3` sealed PASS for
+`ec18afdeb769d7b7860f9edfcf25aa0ab0d436eb` / tree
+`2a6e5d93cfe73ed121c94d9f8fc349cdf9131909`: one iteration, nine fresh
+independent approvals, zero fixes and zero unworked findings. Passing source-bound
+137-test evidence reused, no report created. Original failed native gates remain
+failed; adapter cause UNKNOWN, context-only prerequisite retained. Native post-fix
+platform checks remain incomplete and CI/v3 PR owned. Existing useful 6b2 jobs
+remain preserved; root owns publication timing.
