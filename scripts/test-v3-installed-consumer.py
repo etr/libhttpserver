@@ -21,6 +21,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
 import package_matrix as matrix
 import package_commands as commands
+import package_integration as integration
 import package_process as process
 import package_traffic as traffic
 
@@ -246,11 +247,31 @@ class InstalledInspectionFailureTest(unittest.TestCase):
         return self.popen([sys.executable, '-c', code], **options)
 
     def fail_lane(self):
-        with patch.object(self.runner.audit.platform, 'system', return_value='FreeBSD'), \
+        inspection_platform = SimpleNamespace(system=lambda: 'FreeBSD',
+            platform=self.runner.audit.platform.platform)
+        with patch.object(self.runner.audit, 'platform', inspection_platform), \
                 patch.object(subprocess, 'Popen', side_effect=self.create_process):
             with self.assertRaises(self.runner.audit.AuditError) as caught:
                 self.runner.package_lane(self.args, self.source, self.output, 'no', matrix.load())
         return caught.exception
+
+    def test_forced_inspection_host_preserves_native_compilation(self):
+        native_host = integration.platform.system()
+        compile_hosts = []
+        real_compile = self.runner.compile_probe
+
+        def compile_probe(*args, **kwargs):
+            compile_hosts.append((integration.platform.system(), self.runner.audit.platform.system()))
+            return real_compile(*args, **kwargs)
+
+        with patch.object(self.runner, 'compile_probe', side_effect=compile_probe):
+            error = self.fail_lane()
+
+        self.assertEqual(compile_hosts, [(native_host, 'FreeBSD')])
+        self.assertEqual(str(error), 'empty ELF dependency inspection')
+        consumer = self.output / ('tls-no/consumer/package_consumer' + ('.exe' if os.name == 'nt' else ''))
+        self.assertTrue(consumer.is_file())
+        self.assertTrue(Path(str(consumer) + '.map').is_file())
 
     def test_early_graph_failure_persists_full_output_and_failed_consumer(self):
         self.runner.audit.COMMANDS.append({'argv': ['stale-previous-lane-command']})
