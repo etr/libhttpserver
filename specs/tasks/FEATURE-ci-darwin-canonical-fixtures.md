@@ -1,6 +1,6 @@
 # FEATURE-ci-darwin-canonical-fixtures
 
-Status: In Progress
+Status: Complete (local validation and finalization; native CI pending)
 Base: local v3 `1fa030dd528e67218d7c0a6957371ba246679e96`
 
 Repair the exact known Darwin Python fixture root aliases, executable discovery,
@@ -11,7 +11,7 @@ symlink/tampering controls and production provenance policies intact.
 - [x] Resolve affected fixture roots before constructing identities/catalogs.
 - [x] Discover the success executable and use the selected compiler/native map format.
 - [x] Verify affected suites, syntax and diff; preserve negative controls.
-- [ ] Caller validation and finalization.
+- [x] Caller validation and finalization.
 
 Evidence: primary `.debug/ci-darwin-canonical-fixtures-2shorq1l/journal.md`.
 Native post-fix Darwin, Windows and FreeBSD execution remains CI/v3 PR owned.
@@ -31,3 +31,8 @@ map grammar. No authentic retained Darwin map exists in the selected evidence tr
 small ld64 format tests prove parser behavior only. Real local GNU map/archive controls
 prove foreign-first rejection and selected-only acceptance. Native post-fix platform
 checks remain incomplete and CI/v3 PR owned. Older C++ uncertainties remain closed.
+
+Groundwork validation `13002c772f224b35f4b6506f5647d66b` passed in one
+iteration, nine independent profiles approved, zero fixes and zero unworked
+findings; exact implementation HEAD `9ed911145c4bbb0eda9fdd1e5988c71373cb66c3`.
+Overall CI remains unsuccessful pending fresh native execution.
