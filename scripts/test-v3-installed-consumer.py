@@ -227,14 +227,19 @@ class InstalledInspectionFailureTest(unittest.TestCase):
         self.diagnostic = 'inspector diagnostic\n'
         self.inspector_exit = 0
         self.popen = subprocess.Popen
+        self.bash = Path(shutil.which('bash')).resolve()
+        self.converted_configure = '/fixture source/configure'
         environment = patch.dict(os.environ)
         environment.start()
         self.addCleanup(environment.stop)
 
     def create_process(self, argv, **options):
-        if argv[0] == 'bash':
-            prefix = self.output / 'tls-no/prefix/lib/pkgconfig'
-            code = f'from pathlib import Path; p=Path({str(prefix)!r}); p.mkdir(parents=True); (p/"libhttpserver.pc").write_text("fixture metadata")'
+        if argv[0] in ('bash', str(self.bash)):
+            if argv[1:3] == ['-c', 'cygpath -u "$1"']:
+                code = f'print({self.converted_configure!r})'
+            else:
+                prefix = self.output / 'tls-no/prefix/lib/pkgconfig'
+                code = f'from pathlib import Path; p=Path({str(prefix)!r}); p.mkdir(parents=True); (p/"libhttpserver.pc").write_text("fixture metadata")'
         elif argv[0] == 'fixture-make':
             code = ''
         elif argv[0] == 'pkg-config':
@@ -322,28 +327,91 @@ class InstalledInspectionFailureTest(unittest.TestCase):
         self.assertEqual(self.runner.audit.COMMANDS[-1]['stdout'], self.dynamic)
 
 
+class InstalledInspectionWindowsShellTest(InstalledInspectionFailureTest):
+    """Selected Windows shell branch with real host compilation and recording.
+
+    The shell/converter outputs are controlled; this is not a Windows receipt.
+    """
+    def setUp(self):
+        super().setUp()
+        selected = self.root / 'selected tools'
+        selected.mkdir()
+        self.bash = selected / ('bash.exe' if os.name == 'nt' else 'bash')
+        self.bash.write_text('controlled producer shell')
+        self.bash.chmod(0o755)
+        self.runner.platform = SimpleNamespace(system=lambda: 'Windows')
+        os.environ['PATH'] = str(selected) + os.pathsep + os.environ['PATH']
+
+    def fail_lane(self):
+        error = super().fail_lane()
+        records = json.loads((self.output / 'tls-no/commands.json').read_text())
+        self.assertEqual(records[0]['argv'], [str(self.bash), '-c', 'cygpath -u "$1"',
+            'configure-path', (self.source / 'configure').as_posix()])
+        self.assertEqual(records[0]['exit'], 0)
+        self.assertEqual(records[1]['argv'][0:2], [str(self.bash), self.converted_configure])
+        self.assertEqual(records[1]['exit'], 0)
+        return error
+
+
 class MatrixTest(unittest.TestCase):
     def setUp(self):
         self.inventory = matrix.load()
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
 
     def test_optimized_package_configure_selects_release_flags_without_changing_default(self):
         spec = importlib.util.spec_from_file_location('installed_runner', Path(__file__).with_name('check-v3-installed-consumer.py'))
         runner = importlib.util.module_from_spec(spec); spec.loader.exec_module(runner)
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            (root / 'configure').write_text('printf "%s\\n" "$CXXFLAGS" > selected-flags\nexit 23\n')
-            for optimized, flags in ((False, '-O0 -g'), (True, '-O3 -g')):
-                with self.subTest(optimized=optimized):
-                    output = root / str(optimized); output.mkdir()
-                    args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc', make='make',
-                        prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=root,
-                        optimized=optimized)
-                    with self.assertRaises(RuntimeError):
-                        runner.package_lane(args, root, output, 'no', self.inventory)
-                    self.assertEqual((output / 'tls-no/build/selected-flags').read_text().strip(), flags)
-                    records = json.loads((output / 'tls-no/commands.json').read_text())
-                    self.assertEqual(records[0]['exit'], 23)
-                    self.assertEqual(records[0]['environment']['CXXFLAGS'], flags)
+            self.exercise_configure_flags(runner, Path(temp).resolve())
+
+    def test_configure_flags_receipt_follows_successful_path_conversion(self):
+        spec = importlib.util.spec_from_file_location('installed_flags_runner',
+            Path(__file__).with_name('check-v3-installed-consumer.py'))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        runner.platform = SimpleNamespace(system=lambda: 'Windows')
+        popen = subprocess.Popen
+
+        def create_process(argv, **options):
+            if argv[1:3] == ['-c', 'cygpath -u "$1"']:
+                configure = Path(os.path.relpath(argv[-1], options['cwd'])).as_posix()
+                return popen([sys.executable, '-c', f'print({configure!r})'], **options)
+            return popen(argv, **options)
+
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(subprocess, 'Popen', side_effect=create_process):
+            self.exercise_configure_flags(runner, Path(temp).resolve())
+
+    def exercise_configure_flags(self, runner, root):
+        (root / 'configure').write_text('printf "%s\\n" "$CXXFLAGS" > selected-flags\nexit 23\n')
+        for optimized, flags in ((False, '-O0 -g'), (True, '-O3 -g')):
+            with self.subTest(optimized=optimized):
+                output = root / str(optimized); output.mkdir()
+                args = SimpleNamespace(compiler='selected-cxx', cc='selected-cc', make='make',
+                    prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=root,
+                    optimized=optimized)
+                with self.assertRaises(RuntimeError):
+                    runner.package_lane(args, root, output, 'no', self.inventory)
+                self.assertEqual((output / 'tls-no/build/selected-flags').read_text().strip(), flags)
+                records = json.loads((output / 'tls-no/commands.json').read_text())
+                configure = [record for record in records if record['argv'][2:] == [
+                    '--enable-v3-tls=no', '--disable-examples',
+                    '--prefix=' + (output / 'tls-no/prefix').as_posix()]]
+                self.assertEqual(len(configure), 1)
+                self.assertEqual(configure[0]['exit'], 23)
+                self.assertEqual(configure[0]['environment']['CXXFLAGS'], flags)
+                self.assertEqual(records[-1], configure[0])
+                if runner.platform.system() == 'Windows':
+                    self.assertEqual(len(records), 2)
+                    conversion = records[0]
+                    self.assertEqual(conversion['argv'], [configure[0]['argv'][0], '-c',
+                        'cygpath -u "$1"', 'configure-path', (root / 'configure').as_posix()])
+                    self.assertEqual(conversion['exit'], 0)
+                    self.assertEqual(Path(conversion['log']).read_text().strip(), configure[0]['argv'][1])
+                else:
+                    self.assertEqual(records, configure)
 
     def test_complete_matrix_and_identical_cases(self):
         cells = matrix.cells(self.inventory, 'Linux')
@@ -408,21 +476,24 @@ class MatrixTest(unittest.TestCase):
                 matrix.suite_result(output, status)
 
     def test_shared_suite_requires_installed_library_and_static_forbids_it(self):
-        graph = {'nodes': [{'id': '/prefix/lib/libhttpserver.so'}, {'id': '/consumer'}], 'edges': []}
-        matrix.check_linkage(graph, 'shared', Path('/prefix'))
+        prefix = self.root / 'prefix'
+        consumer = {'id': str(self.root / 'consumer')}
+        graph = {'nodes': [{'id': str(prefix / 'lib/libhttpserver.so')}, consumer], 'edges': []}
+        matrix.check_linkage(graph, 'shared', prefix)
         with self.assertRaises(ValueError):
-            matrix.check_linkage(graph, 'shared', Path('/elsewhere'))
+            matrix.check_linkage(graph, 'shared', self.root / 'elsewhere')
         with self.assertRaises(ValueError):
-            matrix.check_linkage(graph, 'static', Path('/prefix'))
-        matrix.check_linkage({'nodes': [{'id': '/consumer'}], 'edges': []}, 'static', Path('/prefix'))
+            matrix.check_linkage(graph, 'static', prefix)
+        matrix.check_linkage({'nodes': [consumer], 'edges': []}, 'static', prefix)
 
     def test_public_header_contamination_is_rejected_in_private_probes(self):
-        matrix.check_dependencies(['/prefix/include/httpserver.hpp', '/source/src/httpserver/detail/io.hpp'],
-                                  Path('/prefix'), Path('/source'), Path('/build'), private=True)
+        prefix, source, build = (self.root / name for name in ('prefix', 'source', 'build'))
+        matrix.check_dependencies([str(prefix / 'include/httpserver.hpp'), str(source / 'src/httpserver/detail/io.hpp')],
+                                  prefix, source, build, private=True)
         for private in (False, True):
             with self.assertRaises(ValueError):
-                matrix.check_dependencies(['/source/src/httpserver/server/server.hpp'],
-                                          Path('/prefix'), Path('/source'), Path('/build'), private)
+                matrix.check_dependencies([str(source / 'src/httpserver/server/server.hpp')],
+                                          prefix, source, build, private)
 
     def test_missing_configuration_case_or_different_outcome_is_rejected(self):
         for tls in ('yes', 'no'):
@@ -448,11 +519,12 @@ class MatrixTest(unittest.TestCase):
                 with self.assertRaises(ValueError): matrix.supported_configuration_results(bad, tls)
 
     def test_private_external_probe_can_use_the_named_host_helper_only(self):
-        matrix.check_dependencies(['/source/examples/host_poll.hpp'], Path('/prefix'),
-                                  Path('/source'), Path('/build'), private=True)
+        prefix, source, build = (self.root / name for name in ('prefix', 'source', 'build'))
+        matrix.check_dependencies([str(source / 'examples/host_poll.hpp')], prefix,
+                                  source, build, private=True)
         with self.assertRaises(ValueError):
-            matrix.check_dependencies(['/source/examples/other.hpp'], Path('/prefix'),
-                                      Path('/source'), Path('/build'), private=True)
+            matrix.check_dependencies([str(source / 'examples/other.hpp')], prefix,
+                                      source, build, private=True)
 
     def test_parity_backend_replays_preserve_unique_release_observations(self):
         case = dict(id='h1.1-tls:routing.tseq:hello', case='routing.tseq:hello', mode='h1.1-tls')
