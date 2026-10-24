@@ -5,6 +5,9 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
+import shlex
+import subprocess
 from pathlib import Path
 import sys
 import tarfile
@@ -26,7 +29,7 @@ class AdapterContracts(unittest.TestCase):
         self.assertIsNotNone(adapter, 'packaged adapter implementation missing')
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.source = self.root / 'source'
         self.source.mkdir()
         (self.source / 'unit.cpp').write_text('public source\n')
@@ -99,17 +102,22 @@ class AdapterContracts(unittest.TestCase):
         unit = directory / 'consumer.cpp'; unit.write_text('public source\n')
         executable = directory / 'static'; executable.write_text('consumer')
         depfile = directory / 'static-0.d'; depfile.write_text(f'static.o: {unit} {header}\n')
-        linkmap = directory / 'static.map'; linkmap.write_text(str(library) + '(public.o)\nLOAD ' + str(library) + '\n')
+        linkmap = directory / 'static.map'
+        linkmap.write_text(('# Object files:\n[  1] ' + str(library) + '[1](public.o)\n# Sections:\n')
+                           if sys.platform == 'darwin' else str(library) + '(public.o)\nLOAD ' + str(library) + '\n')
+        compiler = os.environ.get('CXX', 'c++')
+        compiler_argv = shlex.split(compiler)
+        map_option = '-Wl,-map,' if sys.platform == 'darwin' else '-Wl,-Map,'
         obj = directory / 'static-0.o'; obj.write_text('object')
         log = self.root / 'command.log'; log.write_text('compile/link ok')
-        commands = [dict(argv=['c++', '-std=c++20', '-MMD', '-MF', str(depfile), '-c', str(unit), '-o', str(obj)],
+        commands = [dict(argv=compiler_argv + ['-std=c++20', '-MMD', '-MF', str(depfile), '-c', str(unit), '-o', str(obj)],
                          exit=0, log=str(log), sha256=bench.artifact(log)['sha256'], bytes=log.stat().st_size),
-                    dict(argv=['c++', str(obj), str(library), '-Wl,-Map,' + str(linkmap), '-o', str(executable)],
+                    dict(argv=compiler_argv + [str(obj), str(library), map_option + str(linkmap), '-o', str(executable)],
                          exit=0, log=str(log), sha256=bench.artifact(log)['sha256'], bytes=log.stat().st_size)]
         compiled = dict(private_test_headers=False, sources={str(unit): bench.artifact(unit)['sha256']},
                         dependencies=[str(unit), str(header)], dependency_sha256={str(p): bench.artifact(p)['sha256'] for p in (unit, header)},
                         artifact_sha256=bench.artifact(executable)['sha256'], link_map=str(linkmap))
-        identity = dict(source=str(self.source), build=str(self.root / 'build'), prefix=str(prefix), compiler='c++',
+        identity = dict(source=str(self.source), build=str(self.root / 'build'), prefix=str(prefix), compiler=compiler,
                         archive={'members': {'test/installed/consumer.cpp': bench.artifact(unit)['sha256']}},
                         package={str(p): bench.artifact(p)['sha256'] for p in (header, library)})
         artifacts = {str(p): bench.artifact(p) for p in directory.iterdir() if p.is_file()}
@@ -153,6 +161,29 @@ class AdapterContracts(unittest.TestCase):
         Path(compiled['link_map']).write_text('')
         artifacts[compiled['link_map']] = bench.artifact(compiled['link_map'])
         with self.assertRaises(ValueError): adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
+    def test_darwin_link_map_requires_actual_selected_archive_contribution(self):
+        from unittest.mock import patch
+        compiled, identity, artifacts, commands = self.provenance()
+        linkmap = Path(compiled['link_map'])
+        archive = str(Path(identity['prefix']) / 'lib/libhttpserver.a')
+        foreign = str(self.root / 'foreign/libhttpserver.a')
+        commands[1]['argv'][-3] = '-Wl,-map,' + str(linkmap)
+        with patch('platform.system', return_value='Darwin'):
+            for member in (archive + '(public.o)', archive + '[12](public.o)'):
+                linkmap.write_text('# Path: consumer\n# Object files:\n[  0] linker synthesized\n[  1] ' + member + '\n# Sections:\n# Symbols:\n')
+                artifacts[str(linkmap)] = bench.artifact(linkmap)
+                adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+            for body in ('', 'LOAD ' + archive, archive + '(public.o)',
+                         '# Object files:\n[  1] ' + foreign + '[1](public.o)\n# Sections:\n',
+                         '# Object files:\n[  1] consumer.o\n# Sections:\n' + archive + '(unused.o)',
+                         '# Object files:\n[  1] ' + archive + '[1](public.o)\n[  2] ' + foreign + '[1](other.o)\n# Sections:\n'):
+                linkmap.write_text(body); artifacts[str(linkmap)] = bench.artifact(linkmap)
+                with self.subTest(body=body), self.assertRaisesRegex(ValueError, 'static archive'):
+                    adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+            commands[1]['argv'][-3] = '-Wl,-Map,' + str(linkmap)
+            with self.assertRaisesRegex(ValueError, 'link map command'):
+                adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
 
     def test_artifact_catalog_rejects_pruning_and_command_tampering(self):
         from release_package_provenance import catalog, validate_catalog
@@ -363,6 +394,23 @@ class AdapterContracts(unittest.TestCase):
                         bad = copy.deepcopy(child); bad.pop('independent_client')
                         with self.assertRaises(ValueError): provenance.validate_child_provenance(bad, identity, {}, [], family)
 
+    def test_static_archive_fixture_uses_selected_quoted_compiler(self):
+        compiler = shlex.split(os.environ.get('CXX', 'c++'))
+        wrapper = self.root / 'selected compiler.py'
+        marker = self.root / 'compiler-commands.jsonl'
+        wrapper.write_text('import json, os, sys\n'
+            'with open(' + repr(str(marker)) + ', "a") as stream: stream.write(json.dumps(sys.argv[1:]) + "\\n")\n'
+            'argv = ' + repr(compiler) + '\nos.execvp(argv[0], argv + sys.argv[1:])\n')
+        result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
+            'AdapterContracts.test_unused_selected_static_archive_cannot_supply_link_identity'],
+            env=dict(os.environ, CXX=shlex.join([sys.executable, str(wrapper)])),
+            capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(marker.is_file(), 'archive fixture bypassed the selected compiler')
+        commands = [json.loads(line) for line in marker.read_text().splitlines()]
+        self.assertEqual(sum('-c' in argv for argv in commands), 3)
+        self.assertEqual(sum('-c' not in argv for argv in commands), 2)
+
     def test_unused_selected_static_archive_cannot_supply_link_identity(self):
         import subprocess
         compiled, identity, artifacts, commands = self.provenance()
@@ -377,16 +425,17 @@ class AdapterContracts(unittest.TestCase):
             source = folder / 'implementation.cpp'; source.write_text('int implementation() { return %d; }\n' % value)
             obj = folder / 'implementation.o'; archive = folder / 'libhttpserver.a'
             archive.unlink(missing_ok=True)
-            subprocess.run(['c++', '-c', str(source), '-o', str(obj)], check=True, capture_output=True)
+            subprocess.run(shlex.split(identity['compiler']) + ['-c', str(source), '-o', str(obj)], check=True, capture_output=True)
             subprocess.run(['ar', 'rcs', str(archive), str(obj)], check=True, capture_output=True)
             libraries.append(str(archive))
-        commands[0]['argv'].insert(2, '-I' + str(Path(identity['prefix']) / 'include'))
-        commands[1]['argv'][2:3] = libraries
-        for command in commands: subprocess.run(command['argv'], check=True, capture_output=True)
+        from package_commands import Commands
+        from package_integration import compile_probe
+        command = Commands(directory)
+        compiled = compile_probe(identity['compiler'], [unit], ['-I' + str(Path(identity['prefix']) / 'include')],
+            libraries, directory / 'static', command, os.environ, self.source,
+            Path(identity['build']), Path(identity['prefix']), False)
+        commands = command.records
         self.assertEqual(subprocess.run([str(directory / 'static')]).returncode, 2)
-        compiled['sources'] = {str(unit): bench.artifact(unit)['sha256']}
-        compiled['dependency_sha256'] = {str(p): bench.artifact(p)['sha256'] for p in (unit, header)}
-        compiled['artifact_sha256'] = bench.artifact(directory / 'static')['sha256']
         identity['archive']['members']['test/installed/consumer.cpp'] = compiled['sources'][str(unit)]
         identity['package'] = {p: bench.artifact(p)['sha256'] for p in identity['package']}
         artifacts = {str(p): bench.artifact(p) for p in directory.iterdir() if p.is_file()}

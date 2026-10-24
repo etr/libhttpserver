@@ -122,7 +122,7 @@ class MeasurementTest(unittest.TestCase):
 
 class ReceiptTest(unittest.TestCase):
     def receipt(self, root, tls='no'):
-        root = Path(root)
+        root = Path(root).resolve()
         consumer = root / 'consumer'; consumer.mkdir()
         files = {'consumer.cpp': 'consumer', 'host_poll.hpp': 'poll', 'client.py': 'client',
                  'fixtures/root.pem': 'certificate', 'shared': 'shared binary', 'static': 'static binary',

@@ -30,7 +30,7 @@ class ReleaseContracts(unittest.TestCase):
         self.assertTrue(SCRIPT.is_file(), 'release gate runner is missing')
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.directory = Path(self.tmp.name)
+        self.directory = Path(self.tmp.name).resolve()
         self.binary = self.directory / 'library'
         self.binary.write_text('current packaged artifact')
         self.source = self.directory / 'source'; self.source.mkdir()
@@ -299,11 +299,21 @@ class ReleaseContracts(unittest.TestCase):
         row['archive_sha256'] = 'historical'; path.write_text(json.dumps(row))
         with self.assertRaises(ValueError): self.gate.import_platform_receipts(manifest, [path])
 
+    def test_native_fixture_discovers_success_tool_on_path(self):
+        from unittest.mock import patch
+        selected = self.directory / 'selected-tools'; selected.mkdir()
+        executable = selected / ('true.exe' if os.name == 'nt' else 'true')
+        shutil.copyfile(shutil.which('true'), executable); executable.chmod(0o755)
+        with patch.dict(os.environ, PATH=str(selected) + os.pathsep + os.environ.get('PATH', '')):
+            self.test_positive_native_suite_cannot_bypass_packaged_library_equivalence()
+        commands = json.loads((self.directory / 'suite-logs/commands.json').read_text())
+        self.assertEqual(commands[0]['argv'][0], str(executable))
+
     def test_positive_native_suite_cannot_bypass_packaged_library_equivalence(self):
         from types import SimpleNamespace
         from release_execution import ReleaseAttempt
         args = SimpleNamespace(output=self.directory / 'attempt', compiler=sys.executable, cc=sys.executable,
-                               make='/bin/true', provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1)
+                               make=shutil.which('true'), provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1)
         attempt = ReleaseAttempt(args, self.gate, {'stages': []}); attempt.source = ROOT
         lane = args.output / 'package/evidence/tls-no'; build = lane / 'build'; prefix = lane / 'prefix'
         (build / 'src/.libs').mkdir(parents=True); (build / 'test').mkdir(); (prefix / 'lib').mkdir(parents=True)
@@ -542,7 +552,7 @@ class ReleaseContracts(unittest.TestCase):
         from release_execution import ReleaseAttempt
         output = Path(tempfile.mkdtemp(dir=self.directory))
         args = SimpleNamespace(output=output, compiler=sys.executable, cc=sys.executable,
-            make='/bin/true', provider_prefix=self.directory, asan_options='detect_leaks=1', jobs=1,
+            make=shutil.which('true'), provider_prefix=self.directory, asan_options='detect_leaks=1', jobs=1,
             python=sys.executable, node='/selected/node', go='/selected/go')
         manifest = {'stages': [], 'source': self.artifact_identity['source'],
                     'release_artifact': self.artifact_identity}
@@ -712,7 +722,7 @@ else:
         from release_execution import ReleaseAttempt
         output = self.directory / 'attempt'; output.mkdir()
         args = SimpleNamespace(output=output, compiler=sys.executable, cc=sys.executable,
-            make='/bin/true', provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1)
+            make=shutil.which('true'), provider_prefix=self.directory, asan_options='detect_leaks=0', jobs=1)
         manifest = {'stages': [], 'source': self.artifact_identity['source'],
                     'release_artifact': self.artifact_identity}
         attempt = ReleaseAttempt(args, self.gate, manifest); attempt.source = self.source
