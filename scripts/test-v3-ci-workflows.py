@@ -2,6 +2,7 @@
 """Workflow dependencies and trust boundaries; execution contracts live beside runners."""
 from pathlib import Path
 import glob
+import importlib.util
 import json
 import os
 import re
@@ -275,6 +276,43 @@ configure.chmod(0o755)
                 self.assertEqual((evidence / '.diagnostic').read_text(), 'hidden diagnostic')
                 self.assertEqual((evidence / 'platform/FreeBSD.tar.gz').read_bytes(), b'platform proof')
                 self.assertFalse((evidence / folder).exists())
+
+    def test_early_inspection_receipt_survives_package_and_archive_failure_recovery(self):
+        spec = importlib.util.spec_from_file_location('installed_failure_fixture', ROOT / 'scripts/test-v3-installed-consumer.py')
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        for name in self.workflows:
+            with self.subTest(workflow=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                runner = root / 'runner'
+                package = name == self.workflows[0]
+                folder = 'package-evidence' if package else 'platform-evidence'
+                case = fixture.InstalledInspectionFailureTest()
+                try:
+                    case.setUp()
+                    case.output = runner / ('package-evidence/matrix' if package else 'platform/matrix')
+                    case.output.mkdir(parents=True)
+                    error = case.fail_lane()
+                    self.assertEqual(str(error), 'empty ELF dependency inspection')
+                    receipt = case.output / 'tls-no/audit-failure.json'
+                    self.assertTrue(receipt.is_file(), 'failed package lane must leave recoverable inspection evidence')
+                    original = receipt.read_bytes()
+                    document = json.loads(original)
+                    self.assertEqual(document['commands'][-1]['stdout'], case.dynamic)
+                    self.assertEqual(document['violations'], [str(error)])
+                    # Execute the existing EXIT copyback before the existing
+                    # recovery helper's real SCP peers, replacing SSH only.
+                    run, steps = self.guest_run(name, runner)
+                    preamble = run.split('# Guest root', 1)[0]
+                    result = subprocess.run(['sh', '-eu', '-c', preamble + '\nexit 1'], cwd=root,
+                        capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    relative = Path('matrix/tls-no/audit-failure.json' if package else 'platform/matrix/tls-no/audit-failure.json')
+                    self.assertEqual((root / folder / relative).read_bytes(), original)
+                    recovered = self.recover(root, steps, runner, dict(os.environ))
+                    self.assertEqual((recovered / relative).read_bytes(), original)
+                finally:
+                    case.doCleanups()
 
 
 class WindowsGitPreflight(unittest.TestCase):
