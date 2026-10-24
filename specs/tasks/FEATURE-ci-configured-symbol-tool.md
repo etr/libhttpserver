@@ -1,6 +1,6 @@
 # FEATURE-ci-configured-symbol-tool
 
-Status: In Progress
+Status: Complete (scoped local validation/finalization; native CI pending)
 Base: v3 `4003ed97e112fefc5fa68b67e4e5868daae1bad2`
 Plan: `.groundwork-plans/FEATURE-ci-configured-symbol-tool-plan.md`
 Journal: primary `.debug/ci-6b2-freebsd-nm-assessment-7tg4peed/journal.md`
@@ -17,7 +17,7 @@ internal crash cause are unknown; this change repairs the configured-tool handof
 - [x] Preserve all 24 required names, uppercase T definitions, demangling and
       fatal missing/undefined/nonzero/empty/malformed-tool behavior without fallback.
 - [x] Complete focused checks, Python compilation and build-definition validation.
-- [ ] Caller-owned validation/finalization.
+- [x] Caller-owned validation/finalization.
 
 Native FreeBSD post-fix checks remain INCOMPLETE and CI/v3 PR owned. No full native
 build or baseline suite, SDK installation, CI retry, merge or publication is part
@@ -50,3 +50,14 @@ failure never triggers another inspector. Local implementation is ready for
 caller-owned validation; status stays In Progress through that handoff. Native
 post-fix FreeBSD/other-platform evidence remains INCOMPLETE and CI/v3 PR owned.
 No push, merge, cleanup or CI controls were performed by this executor.
+
+Groundwork validation `af6cc8349c3b74019fdc68dcfe967f11` sealed PASS for
+`97b8a8b3a70669d1eef238d0f540993300166ca9` / tree
+`1a4fbfdc626c8e2b3829156e254fa0878c1dc401`: one iteration, nine fresh
+independent approvals, zero fixes and zero unworked findings. Required scoped
+gates pass using source-bound receipts; no report created. Independent spec/test
+review confirms the two separate pre-edit MAKE-selection configure failures
+leave no accepted NM criterion unmet and create no new local publication
+constraint. Those two failures remain FAILED/INCOMPLETE with uncertain timestamp
+cause; they were not retried or waived. Native post-fix checks remain incomplete,
+CI/v3 PR owned. Root owns final merge, cleanup and exact-head CI publication.
