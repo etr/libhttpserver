@@ -199,6 +199,108 @@ class InstalledShellPSTest(InstalledShellTest):
         self.addCleanup(observation.stop)
 
 
+class InstalledInspectionFailureTest(unittest.TestCase):
+    """Real lane/compile/inspector subprocesses with controlled producer tools.
+
+    Inspector text is deliberately unrecognized, not a FreeBSD format claim.
+    """
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.output = self.root / 'matrix'
+        self.output.mkdir()
+        self.source = self.root / 'source'
+        (self.source / 'test/installed').mkdir(parents=True)
+        (self.source / 'test/installed/package_consumer.cpp').write_text('int main() { return 0; }\n')
+        (self.source / 'examples').mkdir()
+        (self.source / 'examples/host_poll.hpp').write_text('// fixture\n')
+        spec = importlib.util.spec_from_file_location('installed_inspection_runner',
+            Path(__file__).with_name('check-v3-installed-consumer.py'))
+        self.runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.runner)
+        self.args = SimpleNamespace(compiler=os.environ.get('CXX', 'c++'), cc='cc', make='fixture-make',
+            jobs=1, prerequisite_prefix=[], pkg_config_dir=[], provider_prefix=self.root / 'provider',
+            toolchain_prefix=None, optimized=False)
+        self.dynamic = 'Dynamic section with unrecognized dependency syntax\n' + 'raw dynamic entry\n' * 400
+        self.diagnostic = 'inspector diagnostic\n'
+        self.inspector_exit = 0
+        self.popen = subprocess.Popen
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def create_process(self, argv, **options):
+        if argv[0] == 'bash':
+            prefix = self.output / 'tls-no/prefix/lib/pkgconfig'
+            code = f'from pathlib import Path; p=Path({str(prefix)!r}); p.mkdir(parents=True); (p/"libhttpserver.pc").write_text("fixture metadata")'
+        elif argv[0] == 'fixture-make':
+            code = ''
+        elif argv[0] == 'pkg-config':
+            value = str(self.output / 'tls-no/prefix/lib/pkgconfig') if '--variable=pcfiledir' in argv else ''
+            code = f'print({value!r})'
+        elif argv[0] == 'readelf':
+            code = f'import sys; sys.stdout.write({self.dynamic!r}); sys.stderr.write({self.diagnostic!r}); sys.exit({self.inspector_exit})'
+        else:
+            return self.popen(argv, **options)
+        return self.popen([sys.executable, '-c', code], **options)
+
+    def fail_lane(self):
+        with patch.object(self.runner.audit.platform, 'system', return_value='FreeBSD'), \
+                patch.object(subprocess, 'Popen', side_effect=self.create_process):
+            with self.assertRaises(self.runner.audit.AuditError) as caught:
+                self.runner.package_lane(self.args, self.source, self.output, 'no', matrix.load())
+        return caught.exception
+
+    def test_early_graph_failure_persists_full_output_and_failed_consumer(self):
+        self.runner.audit.COMMANDS.append({'argv': ['stale-previous-lane-command']})
+        error = self.fail_lane()
+        self.assertEqual(str(error), 'empty ELF dependency inspection')
+        receipt_path = self.output / 'tls-no/audit-failure.json'
+        self.assertTrue(receipt_path.is_file(), 'early graph failure must persist inspection evidence')
+        receipt = json.loads(receipt_path.read_text())
+        consumer = self.output / ('tls-no/consumer/package_consumer' + ('.exe' if os.name == 'nt' else ''))
+        self.assertEqual(receipt['violations'], [str(error)])
+        self.assertEqual(receipt['failed_artifact'], dict(id=str(consumer),
+            sha256=hashlib.sha256(consumer.read_bytes()).hexdigest()))
+        command = receipt['commands'][-1]
+        self.assertEqual(len(receipt['commands']), 1)
+        self.assertEqual(command['argv'], ['readelf', '-d', str(consumer)])
+        self.assertEqual(command['returncode'], 0)
+        self.assertEqual(command['stdout'], self.dynamic)
+        self.assertEqual(command['stderr'], self.diagnostic)
+        selected_tool = shutil.which('readelf')
+        if selected_tool:
+            self.assertEqual(command['resolved_tool'], str(Path(selected_tool).resolve()))
+        else:
+            self.assertNotIn('resolved_tool', command)
+        self.assertFalse((self.output / 'tls-no/audit.json').exists())
+
+    def test_nonzero_inspector_remains_failed_with_actual_exit_evidence(self):
+        self.inspector_exit = 7
+        error = self.fail_lane()
+        self.assertIn('command failed: readelf', str(error))
+        receipt_path = self.output / 'tls-no/audit-failure.json'
+        self.assertTrue(receipt_path.is_file(), 'nonzero inspector must persist its actual result')
+        receipt = json.loads(receipt_path.read_text())
+        self.assertEqual(receipt['violations'], [str(error)])
+        self.assertEqual(receipt['commands'][-1]['returncode'], 7)
+        self.assertEqual(receipt['commands'][-1]['stdout'], self.dynamic)
+        self.assertEqual(receipt['commands'][-1]['stderr'], self.diagnostic)
+
+    def test_failure_receipt_write_error_keeps_original_graph_failure(self):
+        real_write = Path.write_text
+        def write(path, *args, **kwargs):
+            if path.name == 'audit-failure.json':
+                raise OSError('evidence disk unavailable')
+            return real_write(path, *args, **kwargs)
+        with patch.object(Path, 'write_text', write):
+            error = self.fail_lane()
+        self.assertEqual(str(error), 'empty ELF dependency inspection')
+        self.assertEqual(error.__notes__, ['could not persist audit failure evidence: evidence disk unavailable'])
+        self.assertEqual(self.runner.audit.COMMANDS[-1]['stdout'], self.dynamic)
+
+
 class MatrixTest(unittest.TestCase):
     def setUp(self):
         self.inventory = matrix.load()

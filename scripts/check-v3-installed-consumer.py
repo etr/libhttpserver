@@ -9,6 +9,7 @@ from pathlib import Path
 import platform
 import shlex
 import shutil
+import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
@@ -24,6 +25,21 @@ spec.loader.exec_module(audit)
 
 
 def package_lane(args, source, output, mode, inventory):
+    audit.COMMANDS.clear()
+    try:
+        return _package_lane(args, source, output, mode, inventory)
+    except (audit.AuditError, OSError, subprocess.TimeoutExpired) as error:
+        receipt = dict(violations=[str(error)], commands=audit.COMMANDS.copy())
+        if hasattr(error, 'failed_artifact'):
+            receipt['failed_artifact'] = error.failed_artifact
+        try:
+            (output / ('tls-' + mode) / 'audit-failure.json').write_text(json.dumps(receipt, indent=2) + '\n')
+        except OSError as persistence_error:
+            error.add_note('could not persist audit failure evidence: ' + str(persistence_error))
+        raise
+
+
+def _package_lane(args, source, output, mode, inventory):
     lane = output / ('tls-' + mode)
     build, prefix, consumer_dir = lane / 'build', lane / 'prefix', lane / 'consumer'
     for directory in (build, prefix, consumer_dir):

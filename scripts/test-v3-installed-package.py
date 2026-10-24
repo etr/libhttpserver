@@ -124,12 +124,12 @@ class AuditTest(unittest.TestCase):
         (prefix / 'lib/libhttpserver.la').write_text('dependency_libs=\"\"\n')
         (prefix / 'include/httpserver.hpp').write_text('struct fixture_server {};\n')
         (prefix / 'include/httpserverpp').write_text('#include <httpserver.hpp>\n')
-        shared = prefix / 'lib/libhttpserver.dylib'
+        shared = prefix / 'lib/libhttpserver-3.dll'
         archive = prefix / 'lib/libhttpserver.a'
-        native = build / 'test/native_linkage'
+        native = build / 'test/native_linkage.exe'
         native_archive = build / 'src/.libs/libhttpserver_v3core.a'
-        consumer = root / 'consumer'
-        legacy = root / 'libmicrohttpd.dylib'
+        consumer = root / 'consumer.exe'
+        legacy = root / 'libmicrohttpd.dll'
         for artifact in (shared, archive, native, native_archive, consumer, legacy):
             artifact.touch()
 
@@ -137,11 +137,9 @@ class AuditTest(unittest.TestCase):
         # compilation, graph traversal and symbol policy all execute normally.
         real_run = subprocess.run
         def inspect(command, **kwargs):
-            if command[:2] == ['otool', '-L']:
-                dependency = str(legacy) if legacy_dependency and command[-1] == str(shared) else '/usr/lib/libSystem.B.dylib'
-                output = command[-1] + ':\n\t' + dependency + ' (compatibility version 1.0.0, current version 1.0.0)\n'
-            elif command[:2] == ['otool', '-l']:
-                output = ''
+            if command[:2] == ['objdump', '-p']:
+                dependency = legacy.name if legacy_dependency and command[-1] == str(shared) else 'KERNEL32.dll'
+                output = command[-1] + ': file format pei-x86-64\n DLL Name: ' + dependency + '\n'
             elif command[0] == 'nm':
                 output = 'unused.o:\n U _MHD_start_daemon\n' if legacy_symbol and command[-1] == str(archive) else 'used.o:\n U _fixture_runtime\n'
             else:
@@ -149,7 +147,8 @@ class AuditTest(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout=output, stderr='')
 
         with patch.object(audit, '__file__', str(source / 'scripts/audit-v3-installed-package.py')), \
-                patch.object(audit.platform, 'system', return_value='Darwin'), \
+                patch.object(audit.platform, 'system', return_value='Windows'), \
+                patch.dict(os.environ, SystemRoot=str(root / 'Windows'), V3_PACKAGE_DLL_DIRS=str(root)), \
                 patch.object(subprocess, 'run', side_effect=inspect):
             return audit.audit(prefix, build, consumer, 'no', mode, self.root / 'provider', compiler=CXX)
 
@@ -401,15 +400,20 @@ class AuditTest(unittest.TestCase):
         for path in ('/opt/include/openssl/ssl.h', '/opt/include/microhttpd.h', '/opt/include/gnutls/gnutls.h',
                      '/prefix/include/httpserver/detail/foo.hpp', '/usr/include/sys/socket.h'):
             self.assertTrue(audit.header_violations('', [path]))
-        self.assertTrue(audit.header_violations('', ['/source/src/httpserver/http.hpp'], forbidden_roots=['/source']))
+        source = self.root / 'source'
+        self.assertTrue(audit.header_violations('', [str(source / 'src/httpserver/http.hpp')], forbidden_roots=[source]))
         self.assertTrue(audit.layout_violations(['httpserver/detail/foo.hpp']))
         self.assertTrue(audit.layout_violations(['httpserver/foo_impl.hpp']))
 
     def test_consumer_flags_cannot_hide_backend_or_import_source(self):
+        source, build = self.root / 'source', self.root / 'build'
         for flags in (['-DHTTPSERVER_COMPILATION'], ['-DHAVE_GNUTLS=1'], ['-DNATIVE_V3_TLS'],
-                      ['-I/source/src'], ['-I/build/generated'], ['-include', '/source/config.h']):
-            self.assertTrue(audit.consumer_flag_violations(flags, ['/source', '/build']))
-        self.assertEqual([], audit.consumer_flag_violations(['-I/prefix/include', '-L/provider/lib', '-lhttpserver'], ['/source', '/build']))
+                      ['-I' + str(source / 'src')], ['-I' + str(build / 'generated')],
+                      ['-include', str(source / 'config.h')]):
+            with self.subTest(flags=flags):
+                self.assertTrue(audit.consumer_flag_violations(flags, [source, build]))
+        self.assertEqual([], audit.consumer_flag_violations(
+            ['-I' + str(self.root / 'prefix/include'), '-L' + str(self.root / 'provider/lib'), '-lhttpserver'], [source, build]))
 
     def test_sanitized_environment_drops_ambient_consumer_configuration(self):
         from unittest.mock import patch
@@ -471,6 +475,61 @@ class AuditTest(unittest.TestCase):
         with patch.object(audit.platform, 'system', return_value='Linux'), patch.object(audit, 'run', return_value=''):
             with self.assertRaises(audit.AuditError):
                 audit.platform_inspector('/usr/lib/example.so')
+
+    def test_failed_graph_inspection_keeps_artifact_and_actual_command_result(self):
+        artifact = self.root / 'consumer'
+        artifact.write_bytes(b'failed graph root')
+        command = [sys.executable, '-c', "import sys; print('dynamic output'); print('tool diagnostic', file=sys.stderr); sys.exit(7)"]
+        audit.COMMANDS.clear()
+        def inspect(path):
+            audit.run(command + [path])
+        with self.assertRaises(audit.AuditError) as caught:
+            audit.dependency_graph([str(artifact)], inspect)
+        self.assertIn('command failed:', str(caught.exception))
+        self.assertEqual(dict(id=str(artifact), sha256=hashlib.sha256(artifact.read_bytes()).hexdigest()),
+                         getattr(caught.exception, 'failed_artifact', None))
+        record = audit.COMMANDS[-1]
+        self.assertEqual(record['argv'], command + [str(artifact)])
+        self.assertEqual(record['returncode'], 7)
+        self.assertEqual(record['stdout'], 'dynamic output\n')
+        self.assertEqual(record['stderr'], 'tool diagnostic\n')
+        self.assertEqual(record['resolved_tool'], str(Path(sys.executable).resolve()))
+
+    def test_inspector_launch_failure_retains_attempted_command(self):
+        command = [str(self.root / 'missing-inspector'), '-d', 'consumer']
+        audit.COMMANDS.clear()
+        with self.assertRaises(OSError):
+            audit.run(command)
+        self.assertEqual(len(audit.COMMANDS), 1, 'failed launch must retain the attempted command')
+        self.assertEqual(audit.COMMANDS[0]['argv'], command)
+        self.assertIsNone(audit.COMMANDS[0]['returncode'])
+        self.assertNotIn('resolved_tool', audit.COMMANDS[0])
+
+    def test_tool_identity_failure_cannot_replace_actual_inspector_failure(self):
+        command = [sys.executable, '-c', "print('actual inspector output'); raise SystemExit(7)"]
+        for metadata_error in (OSError('metadata unavailable'), RuntimeError('tool symlink loop')):
+            with self.subTest(metadata_error=metadata_error), \
+                    patch.object(audit.shutil, 'which', side_effect=metadata_error):
+                with self.assertRaises(Exception) as caught:
+                    audit.run(command, env=None)
+                self.assertIsInstance(caught.exception, audit.AuditError)
+                self.assertIn('command failed:', str(caught.exception))
+                self.assertEqual(audit.COMMANDS[-1]['returncode'], 7)
+                self.assertEqual(audit.COMMANDS[-1]['stdout'], 'actual inspector output\n')
+                self.assertNotIn('resolved_tool', audit.COMMANDS[-1])
+
+    def test_inspector_timeout_retains_actual_partial_output(self):
+        command = [sys.executable, '-c', "import sys, time; print('partial dynamic output', flush=True); print('partial diagnostic', file=sys.stderr, flush=True); time.sleep(10)"]
+        real_run = subprocess.run
+        def bounded_run(*args, **kwargs):
+            return real_run(*args, **dict(kwargs, timeout=1))
+        audit.COMMANDS.clear()
+        with patch.object(subprocess, 'run', side_effect=bounded_run), self.assertRaises(subprocess.TimeoutExpired):
+            audit.run(command)
+        self.assertEqual(len(audit.COMMANDS), 1, 'timed out inspection must retain partial output')
+        self.assertEqual(audit.COMMANDS[0]['stdout'].splitlines(), ['partial dynamic output'])
+        self.assertEqual(audit.COMMANDS[0]['stderr'].splitlines(), ['partial diagnostic'])
+        self.assertIsNone(audit.COMMANDS[0]['returncode'])
 
     def test_static_linker_rejects_legacy_provider_closure(self):
         graph = self.graph({'static_consumer': ['libgnutls.dylib', 'libgmp.dylib', 'libintl.dylib', 'libz.dylib', 'CoreServices'],
@@ -544,8 +603,8 @@ class AuditTest(unittest.TestCase):
         with patch.object(audit.platform, 'system', return_value='FreeBSD'), \
                 patch.object(audit, 'run', return_value='Dynamic section at offset 0 contains 1 entry:\n (NULL) 0x0'):
             self.assertEqual([], audit.platform_inspector('/lib/libc.so.7'))
-        self.assertTrue(audit.runtime('/libexec/ld-elf.so.1'))
-        self.assertFalse(audit.runtime('/tmp/ld-elf.so.1'))
+            self.assertTrue(audit.runtime('/libexec/ld-elf.so.1'))
+            self.assertFalse(audit.runtime('/tmp/ld-elf.so.1'))
 
     def test_current_umbrella_has_no_backend_types(self):
         # Compile the real current umbrella as a consumer, comments removed by cpp.

@@ -13,6 +13,7 @@ from pathlib import Path
 import platform
 import re
 import shlex
+import shutil
 import subprocess
 
 
@@ -24,16 +25,32 @@ COMMANDS = []
 
 
 def run(command, retain_output=True, **kwargs):
-    result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, timeout=120, **kwargs)
-    record = {'argv': command, 'returncode': result.returncode, 'stderr': result.stderr}
+    record = {'argv': command, 'returncode': None}
+    try:
+        environment = kwargs.get('env')
+        environment = os.environ if environment is None else environment
+        selected = shutil.which(command[0], path=environment.get('PATH', os.defpath))
+        if selected:
+            record['resolved_tool'] = str(Path(selected).resolve())
+    except (OSError, RuntimeError):
+        pass  # Optional tool metadata must not replace an inspection failure.
+    if 'input' in kwargs:
+        record['stdin'] = kwargs['input']
+    COMMANDS.append(record)
+    try:
+        result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=120, **kwargs)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        record['error'] = str(error)
+        for key in ('stdout', 'stderr'):
+            output = getattr(error, key, None)
+            record[key] = output.decode(errors='replace') if isinstance(output, bytes) else output
+        raise
+    record.update(returncode=result.returncode, stderr=result.stderr)
     if retain_output:
         record['stdout'] = result.stdout
     else:
         record.update(stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(), stdout_bytes=len(result.stdout.encode()))
-    if 'input' in kwargs:
-        record['stdin'] = kwargs['input']
-    COMMANDS.append(record)
     if result.returncode:
         raise AuditError(f'command failed: {shlex.join(command)}: {result.stderr[-3000:]}')
     return result.stdout
@@ -213,7 +230,11 @@ def dependency_graph(roots, inspector=platform_inspector):
         cached = platform_leaf and not Path(identity).exists()
         nodes.append({'id': identity, 'provenance': 'OS/API-set platform leaf' if cached else 'platform inspector',
                       'sha256': None if cached else hashlib.sha256(Path(identity).read_bytes()).hexdigest()})
-        dependencies = [] if cached else inspector(identity)
+        try:
+            dependencies = [] if cached else inspector(identity)
+        except (AuditError, OSError, subprocess.TimeoutExpired) as error:
+            error.failed_artifact = {'id': identity, 'sha256': nodes[-1]['sha256']}
+            raise
         if not isinstance(dependencies, list):
             raise AuditError('incomplete inspector result: ' + path)
         for name, location in dependencies:
