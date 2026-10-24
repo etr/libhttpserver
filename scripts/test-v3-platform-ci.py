@@ -420,38 +420,89 @@ sys.exit(int(os.environ['COMPILER_STATUS']))
             self.assertIn('-L' + str(llvm / 'lib/c++'), calls[-1])
             self.assertIn('-Wl,-rpath,' + str(llvm / 'lib/c++'), calls[-1])
 
+    def execute_selected_workflow(self, root, workflow, job, entrypoint, privileged, preflight_failure=False):
+        text = (ROOT / '.github/workflows' / workflow).read_text()
+        job_text = re.split(r'^  [a-z0-9_-]+:', text.split('  ' + job + ':', 1)[1], maxsplit=1, flags=re.M)[0]
+        lines = job_text.splitlines()
+        invocation = next(i for i, line in enumerate(lines) if entrypoint in line and '${prefix[@]}' in line)
+        start = next(i for i in range(invocation, -1, -1) if 'run: |' in lines[i])
+        block = textwrap.dedent('\n'.join(lines[start + 1:invocation + 1]))
+        result, env, llvm = self.prepare(root)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        selected = dict(line.split('=', 1) for line in Path(env['GITHUB_ENV']).read_text().splitlines())
+        # Exercise the workflow's shell and argv; only native tools are substituted.
+        boundary = textwrap.dedent('''\
+            import json, os, pathlib, sys
+            state = pathlib.Path({state!r})
+            def record(value):
+                with open({capture!r}, 'a') as stream:
+                    stream.write(json.dumps(value) + '\\n')
+            ''').format(state=str(root / 'alias'), capture=str(root / 'boundary.jsonl'))
+        ifconfig = root / 'tools/ifconfig'
+        ifconfig.write_text('#!' + sys.executable + '\n' + boundary + textwrap.dedent('''\
+            args = sys.argv[1:]
+            record(['ifconfig'] + args)
+            if args == ['lo0', 'inet']:
+                print('lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST>')
+                print('    inet 127.0.0.1 netmask 0xff000000')
+                print('    inet 127.0.0.20 netmask 0xffffffff')
+                if state.exists(): print('    inet 127.0.0.2 netmask 0xffffffff')
+            elif args == ['lo0', 'inet', '127.0.0.2', 'netmask', '255.255.255.255', 'alias']:
+                assert not state.exists(), 'preexisting alias must be preserved'
+                state.touch()
+            elif args == ['lo0', 'inet', '127.0.0.2', '-alias']:
+                assert state.exists(), 'cleanup needs an owned alias'
+                state.unlink()
+            else:
+                raise AssertionError(args)
+            '''))
+        ifconfig.chmod(0o755)
+        # Like DarwinPeerAliasLifecycle, execute the actual stdin preflight
+        # against alias state instead of Linux's permissive loopback binding.
+        (root / 'socket.py').write_text(boundary + 'preflight_failure = ' + repr(preflight_failure) + '\n' +
+            textwrap.dedent('''\
+                class socket:
+                    def __enter__(self): return self
+                    def __exit__(self, *args): self.close()
+                    def close(self): pass
+                    def bind(self, address):
+                        assert address in (('127.0.0.1', 0), ('127.0.0.2', 0)), address
+                        record(['bind', *address])
+                        if address[0] == '127.0.0.2' and (not state.exists() or preflight_failure):
+                            raise OSError(49, 'Cannot assign requested address')
+                '''))
+        python = root / 'tools/python3'
+        python.write_text('#!' + sys.executable + '\n' + boundary + textwrap.dedent("""\
+            if sys.argv[1:] == ['-']:
+                os.execv(sys.executable, [sys.executable, '-'])
+            if sys.argv[1] == '-c':
+                sys.exit(int(os.environ['PRIVILEGED']))
+            if sys.argv[1] == 'scripts/run-v3-release-ci.py':
+                assert state.exists(), 'proof requires the second peer source address'
+            record(['proof'])
+            with open(os.environ['CAPTURE'], 'w') as stream:
+                json.dump({'argv': sys.argv[1:], 'toolchain_environment': os.environ.get('V3_PACKAGE_TOOLCHAIN')}, stream)
+            """))
+        python.chmod(0o755)
+        sudo = root / 'tools/sudo'
+        # Only ifconfig receives an absolute controlled tool; proof still runs
+        # through env -i and the workflow's explicit PATH handoff.
+        sudo.write_text('#!/bin/sh\nif [ "$1" = ifconfig ]; then\nshift\nexec env -i ' +
+                        shlex.quote(str(ifconfig)) + ' "$@"\nfi\nexec env -i CAPTURE="$CAPTURE" "$@"\n')
+        sudo.chmod(0o755)
+        result = subprocess.run(['bash', '-e', '-c', block], cwd=ROOT,
+            env=dict(env, **selected, PRIVILEGED=str(int(privileged)), CAPTURE=str(root / 'captured.json'),
+                     PYTHONPATH=str(root)), capture_output=True, text=True, timeout=10)
+        return result, selected, llvm
+
     def test_workflows_pass_selected_prefix_even_when_sudo_cleans_environment(self):
         for workflow, job, entrypoint in (
                 ('v3-package-validation.yml', 'macos', 'scripts/check-v3-installed-consumer.py'),
                 ('v3-release-acceptance.yml', 'darwin', 'scripts/run-v3-release-ci.py')):
-            text = (ROOT / '.github/workflows' / workflow).read_text()
-            job_text = re.split(r'^  [a-z0-9_-]+:', text.split('  ' + job + ':', 1)[1], maxsplit=1, flags=re.M)[0]
-            lines = job_text.splitlines()
-            invocation = next(i for i, line in enumerate(lines) if entrypoint in line and '${prefix[@]}' in line)
-            start = next(i for i in range(invocation, -1, -1) if 'run: |' in lines[i])
-            block = textwrap.dedent('\n'.join(lines[start + 1:invocation + 1]))
             for privileged in (False, True):
                 with self.subTest(workflow=workflow, privileged=privileged), tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
-                    result, env, llvm = self.prepare(root)
-                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                    selected = dict(line.split('=', 1) for line in Path(env['GITHUB_ENV']).read_text().splitlines())
-                    # Exercise the workflow's shell and argv; only native tools are substituted.
-                    python = root / 'tools/python3'
-                    python.write_text('#!' + sys.executable + '\n' + textwrap.dedent("""\
-                        import json, os, sys
-                        if sys.argv[1] == '-c':
-                            sys.exit(int(os.environ['PRIVILEGED']))
-                        with open(os.environ['CAPTURE'], 'w') as stream:
-                            json.dump({'argv': sys.argv[1:], 'toolchain_environment': os.environ.get('V3_PACKAGE_TOOLCHAIN')}, stream)
-                        """))
-                    python.chmod(0o755)
-                    sudo = root / 'tools/sudo'
-                    sudo.write_text('#!/bin/sh\nexec env -i CAPTURE="$CAPTURE" "$@"\n')
-                    sudo.chmod(0o755)
-                    result = subprocess.run(['bash', '-e', '-c', block], cwd=ROOT,
-                        env=dict(env, **selected, PRIVILEGED=str(int(privileged)), CAPTURE=str(root / 'captured.json')),
-                        capture_output=True, text=True)
+                    result, selected, llvm = self.execute_selected_workflow(root, workflow, job, entrypoint, privileged)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     captured = json.loads((root / 'captured.json').read_text())
                     argv = captured['argv']
@@ -461,6 +512,35 @@ sys.exit(int(os.environ['COMPILER_STATUS']))
                     self.assertEqual(argv[argv.index('--make') + 1] if '--make' in argv else None, 'gmake')
                     if privileged:
                         self.assertIsNone(captured['toolchain_environment'])
+                    else:
+                        self.assertEqual(captured['toolchain_environment'], str(llvm))
+                    if workflow == 'v3-release-acceptance.yml':
+                        calls = [json.loads(line) for line in (root / 'boundary.jsonl').read_text().splitlines()]
+                        self.assertEqual(calls, [
+                            ['ifconfig', 'lo0', 'inet'],
+                            ['ifconfig', 'lo0', 'inet', '127.0.0.2', 'netmask', '255.255.255.255', 'alias'],
+                            ['bind', '127.0.0.1', 0],
+                            ['bind', '127.0.0.2', 0],
+                            ['proof'],
+                            ['ifconfig', 'lo0', 'inet', '127.0.0.2', '-alias'],
+                        ])
+                        self.assertFalse((root / 'alias').exists())
+
+    def test_failed_actual_peer_bind_prevents_selected_proof_and_cleans_owned_alias(self):
+        for privileged in (False, True):
+            with self.subTest(privileged=privileged), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                result, _, _ = self.execute_selected_workflow(root, 'v3-release-acceptance.yml',
+                    'darwin', 'scripts/run-v3-release-ci.py', privileged, preflight_failure=True)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('both loopback source addresses must bind before proof', result.stderr)
+                self.assertFalse((root / 'captured.json').exists(), 'failed preflight must not invoke proof')
+                calls = [json.loads(line) for line in (root / 'boundary.jsonl').read_text().splitlines()]
+                self.assertIn(['bind', '127.0.0.1', 0], calls)
+                self.assertIn(['bind', '127.0.0.2', 0], calls)
+                self.assertNotIn(['proof'], calls)
+                self.assertEqual(calls[-1], ['ifconfig', 'lo0', 'inet', '127.0.0.2', '-alias'])
+                self.assertFalse((root / 'alias').exists())
 
     def test_nonfinal_modes_do_not_receive_runtime_linker_flags(self):
         with tempfile.TemporaryDirectory() as directory:

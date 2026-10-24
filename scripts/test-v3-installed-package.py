@@ -141,7 +141,9 @@ class AuditTest(unittest.TestCase):
                 dependency = legacy.name if legacy_dependency and command[-1] == str(shared) else 'KERNEL32.dll'
                 output = command[-1] + ': file format pei-x86-64\n DLL Name: ' + dependency + '\n'
             elif command[0] == 'nm':
-                output = 'unused.o:\n U _MHD_start_daemon\n' if legacy_symbol and command[-1] == str(archive) else 'used.o:\n U _fixture_runtime\n'
+                output = 'used.o:\n U _fixture_runtime\n'
+                if legacy_symbol and Path(command[-1]).resolve() == archive.resolve():
+                    output = 'unused.o:\n U _MHD_start_daemon\n'
             else:
                 return real_run(command, **kwargs)
             return subprocess.CompletedProcess(command, 0, stdout=output, stderr='')
@@ -189,6 +191,33 @@ class AuditTest(unittest.TestCase):
         except audit.AuditError as error:
             self.fail('strict audit must assess archive members: ' + str(error))
         self.assertIn('legacy archive symbol: MHD_start_daemon', receipt['violations'])
+
+    def test_strict_unused_member_fixture_follows_same_archive_through_parent_alias(self):
+        enumerate_artifacts = audit.package_artifacts
+        selected = []
+
+        def enumerate_alias(prefix):
+            # Real directory enumeration supplies a different spelling of the
+            # same installed file; no native Windows path spelling is assumed.
+            shared, archives = enumerate_artifacts(prefix / 'include/..')
+            installed = prefix / 'lib/libhttpserver.a'
+            self.assertEqual(len(archives), 1)
+            self.assertNotEqual(str(archives[0]), str(installed))
+            self.assertTrue(archives[0].samefile(installed))
+            selected.extend(archives)
+            return shared, archives
+
+        with patch.object(audit, 'package_artifacts', side_effect=enumerate_alias):
+            receipt = self.installed_audit(legacy_symbol=True)
+
+        inspected = [record for record in receipt['commands'] if record['argv'][0] == 'nm']
+        native = self.root / 'build/src/.libs/libhttpserver_v3core.a'
+        self.assertEqual([record['argv'] for record in inspected],
+                         [['nm', str(selected[0])], ['nm', str(native)]])
+        self.assertFalse(selected[0].samefile(native))
+        self.assertEqual(inspected[1]['stdout'], 'used.o:\n U _fixture_runtime\n')
+        self.assertEqual(inspected[0]['stdout'], 'unused.o:\n U _MHD_start_daemon\n')
+        self.assertEqual(receipt['violations'], ['legacy archive symbol: MHD_start_daemon'])
 
     def test_no_policy_mode_accepts_legacy_closure(self):
         graph = self.graph({'consumer': ['libhttpserver.dylib'], 'libhttpserver.dylib': ['libmicrohttpd.dylib'],
