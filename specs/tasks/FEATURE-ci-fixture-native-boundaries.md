@@ -1,6 +1,6 @@
 # FEATURE-ci-fixture-native-boundaries
 
-Status: In Progress (implementation; caller validation/finalization pending).
+Status: Complete (local validation/finalization; native CI pending).
 Base: local v3 `78e2b148aeac08f55e14011ec6588ab020becd40`.
 Plan: primary `.groundwork-plans/FEATURE-ci-fixture-native-boundaries-plan.md`.
 
@@ -13,7 +13,7 @@ strict unused-member MHD rejection and distinct native/foreign archive controls.
 - [x] Exercise actual Darwin workflow query/create, stdin bind preflight, selected proof and owned cleanup through controlled native boundaries.
 - [x] Match installed archive canonical identity and demonstrate real same-file path alias orchestration with strict legacy rejection.
 - [x] Run affected suites, direct alias lifecycle, Python compilation and diff checks; retain evidence and limits.
-- [ ] Caller Groundwork validation and finalization.
+- [x] Caller Groundwork validation and finalization.
 - [ ] Native post-fix Darwin/Windows checks: CI/v3 PR owned, incomplete; not a local acceptance gate.
 
 Evidence: primary `.debug/ci-7880-native-platform-fixture-ie8vyc0a/journal.md`
@@ -58,3 +58,10 @@ merge or publication was performed. Native post-fix checks remain incomplete.
 Durable implementation logs and archive inspection receipts:
 primary `.debug/ci-7880-native-platform-fixture-ie8vyc0a/implementation/`.
 Caller validation/finalization remains pending; this card stays In Progress.
+
+Groundwork validation `743cc097e157a8070dbc03b5c93a4eca` sealed PASS for
+`2376e19f98a6b027729477ad7dc60f6d0647243d`: one iteration, nine fresh
+independent approvals, zero fixes and zero unworked findings. Native post-fix
+Darwin/Windows gates remain incomplete and CI/v3 PR owned. Existing useful
+7880 FreeBSD jobs continue; publication timing belongs to the parent task.
+Overall CI remains unsuccessful; prior uncertainty and failed receipts remain.
