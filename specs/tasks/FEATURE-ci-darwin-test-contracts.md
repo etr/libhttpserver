@@ -1,6 +1,6 @@
 # FEATURE-ci-darwin-test-contracts
 
-Status: In Progress (implementation ready; caller validation/finalization pending)
+Status: Complete (local implementation/validation/finalization; native CI pending)
 Base: local v3 `a5a72356741300e5da16b94090f0f26a67a2d1f7`
 
 Repair four native-reproduced test/setup assumptions without changing production
@@ -11,7 +11,7 @@ runtime, quota accounting, APIs, peer addresses or unrelated workflows.
 - [x] Size the shared response fixture budget from actual reserved string capacity.
 - [x] Prepare and clean up only the Darwin selected-archive proof's owned loopback alias; execute lifecycle regressions.
 - [x] Run focused local checks and record native verification limits.
-- [ ] Caller validation and finalization.
+- [x] Caller validation and finalization.
 
 Evidence: primary `.debug/ci-darwin-test-contracts-8m2spsq4/journal.md`.
 Native RED batch 40055653509 is closed. Diagnostic refs f6475daf/88cd82fd
@@ -34,3 +34,10 @@ in the journal; neither is reported as a passing run. Two Automake wrappers were
 interrupted during unrelated prerequisite compilation before tests; verification
 then executed only the three requested binaries. No production owner expansion,
 full baseline suite, native rerun, CI control or publication occurred.
+
+Groundwork validation `b98a1e2fed06734a1161df488d03ed79` sealed PASS for
+implementation `bcd8f6143e84902bc612c0790392b03190908b0c`: one iteration,
+nine independent approvals, zero fixes and one unworked finding persisted by
+the helper. The report is preserved without caller reading it. Native post-fix
+platform execution remains incomplete and CI/v3 PR owned; overall CI remains
+unsuccessful. Header/outbox causes remain uncertain and CLOSED.
