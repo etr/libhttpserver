@@ -1,6 +1,6 @@
 # FEATURE-ci-darwin-focused-diagnostics
 
-Status: In Progress — implementation prepared; caller validation and the one native batch remain pending.
+Status: In Progress — local diagnostic validation passed; the one native batch remains pending.
 
 Base: local `v3` at `a5a72356741300e5da16b94090f0f26a67a2d1f7`.
 Branch: `task/FEATURE-ci-darwin-focused-diagnostics`.
@@ -14,7 +14,7 @@ This is temporary diagnostic instrumentation. This branch, including its tempora
 - [x] Keep private scalar tracing compile-time disabled in ordinary builds. The helper uses one fixed 512-byte stack buffer and one write, preserves errno, creates no event store/lock and performs no C++ allocation. Runtime flags narrow library traces to the header or storage processes.
 - [x] Prepare manual-only, read-only native Darwin batch under existing default-branch dispatch-capable `release.yml` filename. The required `tag` is a fixed diagnostic sentinel; it never selects a ref, creates a tag or publishes anything.
 - [x] Compile syntax, diagnostic logger smoke checks, workflow/embedded Python/shell syntax, actionlint, changed-file cpplint and diff checks locally; no native tests or full suites in this phase.
-- [ ] Caller independently validates the diagnostic diff and reviews the workflow before publishing this branch only.
+- [x] Caller independently validates the diagnostic diff and reviews the workflow before publishing this branch only.
 - [ ] Caller dispatches the command below ONCE and retains source-bound receipt, raw logs and LLDB abort frames.
 - [ ] Caller records actual native results, context differences and causal assessment without reopening closed probes.
 
@@ -35,3 +35,9 @@ Narrow source-storage tracing was approved by the caller because returned sink s
 Local evidence: enabled C++20 syntax/format checking succeeded for the six test TUs and changed source TUs using the existing primary Linux `build/config.h` only to satisfy `connection_engine.cpp`'s generated include. The first syntax attempt lacked that header; corrected execution setup passed. Linux excludes the native kqueue body; its Darwin compilation and all native execution remain pending. Logger smoke checks confirmed enabled output, preserved errno and disabled operand elision (no test suites executed). Shell/embedded Python/LLDB-script parsing and actionlint passed. Final complete changed-file lint/diff results are recorded in the primary journal.
 
 Implementation notes for future task executors: Autotools requires out-of-tree builds; `./bootstrap`, configure with selected CC/CXX/MAKE, then GNU make. These six tests use the existing littletest harness (`-Itest` for `./littletest.hpp`), except the peer consumer's `require` checks. `src/libhttpserver_v3core.la` supplies private implementation tests; normal consumers link `src/libhttpserver.la` or installed shared library. Public headers must not include private/platform/provider headers. Worktree creation required sandbox escalation for Git metadata even though the task files are within the writable repository. No preexisting task-executor agent memory was available at the usual agent-memory locations; this record retains the setup facts.
+
+Groundwork validation `2c3b204286112d4867f6fe7d78b1920e` sealed PASS for
+implementation HEAD `6d69f85ab44595a6a25626cd31707327e7e8d2de`: one
+iteration, nine independent domain approvals, zero fixes, one unworked finding
+persisted by the helper. The helper report is retained without caller reading it.
+Native execution is pending; this is diagnostic readiness, not a CI-green claim.
