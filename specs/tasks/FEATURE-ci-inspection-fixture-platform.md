@@ -1,6 +1,6 @@
 # FEATURE-ci-inspection-fixture-platform
 
-Status: In Progress (implementation verified; caller review/finalization pending)
+Status: Complete (local validation/finalization; native Darwin pending).
 Base: local v3 `7880e6f01b6f42ee609d45403b858d8c62893ba9`
 
 Repair the inspection-failure fixture's shared stdlib platform mutation, which
@@ -37,3 +37,9 @@ The package/archive early inspection receipt recovery regression passed (one
 test). Python byte-compilation and `git diff --check` passed. No standalone
 Python linter is documented; the repository cpplint rule applies to unchanged C++.
 No broad baseline suite, project rebuild, native Darwin probe or CI control ran.
+
+Groundwork validation `e99cd3a2e1b6abe032f86a9fa3693bde` sealed PASS for
+`de4c853f18bac56a81c28cab0f11aad2e21a69d9`: one iteration, zero fixes and
+zero unworked findings, six fresh affected-domain approvals and three
+explicit invariant/hash carries account for all nine profiles. Native Darwin
+acceptance remains incomplete and CI owned; overall CI remains unsuccessful.
