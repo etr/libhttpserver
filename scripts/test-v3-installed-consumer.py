@@ -534,13 +534,21 @@ class InstalledInspectionWindowsShellTest(InstalledInspectionFailureTest):
     """
     def setUp(self):
         super().setUp()
+        self.native_bash = self.bash
         selected = self.root / 'selected tools'
         selected.mkdir()
         self.bash = selected / ('bash.exe' if os.name == 'nt' else 'bash')
         self.bash.write_text('controlled producer shell')
         self.bash.chmod(0o755)
         self.runner.platform = SimpleNamespace(system=lambda: 'Windows')
-        os.environ['PATH'] = str(selected) + os.pathsep + os.environ['PATH']
+        # Select only the configure producer; native compiler children need real Bash.
+        self.runner.shutil = SimpleNamespace(**vars(shutil))
+        self.runner.shutil.which = self.selected_tool
+
+    def selected_tool(self, tool, *args, **kwargs):
+        if tool == 'bash':
+            return str(self.bash)
+        return shutil.which(tool, *args, **kwargs)
 
     def fail_lane(self):
         error = super().fail_lane()
@@ -551,6 +559,32 @@ class InstalledInspectionWindowsShellTest(InstalledInspectionFailureTest):
         self.assertEqual(records[1]['argv'][0:2], [str(self.bash), self.converted_configure])
         self.assertEqual(records[1]['exit'], 0)
         return error
+
+    def test_selected_shell_preserves_real_bash_compiler(self):
+        wrapper = self.root / 'compiler wrapper'
+        wrapper.write_text('#!/usr/bin/env bash\nexec ' +
+            shlex.join(shlex.split(self.args.compiler)) + ' "$@"\n')
+        wrapper.chmod(0o755)
+        # Native Windows needs an explicit interpreter for a shebang script.
+        launcher = [str(self.native_bash), str(wrapper)] if os.name == 'nt' else [str(wrapper)]
+        self.args.compiler = shlex.join(launcher)
+
+        try:
+            error = self.fail_lane()
+        except RuntimeError as compile_error:
+            self.fail('native compiler failed before dependency inspection: ' + str(compile_error))
+
+        self.assertEqual(str(error), 'empty ELF dependency inspection')
+        consumer = self.output / ('tls-no/consumer/package_consumer' + ('.exe' if os.name == 'nt' else ''))
+        self.assertTrue(consumer.with_name('package_consumer-0.o').is_file())
+        self.assertTrue(Path(str(consumer) + '.map').is_file())
+        receipt = json.loads((self.output / 'tls-no/audit-failure.json').read_text())
+        self.assertEqual(receipt['failed_artifact'], dict(id=str(consumer),
+            sha256=hashlib.sha256(consumer.read_bytes()).hexdigest()))
+        records = json.loads((self.output / 'tls-no/commands.json').read_text())
+        compiler_records = [record for record in records if record['argv'][:len(launcher)] == launcher]
+        self.assertEqual(len(compiler_records), 2)
+        self.assertEqual([record['exit'] for record in compiler_records], [0, 0])
 
 
 class MatrixTest(unittest.TestCase):
