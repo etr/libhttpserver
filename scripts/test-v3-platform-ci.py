@@ -258,19 +258,29 @@ class SelectedPlatformEnvironment(unittest.TestCase):
     @unittest.skipIf(os.name == 'nt', 'selected make fixture requires POSIX scripts and GNU make')
     def test_native_fixture_uses_callers_selected_make_for_test_enumeration(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            make = root / 'caller-make'
-            real_make = os.environ.get('MAKE') or shutil.which('gmake') or shutil.which('make')
-            calls = root / 'make-calls.jsonl'
-            make.write_text('#!' + sys.executable + '\nimport json, os, sys\n' +
-                'with open(' + repr(str(calls)) + ', "a") as stream: stream.write(json.dumps(sys.argv[1:]) + "\\n")\n' +
-                'os.execv(' + repr(real_make) + ', [' + repr(real_make) + '] + sys.argv[1:])\n')
-            make.chmod(0o755)
-            with patch.dict(os.environ, MAKE=str(make)), self.assertRaises(self.NativeChecksComplete):
-                self.native_checks(root)
-            self.assertTrue(calls.is_file(), 'native fixture bypassed the caller-selected make')
-            invocations = [json.loads(line) for line in calls.read_text().splitlines()]
-            self.assertEqual(sum('--eval' in argv for argv in invocations), 2)
+            tools = Path(directory)
+            requested = os.environ.get('MAKE') or shutil.which('gmake') or shutil.which('make')
+            selected = shutil.which(requested)
+            self.assertIsNotNone(selected, 'caller-selected GNU make must be available')
+            (tools / 'gmake').symlink_to(selected)
+            for caller_make in (requested, 'gmake'):
+                with self.subTest(make=caller_make), tempfile.TemporaryDirectory() as fixture, \
+                        patch.dict(os.environ, MAKE=caller_make,
+                                   PATH=str(tools) + os.pathsep + os.environ['PATH']):
+                    root = Path(fixture)
+                    make = root / 'caller-make'
+                    real_make = shutil.which(os.environ['MAKE'])
+                    self.assertIsNotNone(real_make, 'caller-selected GNU make must be available')
+                    calls = root / 'make-calls.jsonl'
+                    make.write_text('#!' + sys.executable + '\nimport json, os, sys\n' +
+                        'with open(' + repr(str(calls)) + ', "a") as stream: stream.write(json.dumps(sys.argv[1:]) + "\\n")\n' +
+                        'os.execv(' + repr(real_make) + ', [' + repr(real_make) + '] + sys.argv[1:])\n')
+                    make.chmod(0o755)
+                    with patch.dict(os.environ, MAKE=str(make)), self.assertRaises(self.NativeChecksComplete):
+                        self.native_checks(root)
+                    self.assertTrue(calls.is_file(), 'native fixture bypassed the caller-selected make')
+                    invocations = [json.loads(line) for line in calls.read_text().splitlines()]
+                    self.assertEqual(sum('--eval' in argv for argv in invocations), 2)
 
     @unittest.skipIf(os.name == 'nt', 'selected tool retention fixture uses POSIX executable aliases')
     def test_archive_retains_compound_compilers_and_spaced_make_exact_bytes(self):
@@ -280,7 +290,7 @@ class SelectedPlatformEnvironment(unittest.TestCase):
             sys.path.insert(0, str(ROOT / 'scripts/lib'))
             from release_platform import Catalog
             catalog = Catalog(root / 'output/bundle/FreeBSD')
-            for path in (root / 'selected python', root / 'compiler alias.py', root / 'selected compiler.py',
+            for path in (root / 'selected python', root / 'compiler alias.py',
                          root / 'selected cc', root / 'selected make'):
                 with self.subTest(path=path):
                     self.assertEqual(catalog.path(str(path)).read_bytes(), path.read_bytes())

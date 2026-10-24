@@ -123,6 +123,14 @@ class CanonicalFixtureContracts(unittest.TestCase):
                                     capture_output=True, text=True, timeout=60)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_restored_corpus_through_symlinked_tmpdir(self):
+        self.check_fixture('test/integ/protocol_fuzz_runner_test.py',
+            'FuzzRunnerTest.test_restored_corpus_is_merged_without_following_links_or_overwriting_seeds')
+
+    def test_selected_compiler_retention_through_symlinked_tmpdir(self):
+        self.check_fixture('scripts/test-v3-platform-ci.py',
+            'SelectedPlatformEnvironment.test_archive_retains_compound_compilers_and_spaced_make_exact_bytes')
+
     def test_archive_parity_through_symlinked_tmpdir(self):
         self.check_fixture('test/integ/release_artifact_test.py', 'ArchiveContracts')
 

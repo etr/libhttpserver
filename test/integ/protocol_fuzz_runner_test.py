@@ -208,7 +208,7 @@ output.chmod(0o755)
     def test_restored_corpus_is_merged_without_following_links_or_overwriting_seeds(self):
         import os
         with tempfile.TemporaryDirectory() as directory:
-            location = pathlib.Path(directory)
+            location = pathlib.Path(directory).resolve()
             compiler = location / 'compiler'
             compiler.write_text("#!/usr/bin/env python3\nimport pathlib,sys\n"
                 "if '--version' in sys.argv: print('recorder'); sys.exit()\n"
