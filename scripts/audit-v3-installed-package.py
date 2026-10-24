@@ -200,7 +200,10 @@ def platform_inspector(path):
         dynamic = run(['readelf', '-d', path])
         if 'Dynamic section' not in dynamic:
             raise AuditError('missing ELF dynamic section: ' + path)
-        names = re.findall(r'\(NEEDED\).*\[(.*?)\]', dynamic)
+        # FreeBSD readelf uses bare tags; GNU readelf parenthesizes them.
+        names = re.findall(
+            r'^[ \t]*(?:0x[0-9a-fA-F]+[ \t]+(?:NEEDED|\(NEEDED\))|\(NEEDED\))'
+            r'[ \t]+Shared library:[ \t]+\[([^\]\s]+)\][ \t]*$', dynamic, re.M)
         if not names:
             if runtime(path):
                 return []

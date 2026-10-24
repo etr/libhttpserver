@@ -643,6 +643,110 @@ class AuditTest(unittest.TestCase):
         self.assertEqual([], audit.header_violations(result, []))
 
 
+# Exact /usr/bin/readelf -d stdout from FreeBSD package job 120773457461,
+# run 40060736308, artifact 12550179871; SHA256 1f60a5922ad44f8a14c69bed7b378558f0f3c02056597781045b37e9610a4a45.
+FREEBSD_NATIVE_DYNAMIC = (
+    '\n'
+    'Dynamic section at offset 0x27530 contains 30 entries:\n'
+    '  Tag                Type                  Name/Value\n'
+    ' 0x000000000000001d RUNPATH              Library runpath: [/tmp/v3-package-40060736308-1/package-evidence/matrix/tls-no/prefix/lib:/tmp/v3-package-40060736308-1/package-evidence/prerequisites/provider/lib:/tmp/v3-package-40060736308-1/package-evidence/toolchain/lib]\n'
+    ' 0x0000000000000001 NEEDED               Shared library: [libhttpserver.so.3]\n'
+    ' 0x0000000000000001 NEEDED               Shared library: [libc++.so.1]\n'
+    ' 0x0000000000000001 NEEDED               Shared library: [libcxxrt.so.1]\n'
+    ' 0x0000000000000001 NEEDED               Shared library: [libm.so.5]\n'
+    ' 0x0000000000000001 NEEDED               Shared library: [libgcc_s.so.1]\n'
+    ' 0x0000000000000001 NEEDED               Shared library: [libthr.so.3]\n'
+    ' 0x0000000000000001 NEEDED               Shared library: [libc.so.7]\n'
+    ' 0x0000000000000015 DEBUG                0x0\n'
+    ' 0x0000000000000007 RELA                 0x205d40\n'
+    ' 0x0000000000000008 RELASZ               432 (bytes)\n'
+    ' 0x0000000000000009 RELAENT              24 (bytes)\n'
+    ' 0x0000000000000017 JMPREL               0x205ef0\n'
+    ' 0x0000000000000002 PLTRELSZ             2040 (bytes)\n'
+    ' 0x0000000000000003 PLTGOT               0x22a970\n'
+    ' 0x0000000000000014 PLTREL               RELA\n'
+    ' 0x0000000000000006 SYMTAB               0x200308\n'
+    ' 0x000000000000000b SYMENT               24 (bytes)\n'
+    ' 0x0000000000000005 STRTAB               0x2021b8\n'
+    ' 0x000000000000000a STRSZ                15233 (bytes)\n'
+    ' 0x000000006ffffef5 GNU_HASH             0x201808\n'
+    ' 0x0000000000000004 HASH                 0x201b70\n'
+    ' 0x0000000000000019 INIT_ARRAY          \n'
+    ' 0x000000000000001b INIT_ARRAYSZ         8 (bytes)\n'
+    ' 0x000000000000000c INIT                 0x227f80\n'
+    ' 0x000000000000000d FINI                 0x227f8c\n'
+    ' 0x000000006ffffff0 VERSYM               0x2015c8\n'
+    ' 0x000000006ffffffe VERNEED              0x201758\n'
+    ' 0x000000006fffffff VERNEEDNUM           4\n'
+    ' 0x0000000000000000 NULL                 0x0\n'
+)
+
+
+class ElfInspectorTest(unittest.TestCase):
+    def inspect(self, dynamic, resolved='', host='FreeBSD'):
+        def command(argv, **kwargs):
+            output = {'readelf': dynamic, 'ldd': resolved}[argv[0]]
+            return subprocess.CompletedProcess(argv, 0, output, '')
+        audit.COMMANDS.clear()
+        with patch.object(audit.platform, 'system', return_value=host), \
+                patch.object(subprocess, 'run', side_effect=command):
+            return audit.platform_inspector('/package/consumer')
+
+    def test_captured_freebsd_needed_rows_resolve_all_seven_dependencies(self):
+        names = ['libhttpserver.so.3', 'libc++.so.1', 'libcxxrt.so.1', 'libm.so.5',
+                 'libgcc_s.so.1', 'libthr.so.3', 'libc.so.7']
+        resolved = ''.join(f' {name} => /selected/lib/{name} (0x1)\n' for name in names)
+
+        dependencies = self.inspect(FREEBSD_NATIVE_DYNAMIC, resolved)
+
+        self.assertEqual([(name, '/selected/lib/' + name) for name in names], dependencies)
+        self.assertEqual(FREEBSD_NATIVE_DYNAMIC, audit.COMMANDS[0]['stdout'])
+        self.assertEqual(0, audit.COMMANDS[0]['returncode'])
+        self.assertEqual('', audit.COMMANDS[0]['stderr'])
+
+    def test_elf_inspection_requires_dynamic_section_and_nonempty_dependencies(self):
+        for host in ('FreeBSD', 'Linux'):
+            for dynamic, error in (
+                    ('0x1 NEEDED Shared library: [libc.so.7]\n', 'missing ELF dynamic section'),
+                    ('Dynamic section at offset 0 contains 1 entry:\n 0x0 NULL 0x0\n',
+                     'empty ELF dependency inspection')):
+                with self.subTest(host=host, dynamic=dynamic), self.assertRaisesRegex(audit.AuditError, error):
+                    self.inspect(dynamic, host=host)
+
+    def test_needed_dependencies_require_successful_ldd_resolution(self):
+        for host in ('FreeBSD', 'Linux'):
+            for resolved, error in (
+                    ('libc++.so.1 => not found\n', 'unresolved ELF dependency'),
+                    ('libhttpserver.so.3 => /package/lib/libhttpserver.so.3 (0x1)\n',
+                     r'missing resolution for libc\+\+\.so\.1')):
+                with self.subTest(host=host, resolved=resolved), self.assertRaisesRegex(audit.AuditError, error):
+                    self.inspect(FREEBSD_NATIVE_DYNAMIC, resolved, host)
+
+    def test_malformed_tags_and_non_needed_noise_cannot_supply_dependencies(self):
+        for row in (
+                '0x1 NOTNEEDED Shared library: [libnoise.so]',
+                '0x1 NEEDED_EXTRA Shared library: [libnoise.so]',
+                '0x1 (NEEDED Shared library: [libnoise.so]',
+                '0x1 NEEDED) Shared library: [libnoise.so]',
+                'diagnostic (NEEDED) Shared library: [libnoise.so]',
+                '0x1 RUNPATH Shared library: [libnoise.so]',
+                '0x1 NEEDED Library runpath: [libnoise.so]',
+                '0x1 NEEDED Shared library: []',
+                '0x1 NEEDED Shared library: [libnoise.so',
+                '0x1 (NEEDED) Shared library: [libnoise.so] trailing noise'):
+            with self.subTest(row=row), self.assertRaisesRegex(audit.AuditError, 'empty ELF dependency inspection'):
+                self.inspect('Dynamic section at offset 0 contains 1 entry:\n ' + row + '\n',
+                             'libnoise.so => /selected/lib/libnoise.so (0x1)\n')
+
+    def test_non_needed_rows_do_not_add_edges_to_valid_gnu_inspection(self):
+        dynamic = ('Dynamic section at offset 0 contains 3 entries:\n'
+                   ' 0x1 (NEEDED) Shared library: [libc.so.6]\n'
+                   ' 0x1 NOTNEEDED Shared library: [libnoise.so]\n'
+                   ' diagnostic (NEEDED) Shared library: [libnoise.so]\n')
+        dependencies = self.inspect(dynamic, 'libc.so.6 => /lib/libc.so.6 (0x1)\n', 'Linux')
+        self.assertEqual([('libc.so.6', '/lib/libc.so.6')], dependencies)
+
+
 class AuditFixturePathTest(unittest.TestCase):
     def test_unwind_contract_under_symlinked_temporary_root(self):
         original_tempdir = tempfile.tempdir
