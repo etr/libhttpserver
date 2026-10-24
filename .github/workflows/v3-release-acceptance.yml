@@ -118,6 +118,43 @@ jobs:
         "$RUNNER_TEMP/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
     - name: Complete native and installed TLS off/on proof
       run: |
+        peer_alias_owned=false
+        cleanup_peer_alias() {
+          status=$?
+          trap - EXIT HUP INT TERM
+          if "$peer_alias_owned"; then
+            if ! sudo ifconfig lo0 inet 127.0.0.2 -alias; then
+              echo 'peer-policy: failed to remove owned lo0 alias 127.0.0.2' >&2
+              if [ "$status" -eq 0 ]; then status=1; fi
+            fi
+          fi
+          exit "$status"
+        }
+        trap cleanup_peer_alias EXIT
+        trap 'exit 129' HUP
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        if ! loopback=$(ifconfig lo0 inet); then
+          echo 'peer-policy: failed to query lo0 IPv4 addresses' >&2
+          exit 1
+        fi
+        if ! awk '$1 == "inet" && $2 == "127.0.0.2" { found=1 } END { exit !found }' <<< "$loopback"; then
+          if ! sudo ifconfig lo0 inet 127.0.0.2 netmask 255.255.255.255 alias; then
+            echo 'peer-policy: failed to create lo0 alias 127.0.0.2' >&2
+            exit 1
+          fi
+          peer_alias_owned=true
+        fi
+        if ! python3 - <<'PY'
+        import socket
+        for address in ('127.0.0.1', '127.0.0.2'):
+            with socket.socket() as peer:
+                peer.bind((address, 0))
+        PY
+        then
+          echo 'peer-policy: both loopback source addresses must bind before proof' >&2
+          exit 1
+        fi
         prefix=()
         if ! python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",443)); s.close()'; then
           prefix=(sudo env "PATH=$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD")

@@ -530,5 +530,149 @@ if 'check' in sys.argv:
                     self.assertRegex(use, r'@[0-9a-f]{40}$')
 
 
+@unittest.skipIf(os.name == 'nt', 'Darwin proof uses a POSIX shell')
+class DarwinPeerAliasLifecycle(unittest.TestCase):
+    def execute(self, *, preexisting=False, failure='', signal_name=''):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools = root / 'tools'
+            tools.mkdir()
+            (root / 'scripts').mkdir()
+            state = root / 'alias'
+            if preexisting:
+                state.touch()
+            capture = root / 'calls.jsonl'
+            boundary = '''import json, os, pathlib, sys
+sys.excepthook = sys.__excepthook__
+def record(value):
+    with open(os.environ['CAPTURE'], 'a') as stream:
+        stream.write(json.dumps(value) + '\\n')
+state = pathlib.Path(os.environ['ALIAS_STATE'])
+failure = os.environ['FAILURE']
+'''
+            scripts = {
+                'ifconfig': boundary + '''
+args = sys.argv[1:]
+record(['ifconfig'] + args)
+if args == ['lo0', 'inet']:
+    if failure == 'query': sys.exit(43)
+    print('lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST>')
+    print('    inet 127.0.0.1 netmask 0xff000000')
+    print('    inet 127.0.0.20 netmask 0xffffffff')
+    if state.exists(): print('    inet 127.0.0.2 netmask 0xffffffff')
+elif args == ['lo0', 'inet', '127.0.0.2', 'netmask', '255.255.255.255', 'alias']:
+    assert not state.exists(), 'preexisting alias must be preserved'
+    if failure == 'create': sys.exit(47)
+    state.touch()
+elif args == ['lo0', 'inet', '127.0.0.2', '-alias']:
+    assert state.exists(), 'cleanup needs an owned alias'
+    if 'cleanup' in failure: sys.exit(53)
+    state.unlink()
+else:
+    raise AssertionError(args)
+''',
+                'sudo': 'import os, sys\nos.execvp(sys.argv[1], sys.argv[1:])\n',
+                'brew': "print('/fixture/homebrew')\n",
+            }
+            for name, code in scripts.items():
+                tool = tools / name
+                tool.write_text('#!' + sys.executable + '\n' + code)
+                tool.chmod(0o755)
+            (tools / 'python3').symlink_to(sys.executable)
+            # Execute the workflow's actual preflight Python, replacing only
+            # the OS socket boundary so Linux cannot mask Darwin's bind refusal.
+            (root / 'socket.py').write_text(boundary + '''
+class socket:
+    def __enter__(self): return self
+    def __exit__(self, *args): self.close()
+    def close(self): pass
+    def bind(self, address):
+        record(['bind', *address])
+        if address[0] == '127.0.0.2' and (not state.exists() or failure == 'preflight'):
+            raise OSError(49, 'Cannot assign requested address')
+''')
+            (root / 'scripts/run-v3-release-ci.py').write_text(boundary + '''
+import signal
+record(['proof'] + sys.argv[1:])
+assert state.exists(), 'proof requires the second peer source address'
+if os.environ['SIGNAL_NAME']:
+    os.kill(os.getppid(), getattr(signal, os.environ['SIGNAL_NAME']))
+if 'proof' in failure: sys.exit(61)
+''')
+            lane = workflow('v3-release-acceptance.yml')
+            job = lane['jobs']['darwin']
+            step = next(step for step in job['steps']
+                        if step.get('name') == 'Complete native and installed TLS off/on proof')
+            env = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ['PATH'],
+                       PYTHONPATH=str(root), CAPTURE=str(capture), ALIAS_STATE=str(state),
+                       FAILURE=failure, SIGNAL_NAME=signal_name, RUNNER_TEMP=str(root),
+                       V3_CXX='/selected/clang++', V3_CC='/selected/clang', V3_PACKAGE_TOOLCHAIN='/selected')
+            result = subprocess.run(workflow_shell(lane, job, step) + [step['run']], cwd=root,
+                                    env=env, capture_output=True, text=True, timeout=10)
+            calls = [json.loads(line) for line in capture.read_text().splitlines()] if capture.exists() else []
+            return result, calls, state.exists()
+
+    def assert_preflight(self, calls):
+        proof = next(i for i, call in enumerate(calls) if call[0] == 'proof')
+        for address in ('127.0.0.1', '127.0.0.2'):
+            self.assertIn(['bind', address, 0], calls[:proof])
+
+    def test_owned_alias_surrounds_proof_and_both_actual_bind_preflights(self):
+        result, calls, remains = self.execute()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_preflight(calls)
+        self.assertEqual(calls[0], ['ifconfig', 'lo0', 'inet'])
+        self.assertEqual(calls[-1], ['ifconfig', 'lo0', 'inet', '127.0.0.2', '-alias'])
+        self.assertFalse(remains)
+        proof = next(call for call in calls if call[0] == 'proof')
+        self.assertIn('/selected/clang++', proof)
+
+    def test_preexisting_alias_survives_success_and_proof_failure(self):
+        for failure, status in (('', 0), ('proof', 61)):
+            with self.subTest(failure=failure):
+                result, calls, remains = self.execute(preexisting=True, failure=failure)
+                self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                self.assert_preflight(calls)
+                self.assertEqual([call for call in calls if call[0] == 'ifconfig'], [['ifconfig', 'lo0', 'inet']])
+                self.assertTrue(remains)
+
+    def test_setup_and_preflight_fail_visibly_before_proof(self):
+        for failure in ('query', 'create', 'preflight'):
+            with self.subTest(failure=failure):
+                result, calls, remains = self.execute(failure=failure)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('peer-policy', result.stderr)
+                self.assertFalse(any(call[0] == 'proof' for call in calls))
+                self.assertFalse(remains)
+                cleanup = ['ifconfig', 'lo0', 'inet', '127.0.0.2', '-alias']
+                self.assertEqual(cleanup in calls, failure == 'preflight')
+
+    def test_preexisting_alias_survives_failed_bind_preflight(self):
+        result, calls, remains = self.execute(preexisting=True, failure='preflight')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('peer-policy', result.stderr)
+        self.assertFalse(any(call[0] == 'proof' for call in calls))
+        self.assertEqual([call for call in calls if call[0] == 'ifconfig'], [['ifconfig', 'lo0', 'inet']])
+        self.assertTrue(remains)
+
+    def test_owned_alias_is_cleaned_after_proof_failure_and_signals(self):
+        for failure, signal_name, status in (('proof', '', 61), ('', 'SIGHUP', 129),
+                                             ('', 'SIGINT', 130), ('', 'SIGTERM', 143)):
+            with self.subTest(failure=failure, signal=signal_name):
+                result, calls, remains = self.execute(failure=failure, signal_name=signal_name)
+                self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                self.assertEqual(calls[-1], ['ifconfig', 'lo0', 'inet', '127.0.0.2', '-alias'])
+                self.assertFalse(remains)
+
+    def test_cleanup_failure_is_visible_and_preserves_prior_failure(self):
+        for failure, status in (('cleanup', 1), ('proof-cleanup', 61)):
+            with self.subTest(failure=failure):
+                result, calls, remains = self.execute(failure=failure)
+                self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                self.assertIn('peer-policy', result.stderr)
+                self.assertEqual(calls[-1], ['ifconfig', 'lo0', 'inet', '127.0.0.2', '-alias'])
+                self.assertTrue(remains)
+
+
 if __name__ == '__main__':
     unittest.main()

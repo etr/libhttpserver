@@ -3,12 +3,15 @@
 #include <cstdlib>
 #include <new>
 #include <limits>
+#include <string>
 #include "./littletest.hpp"
 namespace {
 int allocation_countdown = -1;
+bool allocation_failed = false;
 }  // namespace
 void* operator new(std::size_t size) {
     if (allocation_countdown == 0) {
+        allocation_failed = true;
         allocation_countdown = -1; throw std::bad_alloc();
     }
     if (allocation_countdown > 0) --allocation_countdown;
@@ -125,17 +128,37 @@ LT_BEGIN_AUTO_TEST(http3_qpack_suite, local_settings_advertise_admitted_limits)
     LT_CHECK_EQ(capacity, 128U); LT_CHECK_EQ(blocked, 2U); LT_CHECK_EQ(connect, 1U);
 LT_END_AUTO_TEST(local_settings_advertise_admitted_limits)
 LT_BEGIN_AUTO_TEST(http3_qpack_suite, instruction_allocation_failure_is_internal_and_does_not_publish)
-    for (int stage = 0; stage < 3; ++stage) {
+    // Exceed supported string inline capacities for both decode and table copies.
+    const std::string name(32, 'a'), value(32, 'b');
+    LT_ASSERT(name.size() > std::string().capacity());
+    const auto encoded = hd::qpack_encode_encoder_instruction(
+        {hd::qpack_encoder_instruction_kind::insert_literal, 0, false, name, value}, {100, 100, 100});
+    LT_ASSERT(encoded.status.ok());
+    const auto wire = std::as_bytes(std::span(encoded.value));
+    // Control, decoded name/value, table name/value copies, prepared table node.
+    for (int stage = -1; stage < 5; ++stage) {
         auto root = budget(); hd::quic_storage_pool pool(10000, 30000, root); auto limits = dynamic_limits(); limits.qpack_capacity = 256;
-        hd::http3_connection c(pool.data(), pool.critical(), limits); c.attach_stream(2);
+        hd::http3_connection c(pool.data(), pool.critical(), limits); c.attach_stream(0); c.attach_stream(2);
         LT_CHECK(!feed(c, 2, bytes({2, 0x3f, 0xe1, 1})).error);
-        auto wire = bytes({0x54, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 20,
-                           'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b'});
+        LT_CHECK(!feed(c, 0, bytes({1, 3, 2, 0, 0x80})).error);
+        LT_CHECK_EQ(root.in_use(hs::resource::blocked_headers), 1U);
+        LT_CHECK(!c.event(0));
         LT_CHECK(!feed(c, 2, std::span(wire).first(wire.size() - 1)).error);
+        allocation_failed = false;
         allocation_countdown = stage;
         auto result = feed(c, 2, std::span(wire).last(1)); allocation_countdown = -1;
-        LT_ASSERT(result.error); LT_CHECK_EQ(result.error->wire_code, 0x102U);
-        LT_CHECK(!c.event(0));
+        LT_CHECK_EQ(allocation_failed, stage >= 0);
+        if (stage < 0) {
+            LT_CHECK(!result.error);
+            LT_ASSERT(c.event(0));
+            LT_ASSERT_EQ(c.event(0)->fields.size(), 1U);
+            LT_CHECK_EQ(c.event(0)->fields[0].name, name);
+            LT_CHECK_EQ(c.event(0)->fields[0].value, value);
+            LT_CHECK_EQ(root.in_use(hs::resource::blocked_headers), 0U);
+        } else {
+            LT_ASSERT(result.error); LT_CHECK_EQ(result.error->wire_code, 0x102U);
+            LT_CHECK(!c.event(0));
+        }
     }
 LT_END_AUTO_TEST(instruction_allocation_failure_is_internal_and_does_not_publish)
 LT_BEGIN_AUTO_TEST(http3_qpack_suite, encoded_byte_limit_persists_until_event_release)

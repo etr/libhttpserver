@@ -38,6 +38,28 @@ namespace h = httpserver;
 #endif
 #ifndef LHS_SKIP_NEW_OVERRIDE
 namespace {
+struct suspended_probe {
+    struct promise_type {
+        suspended_probe get_return_object() {
+            return suspended_probe(std::coroutine_handle<promise_type>::from_promise(*this));
+        }
+        std::suspend_always initial_suspend() noexcept { return {}; }
+        std::suspend_always final_suspend() noexcept { return {}; }
+        void return_void() noexcept {}
+        void unhandled_exception() { std::terminate(); }
+    };
+    explicit suspended_probe(std::coroutine_handle<promise_type> frame) : frame(frame) {}
+    suspended_probe(const suspended_probe&) = delete;
+    suspended_probe& operator=(const suspended_probe&) = delete;
+    std::coroutine_handle<promise_type> frame;
+    ~suspended_probe() { if (frame) frame.destroy(); }
+};
+suspended_probe count_resumptions(int* count) {
+    for (;;) {
+        ++*count;
+        co_await std::suspend_always{};
+    }
+}
 thread_local void (*allocation_hook)() = nullptr;
 std::shared_ptr<h::detail::resume_state> state;
 std::unique_ptr<h::resume_waiter> waiter;
@@ -106,6 +128,8 @@ LT_BEGIN_AUTO_TEST(resume_lifetime_suite, published_waiter_can_die_during_timeou
     static_cast<void>(h::detail::default_timer_queue());
     for (int winner : {1, 2}) {
         trigger = winner; deliveries = 0; hook_calls = 0;
+        int resumptions = 0;
+        auto probe = count_resumptions(&resumptions);
         observed = h::resume_outcome::timeout;
         state = std::make_shared<h::detail::resume_state>();
         waiter = std::make_unique<h::resume_waiter>(state,
@@ -114,15 +138,20 @@ LT_BEGIN_AUTO_TEST(resume_lifetime_suite, published_waiter_can_die_during_timeou
         auto* previous = h::detail::current_executor_slot();
         h::detail::current_executor_slot() = &target;
         allocation_hook = reclaim_on_timer_allocation;
-        auto continuation = waiter->await_suspend(std::noop_coroutine());
+        auto continuation = waiter->await_suspend(probe.frame);
         h::detail::current_executor_slot() = previous;
         allocation_hook = nullptr;
-        LT_CHECK(continuation == std::noop_coroutine());
+        LT_CHECK_EQ(resumptions, 1);
+        LT_ASSERT(continuation);
+        continuation.resume();
+        LT_CHECK_EQ(resumptions, 1);
         LT_CHECK_EQ(hook_calls, 1);
         LT_CHECK_EQ(deliveries, 1);
         LT_CHECK(observed == (winner == 1 ? h::resume_outcome::resumed : h::resume_outcome::cancelled));
         LT_CHECK(!waiter);
         LT_CHECK(!state->head);
+        probe.frame.destroy();
+        probe.frame = {};
     }
 #endif
 LT_END_AUTO_TEST(published_waiter_can_die_during_timeout_registration)
