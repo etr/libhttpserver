@@ -90,3 +90,10 @@ executed. Shell and embedded Python syntax, actionlint and diff checks pass.
 The original historical validations and unread helper reports remain untouched.
 The second correction requires fresh caller delta review before publication or
 native continuation; no native check has been rerun and its gates remain incomplete.
+
+Second required setup delta validation `d3efa7a9b263111166f87b7d86abe9b6`
+sealed PASS for `a2ccd0ee7f525d317d8deeab17ba3ac61c376b03`: one iteration,
+zero fixes and zero new unworked findings, five fresh affected-domain approvals
+and four explicit unchanged-invariant carries account for all nine profiles.
+Native original-case execution remains incomplete; both earlier attempts and
+all source-bound receipts remain retained.
