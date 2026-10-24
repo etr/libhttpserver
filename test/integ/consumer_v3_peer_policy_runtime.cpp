@@ -24,6 +24,7 @@
 
 #include <httpserver/server/server.hpp>
 #include "./host_poll.hpp"
+#include "../../src/detail/darwin_focused_diagnostics.hpp"
 
 namespace {
 namespace srv = httpserver::server;
@@ -78,8 +79,16 @@ class client {
         remote.sin_family = AF_INET;
         remote.sin_port = htons(port);
         ::inet_pton(AF_INET, "127.0.0.1", &remote.sin_addr);
-        if (::bind(fd_, reinterpret_cast<sockaddr*>(&local), sizeof(local)) != 0
-            || ::connect(fd_, reinterpret_cast<sockaddr*>(&remote), sizeof(remote)) != 0) {
+        const auto bind_result = ::bind(fd_, reinterpret_cast<sockaddr*>(&local), sizeof(local));
+        LHS_DARWIN_DIAG("peer operation=bind local=%s:0 remote=127.0.0.1:%u fd=%llu result=%d errno=%d\n",
+            admin ? "127.0.0.2" : "127.0.0.1", port, LHS_DARWIN_ID(fd_), bind_result, errno);
+        int connect_result = -1;
+        if (bind_result == 0) {
+            connect_result = ::connect(fd_, reinterpret_cast<sockaddr*>(&remote), sizeof(remote));
+            LHS_DARWIN_DIAG("peer operation=connect local=%s remote=127.0.0.1:%u fd=%llu result=%d errno=%d\n",
+                admin ? "127.0.0.2" : "127.0.0.1", port, LHS_DARWIN_ID(fd_), connect_result, errno);
+        }
+        if (bind_result != 0 || connect_result != 0) {
             close_socket(fd_);
             fd_ = invalid_socket;
             require(false);
@@ -127,6 +136,7 @@ class client {
 enum class change { none, deny, disable, enable, remove_deny, reject_all, allow, accept_all, remove_allow };
 
 void scenario(srv::loop_mode mode) {
+    LHS_DARWIN_DIAG("peer scenario loop=%s\n", mode == srv::loop_mode::external ? "external" : "managed");
     std::atomic<change> next{change::none};
     std::atomic<int> accepted_hooks{0}, refused_hooks{0}, cancelled{0};
     std::atomic<bool> valid{true};

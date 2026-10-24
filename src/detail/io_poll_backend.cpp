@@ -42,6 +42,7 @@
 
 #include "httpserver/detail/io_connection_owner.hpp"
 #include "httpserver/detail/io_timer_sweep.hpp"
+#include "./darwin_focused_diagnostics.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -154,6 +155,14 @@ void io_poll_backend::register_pending_locked(const std::shared_ptr<op_state>& s
         throw std::logic_error(
             "httpserver::io operation submitted twice to backend");
     }
+#ifdef LHS_DARWIN_FOCUSED_DIAGNOSTICS
+    if (op.kind() == io_op_kind::timer || op.kind() == io_op_kind::read) {
+        LHS_DARWIN_HEADER_DIAG("header poll registered now_us=%lld id=%llu op=%p kind=%d sequence=%llu pending=%zu deadline_us=%lld\n",
+            LHS_DARWIN_NOW, LHS_DARWIN_ID(op.connection()), static_cast<void*>(&op), static_cast<int>(op.kind()),
+            LHS_DARWIN_ID(op.sequence()), pending_.size(),
+            op.kind() == io_op_kind::timer ? LHS_DARWIN_TICK(std::get<timer_payload>(op.payload()).deadline) : -1LL);
+    }
+#endif
     const auto cit = connections_.find(op.connection());
     if (cit != connections_.end()
             && (op.kind() == io_op_kind::read || op.kind() == io_op_kind::write
@@ -331,6 +340,7 @@ void io_poll_backend::hangup_connection(std::uint64_t id,
             }
         }
     }
+    LHS_DARWIN_HEADER_DIAG("header poll hangup now_us=%lld id=%llu swept=%zu\n", LHS_DARWIN_NOW, LHS_DARWIN_ID(id), swept.size());
     notify();
     for (const auto& state : swept) {
         finish_now(state,

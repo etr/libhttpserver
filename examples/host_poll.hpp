@@ -44,6 +44,9 @@
 #include <vector>
 
 #include <httpserver/server/readiness.hpp>
+#ifdef LHS_DARWIN_FOCUSED_DIAGNOSTICS
+#include "../src/detail/darwin_focused_diagnostics.hpp"
+#endif
 
 namespace v3_host {
 namespace srv = httpserver::server;
@@ -97,12 +100,20 @@ inline std::vector<srv::readiness_event> wait(
     if (snapshot.wake) interests.push_back(*snapshot.wake);
     std::vector<slot> fds;
     for (const auto& interest : interests) fds.push_back(registration(interest));
+    const auto selected_timeout = timeout(deadline);
 #if defined(_WIN32)
-    const auto ready = ::WSAPoll(fds.data(), static_cast<ULONG>(fds.size()), timeout(deadline));
+    const auto ready = ::WSAPoll(fds.data(), static_cast<ULONG>(fds.size()), selected_timeout);
     if (ready < 0 && ::WSAGetLastError() != WSAEINTR) throw std::runtime_error("WSAPoll failed");
 #else
-    const auto ready = ::poll(fds.data(), static_cast<nfds_t>(fds.size()), timeout(deadline));
+    const auto ready = ::poll(fds.data(), static_cast<nfds_t>(fds.size()), selected_timeout);
     if (ready < 0 && errno != EINTR) throw std::runtime_error("poll failed");
+#endif
+#ifdef LHS_DARWIN_FOCUSED_DIAGNOSTICS
+    LHS_DARWIN_HEADER_DIAG("header host poll now_us=%lld result=%d errno=%d deadline_us=%lld timeout_ms=%d count=%zu\n",
+        LHS_DARWIN_NOW, ready, errno, deadline ? LHS_DARWIN_TICK(*deadline) : -1LL, selected_timeout, fds.size());
+    for (const auto& fd : fds) {
+        LHS_DARWIN_HEADER_DIAG("header host poll fd=%llu events=%d revents=%d\n", LHS_DARWIN_ID(fd.fd), fd.events, fd.revents);
+    }
 #endif
     std::vector<srv::readiness_event> events;
     for (std::size_t i = 0; i < fds.size(); ++i) {

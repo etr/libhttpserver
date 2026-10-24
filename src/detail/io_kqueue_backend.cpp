@@ -19,6 +19,7 @@
 #include <httpserver/detail/io_connection_owner.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include <httpserver/detail/io_timer_sweep.hpp>
+#include "./darwin_focused_diagnostics.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -38,6 +39,7 @@ std::atomic<std::uint64_t> io_kqueue_backend::all_waits_{0};
 
 io_kqueue_backend::io_kqueue_backend() {
     kqueue_ = ::kqueue();
+    LHS_DARWIN_HEADER_DIAG("header kqueue constructed now_us=%lld descriptor=%d\n", LHS_DARWIN_NOW, kqueue_);
     if (kqueue_ < 0 || !wake_.valid()) {
         closed_ = true;
         return;
@@ -120,6 +122,9 @@ std::optional<std::chrono::steady_clock::time_point> io_kqueue_backend::reconcil
     std::vector<struct kevent> changes;
     for (auto& entry : connections_) rearm_locked(*entry.second, masks[entry.first], changes);
     apply_changes_locked(changes);
+    LHS_DARWIN_HEADER_DIAG("header kqueue reconcile now_us=%lld pending=%zu deadline_us=%lld changes=%zu receipts=%llu failed_receipts=%llu\n",
+        LHS_DARWIN_NOW, pending_.size(), deadline ? LHS_DARWIN_TICK(*deadline) : -1LL, changes.size(),
+        LHS_DARWIN_ID(receipts_), LHS_DARWIN_ID(failed_receipts_));
     return deadline;
 }
 

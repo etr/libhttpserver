@@ -6,6 +6,7 @@
 
 #include <httpserver/detail/io_connection_owner.hpp>
 #include <httpserver/detail/io_timer_sweep.hpp>
+#include "./darwin_focused_diagnostics.hpp"
 
 namespace httpserver::detail {
 
@@ -32,6 +33,9 @@ std::size_t sweep_due_timers(std::unordered_map<op_state*, std::shared_ptr<op_st
     std::size_t expired = 0;
     for (const auto& entry : due) {
         if (entry.second->claim_terminal()) {
+            LHS_DARWIN_HEADER_DIAG("header timer claimed now_us=%lld sweep_now_us=%lld deadline_us=%lld id=%llu op=%p sequence=%llu\n",
+                LHS_DARWIN_NOW, LHS_DARWIN_TICK(now), LHS_DARWIN_TICK(entry.first), LHS_DARWIN_ID(entry.second->connection()),
+                static_cast<void*>(entry.second.get()), LHS_DARWIN_ID(entry.second->sequence()));
             entry.second->owner()->enqueue(entry.second, io_result{});
             ++expired;
         }

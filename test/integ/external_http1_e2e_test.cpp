@@ -34,6 +34,7 @@
 #include "../../examples/host_poll.hpp"
 #include "./raw_http_client.hpp"
 #include "./littletest.hpp"
+#include "../../src/detail/darwin_focused_diagnostics.hpp"
 
 namespace srv = httpserver::server;
 namespace http = httpserver::http;
@@ -81,7 +82,15 @@ struct host_server {
                         }
                         for (const auto& socket : snapshot.sockets) retained.push_back(socket);
                     }
+                    if (trace_header) {
+                        LHS_DARWIN_DIAG("header host before_wait now_us=%lld deadline_us=%lld failure_us=%lld sockets=%zu wake=%d\n",
+                            LHS_DARWIN_NOW, snapshot.next_deadline ? LHS_DARWIN_TICK(*snapshot.next_deadline) : -1LL,
+                            LHS_DARWIN_TICK(failure_deadline), snapshot.sockets.size(), static_cast<bool>(snapshot.wake));
+                    }
                     auto events = v3_host::wait(snapshot, failure_deadline);
+                    if (trace_header) {
+                        LHS_DARWIN_DIAG("header host after_wait now_us=%lld events=%zu\n", LHS_DARWIN_NOW, events.size());
+                    }
                     if (clock_type::now() >= failure_deadline) {
                         failed.store(true);
                         break;
@@ -96,6 +105,10 @@ struct host_server {
                         replay.clear();
                     }
                     const auto result = server.readiness()->dispatch(events, clock_type::now());
+                    if (trace_header) {
+                        LHS_DARWIN_DIAG("header host after_dispatch now_us=%lld result=%d empty_dispatches=%d wakes=%d\n",
+                            LHS_DARWIN_NOW, static_cast<int>(result.code()), empty_dispatches.load(), wake_dispatches.load());
+                    }
                     if (!result.ok() && !stopping.load()) {
                         failed.store(true);
                         break;
@@ -116,6 +129,7 @@ struct host_server {
         server.stop();
     }
     srv::native_server server;
+    bool trace_header = false;
     std::atomic_bool stopping{false};
     std::atomic_bool failed{false};
     std::atomic_int stale_replays{0};
@@ -209,12 +223,18 @@ LT_END_AUTO_TEST(delayed_worker_response_uses_wake_without_periodic_poll)
 
 LT_BEGIN_AUTO_TEST(external_http1_suite, published_header_deadline_drives_empty_dispatch)
     host_server fx;
+    fx.trace_header = true;
+    LHS_DARWIN_DIAG("header inferior euid=%llu now_us=%lld\n", LHS_DARWIN_ID(::geteuid()), LHS_DARWIN_NOW);
     LT_ASSERT(fx.start());
     raw_http::connection client;
     LT_ASSERT(client.connect(fx.server.get_bound_port(0)));
     LT_CHECK(client.send("GET /incomplete"));
     std::deque<raw_http::observed_response> seen;
-    LT_CHECK(client.receive_close(seen));
+    LHS_DARWIN_DIAG("header client before_receive_close now_us=%lld\n", LHS_DARWIN_NOW);
+    const bool received_close = client.receive_close(seen);
+    LHS_DARWIN_DIAG("header client after_receive_close now_us=%lld closed=%d responses=%zu failed=%d empty_dispatches=%d\n",
+        LHS_DARWIN_NOW, received_close, seen.size(), fx.failed.load(), fx.empty_dispatches.load());
+    LT_CHECK(received_close);
     LT_CHECK(seen.empty());
     LT_CHECK(fx.empty_dispatches.load() > 0);
     fx.stop();

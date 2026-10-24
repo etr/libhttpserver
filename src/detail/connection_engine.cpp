@@ -40,6 +40,7 @@
 #include <httpserver/detail/drain_scope.hpp>
 #include <httpserver/detail/diagnostics_access.hpp>
 #include <httpserver/http/outcome.hpp>
+#include "./darwin_focused_diagnostics.hpp"
 
 namespace httpserver {
 
@@ -740,6 +741,8 @@ void connection_engine::note_transport_activity(bool written) {
 }
 
 void connection_engine::enforce_timeout(std::chrono::steady_clock::time_point deadline) noexcept {
+    LHS_DARWIN_HEADER_DIAG("header enforce_timeout now_us=%lld id=%llu deadline_us=%lld\n",
+        LHS_DARWIN_NOW, LHS_DARWIN_ID(id_), LHS_DARWIN_TICK(deadline));
     bool global_expiry = false, close_expiry = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
@@ -776,6 +779,8 @@ task<void> connection_engine::watchdog_loop(
             std::lock_guard<std::mutex> lock(self->mu_);
             plan = self->plan_watchdog_locked();
         }
+        LHS_DARWIN_HEADER_DIAG("header watchdog plan now_us=%lld id=%llu exit=%d defer=%d deadline_us=%lld\n",
+            LHS_DARWIN_NOW, LHS_DARWIN_ID(self->id_), plan.exit, plan.defer, LHS_DARWIN_TICK(plan.deadline));
         if (plan.exit) co_return;
         const auto deadline = plan.defer
             ? std::chrono::steady_clock::now() + k_watchdog_tick
@@ -783,6 +788,8 @@ task<void> connection_engine::watchdog_loop(
         timer_operation op(self->owner_, self->id_, deadline);
         if (!self->arm_watchdog(op, plan)) continue;
         const io_result r = co_await std::move(op);
+        LHS_DARWIN_HEADER_DIAG("header watchdog resumed now_us=%lld id=%llu result=%d deadline_us=%lld\n",
+            LHS_DARWIN_NOW, LHS_DARWIN_ID(self->id_), static_cast<int>(r.code), LHS_DARWIN_TICK(deadline));
         {
             std::lock_guard<std::mutex> lock(self->mu_);
             self->pending_timer_.reset();
@@ -810,6 +817,7 @@ void connection_engine::loop_finished() {
 }
 
 void connection_engine::finalize() {
+    LHS_DARWIN_HEADER_DIAG("header connection finalize now_us=%lld id=%llu\n", LHS_DARWIN_NOW, LHS_DARWIN_ID(id_));
     // The engine's counted unit drops first: by the time the listener
     // erases its record, a drain waiting on the scope observes
     // completion with every loop finished and the writer flushed.

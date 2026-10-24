@@ -27,6 +27,7 @@
 #include <utility>
 #include <httpserver/concurrency/resume_signal.hpp>
 #include "./littletest.hpp"
+#include "../../src/detail/darwin_focused_diagnostics.hpp"
 namespace h = httpserver;
 // TSan owns the allocator; only the allocation-hook case needs an override.
 #if defined(LHS_SANITIZER_OWNS_OPERATOR_NEW) || defined(__SANITIZE_THREAD__)
@@ -117,6 +118,9 @@ LT_BEGIN_AUTO_TEST(resume_lifetime_suite, published_waiter_can_die_during_timeou
         auto continuation = waiter->await_suspend(std::noop_coroutine());
         h::detail::current_executor_slot() = previous;
         allocation_hook = nullptr;
+        LHS_DARWIN_DIAG("resume winner=%d returned=%p local_noop=%p hooks=%d deliveries=%d observed=%d waiter_alive=%d head_alive=%d\n",
+            winner, continuation.address(), std::noop_coroutine().address(), hook_calls,
+            deliveries, static_cast<int>(observed), static_cast<bool>(waiter), static_cast<bool>(state->head));
         LT_CHECK(continuation == std::noop_coroutine());
         LT_CHECK_EQ(hook_calls, 1);
         LT_CHECK_EQ(deliveries, 1);

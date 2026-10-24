@@ -9,6 +9,7 @@
 #include "./http3_websocket_fixture.hpp"
 #include "./http3_request_fixture.hpp"
 #include "./websocket_engine_helpers.hpp"
+#include "../../src/detail/darwin_focused_diagnostics.hpp"
 namespace httpserver::detail {
 struct http1_outbox_test_access {
     static std::size_t retained_capacity(http1_response_outbox& outbox) {
@@ -187,7 +188,14 @@ LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_partial_output_keeps_retained_prefi
     LT_ASSERT(sink.start(request, http::status::from_code(200), fields).ok());
     outbox.consume_front(outbox.queued_bytes());
     const std::array<std::byte, 512> payload{};
-    LT_ASSERT(sink.push(payload).kind == hd::body_push::accepted);
+    LHS_DARWIN_DIAG("resource partial before_push retained_capacity=%zu used=%zu budget=%zu payload=%zu queued=%zu\n",
+        hd::http1_outbox_test_access::retained_capacity(outbox), budget.in_use(hs::resource::response_queue_bytes),
+        budget.capacity(hs::resource::response_queue_bytes), payload.size(), outbox.queued_bytes());
+    const auto pushed = sink.push(payload);
+    LHS_DARWIN_DIAG("resource partial after_push kind=%d copied=%zu retained_capacity=%zu used=%zu budget=%zu queued=%zu\n",
+        static_cast<int>(pushed.kind), pushed.copied, hd::http1_outbox_test_access::retained_capacity(outbox),
+        budget.in_use(hs::resource::response_queue_bytes), budget.capacity(hs::resource::response_queue_bytes), outbox.queued_bytes());
+    LT_ASSERT(pushed.kind == hd::body_push::accepted);
     LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 512u);
     LT_CHECK_EQ(outbox.consume_front(511), 511u);
     LT_CHECK_EQ(outbox.queued_bytes(), 1u);

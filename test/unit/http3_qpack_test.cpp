@@ -4,10 +4,24 @@
 #include <new>
 #include <limits>
 #include "./littletest.hpp"
+#include "../../src/detail/darwin_focused_diagnostics.hpp"
 namespace {
 int allocation_countdown = -1;
+#ifdef LHS_DARWIN_FOCUSED_DIAGNOSTICS
+std::size_t attempted_sizes[8]{};
+unsigned attempted_allocations = 0;
+bool observe_allocations = false;
+bool injected_failure = false;
+#endif
 }  // namespace
 void* operator new(std::size_t size) {
+#ifdef LHS_DARWIN_FOCUSED_DIAGNOSTICS
+    if (observe_allocations) {
+        if (attempted_allocations < 8) attempted_sizes[attempted_allocations] = size;
+        ++attempted_allocations;
+        if (allocation_countdown == 0) injected_failure = true;
+    }
+#endif
     if (allocation_countdown == 0) {
         allocation_countdown = -1; throw std::bad_alloc();
     }
@@ -132,8 +146,25 @@ LT_BEGIN_AUTO_TEST(http3_qpack_suite, instruction_allocation_failure_is_internal
         auto wire = bytes({0x54, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 20,
                            'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b', 'b'});
         LT_CHECK(!feed(c, 2, std::span(wire).first(wire.size() - 1)).error);
+#ifdef LHS_DARWIN_FOCUSED_DIAGNOSTICS
+        attempted_allocations = 0; injected_failure = false; observe_allocations = true;
+#endif
         allocation_countdown = stage;
-        auto result = feed(c, 2, std::span(wire).last(1)); allocation_countdown = -1;
+        auto result = feed(c, 2, std::span(wire).last(1));
+#ifdef LHS_DARWIN_FOCUSED_DIAGNOSTICS
+        observe_allocations = false;
+        const int remaining_countdown = allocation_countdown;
+#endif
+        allocation_countdown = -1;
+        LHS_DARWIN_DIAG("qpack stage=%d attempts=%u injected=%d remaining=%d consumed=%zu error_present=%d wire_code=%llu event0=%d\n",
+            stage, attempted_allocations, injected_failure, remaining_countdown, result.consumed,
+            static_cast<bool>(result.error), result.error ? LHS_DARWIN_ID(result.error->wire_code) : 0ULL,
+            c.event(0) != nullptr);
+#ifdef LHS_DARWIN_FOCUSED_DIAGNOSTICS
+        for (unsigned i = 0; i < attempted_allocations && i < 8; ++i) {
+            LHS_DARWIN_DIAG("qpack stage=%d allocation_index=%u requested_bytes=%zu\n", stage, i, attempted_sizes[i]);
+        }
+#endif
         LT_ASSERT(result.error); LT_CHECK_EQ(result.error->wire_code, 0x102U);
         LT_CHECK(!c.event(0));
     }

@@ -62,6 +62,7 @@
 #include <parity/response_frame.hpp>
 
 #include "./littletest.hpp"
+#include "../../src/detail/darwin_focused_diagnostics.hpp"
 
 namespace httpserver::detail {
 struct http1_outbox_test_access {
@@ -402,6 +403,9 @@ LT_BEGIN_AUTO_TEST(outbox_suite, concurrent_sibling_heads_share_actual_capacity)
     const auto head = get_11();
     http::fields fields;
     fields.append("Content-Length", "16");
+    LHS_DARWIN_DIAG("outbox siblings before_start sampled_capacity=%zu root_capacity=%zu first_capacity=%zu second_capacity=%zu\n",
+        allocation.capacity(), root.capacity(hs::resource::response_queue_bytes),
+        hd::http1_outbox_test_access::capacity(first_sink), hd::http1_outbox_test_access::capacity(second_sink));
     std::atomic<bool> go{false};
     bool first_ok = false;
     bool second_ok = false;
@@ -418,6 +422,10 @@ LT_BEGIN_AUTO_TEST(outbox_suite, concurrent_sibling_heads_share_actual_capacity)
     a.join();
     b.join();
 
+    LHS_DARWIN_DIAG("outbox siblings after_join first_ok=%d second_ok=%d first_capacity=%zu second_capacity=%zu root_used=%zu first_used=%zu second_used=%zu\n",
+        first_ok, second_ok, hd::http1_outbox_test_access::capacity(first_sink),
+        hd::http1_outbox_test_access::capacity(second_sink), root.in_use(hs::resource::response_queue_bytes),
+        first_scope.in_use(hs::resource::response_queue_bytes), second_scope.in_use(hs::resource::response_queue_bytes));
     // Concurrent provisional charges may both refuse; they must never
     // overcommit or leave a failed candidate charged.
     LT_CHECK(!first_ok || !second_ok);

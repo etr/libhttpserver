@@ -30,6 +30,7 @@
 #include <exception>
 #include <memory>
 #include <utility>
+#include "./darwin_focused_diagnostics.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -109,6 +110,8 @@ void op_state::apply(io_result result) {
         witness = std::move(witness_);
         resume_ex = std::exchange(resume_ex_, nullptr);
     }
+    LHS_DARWIN_HEADER_DIAG("header op applied now_us=%lld id=%llu op=%p kind=%d frame=%p code=%d\n", LHS_DARWIN_NOW,
+        LHS_DARWIN_ID(connection_), static_cast<void*>(this), static_cast<int>(kind_), frame.address(), static_cast<int>(result.code));
     if (frame) {
         resume_guarded(resume_ex, witness, frame);
     }

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <httpserver/detail/http1_response_outbox.hpp>
+#include "./darwin_focused_diagnostics.hpp"
 
 namespace httpserver::detail {
 
@@ -147,8 +148,14 @@ auto http1_response_outbox::reserve_buffer_locked(http1_response_sink& sink, std
     if (size > maximum) return false;
     const auto capacity = sink.bytes_.capacity();
     const auto bound = std::max(size, capacity > maximum / 2 ? maximum : 2 * capacity);
+    LHS_DARWIN_STORAGE_DIAG("storage reserve candidate outbox=%p sink=%p size=%zu old_capacity=%zu bound=%zu charge=%zu queue_budget=%zu\n",
+        static_cast<void*>(this), static_cast<void*>(&sink), size, capacity, bound, storage_charge_.units(), budget_.max_queue_bytes);
     if (bound > std::numeric_limits<std::size_t>::max() - storage_charge_.units() ||
-        !storage_charge_.grow(bound)) return false;
+        !storage_charge_.grow(bound)) {
+        LHS_DARWIN_STORAGE_DIAG("storage refused provisional outbox=%p sink=%p bound=%zu charge=%zu\n",
+            static_cast<void*>(this), static_cast<void*>(&sink), bound, storage_charge_.units());
+        return false;
+    }
     // Destroy the private candidate before rolling back its admission.
     struct provisional_charge {
         resource_charge& charge;
@@ -159,14 +166,22 @@ auto http1_response_outbox::reserve_buffer_locked(http1_response_sink& sink, std
     replacement.reserve(bound);
     const auto actual = replacement.capacity();
     const auto excess = actual - bound;
+    LHS_DARWIN_STORAGE_DIAG("storage allocated candidate outbox=%p sink=%p bound=%zu actual=%zu excess=%zu provisional_charge=%zu\n",
+        static_cast<void*>(this), static_cast<void*>(&sink), bound, actual, excess, storage_charge_.units());
     if (excess > std::numeric_limits<std::size_t>::max() - storage_charge_.units() ||
-        !storage_charge_.grow(excess)) return false;
+        !storage_charge_.grow(excess)) {
+        LHS_DARWIN_STORAGE_DIAG("storage refused excess outbox=%p sink=%p actual=%zu excess=%zu charge=%zu\n",
+            static_cast<void*>(this), static_cast<void*>(&sink), actual, excess, storage_charge_.units());
+        return false;
+    }
     pending.units = actual;
     replacement.append(sink.bytes_);
     sink.bytes_.swap(replacement);
     std::string().swap(replacement);
     storage_charge_.shrink(std::exchange(sink.storage_units_, actual));
     pending.units = 0;
+    LHS_DARWIN_STORAGE_DIAG("storage accepted candidate outbox=%p sink=%p actual=%zu charge=%zu\n",
+        static_cast<void*>(this), static_cast<void*>(&sink), actual, storage_charge_.units());
     return true;
 }
 

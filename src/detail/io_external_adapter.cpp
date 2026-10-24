@@ -30,6 +30,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include "./darwin_focused_diagnostics.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -121,6 +122,9 @@ server::interest_snapshot io_poll_backend::interests() const {
         borrowed_handle(wake_.read_handle()), true, false};
     std::unordered_map<std::uint64_t, pollsys::event_mask> masks;
     snapshot.next_deadline = scan_interest_locked(masks);
+    LHS_DARWIN_HEADER_DIAG("header poll published now_us=%lld pending=%zu deadline_us=%lld wake_pending=%d wake_fd=%llu\n",
+        LHS_DARWIN_NOW, pending_.size(), snapshot.next_deadline ? LHS_DARWIN_TICK(*snapshot.next_deadline) : -1LL,
+        wake_pending_, LHS_DARWIN_ID(wake_.read_handle()));
     for (const auto& entry : connections_) {
         const auto& record = entry.second;
         const auto& lifetime = record.lifetime;
@@ -161,6 +165,7 @@ http::outcome io_poll_backend::dispatch(
         close();
         return status;
     }
+    LHS_DARWIN_HEADER_DIAG("header poll dispatch now_us=%lld host_now_us=%lld events=%zu\n", LHS_DARWIN_NOW, LHS_DARWIN_TICK(now), events.size());
     for (const auto& event : events) dispatch_event(event);
     expire_due_timers(now);
     return ready();
@@ -213,6 +218,9 @@ void io_poll_backend::dispatch_event(const server::readiness_event& event) {
         std::lock_guard<std::mutex> lock(mu_);
         if (closed_) return;
         std::tie(id, lease) = find_registration_locked(event);
+        LHS_DARWIN_HEADER_DIAG("header poll event now_us=%lld id=%llu generation=%llu matched=%d read=%d write=%d closed=%d error=%d\n",
+            LHS_DARWIN_NOW, LHS_DARWIN_ID(id), LHS_DARWIN_ID(event.generation),
+            static_cast<bool>(lease), event.readable, event.writable, event.closed, event.error);
         if (!lease) return;
         datagram = connections_.at(id).datagram;
         // Prepare both directions before detaching either one. A failure in

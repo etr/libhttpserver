@@ -25,6 +25,7 @@
 #include <memory>
 #include <exception>
 #include <utility>
+#include "./darwin_focused_diagnostics.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -87,6 +88,9 @@ datagram_enqueue_code io_connection_owner::datagram_port::enqueue(
 
 void io_connection_owner::apply_record(record entry, const std::shared_ptr<shared_state>& pending) {
     if (entry.state) {
+        LHS_DARWIN_HEADER_DIAG("header owner apply now_us=%lld id=%llu op=%p kind=%d code=%d bytes=%zu\n", LHS_DARWIN_NOW,
+            LHS_DARWIN_ID(entry.state->connection()), static_cast<void*>(entry.state.get()),
+            static_cast<int>(entry.state->kind()), static_cast<int>(entry.result.code), entry.result.transferred);
         entry.state->apply(entry.result);
         return;
     }
@@ -106,6 +110,8 @@ void io_connection_owner::apply_record(record entry, const std::shared_ptr<share
 
 void io_connection_owner::enqueue(std::shared_ptr<op_state> state,
                                   io_result result) {
+    LHS_DARWIN_HEADER_DIAG("header owner enqueue now_us=%lld id=%llu op=%p kind=%d code=%d bytes=%zu\n", LHS_DARWIN_NOW,
+        LHS_DARWIN_ID(state->connection()), static_cast<void*>(state.get()), static_cast<int>(state->kind()), static_cast<int>(result.code), result.transferred);
     bool need_post = false;
     {
         std::lock_guard<std::mutex> lock(state_->mu);

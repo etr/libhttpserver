@@ -25,6 +25,7 @@
 #include <utility>
 #include <httpserver/detail/connection_engine.hpp>
 #include <httpserver/detail/http1_websocket_handshake.hpp>
+#include "./darwin_focused_diagnostics.hpp"
 namespace httpserver::detail {
 namespace {
 bool retire_completed_front(http1_response_outbox& outbox) {
@@ -239,6 +240,9 @@ bool connection_engine::arm_watchdog(timer_operation& timer, const watchdog_plan
     if (current.exit) return false;
     if (current.defer != plan.defer || current.deadline != plan.deadline) return false;
     pending_timer_ = timer.state();
+    LHS_DARWIN_HEADER_DIAG("header watchdog submit now_us=%lld id=%llu op=%p deadline_us=%lld phase=%d head_routed=%d last_activity_us=%lld\n",
+        LHS_DARWIN_NOW, LHS_DARWIN_ID(id_), static_cast<void*>(pending_timer_.get()),
+        LHS_DARWIN_TICK(std::get<timer_payload>(pending_timer_->payload()).deadline), static_cast<int>(phase_), head_routed_, LHS_DARWIN_TICK(last_activity_));
     timer.submit(backend_);
     return true;
 }
