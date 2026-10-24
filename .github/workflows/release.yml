@@ -93,6 +93,12 @@ jobs:
               (root / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
 
 
+          def host_environment(env):
+              # Apple tools must not load the selected test runtime or inherit its tracing.
+              return {key: value for key, value in env.items() if key not in
+                      ('DYLD_LIBRARY_PATH', 'LHS_DARWIN_HEADER_TRACE', 'LHS_DARWIN_STORAGE_TRACE')}
+
+
           def command(argv, cwd, env, timeout=1200, required=True):
               row = dict(argv=[str(arg) for arg in argv], cwd=str(cwd), timeout_seconds=timeout,
                          environment={key: env.get(key) for key in ('CC', 'CXX', 'CXXFLAGS', 'CPPFLAGS', 'LDFLAGS', 'SDKROOT',
@@ -167,10 +173,11 @@ jobs:
                   inferior_environment.append('LHS_DARWIN_STORAGE_TRACE=1')
               if env.get('LHS_DARWIN_HEADER_TRACE'):
                   inferior_environment.append('LHS_DARWIN_HEADER_TRACE=1')
+              case['inferior_environment'] = dict(entry.split('=', 1) for entry in inferior_environment)
               commands.write_text('settings set target.disable-aslr false\nsettings set target.env-vars ' +
                                   shlex.join(inferior_environment) + '\nscript exec(compile(open(' +
                                   repr(str(debug_script)) + ').read(), ' + repr(str(debug_script)) + ", 'exec'))\n")
-              launch_env = dict(env, LHS_DEBUG_RESULT=str(result_path), LHS_DEBUG_CWD=str(cwd))
+              launch_env = dict(host_environment(env), LHS_DEBUG_RESULT=str(result_path), LHS_DEBUG_CWD=str(cwd))
               # xcrun supplies native Apple LLDB/debugserver; the inferior is the real
               # selected test binary, with no rerun after an assertion, abort or timeout.
               row = command(['xcrun', 'lldb', '--batch', '--source', str(commands), '--', str(executable)],
@@ -184,11 +191,11 @@ jobs:
               save()
 
 
-          base_env = dict(os.environ, CC=os.environ['V3_CC'], CXX=os.environ['V3_CXX'], MAKE='gmake',
+          base_env = dict(host_environment(os.environ), CC=os.environ['V3_CC'], CXX=os.environ['V3_CXX'], MAKE='gmake',
                           PKG_CONFIG_PATH='', CXXFLAGS='-O0 -g -DLHS_DARWIN_FOCUSED_DIAGNOSTICS')
           provider = root / 'prerequisites/provider'
           base_env['LDFLAGS'] = '-Wl,-rpath,' + str(provider / 'lib')
-          base_env['DYLD_LIBRARY_PATH'] = os.pathsep.join([str(provider / 'lib'), os.environ['V3_PACKAGE_TOOLCHAIN'] + '/lib/c++'])
+          inferior_library_path = os.pathsep.join([str(provider / 'lib'), os.environ['V3_PACKAGE_TOOLCHAIN'] + '/lib/c++'])
           try:
               save()
               if platform.system() != 'Darwin' or os.geteuid() != 0:
@@ -206,7 +213,7 @@ jobs:
                   env = dict(base_env)
                   if mode == 'yes':
                       env.update(V3_TLS_CFLAGS='-I' + str(provider / 'include'),
-                                 V3_TLS_LIBS='-L' + str(provider / 'lib') + ' -lssl -lcrypto', LHS_DARWIN_HEADER_TRACE='1')
+                                 V3_TLS_LIBS='-L' + str(provider / 'lib') + ' -lssl -lcrypto')
                   try:
                       command(['bash', str(source / 'configure'), '--enable-v3-tls=' + mode,
                                '--disable-examples', '--prefix=' + str(prefix)], build, env)
@@ -224,7 +231,7 @@ jobs:
                               binary = build / 'test/.libs' / name
                               if not binary.is_file():
                                   binary = build / 'test' / name
-                              case_env = dict(env, DYLD_LIBRARY_PATH=os.pathsep.join([str(build / 'src/.libs'), env['DYLD_LIBRARY_PATH']]))
+                              case_env = dict(env, DYLD_LIBRARY_PATH=os.pathsep.join([str(build / 'src/.libs'), inferior_library_path]))
                               if name in ('resource_limits', 'http1_response_outbox'):
                                   case_env['LHS_DARWIN_STORAGE_TRACE'] = '1'
                               receipt['cases'][name].update(tls='no', linkage='native-target-declared', source_context='git-archive')
@@ -240,10 +247,11 @@ jobs:
                                       [str(prefix / 'lib/libhttpserver.dylib'), '-pthread', '-Wl,-rpath,' + str(prefix / 'lib'),
                                        '-Wl,-map,' + str(binary) + '.map', '-MMD', '-o', str(binary)], consumer, env)
                               command(['otool', '-L', str(prefix / 'lib/libhttpserver.dylib')], build, env, timeout=30)
-                              case_env = dict(env, DYLD_LIBRARY_PATH=os.pathsep.join([str(prefix / 'lib'), env['DYLD_LIBRARY_PATH']]))
+                              case_env = dict(env, DYLD_LIBRARY_PATH=os.pathsep.join([str(prefix / 'lib'), inferior_library_path]),
+                                              LHS_DARWIN_HEADER_TRACE='1')
                               receipt['cases'][name].update(tls='yes', linkage='installed-shared', source_context='git-archive-private-integration-headers')
-                          command(['file', str(binary)], build, case_env, timeout=30)
-                          command(['otool', '-L', str(binary)], build, case_env, timeout=30)
+                          command(['file', str(binary)], build, env, timeout=30)
+                          command(['otool', '-L', str(binary)], build, env, timeout=30)
                           run_case(name, binary, build / 'test' if mode == 'no' else source / 'test', case_env)
                       except Exception as error:
                           receipt['cases'][name].update(status='incomplete', error=str(error))
