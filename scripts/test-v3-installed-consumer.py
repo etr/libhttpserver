@@ -111,6 +111,206 @@ check-headers check-hygiene check-v3-installed-package-fixtures:
         self.exercise_selection('make', ambient_make=True)
 
 
+
+@unittest.skipIf(os.name == 'nt', 'POSIX executable fixture; native Windows is CI owned')
+class CompiledOperationsFixture(unittest.TestCase):
+    """Execute the checker with a controlled symbol-producer boundary."""
+    # Independent examples of the existing compiled-definition contract.
+    symbols = (
+        'httpserver::http::fields::append(',
+        'httpserver::server::server_options::validate(',
+        'httpserver::server::resource_budget::reserve(',
+        'httpserver::server::route_pattern::parse(',
+        'httpserver::server::make_sync_route(',
+        'httpserver::manual_executor::run_one(',
+        'httpserver::detail::current_executor_slot(',
+        'httpserver::detail::task_frame_base::finish(',
+        'httpserver::stop_token::cancellation_awaiter::await_suspend(',
+        'httpserver::detail::fire_trigger(',
+        'httpserver::exchange::admit_body(',
+        'httpserver::body_reader::collect(',
+        'httpserver::response_writer::finish(',
+        'httpserver::response_definition::owned_bytes(',
+        'httpserver::send_definition(',
+        'httpserver::detail::send_cursor::pull(',
+        'httpserver::detail::http1_head_parser::',
+        'httpserver::detail::hpack_decoder::',
+        'httpserver::detail::qpack_decoder::',
+        'httpserver::websocket::options::validate(',
+        'httpserver::detail::http2_dispatch::post(',
+        'httpserver::detail::valid_http1_host(',
+        'httpserver::detail::unescape_buf_raw(',
+        'httpserver::detail::owned_completion_storage::claim_read(',
+    )
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.checker = Path(__file__).with_name('check-v3-compiled-operations.py').resolve()
+        self.selected = self.root / "selected tools' directory" / 'symbol tool'
+        self.selected.parent.mkdir()
+        self.calls = self.root / 'selected.json'
+        self.default_calls = self.root / 'default-used'
+        self.default = self.root / ('nm.exe' if os.name == 'nt' else 'nm')
+        self.write_tool(self.default, f'from pathlib import Path; Path({str(self.default_calls)!r}).touch(); raise SystemExit(91)')
+        self.archive = self.root / 'installed archive.a'
+        self.archive.write_bytes(b'archive identity fixture')
+        self.environment = dict(os.environ, PATH=str(self.root) + os.pathsep + os.environ['PATH'])
+        self.selection = shlex.join([str(self.selected), '-B', '--selected-option'])
+        self.producer()
+
+    def write_tool(self, path, code):
+        path.write_text('#!' + sys.executable + '\n' + code + '\n')
+        path.chmod(0o755)
+
+    def producer(self, symbols=None, status=0):
+        text = '\n'.join('00000000 T ' + name for name in self.symbols) if symbols is None else symbols
+        self.write_tool(self.selected, 'import json,sys; from pathlib import Path; '
+            f'Path({str(self.calls)!r}).write_text(json.dumps(sys.argv[1:])); '
+            f'print({text!r}); raise SystemExit({status})')
+
+    def check(self, selection=None):
+        return subprocess.run([sys.executable, str(self.checker), '--nm=' + (self.selection if selection is None else selection),
+                               str(self.archive)], env=self.environment, text=True, capture_output=True)
+
+
+class CompiledOperationsToolTest(CompiledOperationsFixture):
+    def test_selected_command_preserves_options_spaces_demangling_and_archive(self):
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(self.calls.read_text()), ['-B', '--selected-option', '-C', str(self.archive)])
+        self.assertFalse(self.default_calls.exists())
+
+    def test_omitted_selection_preserves_default_nm_cli(self):
+        self.producer()
+        shutil.copyfile(self.selected, self.default)
+        result = subprocess.run([sys.executable, str(self.checker), str(self.archive)],
+                                env=self.environment, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(self.calls.read_text()), ['-C', str(self.archive)])
+
+    def test_missing_or_undefined_definition_remains_fatal(self):
+        for kind in ('missing', 'undefined', 'lowercase'):
+            with self.subTest(kind=kind):
+                lines = ['00000000 T ' + name for name in self.symbols[1:]]
+                if kind != 'missing':
+                    lines.append(('         U ' if kind == 'undefined' else '00000000 t ') + self.symbols[0])
+                self.producer('\n'.join(lines))
+                result = self.check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('Missing compiled library operations:\n' + self.symbols[0], result.stderr)
+                self.assertFalse(self.default_calls.exists())
+
+    def test_nonzero_selected_tool_is_fatal_even_with_complete_definitions(self):
+        self.producer(status=23)
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(self.calls.exists(), result.stderr)
+        self.assertIn('23', result.stderr)
+        self.assertFalse(self.default_calls.exists())
+
+    def test_empty_output_remains_missing_definitions(self):
+        self.producer('')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Missing compiled library operations', result.stderr)
+        self.assertFalse(self.default_calls.exists())
+
+    def test_empty_malformed_or_unavailable_selection_never_uses_default(self):
+        for selection in ('', '  ', "''", "'unclosed", str(self.root / 'absent-tool')):
+            with self.subTest(selection=selection):
+                result = self.check(selection)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.calls.exists())
+                self.assertFalse(self.default_calls.exists())
+
+
+@unittest.skipIf(os.name == 'nt', 'POSIX Autotools fixture; Windows is CI owned')
+class ConfiguredSymbolEntryPointsTest(CompiledOperationsFixture):
+    """Real generated Makefiles and lane subprocesses; no full library build."""
+    def configure(self, source, build, environment):
+        result = subprocess.run(['bash', str(source / 'configure'), '--disable-v3-tls', '--disable-examples',
+                                 '--prefix=' + str(self.root / 'matrix/tls-no/prefix')],
+                                cwd=build, env=environment, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_generated_owning_make_target_uses_configured_nm(self):
+        source = Path(__file__).resolve().parent.parent
+        build = self.root / 'build'
+        build.mkdir()
+        self.configure(source, build, dict(self.environment, NM=self.selection))
+        result = subprocess.run([shutil.which('gmake') or shutil.which('make'), '-o', 'src/libhttpserver.la',
+            'check-v3-compiled-operations'], cwd=build, env=self.environment,
+            text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(self.calls.read_text()),
+                         ['-B', '--selected-option', '-C', './src/.libs/libhttpserver.a'])
+        self.assertFalse(self.default_calls.exists())
+
+    def exercise_lane(self, *, missing=False, selection=None, error='23'):
+        source = self.root / 'source'
+        source.mkdir()
+        # A small genuine configured project reaches the existing package lane
+        # without replacing its compile, dependency inspection or symbol check.
+        (source / 'configure.ac').write_text('AC_INIT([symbol-lane], [1])\n'
+            'AM_INIT_AUTOMAKE([foreign])\nAC_PROG_CC\n'
+            'AC_ARG_ENABLE([v3-tls])\nAC_ARG_ENABLE([examples])\n' +
+            ('' if missing else 'AC_SUBST([NM], [' + shlex.quote(self.selection if selection is None else selection) + '])\n') +
+            'AC_CONFIG_FILES([Makefile])\nAC_OUTPUT\n')
+        (source / 'Makefile.am').write_text(('' if missing else 'NM = @NM@\n') +
+            'all-local:\n\t$(CC) -c $(srcdir)/fixture.c -o fixture.o\n\tar cr libhttpserver.a fixture.o\n'
+            'install-exec-local:\n\tmkdir -p $(prefix)/lib/pkgconfig\n'
+            '\tcp libhttpserver.a $(prefix)/lib/libhttpserver.a\n'
+            '\tprintf "Name: libhttpserver\\nDescription: fixture\\nVersion: 1\\nLibs: -lhttpserver\\n" > $(prefix)/lib/pkgconfig/libhttpserver.pc\n'
+            'check-v3-native-linkage check-headers check-hygiene check-v3-installed-package-fixtures:\n\t@:\n')
+        (source / 'fixture.c').write_text('int fixture(void) { return 1; }\n')
+        for name, content in (('package_consumer.cpp', 'int main() { return 0; }\n'),
+                              ('compiled_operations.cpp', 'int main() { return 0; }\n'),
+                              ('compiled_operations_worker.cpp', 'int worker() { return 0; }\n')):
+            path = source / 'test/installed' / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        (source / 'examples').mkdir()
+        (source / 'examples/host_poll.hpp').write_text('// fixture\n')
+        (source / 'scripts').mkdir()
+        shutil.copyfile(self.checker, source / 'scripts' / self.checker.name)
+        generated = subprocess.run(['autoreconf', '--install', '--force'], cwd=source,
+                                    text=True, capture_output=True)
+        self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+        output = self.root / 'matrix'
+        output.mkdir()
+        spec = importlib.util.spec_from_file_location('configured_symbol_lane', self.checker.with_name('check-v3-installed-consumer.py'))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        args = SimpleNamespace(compiler=shutil.which('c++'), cc=shutil.which('cc'),
+            make=shutil.which('gmake') or shutil.which('make'), jobs=1, prerequisite_prefix=[],
+            pkg_config_dir=[], provider_prefix=self.root, toolchain_prefix=None, optimized=False)
+        inventory = matrix.load()
+        inventory.update(linkages=['static'], loops=[])
+        self.producer(status=23)  # Halt at the selected inspector with real failure evidence.
+        with patch.dict(os.environ, dict(self.environment, NM='unrelated-ambient-nm'), clear=True):
+            with self.assertRaisesRegex((RuntimeError, ValueError), error):
+                runner.package_lane(args, source, output, 'no', inventory)
+        self.assertFalse(self.default_calls.exists())
+        return output
+
+    def test_installed_lane_uses_generated_selection_over_ambient_nm(self):
+        output = self.exercise_lane()
+        self.assertEqual(json.loads(self.calls.read_text()), ['-B', '--selected-option', '-C',
+            str(output / 'tls-no/prefix/lib/libhttpserver.a')])
+        self.assertEqual((output / 'tls-no/prefix/lib/libhttpserver.a').read_bytes(),
+                         (output / 'tls-no/build/libhttpserver.a').read_bytes())
+
+    def test_installed_lane_missing_configured_nm_fails_without_default(self):
+        self.exercise_lane(missing=True, error='configured NM')
+        self.assertFalse(self.calls.exists())
+
+    def test_installed_lane_empty_configured_nm_fails_without_default(self):
+        self.exercise_lane(selection='', error='NM command is empty')
+        self.assertFalse(self.calls.exists())
+
+
 class InstalledShellTest(unittest.TestCase):
     """Controlled process boundary; these are not native Windows receipts."""
     def setUp(self):

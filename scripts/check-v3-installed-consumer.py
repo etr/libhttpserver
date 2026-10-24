@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shlex
 import shutil
 import subprocess
@@ -137,8 +138,11 @@ def _package_lane(args, source, output, mode, inventory):
         matrix.check_linkage(compiled_graph, linkage, prefix)
         command([str(compiled_executable)], consumer_dir, runtime_env)
         public[linkage]['compiled_operations'] = dict(compile=compiled_provenance, dependencies=compiled_graph)
+        configured_nm = re.search(r'^NM = (.*)$', (build / 'Makefile').read_text(), re.M)
+        if configured_nm is None:
+            raise ValueError('generated Makefile is missing configured NM')
         command([sys.executable, str(source / 'scripts/check-v3-compiled-operations.py'),
-                 str(prefix / 'lib/libhttpserver.a')], consumer_dir, runtime_env)
+                 '--nm=' + configured_nm[1], str(prefix / 'lib/libhttpserver.a')], consumer_dir, runtime_env)
         private_dir = lane / ('integration-' + linkage)
         private_dir.mkdir()
         private_libraries = libraries + (shlex.split(env['V3_TLS_LIBS']) if mode == 'yes' else [])

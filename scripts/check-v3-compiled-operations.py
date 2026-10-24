@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check the installed-library implementation contract for representative operations."""
 import argparse
+import shlex
 import subprocess
 
 # These operations must have a library-owned definition even when no consumer
@@ -35,9 +36,16 @@ OPERATIONS = (
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--nm', default='nm', help='configured symbol-tool command, including options')
     parser.add_argument('library')
     args = parser.parse_args()
-    result = subprocess.run(['nm', '-C', args.library],
+    try:
+        command = shlex.split(args.nm)
+    except ValueError as error:
+        parser.error('invalid NM command: ' + str(error))
+    if not command or not command[0]:
+        parser.error('NM command is empty')
+    result = subprocess.run(command + ['-C', args.library],
                             check=True, text=True, capture_output=True)
     definitions = [line for line in result.stdout.splitlines()
                    if ' T ' in line]

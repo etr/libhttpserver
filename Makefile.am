@@ -628,8 +628,10 @@ EXTRA_DIST += scripts/lib/example_inventory.py scripts/lib/example_consumers.py 
 
 EXTRA_DIST += docs/v3-source-layout.md scripts/check-v3-compiled-operations.py
 
+# Export preserves quotes in configured commands without shell re-evaluation.
+check-v3-compiled-operations: export V3_COMPILED_OPERATIONS_NM = $(NM)
 check-v3-compiled-operations: $(top_builddir)/src/libhttpserver.la
-	python3 $(top_srcdir)/scripts/check-v3-compiled-operations.py $(top_builddir)/src/.libs/libhttpserver.a
+	python3 $(top_srcdir)/scripts/check-v3-compiled-operations.py --nm="$$V3_COMPILED_OPERATIONS_NM" $(top_builddir)/src/.libs/libhttpserver.a
 
 .PHONY: check-v3-compiled-operations
 
