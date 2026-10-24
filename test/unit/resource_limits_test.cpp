@@ -179,7 +179,10 @@ LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_output_retirement_restores_shared_c
     LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 0u);
 LT_END_AUTO_TEST(h1_output_retirement_restores_shared_capacity_for_a_long_response)
 LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_partial_output_keeps_retained_prefix_charged_until_refill_or_drain)
-    auto budget = root(hs::resource::response_queue_bytes, 512);
+    std::string allocation;
+    allocation.reserve(512);
+    const auto retained_capacity = allocation.capacity();
+    auto budget = root(hs::resource::response_queue_bytes, retained_capacity);
     hd::http1_response_outbox outbox({512, 512}, budget);
     auto& sink = outbox.open(1, {});
     http::request_head request; request.request_protocol = http::protocol::http_1_1;
@@ -188,10 +191,10 @@ LT_BEGIN_AUTO_TEST(resource_limits_suite, h1_partial_output_keeps_retained_prefi
     outbox.consume_front(outbox.queued_bytes());
     const std::array<std::byte, 512> payload{};
     LT_ASSERT(sink.push(payload).kind == hd::body_push::accepted);
-    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 512u);
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), retained_capacity);
     LT_CHECK_EQ(outbox.consume_front(511), 511u);
     LT_CHECK_EQ(outbox.queued_bytes(), 1u);
-    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), 512u);
+    LT_CHECK_EQ(budget.in_use(hs::resource::response_queue_bytes), retained_capacity);
     hd::http1_response_outbox sibling({512, 512}, budget);
     auto& excess = sibling.open(1, {});
     LT_CHECK(excess.start(request, http::status::from_code(200), fields).code() == http::outcome_code::limit_exceeded);
