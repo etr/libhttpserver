@@ -78,13 +78,13 @@ void io_poll_backend::retirement_progress(std::chrono::milliseconds maximum) {
     if (dispatching_.exchange(true, std::memory_order_acq_rel)) return;
     dispatch_guard guard(dispatching_);
     std::vector<pollsys::poll_slot> sockets;
-    std::vector<std::uint64_t> ids;
-    auto due = build_projection(sockets, ids);
+    std::vector<managed_registration> registrations;
+    auto due = build_projection(sockets, registrations);
     const auto now = std::chrono::steady_clock::now();
     const auto timeout = std::min<int>(maximum.count(), poll_timeout_ms(now, due));
     const auto result = pollsys::poll_call(sockets.data(), sockets.size(), timeout);
     { std::lock_guard lock(mu_); acknowledge_wake(); }
-    if (result >= 0) dispatch_revents(sockets, ids);
+    if (result >= 0) dispatch_revents(sockets, registrations);
     expire_due_timers(std::chrono::steady_clock::now());
 }
 

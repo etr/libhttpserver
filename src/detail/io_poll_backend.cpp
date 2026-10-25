@@ -458,7 +458,7 @@ io_poll_backend::scan_interest_locked(
 void io_poll_backend::project_connections_locked(
     const std::unordered_map<std::uint64_t, pollsys::event_mask>& interest,
     std::vector<pollsys::poll_slot>& fds,
-    std::vector<std::uint64_t>& ids) {
+    std::vector<managed_registration>& registrations) {
     std::vector<std::uint64_t> prunable;
     for (auto& entry : connections_) {
         const connection_record& record = entry.second;
@@ -473,7 +473,7 @@ void io_poll_backend::project_connections_locked(
             continue;
         }
         fds.push_back(pollsys::poll_slot{record.socket, mask->second, 0});
-        ids.push_back(entry.first);
+        registrations.push_back({entry.first, record.lifetime});
     }
     for (const std::uint64_t id : prunable) {
         auto it = connections_.find(id);
@@ -483,66 +483,70 @@ void io_poll_backend::project_connections_locked(
 
 std::optional<std::chrono::steady_clock::time_point>
 io_poll_backend::build_projection(std::vector<pollsys::poll_slot>& fds,
-                                  std::vector<std::uint64_t>& ids) {
+                                  std::vector<managed_registration>& registrations) {
     fds.push_back(
         pollsys::poll_slot{wake_.read_handle(), pollsys::k_readable, 0});
-    ids.push_back(0);  // 0 marks the wake slot in the parallel id vector
+    registrations.push_back({0, {}});  // wake slot has no connection lease
     std::lock_guard<std::mutex> lock(mu_);
     std::unordered_map<std::uint64_t, pollsys::event_mask> interest;
     const std::optional<std::chrono::steady_clock::time_point> next_deadline =
         scan_interest_locked(interest);
-    project_connections_locked(interest, fds, ids);
+    project_connections_locked(interest, fds, registrations);
     return next_deadline;
 }
 
 void io_poll_backend::dispatch_revents(
     const std::vector<pollsys::poll_slot>& fds,
-    const std::vector<std::uint64_t>& ids) {
+    const std::vector<managed_registration>& registrations) {
     for (std::size_t i = 1; i < fds.size(); ++i) {
         const pollsys::event_mask revents = fds[i].revents;
         if (revents == 0) {
             continue;
         }
+        const auto& [id, lease] = registrations[i];
         bool datagram = false;
         {
             std::lock_guard<std::mutex> lock(mu_);
-            const auto found = connections_.find(ids[i]);
-            datagram = found != connections_.end() && found->second.datagram;
+            const auto found = connections_.find(id);
+            if (found == connections_.end() || found->second.dead
+                || found->second.lifetime != lease
+                || !lease || lease->retired.load(std::memory_order_acquire)) continue;
+            datagram = found->second.datagram;
         }
         if (datagram && !(revents & pollsys::k_poll_invalid)) {
             // A UDP error belongs to a packet; receive/send consumes it without
             // treating the shared listener as a disconnected TCP connection.
-            if (revents & (pollsys::k_readable | pollsys::k_poll_error)) dispatch_readable(ids[i]);
-            if (revents & (pollsys::k_writable | pollsys::k_poll_error)) dispatch_writable(ids[i]);
+            if (revents & (pollsys::k_readable | pollsys::k_poll_error)) dispatch_readable(id, lease);
+            if (revents & (pollsys::k_writable | pollsys::k_poll_error)) dispatch_writable(id, lease);
             continue;
         }
         if ((revents & (pollsys::k_poll_error
                         | pollsys::k_poll_invalid)) != 0) {
-            hangup_connection(ids[i]);  // use-after-close defense
+            hangup_connection(id, lease);  // use-after-close defense
             continue;
         }
         if ((revents & pollsys::k_readable) != 0) {
-            dispatch_readable(ids[i]);
+            dispatch_readable(id, lease);
         }
         if ((revents & pollsys::k_writable) != 0) {
-            dispatch_writable(ids[i]);
+            dispatch_writable(id, lease);
         } else if ((revents & pollsys::k_poll_hangup) != 0) {
             // HUP without readable data (WSAPoll never reports a
             // reliable HUP, so on Windows the recv()/send() results
             // carry this decision instead).
-            hangup_connection(ids[i]);
+            hangup_connection(id, lease);
         }
     }
 }
 
 void io_poll_backend::run_loop() {
     std::vector<pollsys::poll_slot> fds;
-    std::vector<std::uint64_t> ids;  // parallel to fds
+    std::vector<managed_registration> registrations;  // parallel to fds
     while (!stop_.load(std::memory_order_acquire)) {
         fds.clear();
-        ids.clear();
+        registrations.clear();
         const std::optional<std::chrono::steady_clock::time_point>
-            next_deadline = build_projection(fds, ids);
+            next_deadline = build_projection(fds, registrations);
 
         // The only blocking point: no locks held, bounded by the
         // nearest timer deadline or the idle cap.
@@ -559,7 +563,7 @@ void io_poll_backend::run_loop() {
             acknowledge_wake();
         }
         if (ready >= 0) {
-            dispatch_revents(fds, ids);  // EINTR and friends: just re-arm
+            dispatch_revents(fds, registrations);  // EINTR and friends: just re-arm
         }
         expire_due_timers(std::chrono::steady_clock::now());
     }
@@ -729,27 +733,33 @@ void io_poll_backend::dispatch_batch(
     }
 }
 
-void io_poll_backend::dispatch_readable(std::uint64_t id) {
+void io_poll_backend::dispatch_readable(std::uint64_t id,
+    const std::shared_ptr<registration_lifetime>& expected) {
     std::vector<std::shared_ptr<op_state>> batch;
     std::shared_ptr<registration_lifetime> lease;
     {
         std::lock_guard<std::mutex> lock(mu_);
         const auto cit = connections_.find(id);
-        if (cit == connections_.end() || cit->second.dead) return;
-        lease = cit->second.lifetime;
+        if (cit == connections_.end() || cit->second.dead
+            || cit->second.lifetime != expected
+            || !expected || expected->retired.load(std::memory_order_acquire)) return;
+        lease = expected;
         take_direction_locked(id, true, batch);
     }
     dispatch_batch(id, batch, lease);
 }
 
-void io_poll_backend::dispatch_writable(std::uint64_t id) {
+void io_poll_backend::dispatch_writable(std::uint64_t id,
+    const std::shared_ptr<registration_lifetime>& expected) {
     std::vector<std::shared_ptr<op_state>> batch;
     std::shared_ptr<registration_lifetime> lease;
     {
         std::lock_guard<std::mutex> lock(mu_);
         const auto cit = connections_.find(id);
-        if (cit == connections_.end() || cit->second.dead) return;
-        lease = cit->second.lifetime;
+        if (cit == connections_.end() || cit->second.dead
+            || cit->second.lifetime != expected
+            || !expected || expected->retired.load(std::memory_order_acquire)) return;
+        lease = expected;
         take_direction_locked(id, false, batch);
     }
     dispatch_batch(id, batch, lease);
