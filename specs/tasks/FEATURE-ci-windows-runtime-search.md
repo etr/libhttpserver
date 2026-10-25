@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-runtime-search
 
-Status: In Progress (implementation; caller owns validation/finalization).
+Status: Complete (local validation/finalization; native CI pending).
 Base: local v3 `7792d6252f44bc04b0018128819bd0f760b33c66`.
 Plan: primary `.groundwork-plans/FEATURE-ci-windows-runtime-search-plan.md`.
 Journal: primary `.debug/ci-284-windows-pe-resolution-xntbf7u3/journal.md`.
@@ -13,7 +13,7 @@ selection over inherited declaration, and existing runtime/graph policy.
 - [x] Verify five focused existing PE controls and record behavioral RED through real resolution/graph policy.
 - [x] Append selected Windows runtime bin to DLL resolver roots only.
 - [x] Verify focused runtime/PE and affected existing consumer contracts, Python syntax and diff.
-- [ ] Caller Groundwork validation/finalization.
+- [x] Caller Groundwork validation/finalization.
 - [ ] Native Windows post-fix package/archive availability and loader checks: CI/v3 PR owned, incomplete.
 
 Native RED: package run 40084556223 / MinGW job 120844695264 and archive
@@ -61,3 +61,12 @@ replace only package_commands' local OS binding and auditor's local platform
 binding, and control external objdump subprocess results rather than owned
 resolution or graph methods. Generated syntax output belongs under ignored
 `build/`. Caller owns review, validation, finalization and publication.
+
+Groundwork validation `07bc474ac32031e0eaa494fb394cc655` sealed PASS for
+`d7cc9dd7db87d3793178a32bb306a4e8e40fba3e` / tree
+`c5af14728f1bc166f0c5c13277814feb11fc06dc`: one iteration, nine fresh
+independent approvals, zero fixes and zero unworked findings. Source-bound
+23 PE/policy and 26 consumer checks plus syntax/whitespace evidence reused;
+no report created. Native availability/loader checks remain incomplete,
+CI/v3 PR owned. Closed incidental checks and unknown causes retain their
+stated limits. Root owns merge, cleanup and combined exact-head CI publication.
