@@ -376,6 +376,9 @@ def runtime_environment(clean, prefix, provider, prerequisites, toolchain=None):
     if toolchain:
         env['V3_PACKAGE_TOOLCHAIN'] = str(toolchain)
     if os.name == 'nt':
+        selected = env.get('V3_PACKAGE_TOOLCHAIN')
+        if selected:
+            env['V3_PACKAGE_DLL_DIRS'] += os.pathsep + str(Path(selected) / 'bin')
         env['PATH'] = search + os.pathsep + env.get('PATH', '')
     return env
 

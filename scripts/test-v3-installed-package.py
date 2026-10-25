@@ -9,11 +9,13 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent / 'lib'))
 import package_integration as integration
+import package_commands as commands
 
 CXX = os.environ.get('CXX', 'c++')
 
@@ -77,6 +79,158 @@ class CompileProbeTest(unittest.TestCase):
             integration.compile_probe('c++', [self.unit], [], [], self.executable, self.command,
                 {}, self.root, self.build, self.prefix, False)
         self.assertEqual(len(self.calls), 1)
+
+
+class RuntimeEnvironmentTest(unittest.TestCase):
+    """Controlled PE tool output and real files; no Windows loader receipt."""
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.prefix, self.provider, self.prerequisite, self.selected, self.other = (
+            self.root / name for name in ('prefix', 'provider', 'prerequisite', 'mingw64', 'ucrt64'))
+        self.consumer = self.write(self.root / 'package_consumer.exe')
+        self.clean = {'PATH': str(self.other / 'bin'), 'SystemRoot': str(self.root / 'Windows')}
+        self.imports = []
+        self.policy = audit.load_policy()
+        platform = patch.object(audit, 'platform', SimpleNamespace(system=lambda: 'Windows'))
+        platform.start()
+        self.addCleanup(platform.stop)
+        inspector = patch.object(subprocess, 'run', side_effect=self.inspect)
+        inspector.start()
+        self.addCleanup(inspector.stop)
+
+    def write(self, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(('controlled artifact: ' + str(path)).encode())
+        return path
+
+    def environment(self, clean=None, toolchain=None, host='nt'):
+        # Replace this module's OS binding; pathlib keeps the actual host OS.
+        with patch.object(commands, 'os', SimpleNamespace(name=host, pathsep=os.pathsep)):
+            return commands.runtime_environment(self.clean if clean is None else clean,
+                self.prefix, self.provider, [self.prerequisite], toolchain)
+
+    def inspect(self, argv, **kwargs):
+        if argv[:2] != ['objdump', '-p']:
+            raise AssertionError('unexpected external inspection: ' + repr(argv))
+        imports = self.imports if Path(argv[-1]) == self.consumer else ['KERNEL32.dll']
+        output = argv[-1] + ': file format pei-x86-64\n' + ''.join(
+            ' DLL Name: ' + name + '\n' for name in imports)
+        return subprocess.CompletedProcess(argv, 0, output, '')
+
+    def graph(self, env, imports):
+        self.imports = imports
+        with patch.dict(os.environ, env, clear=True):
+            audit.COMMANDS.clear()
+            graph = audit.dependency_graph([str(self.consumer)])
+            violations = audit.graph_violations(graph, 'strict', 'yes', 'aggregate',
+                                                self.policy, self.provider)
+            return graph, violations
+
+    def test_selected_runtime_bin_resolves_hashed_graph_with_explicit_or_inherited_selection(self):
+        names = ['libgcc_s_seh-1.dll', 'libwinpthread-1.dll', 'libstdc++-6.dll']
+        runtimes = [self.write(self.selected / 'bin' / name) for name in names]
+        for name in names:
+            self.write(self.other / 'bin' / name)
+        shared = self.write(self.prefix / 'bin/libhttpserver-3.dll')
+        provider = self.write(self.provider / 'bin/libssl-3-x64.dll')
+        selections = (
+            ('explicit', self.clean, self.selected),
+            ('inherited', dict(self.clean, V3_PACKAGE_TOOLCHAIN=str(self.selected)), None),
+            ('override', dict(self.clean, V3_PACKAGE_TOOLCHAIN=str(self.other)), self.selected))
+        for selection, clean, toolchain in selections:
+            with self.subTest(selection=selection):
+                env = self.environment(clean, toolchain)
+                try:
+                    graph, violations = self.graph(env, names + [shared.name, provider.name])
+                except audit.AuditError as error:
+                    self.fail('declared runtime imports must resolve: ' + str(error))
+
+                self.assertEqual([], violations)
+                self.assertEqual(str(self.selected), env['V3_PACKAGE_TOOLCHAIN'])
+                children = {edge['name']: edge['child'] for edge in graph['edges']
+                            if edge['parent'] == str(self.consumer)}
+                self.assertEqual({path.name: str(path) for path in runtimes + [shared, provider]}, children)
+                hashes = {node['id']: node['sha256'] for node in graph['nodes']}
+                for path in runtimes:
+                    self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), hashes[str(path)])
+
+    def test_installed_provider_and_prerequisite_directories_keep_resolution_priority(self):
+        candidates = [self.write(root / directory / 'libhttpserver-3.dll')
+                      for root in (self.prefix, self.provider, self.prerequisite)
+                      for directory in ('lib', 'bin')]
+        candidates.append(self.write(self.selected / 'bin/libhttpserver-3.dll'))
+        env = self.environment(toolchain=self.selected)
+        for candidate in candidates:
+            with self.subTest(first_remaining=candidate):
+                graph, violations = self.graph(env, [candidate.name])
+
+                self.assertEqual([], violations)
+                edge = next(edge for edge in graph['edges'] if edge['parent'] == str(self.consumer))
+                self.assertEqual(str(candidate), edge['child'])
+            candidate.unlink()
+
+    def test_missing_selected_dll_never_falls_back_to_path_or_sibling_toolchains(self):
+        self.write(self.other / 'bin/libgcc_s_seh-1.dll')
+        (self.selected / 'bin').mkdir(parents=True)
+        for clean in (self.clean, dict(self.clean, V3_PACKAGE_TOOLCHAIN=str(self.other))):
+            with self.subTest(inherited=clean.get('V3_PACKAGE_TOOLCHAIN')):
+                env = self.environment(clean, toolchain=self.selected)
+
+                with self.assertRaisesRegex(audit.AuditError, 'unresolved PE import: libgcc_s_seh-1.dll'):
+                    self.graph(env, ['libgcc_s_seh-1.dll'])
+
+    def test_undeclared_or_empty_toolchain_cannot_resolve_path_only_runtime(self):
+        self.write(self.other / 'bin/libgcc_s_seh-1.dll')
+        for declaration in ({}, {'V3_PACKAGE_TOOLCHAIN': ''}):
+            with self.subTest(declaration=declaration):
+                env = self.environment(dict(self.clean, **declaration))
+
+                with self.assertRaisesRegex(audit.AuditError, 'unresolved PE import: libgcc_s_seh-1.dll'):
+                    self.graph(env, ['libgcc_s_seh-1.dll'])
+
+    def test_selected_bin_foreign_families_remain_undeclared_dependencies(self):
+        for name in ('msys-2.0.dll', 'libmicrohttpd-12.dll', 'libforeign-1.dll'):
+            with self.subTest(name=name):
+                foreign = self.write(self.selected / 'bin' / name)
+                graph, violations = self.graph(self.environment(toolchain=self.selected), [name])
+
+                self.assertIn(str(foreign), {node['id'] for node in graph['nodes']})
+                self.assertEqual([f'undeclared dependency (aggregate/strict): {self.consumer} -> {foreign}'],
+                                 violations)
+
+    def test_runtime_basename_outside_declared_toolchain_remains_untrusted(self):
+        wrong = self.write(self.prefix / 'bin/libgcc_s_seh-1.dll')
+        self.write(self.selected / 'bin/libgcc_s_seh-1.dll')
+
+        graph, violations = self.graph(self.environment(toolchain=self.selected), [wrong.name])
+
+        self.assertIn(str(wrong), {node['id'] for node in graph['nodes']})
+        self.assertEqual([f'undeclared dependency (aggregate/strict): {self.consumer} -> {wrong}'], violations)
+
+    def test_runtime_search_handoff_preserves_loader_paths_and_unix_environment(self):
+        clean = dict(self.clean, V3_PACKAGE_TOOLCHAIN=str(self.other),
+                     LD_LIBRARY_PATH='old-ld', DYLD_LIBRARY_PATH='old-dyld', CUSTOM='preserved')
+        original = dict(clean)
+        search = os.pathsep.join(str(root / directory)
+            for root in (self.prefix, self.provider, self.prerequisite) for directory in ('lib', 'bin'))
+        for host in ('nt', 'posix'):
+            for toolchain in (None, self.selected):
+                with self.subTest(host=host, toolchain=toolchain):
+                    env = self.environment(clean, toolchain, host)
+                    expected = dict(clean, LD_LIBRARY_PATH=search, DYLD_LIBRARY_PATH=search,
+                                    V3_PACKAGE_DLL_DIRS=search,
+                                    V3_PACKAGE_PREREQUISITES=str(self.prerequisite))
+                    if toolchain:
+                        expected['V3_PACKAGE_TOOLCHAIN'] = str(toolchain)
+                    if host == 'nt':
+                        expected['PATH'] = search + os.pathsep + clean['PATH']
+                        expected['V3_PACKAGE_DLL_DIRS'] += os.pathsep + str(
+                            Path(expected['V3_PACKAGE_TOOLCHAIN']) / 'bin')
+
+                    self.assertEqual(expected, env)
+                    self.assertEqual(original, clean)
 
 
 class AuditTest(unittest.TestCase):
