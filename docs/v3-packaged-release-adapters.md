@@ -79,6 +79,57 @@ and module hashes, and workload. Archive paths must be safe, consistent,
 unique and regular files/directories; symlink/hardlink members are rejected.
 A genuine extraction needs no `.git` directory.
 
+`identity.darwin_sdk` is an optional internal version-1 compiler context, captured
+by `identity()` **before** consumers compile and reverified after execution and
+on validation. On Darwin, the literal configured CXX argv is queried with
+`-### -x c++ -c /dev/null -o /dev/null`, without a shell or target-code execution.
+Exactly one macOS `-cc1` job must select one absolute `-isysroot`. Only that
+canonical SDK's direct, nonsymlink `SDKSettings.json` can supply this exception;
+other SDK files, sibling JSON, caller paths, and matching hashes grant none.
+Unsupported, failed, indirect response/config/VFS, missing-SDK and ambiguous
+queries yield no context. They never relax dependency admission.
+
+The optional object contains `version=1`, literal `compiler_argv`, `environment`,
+canonical `sdk`, effective `target`, `driver` artifact, `compiler_inputs` artifact
+mapping, `metadata` artifact, `metadata_hex`, and `query`/`query_sha256`.
+`compiler_inputs` binds the selected executable and existing regular file argv
+operands (including a quoted compound CXX wrapper). Artifact records use the
+existing absolute `path`, `bytes`, `sha256` contract. `metadata_hex` retains the
+actual bounded metadata bytes in the exported identity; it is not a path/hash
+claim alone. The original live metadata, driver and compiler inputs must also be
+selected by `identity_artifacts()` and included in the artifact catalog.
+`query` retains literal argv, cwd, exit, stdout and stderr, with a canonical JSON
+SHA-256 association. Revalidation independently rederives selection using the
+configured compiler. It compares selected inputs, target, argv, environment and
+bytes; varying query diagnostics are retained and checked without becoming a
+false identity difference.
+
+Selection environment capture includes SDKROOT, DEVELOPER_DIR, TOOLCHAINS, PATH,
+Apple deployment targets, CCC_OVERRIDE_OPTIONS, Clang config selectors, compiler
+search paths and language include paths (the exact keys are `SELECTION_ENV` in
+`compiler_sdk.py`). Actual compile logs must contain every key, including absent
+values, and match the captured selection environment and literal CXX prefix.
+The configured prefix is requeried in each actual compile cwd to catch relative
+wrapper/SDK/search selection changes. Additional flags are restricted to the
+existing public C++20 compile operations: include paths, definitions, ordinary
+optimization/debug/warning flags and the supported sanitizers. Unknown options,
+target/sysroot changes, response/config files, forwarding options and VFS
+changes outside that prefix fail. The selected compiler/wrapper and command
+logger remain trusted tools; this does not attest a malicious compiler or prove
+that files never changed transiently between observations.
+
+All source/build/private contamination, public source/header, actual compile,
+raw depfile/hash, link and static-contribution requirements still apply. Raw
+SDK dependency paths and hashes are preserved, including canonical aliases;
+metadata symlinks escaping the selected SDK fail. SDK-free legacy identities
+and receipts retain their original strict checks. An absent precompile context
+cannot borrow a newly discovered validation context: SDK-bearing legacy
+receipts still fail as foreign dependencies. The schema version and existing
+entry points remain unchanged. Native Darwin compatibility remains CI/v3-PR
+owned; portable fixtures and a local Clang Darwin-target driver dry run provide
+logic evidence only. Normal code revert is the rollback for this receipt-model
+change.
+
 `children` maps the exact family members to receipt artifact records. Every
 artifact record contains absolute `path`, `bytes` and `sha256`. The complete
 catalog covers child receipts, command outputs, process receipts, copied

@@ -616,7 +616,7 @@ EXTRA_DIST += scripts/run-v3-native-benchmarks.py scripts/lib/native_benchmark.p
 
 EXTRA_DIST += scripts/run-v3-packaged-adapters.py scripts/check-v3-public-http1.py \
  scripts/test-v3-packaged-adapters.py scripts/lib/release_package_adapters.py \
- scripts/lib/release_package_provenance.py test/installed/websocket_consumer.cpp \
+ scripts/lib/release_package_provenance.py scripts/lib/compiler_sdk.py test/installed/websocket_consumer.cpp \
  docs/v3-packaged-release-adapters.md
 
 EXTRA_DIST += test/installed/task199-capabilities.md \

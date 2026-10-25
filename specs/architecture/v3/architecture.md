@@ -183,7 +183,11 @@ installed headers/metadata/libraries, provider/tools/clients, complete scenario
 inventories and immutable execution artifacts. Independent validation rechecks
 actual compile/dependency/link provenance, runtime library selection and decoded
 protocol/measurement outcomes. Reduced benchmark integration cannot satisfy a
-full workload gate. See [the interface](../../../docs/v3-packaged-release-adapters.md)
+full workload gate. An optional identity-owned Darwin compiler context pins the
+exact independently Clang-selected SDKSettings.json before compilation, rechecks
+actual command context and retained bytes afterward, and admits only that
+metadata input without weakening package/source/static-contribution gates.
+See [the interface](../../../docs/v3-packaged-release-adapters.md)
 and [current evidence](TASK-199-implementation-evidence.md). Nonlocal checks
 remain CI/v3-PR owned; TASK-185 owns final runner wiring and release acceptance.
 

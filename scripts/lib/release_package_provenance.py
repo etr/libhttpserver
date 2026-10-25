@@ -7,6 +7,7 @@ import shlex
 import os
 import platform
 from native_benchmark import require, verify_artifact, parse_json
+import compiler_sdk
 from package_commands import dependencies
 from package_matrix import check_dependencies, check_linkage
 
@@ -38,9 +39,15 @@ def validate_compile(compiled, linkage, identity, artifacts, commands):
         bound(path, digest)
     require(set(sources) <= set(deps), 'sources missing from dependencies')
     require(any(path in identity['package'] for path in deps), 'no installed header dependency')
+    sdk = identity.get('darwin_sdk')
+    metadata = compiler_sdk.verify(sdk, identity['compiler']) if sdk else None
     for path, digest in deps.items():
         if path in identity['package']:
             require(digest == identity['package'][path] and hashlib.sha256(Path(path).read_bytes()).hexdigest() == digest, 'installed header changed')
+        elif metadata is not None and str(Path(path).resolve()) == metadata:
+            bound(metadata, digest)
+            for required in compiler_sdk.artifact_paths(sdk):
+                bound(required)
         else:
             require(digest in members, 'private or foreign dependency')
             bound(path, digest)
@@ -73,6 +80,8 @@ def validate_compile(compiled, linkage, identity, artifacts, commands):
     require(link[:len(compiler)] == compiler, 'different link compiler')
     for row in compile_rows:
         argv = row['argv']
+        if sdk:
+            compiler_sdk.validate_command(sdk, row)
         require(argv[:len(compiler)] == compiler, 'different compile compiler')
         require('-std=c++20' in argv and not any(re.match(r'-D(?:HTTPSERVER_COMPILATION|_HTTPSERVER_HPP_INSIDE_|HAVE_\w*|NATIVE_V3_TLS)(?:=|$)', flag) or flag in ('-include', '-imacros') for flag in argv), 'private/non-C++20 compile')
         for i, flag in enumerate(argv):

@@ -12,6 +12,9 @@ import threading
 import time
 
 
+from compiler_sdk import SELECTION_ENV
+
+
 OUTPUT_LIMIT = 64 * 1024 * 1024
 
 
@@ -304,7 +307,7 @@ class Commands:
                       environment={key: env.get(key) for key in ('CXX', 'CPPFLAGS', 'LDFLAGS', 'CXXFLAGS',
                         'V3_TLS_CFLAGS', 'V3_TLS_LIBS', 'PKG_CONFIG_LIBDIR', 'PKG_CONFIG_PATH',
                         'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'V3_PACKAGE_DLL_DIRS', 'V3_PACKAGE_TOOLCHAIN', 'CC', 'PATH',
-                        'V3_RELEASE_IDENTITY', 'ASAN_OPTIONS', 'UBSAN_OPTIONS', 'TSAN_OPTIONS')})
+                        'V3_RELEASE_IDENTITY', 'ASAN_OPTIONS', 'UBSAN_OPTIONS', 'TSAN_OPTIONS') + SELECTION_ENV})
         self.records.append(record)
         try:
             with log.open('wb') as output:
