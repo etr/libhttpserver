@@ -384,7 +384,7 @@ struct fixture {
         for (auto& [id, connection] : connections)
             if (auto deadline = connection->deadline()) due = std::min(due, *deadline);
         if (snapshot.next_deadline) due = std::min(due, *snapshot.next_deadline);
-        int timeout = std::max(std::int64_t{0}, std::chrono::ceil<std::chrono::milliseconds>(due - clock_type::now()).count());
+        int timeout = std::max<std::int64_t>(std::int64_t{0}, std::chrono::ceil<std::chrono::milliseconds>(due - clock_type::now()).count());
         if (poll(descriptors.data(), descriptors.size(), timeout) < 0) throw std::runtime_error("poll failed");
         if (descriptors[0].revents & (POLLIN | POLLHUP)) {
             std::string command;
