@@ -264,7 +264,7 @@ struct fixture {
                 }
                 if (const auto* crypto = std::get_if<hd::quic_crypto_frame>(&frame.value)) {
                     auto& bytes = received_crypto[level];
-                    bytes.resize(std::max(bytes.size(), crypto->offset + crypto->data.size()));
+                    bytes.resize(std::max<std::uint64_t>(bytes.size(), crypto->offset + crypto->data.size()));
                     std::copy(crypto->data.begin(), crypto->data.end(), bytes.begin() + crypto->offset);
                     peer.input[level].insert(peer.input[level].end(), bytes.begin() + delivered[level], bytes.end());
                     delivered[level] = bytes.size();

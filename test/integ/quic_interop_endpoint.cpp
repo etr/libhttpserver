@@ -306,7 +306,7 @@ struct fixture {
                 due = std::min(due, *deadline);
         if (snapshot.next_deadline)
             due = std::min(due, *snapshot.next_deadline);
-        int timeout = std::min<std::int64_t>(1000, std::max(std::int64_t{0}, std::chrono::ceil<std::chrono::milliseconds>(due - clock_type::now()).count()));
+        int timeout = std::min<std::int64_t>(1000, std::max<std::int64_t>(std::int64_t{0}, std::chrono::ceil<std::chrono::milliseconds>(due - clock_type::now()).count()));
         if (poll(descriptors.data(), descriptors.size(), timeout) < 0 && !stopping)
             throw std::runtime_error("poll failed");
         std::vector<h::server::readiness_event> events;
