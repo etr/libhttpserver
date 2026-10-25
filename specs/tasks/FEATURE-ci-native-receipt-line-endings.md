@@ -1,6 +1,6 @@
 # FEATURE-ci-native-receipt-line-endings
 
-Status: In Progress (implementation; caller validation/finalization pending).
+Status: Complete (local validation/finalization; native CI pending).
 Base: local v3 `47c6f89a6402e1d4cf71623772c44faa23be2a58`.
 Plan: primary `.groundwork-plans/FEATURE-ci-native-receipt-line-endings-plan.md`.
 Journal: primary `.debug/ci-47c-windows-configuration-5x995i1u/journal.md`.
@@ -15,7 +15,7 @@ process, socket or HTTP handling.
 - [x] Record meaningful RED with actual captured native stderr through the real parser.
 - [x] Implement component-local LF/CRLF handling and strict positive/negative regressions.
 - [x] Run affected Matrix/receipt checks, Python compilation and diff checks.
-- [ ] Caller Groundwork validation/finalization.
+- [x] Caller Groundwork validation/finalization.
 - [ ] Native Windows post-fix package/archive checks: CI/v3 PR owned, incomplete; not a local acceptance gate.
 
 Actual Windows package run 40170157075 / MinGW job 121099184812 produced
@@ -61,3 +61,11 @@ the repaired parser against original LF-only outcomes while preserving the
 740-byte native JSON receipt (SHA256
 `fd27b6db1cc254d9b97ac60416f4f278a74671fd66ed3f5a086a183ed833eba8`).
 Native Windows post-fix CI remains incomplete and CI/v3 PR owned.
+
+Groundwork validation `03844849b08d4718dd3c9faba1f32bee` sealed PASS for
+`20007a4563e78cd142506c57c185f19bb7f648d3` / tree
+`9f62c12d36b127e28a17e1a36f7ddbe611e185e8`: one iteration, nine fresh
+independent approvals, zero fixes and zero unworked findings. Source-bound
+28 Matrix/Process, 2 Commands, syntax and whitespace checks reused; no report
+created. Native post-fix gates remain incomplete and CI/v3 PR owned. Root owns
+merge, cleanup, exact-head publication and the queued approved native capture.
