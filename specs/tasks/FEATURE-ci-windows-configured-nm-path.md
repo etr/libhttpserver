@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-configured-nm-path
 
-Status: In Progress (implementation complete; caller validation/finalization pending)
+Status: Complete — local validation passed; native Windows proof remains CI-owned/incomplete.
 Base: v3 `a9c800522afe6d2abea308e0be9215fda1b2826e`
 Plan: `.groundwork-plans/FEATURE-ci-windows-configured-nm-path-plan.md`
 Journal: primary `.debug/ci-a9c-windows-nm-path/journal.md`
@@ -26,7 +26,7 @@ handoff defect; it establishes no internal inspector or library-symbol result.
 - [x] Run focused checker and existing small installed-lane fixtures; retain
       literal RED/GREEN logs and syntax/diff evidence in primary journal's
       `implementation/` directory.
-- [ ] Caller-owned Groundwork validation, local finalization and merge into v3.
+- [x] Caller-owned Groundwork validation sealed PASS: session `e4d1040c1fb60731690dec2acf4cc313`, all9 independent reviewers approve,1 iteration,0 fixed,0 unworked. Local finalization/merge into v3; native Windows post-fix proof pending.
 
 ## Implementation verification
 
