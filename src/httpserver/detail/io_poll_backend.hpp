@@ -193,6 +193,13 @@ class io_poll_backend final : public io_socket_backend {
         std::shared_ptr<registration_lifetime> lifetime;
     };
 
+    // Parallel to each managed poll slot; pins the original socket and
+    // registration identity through work selection and trailing teardown.
+    struct managed_registration {
+        std::uint64_t id;
+        std::shared_ptr<registration_lifetime> lifetime;
+    };
+
     void adopt_socket(std::uint64_t id, pollsys::native_socket_t socket,
                       bool listener, bool datagram = false);
     void run_loop();
@@ -201,20 +208,23 @@ class io_poll_backend final : public io_socket_backend {
     // records without pending ops are pruned. Returns the earliest
     // pending timer deadline, if any.
     std::optional<std::chrono::steady_clock::time_point> build_projection(
-        std::vector<pollsys::poll_slot>& fds, std::vector<std::uint64_t>& ids);
+        std::vector<pollsys::poll_slot>& fds,
+        std::vector<managed_registration>& registrations);
     std::optional<std::chrono::steady_clock::time_point> scan_interest_locked(
         std::unordered_map<std::uint64_t, pollsys::event_mask>& interest) const;
     void project_connections_locked(
         const std::unordered_map<std::uint64_t, pollsys::event_mask>&
             interest,
         std::vector<pollsys::poll_slot>& fds,
-        std::vector<std::uint64_t>& ids);
+        std::vector<managed_registration>& registrations);
     // Routes one iteration's readiness bits to the per-direction
     // dispatchers (driver thread, no locks held).
     void dispatch_revents(const std::vector<pollsys::poll_slot>& fds,
-                          const std::vector<std::uint64_t>& ids);
-    void dispatch_readable(std::uint64_t id);
-    void dispatch_writable(std::uint64_t id);
+                          const std::vector<managed_registration>& registrations);
+    void dispatch_readable(std::uint64_t id,
+        const std::shared_ptr<registration_lifetime>& expected);
+    void dispatch_writable(std::uint64_t id,
+        const std::shared_ptr<registration_lifetime>& expected);
     // Runs one direction's batch against its socket: sorted by
     // sequence, one syscall per op until would-block or hangup.
     void dispatch_batch(std::uint64_t id,

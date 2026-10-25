@@ -39,6 +39,7 @@
 #include <optional>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -155,8 +156,13 @@ using poll_rearm = poll_tag<void (hd::io_poll_backend::*)(
 using poll_read = poll_tag<hd::step_outcome (hd::io_poll_backend::*)(
     hd::pollsys::native_socket_t, const std::shared_ptr<hd::op_state>&)>;
 using poll_accept = poll_tag<poll_read::type, 1>;
-using poll_project = poll_tag<std::optional<std::chrono::steady_clock::time_point> (hd::io_poll_backend::*)(
-        std::vector<hd::pollsys::poll_slot>&, std::vector<std::uint64_t>&)>;
+template<typename Tag, auto Pointer>
+struct poll_auto_member {
+    friend auto member(Tag) { return Pointer; }
+};
+struct poll_project { friend auto member(poll_project); };
+struct poll_dispatch { friend auto member(poll_dispatch); };
+struct poll_connections { friend auto member(poll_connections); };
 
 template struct poll_member<poll_stop, &hd::io_poll_backend::stop_>;
 template struct poll_member<poll_thread, &hd::io_poll_backend::thread_>;
@@ -166,7 +172,26 @@ template struct poll_member<poll_detach, &hd::io_poll_backend::take_direction_lo
 template struct poll_member<poll_rearm, &hd::io_poll_backend::rearm_after_would_block>;
 template struct poll_member<poll_read, &hd::io_poll_backend::read_step>;
 template struct poll_member<poll_accept, &hd::io_poll_backend::accept_step>;
-template struct poll_member<poll_project, &hd::io_poll_backend::build_projection>;
+template struct poll_auto_member<poll_project, &hd::io_poll_backend::build_projection>;
+template struct poll_auto_member<poll_dispatch, &hd::io_poll_backend::dispatch_revents>;
+template struct poll_auto_member<poll_connections, &hd::io_poll_backend::connections_>;
+
+template<typename R, typename C, typename A, typename B>
+std::remove_cvref_t<B> projection_registrations(R(C::*)(A, B));
+using poll_registrations = decltype(projection_registrations(member(poll_project{})));
+
+// Holds the actual managed-loop projection, including its original identity.
+struct retained_poll_projection {
+    explicit retained_poll_projection(hd::io_poll_backend& backend) {
+        (backend.*member(poll_project{}))(fds, registrations);
+    }
+    void dispatch(hd::io_poll_backend& backend, hd::pollsys::event_mask flags) {
+        for (std::size_t i = 1; i < fds.size(); ++i) fds[i].revents = flags;
+        (backend.*member(poll_dispatch{}))(fds, registrations);
+    }
+    std::vector<hd::pollsys::poll_slot> fds;
+    poll_registrations registrations;
+};
 
 struct controlled_poll_fixture {
     controlled_poll_fixture() {
@@ -185,7 +210,7 @@ struct controlled_poll_fixture {
 
     void prune() {
         std::vector<hd::pollsys::poll_slot> fds;
-        std::vector<std::uint64_t> ids;
+        poll_registrations ids;
         (instance.*member(poll_project{}))(fds, ids);
     }
 
@@ -264,6 +289,118 @@ void released_accept_case(littletest::test_runner* __lt_tr__,
     hd::accept_operation op(fx.rig.owner, 1);
     release_detached_would_block(__lt_tr__, __lt_name__, fx, std::move(op),
                                  prune);
+}
+
+void stale_projection_case(littletest::test_runner* __lt_tr__,
+                           const char* __lt_name__, hd::pollsys::event_mask flags) {
+    controlled_poll_fixture fx;
+    auto old_pair = io_loopback::pair::make();
+    auto replacement = io_loopback::pair::make();
+    LT_ASSERT(old_pair.ok());
+    LT_ASSERT(replacement.ok());
+    fx.instance.adopt_connection(1, old_pair.detach_local());
+    hd::read_operation old(fx.rig.owner, 1, fx.rig.buffer);
+    old.submit(fx.instance);
+    retained_poll_projection stale(fx.instance);
+    LT_ASSERT_EQ(stale.fds.size(), std::size_t{2});
+    fx.instance.release_connection(1);
+    fx.rig.ex.run_pending();
+    const auto fresh_handle = replacement.local();
+    fx.instance.adopt_connection(1, replacement.detach_local());
+    std::byte buffer[3]{};
+    const std::byte output[]{std::byte{'o'}, std::byte{'u'}, std::byte{'t'}};
+    hd::read_operation read(fx.rig.owner, 1, buffer);
+    hd::write_operation write(fx.rig.owner, 1, output);
+    io_contract::probe read_result, write_result;
+    read.submit(fx.instance);
+    write.submit(fx.instance);
+    spawn(fx.rig.ex, io_contract::await_into(std::move(read), &read_result), [](task_result<void>) { });
+    spawn(fx.rig.ex, io_contract::await_into(std::move(write), &write_result), [](task_result<void>) { });
+    fx.rig.ex.run_pending();
+    io_loopback::write_all(replacement.peer(), "new", 3);
+    hd::pollsys::set_nonblocking(replacement.peer(), true);
+    stale.dispatch(fx.instance, flags);
+    stale.dispatch(fx.instance, flags);
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(fx.instance.native_handle(1), fresh_handle);
+    LT_CHECK_EQ(fx.instance.pending_count(), std::size_t{2});
+    LT_CHECK_EQ(read_result.delivered.load(), 0);
+    LT_CHECK_EQ(write_result.delivered.load(), 0);
+    LT_CHECK(buffer[0] == std::byte{0});
+    std::byte received[3]{};
+    LT_CHECK(hd::pollsys::read_some(replacement.peer(), received, 3).status
+             == hd::pollsys::sys_status::would_block);
+    retained_poll_projection fresh(fx.instance);
+    fresh.dispatch(fx.instance, hd::pollsys::k_readable | hd::pollsys::k_writable);
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(read_result.delivered.load(), 1);
+    LT_CHECK_EQ(write_result.delivered.load(), 1);
+    LT_CHECK(read_result.observed.code == hh::outcome_code::ok);
+    LT_CHECK_EQ(read_result.observed.transferred, std::size_t{3});
+    LT_CHECK(write_result.observed.code == hh::outcome_code::ok);
+    LT_CHECK_EQ(write_result.observed.transferred, std::size_t{3});
+    LT_CHECK(std::string_view(reinterpret_cast<const char*>(buffer), 3) == "new");
+    LT_CHECK_EQ(hd::pollsys::read_some(replacement.peer(), received, 3).transferred, std::size_t{3});
+    LT_CHECK(std::string_view(reinterpret_cast<const char*>(received), 3) == "out");
+    fresh.dispatch(fx.instance, hd::pollsys::k_readable | hd::pollsys::k_writable);
+    fx.instance.close();
+    fx.rig.ex.run_pending();
+    LT_CHECK_EQ(read_result.delivered.load(), 1);
+    LT_CHECK_EQ(write_result.delivered.load(), 1);
+}
+
+void completion_replacement_case(littletest::test_runner* __lt_tr__,
+                                 const char* __lt_name__, bool writable, bool data) {
+    httpserver::inline_executor ex;
+    hd::io_connection_owner owner(ex);
+    hd::io_poll_backend backend(httpserver::server::loop_mode::external);
+    auto old_pair = io_loopback::pair::make();
+    auto replacement = io_loopback::pair::make();
+    LT_ASSERT(old_pair.ok());
+    LT_ASSERT(replacement.ok());
+    backend.adopt_connection(1, old_pair.detach_local());
+    const auto fresh_handle = replacement.local();
+    std::byte old_buffer[16]{}, fresh_buffer[3]{};
+    const std::byte output[]{std::byte{'w'}};
+    hd::read_operation old(owner, 1, old_buffer);
+    hd::read_operation fresh_read(owner, 1, fresh_buffer);
+    hd::write_operation fresh_write(owner, 1, output);
+    old.submit(backend);
+    io_contract::probe old_result, read_result, write_result;
+    auto continuation = [&]() -> task<void> {
+        old_result.observed = co_await std::move(old);
+        ++old_result.delivered;
+        backend.release_connection(1);
+        backend.adopt_connection(1, replacement.detach_local());
+        fresh_read.submit(backend);
+        fresh_write.submit(backend);
+    };
+    spawn(ex, continuation(), [](task_result<void>) { });
+    retained_poll_projection stale(backend);
+    if (data) io_loopback::write_all(old_pair.peer(), "tai", 3);
+    old_pair.close_peer();
+    io_loopback::write_all(replacement.peer(), "new", 3);
+    stale.dispatch(backend, hd::pollsys::k_readable
+        | (writable ? hd::pollsys::k_writable : hd::pollsys::k_poll_hangup));
+    spawn(ex, io_contract::await_into(std::move(fresh_read), &read_result), [](task_result<void>) { });
+    spawn(ex, io_contract::await_into(std::move(fresh_write), &write_result), [](task_result<void>) { });
+    LT_CHECK_EQ(old_result.delivered.load(), 1);
+    LT_CHECK(old_result.observed.code == (data ? hh::outcome_code::ok : hh::outcome_code::connection_closed));
+    LT_CHECK_EQ(old_result.observed.transferred, data ? std::size_t{3} : std::size_t{0});
+    LT_CHECK_EQ(backend.native_handle(1), fresh_handle);
+    LT_CHECK_EQ(backend.pending_count(), std::size_t{2});
+    LT_CHECK_EQ(read_result.delivered.load(), 0);
+    LT_CHECK_EQ(write_result.delivered.load(), 0);
+    retained_poll_projection fresh(backend);
+    fresh.dispatch(backend, hd::pollsys::k_readable | hd::pollsys::k_writable);
+    LT_CHECK_EQ(read_result.delivered.load(), 1);
+    LT_CHECK_EQ(write_result.delivered.load(), 1);
+    LT_CHECK(read_result.observed.code == hh::outcome_code::ok);
+    LT_CHECK(write_result.observed.code == hh::outcome_code::ok);
+    LT_CHECK(std::string_view(reinterpret_cast<const char*>(fresh_buffer), 3) == "new");
+    backend.close();
+    LT_CHECK_EQ(read_result.delivered.load(), 1);
+    LT_CHECK_EQ(write_result.delivered.load(), 1);
 }
 
 }  // namespace
@@ -627,6 +764,92 @@ LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_slow_reader_no_busy_loop)
     io_contract::poll_rig rig;
     io_contract::slow_reader_no_busy_loop(__lt_tr__, __lt_name__, rig);
 LT_END_AUTO_TEST(poll_slow_reader_no_busy_loop)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_retired_projection_cannot_touch_replacement)
+    const hd::pollsys::event_mask bits[]{hd::pollsys::k_readable, hd::pollsys::k_writable,
+        hd::pollsys::k_poll_hangup, hd::pollsys::k_poll_error, hd::pollsys::k_poll_invalid};
+    // Every nonempty combination is a distinct deterministic stale event.
+    for (unsigned combination = 1; combination < 32; ++combination) {
+        hd::pollsys::event_mask flags = 0;
+        for (unsigned bit = 0; bit < 5; ++bit) {
+            if (combination & (1U << bit)) flags |= bits[bit];
+        }
+        stale_projection_case(__lt_tr__, __lt_name__, flags);
+    }
+LT_END_AUTO_TEST(poll_retired_projection_cannot_touch_replacement)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_eof_completion_replacement_survives_old_hup)
+    completion_replacement_case(__lt_tr__, __lt_name__, false, false);
+LT_END_AUTO_TEST(poll_eof_completion_replacement_survives_old_hup)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_data_before_eof_replacement_survives_old_hup)
+    completion_replacement_case(__lt_tr__, __lt_name__, false, true);
+LT_END_AUTO_TEST(poll_data_before_eof_replacement_survives_old_hup)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_completion_replacement_rejects_old_writable)
+    completion_replacement_case(__lt_tr__, __lt_name__, true, true);
+LT_END_AUTO_TEST(poll_completion_replacement_rejects_old_writable)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_current_projection_teardown_completes_once)
+    for (const auto flags : {hd::pollsys::k_poll_hangup, hd::pollsys::k_poll_error,
+                             hd::pollsys::k_poll_invalid}) {
+        controlled_poll_fixture fx;
+        auto pair = io_loopback::pair::make();
+        LT_ASSERT(pair.ok());
+        fx.instance.adopt_connection(1, pair.detach_local());
+        hd::read_operation read(fx.rig.owner, 1, fx.rig.buffer);
+        hd::write_operation write(fx.rig.owner, 1, fx.rig.cbuffer);
+        io_contract::probe read_result, write_result;
+        read.submit(fx.instance);
+        write.submit(fx.instance);
+        spawn(fx.rig.ex, io_contract::await_into(std::move(read), &read_result), [](task_result<void>) { });
+        spawn(fx.rig.ex, io_contract::await_into(std::move(write), &write_result), [](task_result<void>) { });
+        fx.rig.ex.run_pending();
+        retained_poll_projection current(fx.instance);
+        current.dispatch(fx.instance, flags);
+        current.dispatch(fx.instance, flags);
+        fx.rig.ex.run_pending();
+        LT_CHECK_EQ(fx.instance.native_handle(1), hd::pollsys::k_invalid_socket);
+        LT_CHECK_EQ(fx.instance.pending_count(), std::size_t{0});
+        LT_CHECK_EQ(read_result.delivered.load(), 1);
+        LT_CHECK_EQ(write_result.delivered.load(), 1);
+        LT_CHECK(read_result.observed.code == hh::outcome_code::connection_closed);
+        LT_CHECK(write_result.observed.code == hh::outcome_code::connection_closed);
+        fx.instance.close();
+        fx.rig.ex.run_pending();
+        LT_CHECK_EQ(read_result.delivered.load(), 1);
+        LT_CHECK_EQ(write_result.delivered.load(), 1);
+    }
+LT_END_AUTO_TEST(poll_current_projection_teardown_completes_once)
+
+LT_BEGIN_AUTO_TEST(poll_contract_suite, poll_projection_lease_defers_close_until_snapshot_dropped)
+    controlled_poll_fixture fx;
+    auto pair = io_loopback::pair::make();
+    LT_ASSERT(pair.ok());
+    const auto descriptor = pair.local();
+    fx.instance.adopt_connection(1, pair.detach_local());
+    hd::read_operation old(fx.rig.owner, 1, fx.rig.buffer);
+    old.submit(fx.instance);
+    auto lifetime = std::weak_ptr((fx.instance.*member(poll_connections{})).at(1).lifetime);
+    {
+        retained_poll_projection snapshot(fx.instance);
+        fx.instance.release_connection(1);
+        LT_CHECK(!lifetime.expired());
+#if !defined(_WIN32)
+        LT_CHECK(::fcntl(descriptor, F_GETFD) != -1);
+#else
+        int error = 0, length = sizeof(error);
+        LT_CHECK(::getsockopt(descriptor, SOL_SOCKET, SO_ERROR,
+            reinterpret_cast<char*>(&error), &length) == 0);
+#endif
+        snapshot.dispatch(fx.instance, hd::pollsys::k_poll_hangup);
+    }
+    LT_CHECK(lifetime.expired());
+#if !defined(_WIN32)
+    LT_CHECK(::fcntl(descriptor, F_GETFD) == -1 && errno == EBADF);
+#endif
+    fx.rig.ex.run_pending();
+LT_END_AUTO_TEST(poll_projection_lease_defers_close_until_snapshot_dropped)
 
 // Pure unit suite for the monotonic deadline -> poll-timeout
 // conversion (plan deliverable 2b). Fully deterministic: the clock
