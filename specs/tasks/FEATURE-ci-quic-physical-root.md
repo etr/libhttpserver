@@ -1,6 +1,6 @@
 # FEATURE-ci-quic-physical-root: physical temporary root for partial QUIC Initial fixture
 
-Status: Implemented; scoped local checks pass. Caller Groundwork validation and finalization pending; native post-fix CI proof incomplete.
+Status: Complete locally; scoped compiler checks and Groundwork validation pass. Focused Linux execution unavailable; native post-fix CI proof incomplete.
 Base: exact local `v3` at `37095c23751960b6e1adcad95d7b3c4c34c64351`.
 Plan: `.groundwork-plans/FEATURE-ci-quic-physical-root-plan.md` in the primary checkout.
 
@@ -30,7 +30,7 @@ all other test-source bytes. Production behavior and the support root opener's
 - [ ] Focused actual Linux case under symlinked TMPDIR: unavailable with the
   inspected caches; no compatible cached interop-provider/core pair established.
   No provider/core rebuild or broader executable run is authorized or performed.
-- [ ] Caller Groundwork validation and local finalization.
+- [x] Caller Groundwork validation and local finalization.
 - [ ] Native Darwin/FreeBSD post-fix execution (CI/v3 PR-owned; incomplete,
   not a local completion or merge blocker under project policy).
 
@@ -61,3 +61,9 @@ verify this reversible fixture change. Native post-fix runtime proof remains
 incomplete and CI/v3 PR-owned. No new native executions, probes, suites, CI
 API actions, dispatches, publication or unrelated repairs are authorized here.
 All earlier closed budgets and unrelated UNKNOWN assessments remain unchanged.
+
+Groundwork validation session `e79cc6c106c5a7eaf50ef45a49dc44b3` sealed PASS:
+nine approvals, one iteration, zero fixes, zero unworked findings. The source
+remains byte-identical to validated commit `0de42780565dff252b54378de305c80a36810622`.
+Caller performs normal local merge, publication and exact worktree cleanup;
+all unavailable/unexecuted runtime checks above remain incomplete.
