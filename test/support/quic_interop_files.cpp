@@ -3,6 +3,10 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <cerrno>
+#include <cinttypes>
+#include <cstdio>
+#include <cstdlib>
 #include <algorithm>
 #include <array>
 #include <memory>
@@ -18,6 +22,22 @@ struct files::request {
     ~request() { if (fd >= 0) ::close(fd); }
 };
 files::files(const std::string& root) : root_(::open(root.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)) {
+    const int saved_errno = root_ < 0 ? errno : 0;
+    // Diagnostic branch only: preserve errno before any logging or metadata call.
+    std::fprintf(stderr, "ROOT_CAPTURE root_bytes=%zu root=%.*s fd=%d errno=%d uid=%" PRIu64 " euid=%" PRIu64 "\n",
+        root.size(), 4096, root.c_str(), root_, saved_errno,
+        static_cast<std::uint64_t>(getuid()), static_cast<std::uint64_t>(geteuid()));
+    struct stat info{};
+    const int stat_rc = lstat(root.c_str(), &info);
+    const int stat_errno = stat_rc < 0 ? errno : 0;
+    std::fprintf(stderr, "ROOT_CAPTURE lstat_rc=%d errno=%d mode=%" PRIo64 " symlink=%d directory=%d\n",
+        stat_rc, stat_errno, static_cast<std::uint64_t>(info.st_mode),
+        S_ISLNK(info.st_mode), S_ISDIR(info.st_mode));
+    for (const char* key : {"TMPDIR", "TMP", "TEMP", "TEMPDIR"}) {
+        const char* value = std::getenv(key);
+        std::fprintf(stderr, "ROOT_CAPTURE env=%s value=%.*s\n", key, 4096, value ? value : "<unset>");
+    }
+    errno = saved_errno;
     if (root_ < 0) throw std::runtime_error("interop root unavailable");
 }
 files::~files() { if (root_ >= 0) ::close(root_); }

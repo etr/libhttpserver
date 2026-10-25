@@ -3,6 +3,10 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
      SPDX-License-Identifier: LGPL-2.1-or-later
 */
+#include <openssl/err.h>
+#include <cinttypes>
+#include <cstdio>
+#include <cstdint>
 #include <algorithm>
 #include <atomic>
 #include <memory>
@@ -15,6 +19,20 @@
 namespace hh = httpserver::http;
 using std::chrono_literals::operator""ms;
 using std::chrono_literals::operator""s;
+// Diagnostic branch only: clocks and stderr writes perturb the original timing.
+static void psk_capture(const char* label, int version, const char* default_host,
+                        bool first, bool second, bool third,
+                        const psk_test::connection& peer,
+                        std::chrono::steady_clock::duration elapsed = {}) {
+    const auto provider_error = ERR_peek_error();  // Never consume the provider queue.
+    const auto stored = peer.handshake.state()->stored_result();
+    const char* sni = SSL_get_servername(peer.peer.get(), TLSEXT_NAMETYPE_host_name);
+    std::fprintf(stderr, "PSK_CAPTURE label=%s version=%d default_host=%s sni=%s predicates=%d,%d,%d "
+        "applied=%d outcome=%u transferred=%zu provider_thread=owner provider_error=%lu elapsed_us=%" PRId64 "\n",
+        label, version, default_host, sni ? sni : "<unset>", first, second, third, peer.handshake.state()->applied(),
+        static_cast<unsigned>(stored.code), stored.transferred, provider_error,
+        static_cast<std::int64_t>(std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()));
+}
 LT_BEGIN_SUITE(psk_suite)
     void set_up() {}
     void tear_down() {}
@@ -143,6 +161,8 @@ LT_BEGIN_AUTO_TEST(psk_suite, blocking_lookup_leaves_owner_responsive_and_cancel
         LT_CHECK(entered);
         LT_CHECK(longest < 100ms);
         LT_CHECK(cancelled == hh::outcome_code::ok);
+        psk_capture("cancel-held", version, "psk.example", completed_while_held,
+                    entered.load(), returned.load(), peer, longest);
         LT_CHECK(completed_while_held);
         LT_CHECK(peer.handshake.state()->stored_result().code == hh::outcome_code::cancelled);
         LT_CHECK(!peer.tls->peer_metadata());
@@ -172,6 +192,7 @@ LT_BEGIN_AUTO_TEST(psk_suite, held_lookup_timeout_keeps_capacity_and_late_succes
         hd::tls_credentials_registry registry;
         LT_ASSERT(registry.replace(config).ok());
         psk_test::connection peer(registry.acquire()->select_default(), version, "identity", psk_test::bytes("secret"), "psk.example", 400ms);
+        const auto capture_timeout_started = std::chrono::steady_clock::now();
         peer.handshake.submit(*peer.tls);
         const bool held = peer.until([&] { return entered.load(); });
         const bool terminal = peer.until([&] { return peer.handshake.state()->applied(); });
@@ -183,6 +204,10 @@ LT_BEGIN_AUTO_TEST(psk_suite, held_lookup_timeout_keeps_capacity_and_late_succes
         release.set_value();
         const bool drained = runtime->drain(std::chrono::steady_clock::now() + 1s);
         peer.ex.run_pending();
+        psk_capture("timeout-held", version, "psk.example", held, terminal, accepted, peer,
+                    std::chrono::steady_clock::now() - capture_timeout_started);
+        psk_capture("timeout-second", version, "psk.example", early_drain, drained, accepted, second,
+                    std::chrono::steady_clock::now() - capture_timeout_started);
         LT_CHECK(held);
         LT_CHECK(terminal);
         LT_CHECK(peer.handshake.state()->stored_result().code == hh::outcome_code::timeout);
@@ -269,13 +294,28 @@ LT_BEGIN_AUTO_TEST(psk_suite, mixed_certificate_psk_hosts_apply_selected_profile
             psk_test::connection psk(registry.acquire()->select_default(), version, "identity", psk_test::bytes("psk-key"));
             psk_test::connection certificate(registry.acquire()->select_default(), version, "identity", psk_test::bytes("wrong-psk"), "a.example");
             SSL_set_cipher_list(certificate.peer.get(), "DEFAULT:PSK-AES128-GCM-SHA256");
-            LT_CHECK(psk.connect());
-            LT_CHECK(certificate.connect());
+            const auto capture_psk_started = std::chrono::steady_clock::now();
+            const bool capture_psk_connected = psk.connect();
+            psk_capture("mixed-psk", version, psk_default ? "psk.example" : "a.example",
+                        psk_default, capture_psk_connected, false, psk,
+                        std::chrono::steady_clock::now() - capture_psk_started);
+            LT_CHECK(capture_psk_connected);
+            const auto capture_cert_started = std::chrono::steady_clock::now();
+            const bool capture_cert_connected = certificate.connect();
+            psk_capture("mixed-certificate", version, psk_default ? "psk.example" : "a.example",
+                        psk_default, capture_cert_connected, false, certificate,
+                        std::chrono::steady_clock::now() - capture_cert_started);
+            LT_CHECK(capture_cert_connected);
             LT_CHECK(SSL_get0_peer_certificate(certificate.peer.get()) != nullptr);
             LT_CHECK(SSL_get0_peer_certificate(psk.peer.get()) == nullptr);
             LT_CHECK_EQ(calls.load(), 1u);
             LT_CHECK(psk.exchange());
-            LT_CHECK(certificate.exchange());
+            const auto capture_exchange_started = std::chrono::steady_clock::now();
+            const bool capture_cert_exchanged = certificate.exchange();
+            psk_capture("mixed-certificate-exchange", version, psk_default ? "psk.example" : "a.example",
+                        psk_default, capture_cert_exchanged, false, certificate,
+                        std::chrono::steady_clock::now() - capture_exchange_started);
+            LT_CHECK(capture_cert_exchanged);
             psk.close();
             certificate.close();
             runtime->stop();

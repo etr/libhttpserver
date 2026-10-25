@@ -139,25 +139,36 @@ int main(int argc, char** argv) {
                         registered += snapshot.sockets.size();
                         wakes += snapshot.wake.has_value();
                         const auto events = v3_host::wait(snapshot, v3_host::clock_type::now() + std::chrono::seconds(5));
+                        v3_host::capture_dispatch("dispatch_begin");
                         if (!driver->dispatch(events, v3_host::clock_type::now()).ok()) throw std::runtime_error("external dispatch");
+                        v3_host::capture_dispatch("dispatch_end");
                         ++dispatched;
                     }
                     if (!dispatched || !registered || !wakes) throw std::runtime_error("external host did no work");
                     std::cerr << "PACKAGE_EXTERNAL " << dispatched << ' ' << registered << ' ' << wakes << '\n';
                 } catch (const std::exception& error) {
+                    v3_host::capture_event("host_catch");
                     std::cerr << error.what() << '\n';
                     failed.store(true);
                 }
+                v3_host::capture_event("host_stop_begin");
                 server.stop();
+                v3_host::capture_event("host_stop_end");
             });
         }
         std::cout << server.get_bound_port(0) << std::endl;
         std::string stop;
         const bool requested = std::getline(std::cin, stop) && stop == "stop";
+        v3_host::capture_event("main_stopping_before");
         stopping.store(true);
+        v3_host::capture_event("main_stopping_after");
+        v3_host::capture_event("request_stop_begin");
         server.request_stop();
+        v3_host::capture_event("request_stop_end");
         if (host.joinable()) host.join();
         else server.stop();
+        v3_host::capture_event("main_joined");
+        v3_host::capture_flush();
         return !requested || failed.load() || server.is_running() ? 6 : 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
