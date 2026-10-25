@@ -1,6 +1,6 @@
 # FEATURE-ci-windows-scratch-cleanup: remove native scratch directories
 
-Status: Scoped implementation complete; caller validation and finalization pending.
+Status: Complete (local). Scoped GNU/LLVM and native Windows/UCRT checks and full Groundwork validation passed; exact MSYS2 CI remains pending.
 Base: exact local `v3` at `bdc2dcf3fce915d0a11917da745501256dbe6d3e`.
 Plan: `.groundwork-plans/FEATURE-ci-windows-scratch-cleanup-plan.md` in the primary checkout.
 
@@ -88,3 +88,9 @@ Both original and fixed-helper native budgets are now closed with zero remaining
 launches. This native/UCRT GREEN verifies the local mechanism; exact CI/MSYS2
 post-fix proof remains pending and CI owned. The separate 180-second completion
 UNKNOWN and every other closed investigation remain unchanged.
+
+Caller full validation session `79331177cdaaac0246f4b911ff4c1873` sealed PASS:
+one iteration, all nine independent reviewers approve, zero findings/fixes/unworked.
+Eight retained successful gate receipts and exact source/helper hashes verified;
+no checks rerun during review. Native original and fixed helper budgets remain
+closed. Exact MSYS2 CI proof stays incomplete and CI/v3-PR owned.
