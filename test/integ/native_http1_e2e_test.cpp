@@ -739,6 +739,14 @@ std::string lowered_header_name(const std::string& name) {
     return out;
 }
 
+std::filesystem::path directory_identity_path(std::filesystem::path directory) {
+    // MinGW equivalent can reject a non-root directory's trailing separator.
+    if (!directory.has_filename() && directory != directory.root_path()) {
+        directory = directory.parent_path();
+    }
+    return directory;
+}
+
 }  // namespace
 
 LT_BEGIN_SUITE(native_http1_e2e_suite)
@@ -769,6 +777,8 @@ LT_END_SUITE(native_http1_e2e_suite)
 
 LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, temp_file_uses_native_temp_parent)
     namespace fs = std::filesystem;
+    const fs::path temp_parent = directory_identity_path(
+        fs::temp_directory_path());
     std::string first_path;
     std::string second_path;
     {
@@ -777,10 +787,8 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, temp_file_uses_native_temp_parent)
         httpserver_test::temp_file second("second fixture");
         first_path = first.path();
         second_path = second.path();
-        LT_CHECK(fs::equivalent(fs::path(first_path).parent_path(),
-                                fs::temp_directory_path()));
-        LT_CHECK(fs::equivalent(fs::path(second_path).parent_path(),
-                                fs::temp_directory_path()));
+        LT_CHECK(fs::equivalent(fs::path(first_path).parent_path(), temp_parent));
+        LT_CHECK(fs::equivalent(fs::path(second_path).parent_path(), temp_parent));
         LT_CHECK_NEQ(first_path, second_path);
         LT_CHECK_EQ(read_all(first_path), payload);
         LT_CHECK_EQ(read_all(second_path), "second fixture");
@@ -793,6 +801,10 @@ LT_END_AUTO_TEST(temp_file_uses_native_temp_parent)
 
 LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, scratch_dir_uses_native_temp_parent)
     namespace fs = std::filesystem;
+    const fs::path temp_parent = directory_identity_path(
+        fs::temp_directory_path());
+    const fs::path root = temp_parent.root_path();
+    LT_CHECK_EQ(directory_identity_path(root), root);
     std::string first_path;
     std::string second_path;
     fs::path payload_path;
@@ -803,10 +815,11 @@ LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, scratch_dir_uses_native_temp_parent)
         second_path = second.path();
         LT_CHECK(fs::is_directory(first_path));
         LT_CHECK(fs::is_directory(second_path));
-        LT_CHECK(fs::equivalent(fs::path(first_path).parent_path(),
-                                fs::temp_directory_path()));
-        LT_CHECK(fs::equivalent(fs::path(second_path).parent_path(),
-                                fs::temp_directory_path()));
+        LT_CHECK(fs::equivalent(fs::path(first_path).parent_path(), temp_parent));
+        LT_CHECK(fs::equivalent(fs::path(second_path).parent_path(), temp_parent));
+        LT_CHECK(!fs::equivalent(
+            directory_identity_path(fs::path(first_path) / ""),
+            directory_identity_path(fs::path(second_path) / "")));
         LT_CHECK_NEQ(first_path, second_path);
         LT_CHECK(first.empty());
         LT_CHECK(second.empty());
