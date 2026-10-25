@@ -59,7 +59,7 @@ transfer or workaround is authorized here. Retain unrelated worktrees and refs.
 
 ## Caller finalization
 
-- [ ] Groundwork validation and local finalization (caller owned).
+- [x] Groundwork validation and local finalization (caller owned).
 - [ ] Exact post-fix MSYS2 Windows CI/v3-PR proof (incomplete; CI owned).
 
 ## Scoped results
