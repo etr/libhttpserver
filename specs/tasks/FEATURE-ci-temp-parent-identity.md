@@ -1,6 +1,6 @@
 # FEATURE-ci-temp-parent-identity: physical native temporary-parent checks
 
-Status: Implementation complete — local scoped gates pass; caller validation and finalization pending.
+Status: Complete (local). Scoped gates and full Groundwork validation passed; native Windows verification remains CI-owned.
 Base: exact local `v3` at `0246d7a27774866ba96bd60c7d0fed553f6dee4d`.
 Plan: `.groundwork-plans/FEATURE-ci-temp-parent-identity-plan.md` in the primary checkout.
 
@@ -71,3 +71,15 @@ empty. This is a recorded setup assessment, not an ignored failing gate.
 Parallel compilation temporarily left a compiler assembly file in the shared
 controlled parent at lint/syntax receipt time; all four sequential runtime
 receipts record an empty parent after exit.
+
+## Caller finalization
+
+- [x] Full Groundwork validation sealed PASS in session
+  `a694e258a832a1abe3fc195bc2f8f055`: one iteration, all nine profiles
+  approve, zero findings/fixes/unworked. Retained gates remain input-bound.
+- [x] Local task completion and finalization.
+- [ ] Post-fix native Windows CI/v3 PR proof (incomplete; not a local merge gate).
+
+No production/runtime repair or native diagnostic was added. The command budget
+and distinct external-consumer WSAPoll issue remain UNKNOWN; the separate
+Windows16 capture remains pending authorization.
