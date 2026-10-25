@@ -11,6 +11,7 @@ import sys
 import tarfile
 from types import SimpleNamespace
 
+import compiler_sdk
 import native_benchmark as bench
 import package_matrix as matrix
 from package_commands import Commands
@@ -100,6 +101,7 @@ def provider_identity(prefix):
 
 def identity(inputs, workload=None):
     args = inputs_namespace(inputs, workload=workload)
+    sdk = compiler_sdk.capture(args.compiler)
     archive = archive_identity(args.archive, args.archive_sha256, args.source)
     package = package_identity(args.prefix)
     require(package and str(args.prefix / 'lib/libhttpserver.a') in package, 'missing installed headers/library')
@@ -116,15 +118,20 @@ def identity(inputs, workload=None):
     require(node_version == 'v24.15.0', 'Node client pin differs')
     quic = bench.parse_json(subprocess.run([str(args.quic_go), '--identity'], check=True, capture_output=True, text=True, timeout=10).stdout)
     require('v0.55.0' in canonical(quic), 'quic-go client pin differs')
-    return dict(archive=archive, source=str(args.source), build=str(args.build), prefix=str(args.prefix),
+    result = dict(archive=archive, source=str(args.source), build=str(args.build), prefix=str(args.prefix),
                 tls=args.tls, package=package, provider=provider, provider_prefix=str(args.provider_prefix), tools=tools, compiler=args.compiler,
                 clients=clients, node_version=node_version, quic_go=quic,
                 configuration={str(args.build / name): digest(args.build / name) for name in ('config.status', 'config.log', 'src/Makefile')},
                 workload=dict(bench.DEFAULTS if workload is None else workload))
+    if sdk:
+        result['darwin_sdk'] = sdk
+    return result
 
 
 def identity_artifacts(expected):
     paths = [tool['path'] for tool in expected['tools'].values()]
+    if expected.get('darwin_sdk'):
+        paths += compiler_sdk.artifact_paths(expected['darwin_sdk'])
     paths += [path for client in expected['clients'].values() for path in client['files']]
     if expected.get('source') and 'test/installed/tls_client.cpp' in expected.get('archive', {}).get('members', {}):
         paths.append(str(Path(expected['source']) / 'test/installed/tls_client.cpp'))
@@ -140,6 +147,8 @@ def check_workload(workload, require_full_workload):
 
 
 def verify_identity(expected):
+    if expected.get('darwin_sdk'):
+        compiler_sdk.verify(expected['darwin_sdk'], expected['compiler'])
     archive = expected['archive']
     require(archive_identity(archive['path'], archive['sha256'], expected['source']) == archive, 'changed archive extraction')
     for group in ('package', 'provider', 'configuration'):
@@ -150,17 +159,27 @@ def verify_identity(expected):
         for path, sha256 in client['files'].items(): require(digest(path) == sha256, 'changed client identity')
 
 
+def _identity_key(expected):
+    result = dict(expected)
+    if result.get('darwin_sdk'):
+        result['darwin_sdk'] = compiler_sdk.context_key(result['darwin_sdk'])
+    return result
+
+
 def validate_base(path, expected, run_id, family):
     path = Path(path).resolve()
     receipt = bench.parse_json(path.read_text())
     require(receipt['schema_version'] == 1 and receipt['status'] == 'passed', 'failed adapter receipt')
     require(receipt['family'] == family and receipt['run_id'] == run_id, 'stale family/run ID')
     require(len(run_id) == 32 and all(c in '0123456789abcdef' for c in run_id), 'invalid run ID')
-    require(receipt['identity'] == expected, 'stale archive/source/package/provider/tool/configuration identity')
-    verify_identity(expected)
+    expected_key = _identity_key(expected)
+    if 'darwin_sdk' not in receipt['identity']:
+        expected_key.pop('darwin_sdk', None)
+    require(_identity_key(receipt['identity']) == expected_key, 'stale archive/source/package/provider/tool/configuration identity')
+    verify_identity(receipt['identity'])
     inventory = bench.parse_json(canonical(required_inventory(family, expected['tls'])))
     require(receipt['inventory'] == inventory and receipt['inventory_sha256'] == hashlib.sha256(canonical(inventory).encode()).hexdigest(), 'incomplete required inventory')
-    require(set(identity_artifacts(expected)) <= set(receipt['artifact_extras']), 'pruned tool/client artifacts')
+    require(set(identity_artifacts(receipt['identity'])) <= set(receipt['artifact_extras']), 'pruned tool/client/SDK artifacts')
     artifacts, commands = validate_catalog(receipt, path)
     require(Path(receipt['artifact_roots'][0]).is_absolute(), 'wrong artifact root')
     return receipt, artifacts, commands
@@ -339,7 +358,7 @@ def validate_public_receipt(path, expected_identity, expected_run_id):
         require(artifacts.get(record['path']) == record, 'unbound child receipt')
         child = bench.parse_json(Path(record['path']).read_text())
         require(child['run_id'] == expected_run_id, 'stale child run ID')
-        validate_child_provenance(child, expected_identity, artifacts, commands, family)
+        validate_child_provenance(child, receipt['identity'], artifacts, commands, family)
         if expected_identity['tls'] == 'yes':
             if family == 'h2':
                 validate_h2(child)
@@ -396,7 +415,7 @@ def validate_benchmark_receipt(path, expected_identity, expected_run_id, require
     args = inputs_namespace(receipt['inputs'], workload=expected_identity['workload'])
     child = runner.validate(record['path'], runner.identity(args), expected_run_id)
     for linkage, consumer in child['consumers'].items():
-        validate_compile(consumer['compile'], linkage, expected_identity, artifacts, commands)
+        validate_compile(consumer['compile'], linkage, receipt['identity'], artifacts, commands)
         validate_runtime(consumer['compile']['link_map'][:-4], linkage, expected_identity)
     return receipt
 
@@ -432,7 +451,8 @@ def execute(inputs, output, run_id, family, workload=None):
             receipt['children'][name] = bench.artifact(child_path)
             roots.append(child['consumer_directory'])
             extras.extend(row['path'] for row in child.get('client_inputs', []))
-        require(receipt['identity'] == identity(args, workload), 'inputs changed during execution')
+        require(_identity_key(receipt['identity']) == _identity_key(identity(args, workload)), 'inputs changed during execution')
+        verify_identity(receipt['identity'])
         receipt['artifact_roots'], receipt['artifact_extras'] = roots, sorted(set(extras))
         receipt['artifacts'] = catalog(roots, extras)
         receipt['full_workload'] = receipt['identity']['workload'] == bench.DEFAULTS

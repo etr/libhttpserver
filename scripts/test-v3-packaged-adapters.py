@@ -123,6 +123,385 @@ class AdapterContracts(unittest.TestCase):
         artifacts = {str(p): bench.artifact(p) for p in directory.iterdir() if p.is_file()}
         return compiled, identity, artifacts, commands
 
+    def sdk_provenance(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import compiler_sdk
+        self.enterContext(patch.object(compiler_sdk, 'platform', SimpleNamespace(system=lambda: 'Darwin')))
+        compiled, identity, artifacts, commands = self.provenance()
+        sdk = self.root / 'Mac SDK'; sdk.mkdir()
+        metadata = sdk / 'SDKSettings.json'; metadata.write_text('{"Version":"test"}')
+        selected_driver = self.root / 'selected clang driver'; selected_driver.write_text('controlled driver identity')
+        driver = self.root / 'selected compiler.py'
+        plan = shlex.join([str(selected_driver), '-cc1', '-triple', 'arm64-apple-macosx14.0.0',
+                           '-isysroot', str(sdk), '-o', os.devnull, '-x', 'c++', os.devnull])
+        driver.write_text('import sys, time\nsys.stderr.write(' + repr(plan + '\n') + ')\n'
+                          'sys.stderr.write("query timestamp: %s\\n" % time.monotonic_ns())\n')
+        compiler = shlex.join([sys.executable, str(driver)])
+        original = shlex.split(identity['compiler'])
+        for row in commands:
+            row['argv'][:len(original)] = shlex.split(compiler)
+        identity['compiler'] = compiler
+        identity['darwin_sdk'] = compiler_sdk.capture(compiler)
+        self.assertIsNotNone(identity['darwin_sdk'], 'controlled Clang plan must select its exact SDK')
+        for row in commands:
+            row['environment'] = compiler_sdk.selection_environment(os.environ)
+            row['cwd'] = str(Path.cwd().resolve())
+        compiled['dependencies'].append(str(metadata))
+        compiled['dependency_sha256'][str(metadata)] = bench.artifact(metadata)['sha256']
+        for path in compiler_sdk.artifact_paths(identity['darwin_sdk']):
+            artifacts[path] = bench.artifact(path)
+        depfile = Path(commands[0]['argv'][commands[0]['argv'].index('-MF') + 1])
+        depfile.write_text(depfile.read_text().rstrip() + ' ' + shlex.quote(str(metadata)) + '\n')
+        artifacts[str(depfile)] = bench.artifact(depfile)
+        return compiled, identity, artifacts, commands
+
+    def test_independently_selected_sdk_metadata_reaches_static_archive_gate(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        Path(compiled['link_map']).write_text('LOAD ' + str(Path(identity['prefix']) / 'lib/libhttpserver.a'))
+        artifacts[compiled['link_map']] = bench.artifact(compiled['link_map'])
+        with self.assertRaisesRegex(ValueError, 'static archive'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
+    def test_selected_sdk_metadata_preserves_complete_depfile_and_positive_compile(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        before = copy.deepcopy(compiled)
+        depfile = Path(commands[0]['argv'][commands[0]['argv'].index('-MF') + 1])
+        raw = depfile.read_bytes()
+        adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+        self.assertEqual((compiled, depfile.read_bytes()), (before, raw))
+
+    def test_identity_artifacts_require_selected_sdk_bytes_and_driver_inputs(self):
+        import compiler_sdk
+        _, identity, _, _ = self.sdk_provenance()
+        identity.update(tools={}, clients={})
+        self.assertEqual(set(adapter.identity_artifacts(identity)),
+                         set(compiler_sdk.artifact_paths(identity['darwin_sdk'])))
+
+    def test_verify_identity_rejects_sdk_mutation_after_precompile_capture(self):
+        _, identity, _, _ = self.sdk_provenance()
+        identity.update(archive=adapter.archive_identity(self.archive, self.digest, self.source),
+                        provider={}, configuration={'%s/unit.cpp' % self.source: bench.artifact(self.source / 'unit.cpp')['sha256']},
+                        tools={}, clients={})
+        Path(identity['darwin_sdk']['metadata']['path']).write_text('changed after identity')
+        with self.assertRaises(ValueError):
+            adapter.verify_identity(identity)
+
+    def test_identity_captures_selected_sdk_before_any_consumer_compile(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        _, selected, _, _ = self.sdk_provenance()
+        build = Path(selected['build']); (build / 'src').mkdir(parents=True)
+        for name in ('config.log', 'config.status', 'src/Makefile'):
+            (build / name).write_text('configuration')
+        inputs = dict(archive=str(self.archive), archive_sha256=self.digest, source=str(self.source),
+                      build=str(build), prefix=selected['prefix'], provider_prefix=str(self.root / 'provider'),
+                      compiler=selected['compiler'], client_python=sys.executable, node='node',
+                      quic_go=str(self.root / 'quic-go'), tls='no')
+        original_run = subprocess.run
+        def pinned_clients(argv, **kwargs):
+            if '-###' in argv:
+                return original_run(argv, **kwargs)
+            if argv[0] == 'node':
+                return SimpleNamespace(stdout='v24.15.0\n')
+            if '--identity' in argv:
+                return SimpleNamespace(stdout='{"version":"v0.55.0"}')
+            return SimpleNamespace(stdout=json.dumps({name: dict(version=version, files=[])
+                for name, version in (('h2', '4.4.1'), ('aioquic', '1.3.0'))}))
+        with patch.object(adapter, 'subprocess', SimpleNamespace(run=pinned_clients)), \
+             patch.object(adapter, 'tool_identity', return_value=bench.artifact(Path(sys.executable).resolve())):
+            captured = adapter.identity(inputs)
+        self.assertIn('darwin_sdk', captured, 'identity must bind SDK bytes before compiling')
+        self.assertEqual(captured['darwin_sdk']['metadata_hex'], selected['darwin_sdk']['metadata_hex'])
+
+    def test_commands_retain_sdk_selection_environment_used_by_compile(self):
+        import compiler_sdk
+        from package_commands import Commands
+        env = dict(os.environ, SDKROOT=str(self.root / 'selected SDK'), DEVELOPER_DIR='/selected/developer',
+                   TOOLCHAINS='selected-toolchain', CCC_OVERRIDE_OPTIONS='')
+        commands = Commands(self.root)
+        commands([sys.executable, '-c', 'print("bounded command environment")'], self.root, env)
+        self.assertEqual({key: commands.records[0]['environment'].get(key) for key in compiler_sdk.SELECTION_ENV},
+                         compiler_sdk.selection_environment(env))
+
+    def test_retained_sdk_query_tampering_is_rejected(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        identity['darwin_sdk']['query']['stderr'] += 'forged query evidence\n'
+        with self.assertRaisesRegex(ValueError, 'query'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
+    def test_sdk_symlink_alias_is_canonical_without_rewriting_raw_dependencies(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        metadata = Path(identity['darwin_sdk']['metadata']['path'])
+        alias = self.root / 'SDK alias'; alias.symlink_to(metadata.parent, target_is_directory=True)
+        dependency = str(alias / metadata.name)
+        compiled['dependencies'].remove(str(metadata)); compiled['dependencies'].append(dependency)
+        compiled['dependency_sha256'][dependency] = compiled['dependency_sha256'].pop(str(metadata))
+        depfile = Path(commands[0]['argv'][commands[0]['argv'].index('-MF') + 1])
+        depfile.write_text('object: ' + ' '.join(shlex.quote(path) for path in compiled['dependencies']) + '\n')
+        artifacts[str(depfile)] = bench.artifact(depfile)
+        before = copy.deepcopy(compiled)
+        adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+        self.assertEqual(compiled, before)
+
+    def test_sdk_context_cannot_override_foreign_source_or_static_contribution(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        foreign = self.root / 'other SDK' / 'SDKSettings.json'; foreign.parent.mkdir()
+        foreign.write_bytes(Path(identity['darwin_sdk']['metadata']['path']).read_bytes())
+        for path in (foreign, self.source / 'private.json', Path(identity['build']) / 'private.json'):
+            path.parent.mkdir(exist_ok=True); path.write_bytes(foreign.read_bytes())
+            bad = copy.deepcopy(compiled)
+            bad['dependencies'].append(str(path)); bad['dependency_sha256'][str(path)] = bench.artifact(path)['sha256']
+            artifacts[str(path)] = bench.artifact(path)
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                adapter.validate_compile(bad, 'static', identity, artifacts, commands)
+        sha = next(iter(compiled['sources'].values()))
+        identity['archive']['members'] = {'src/detail/private.cpp': sha}
+        with self.assertRaisesRegex(ValueError, 'source outside'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
+    def test_sdk_proof_is_bound_to_actual_compiler_and_complete_selection_environment(self):
+        import compiler_sdk
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        bad = copy.deepcopy(commands); bad[0]['argv'][0] = '/other/compiler'
+        with self.assertRaisesRegex(ValueError, 'compiler'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, bad)
+        for key in compiler_sdk.SELECTION_ENV:
+            bad = copy.deepcopy(commands); bad[0]['environment'][key] = 'other-selection'
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'environment'):
+                adapter.validate_compile(compiled, 'static', identity, artifacts, bad)
+        bad = copy.deepcopy(commands); bad[0].pop('environment')
+        with self.assertRaisesRegex(ValueError, 'environment'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, bad)
+
+    def test_sdk_proof_rejects_context_overrides_outside_compound_cxx_prefix(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        for flags in (['-isysroot', '/other'], ['--sysroot=/other'], ['-target', 'other'],
+                      ['--target=other'], ['-arch', 'other'], ['@response'], ['--config=file'],
+                      ['-Xclang', '-isysroot'], ['-ivfsoverlay', 'overlay'], ['-vfsoverlay=overlay'],
+                      ['-resource-dir=/other'], ['-B/other'], ['-working-directory=/other'],
+                      ['-Wp,-isysroot,/other'], ['-Xarch_arm64', '-isysroot/other']):
+            bad = copy.deepcopy(commands); bad[0]['argv'].extend(flags)
+            with self.subTest(flags=flags), self.assertRaisesRegex(ValueError, 'SDK compile context'):
+                adapter.validate_compile(compiled, 'static', identity, artifacts, bad)
+
+    def test_sdk_metadata_driver_and_configured_wrapper_bytes_are_pinned(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        paths = [identity['darwin_sdk']['metadata']['path'], identity['darwin_sdk']['driver']['path'],
+                 next(path for path in identity['darwin_sdk']['compiler_inputs'] if path.endswith('.py'))]
+        for path in paths:
+            location = Path(path); before = location.read_bytes()
+            location.write_bytes(before + b'changed after capture')
+            try:
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+            finally:
+                location.write_bytes(before)
+        with self.assertRaises(ValueError):
+            bad = copy.deepcopy(identity); bad['darwin_sdk']['metadata_hex'] = b'forged retained bytes'.hex()
+            adapter.validate_compile(compiled, 'static', bad, artifacts, commands)
+
+    def test_sdk_missing_pruned_tampered_and_unproved_artifacts_fail(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        for path in [identity['darwin_sdk']['metadata']['path'], identity['darwin_sdk']['driver']['path']]:
+            bad = copy.deepcopy(artifacts); bad.pop(path)
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, 'unbound'):
+                adapter.validate_compile(compiled, 'static', identity, bad, commands)
+        bad = copy.deepcopy(identity); bad.pop('darwin_sdk')
+        with self.assertRaisesRegex(ValueError, 'private or foreign'):
+            adapter.validate_compile(compiled, 'static', bad, artifacts, commands)
+        depfile = Path(commands[0]['argv'][commands[0]['argv'].index('-MF') + 1])
+        depfile.write_text(depfile.read_text() + 'forged raw dependency')
+        with self.assertRaises(ValueError):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
+    def test_sdk_selected_root_and_environment_change_after_capture_fails(self):
+        from unittest.mock import patch
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        other = self.root / 'other SDK'; other.mkdir()
+        (other / 'SDKSettings.json').write_bytes(Path(identity['darwin_sdk']['metadata']['path']).read_bytes())
+        bad = copy.deepcopy(identity)
+        bad['darwin_sdk']['sdk'] = str(other)
+        bad['darwin_sdk']['metadata'] = bench.artifact(other / 'SDKSettings.json')
+        bad['darwin_sdk']['query']['stderr'] = bad['darwin_sdk']['query']['stderr'].replace(
+            identity['darwin_sdk']['sdk'], str(other))
+        bad['darwin_sdk']['query_sha256'] = hashlib.sha256(json.dumps(bad['darwin_sdk']['query'],
+            sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        # Even a self-consistent forged query/hash cannot choose a sibling SDK.
+        with self.assertRaisesRegex(ValueError, 'changed selected SDK context'):
+            adapter.validate_compile(compiled, 'static', bad, artifacts, commands)
+        with patch.dict(os.environ, SDKROOT=str(other)), self.assertRaisesRegex(ValueError, 'environment'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
+    def test_sdk_discovery_rejects_escaped_metadata_and_ambiguous_or_failed_queries(self):
+        import compiler_sdk
+        _, identity, _, _ = self.sdk_provenance()
+        metadata = Path(identity['darwin_sdk']['metadata']['path'])
+        other = self.root / 'foreign.json'; other.write_bytes(metadata.read_bytes())
+        metadata.unlink(); metadata.symlink_to(other)
+        self.assertIsNone(compiler_sdk.capture(identity['compiler']))
+        metadata.unlink(); metadata.write_bytes(other.read_bytes())
+        wrapper = next(Path(path) for path in identity['darwin_sdk']['compiler_inputs'] if path.endswith('.py'))
+        original = wrapper.read_text()
+        for program in ('import sys; sys.exit(1)', 'print("no SDK driver job")',
+                        original + '\n' + original,
+                        original.replace('-isysroot', '-unsupported-root'),
+                        original.replace('arm64-apple-macosx14.0.0', 'arm64-apple-ios14.0.0')):
+            wrapper.write_text(program)
+            with self.subTest(program=program):
+                self.assertIsNone(compiler_sdk.capture(identity['compiler']))
+
+    def test_revalidation_compares_selected_context_while_retaining_original_raw_query(self):
+        from unittest.mock import patch
+        import compiler_sdk
+        compiled, expected, artifacts, commands = self.sdk_provenance()
+        expected.update(archive=adapter.archive_identity(self.archive, self.digest, self.source), tls='no',
+                        provider={}, configuration={str(self.source / 'unit.cpp'): bench.artifact(self.source / 'unit.cpp')['sha256']},
+                        tools={}, clients={})
+        original = copy.deepcopy(expected)
+        # Driver diagnostics can vary without changing any selected input.
+        expected['darwin_sdk'] = compiler_sdk.capture(expected['compiler'])
+        self.assertNotEqual(expected['darwin_sdk']['query'], original['darwin_sdk']['query'])
+        inventory = adapter.required_inventory(adapter.PUBLIC, 'no')
+        receipt = dict(schema_version=1, status='passed', family=adapter.PUBLIC, run_id='a' * 32,
+            identity=original, inventory=inventory,
+            inventory_sha256=hashlib.sha256(adapter.canonical(inventory).encode()).hexdigest(),
+            artifact_extras=adapter.identity_artifacts(original), artifact_roots=[str(self.root)])
+        path = self.root / 'receipt.json'; path.write_text(json.dumps(receipt))
+        with patch.object(adapter, 'validate_catalog', return_value=(artifacts, commands)):
+            try:
+                result, _, _ = adapter.validate_base(path, expected, 'a' * 32, adapter.PUBLIC)
+            except ValueError as error:
+                self.fail('semantically identical selected SDK must revalidate: ' + str(error))
+        self.assertEqual(result['identity']['darwin_sdk']['query'], original['darwin_sdk']['query'])
+
+    def test_local_clang_darwin_driver_dry_run_selects_exact_controlled_sdk(self):
+        import shutil
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import compiler_sdk
+        clang = shutil.which('clang++')
+        if clang is None:
+            self.skipTest('local Clang driver unavailable; no native Darwin claim')
+        sdk = self.root / 'controlled Mac SDK'; sdk.mkdir()
+        metadata = sdk / 'SDKSettings.json'
+        metadata.write_text('{"Version":"14.0","MaximumDeploymentTarget":"14.0"}')
+        compiler = shlex.join([clang, '--target=x86_64-apple-macosx14.0', '-isysroot', str(sdk)])
+        with patch.object(compiler_sdk, 'platform', SimpleNamespace(system=lambda: 'Darwin')):
+            context = compiler_sdk.capture(compiler)
+            self.assertIsNotNone(context, 'real Clang Darwin driver dry run must produce one selected context')
+            self.assertEqual(compiler_sdk.verify(context, compiler), str(metadata))
+        self.assertEqual(context['metadata_hex'], metadata.read_bytes().hex())
+        self.assertEqual(list(sdk.iterdir()), [metadata])
+
+    def test_sdk_context_is_rechecked_in_actual_compile_working_directory(self):
+        import compiler_sdk
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        context = identity['darwin_sdk']
+        other = self.root / 'other SDK'; other.mkdir()
+        (other / 'SDKSettings.json').write_bytes(Path(context['metadata']['path']).read_bytes())
+        wrapper = next(Path(path) for path in context['compiler_inputs'] if path.endswith('.py'))
+        original_plan = context['query']['stderr'].splitlines()[0]
+        other_plan = original_plan.replace(str(Path(context['sdk'])), str(other))
+        wrapper.write_text('import pathlib, sys\n'
+            'sys.stderr.write(' + repr(original_plan + '\n') + ' if str(pathlib.Path.cwd()) == '
+            + repr(str(Path.cwd().resolve())) + ' else ' + repr(other_plan + '\n') + ')\n')
+        identity['darwin_sdk'] = compiler_sdk.capture(identity['compiler'])
+        artifacts.update({path: bench.artifact(path) for path in compiler_sdk.artifact_paths(identity['darwin_sdk'])})
+        commands[0]['cwd'] = str(self.root)
+        with self.assertRaisesRegex(ValueError, 'working directory'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
+    def test_sdk_discovery_rejects_indirect_configured_cxx_inputs_without_permission(self):
+        import compiler_sdk
+        _, identity, _, _ = self.sdk_provenance()
+        for flag in ('@response', '--config=selection.cfg', '-config=selection.cfg',
+                     '-ivfsoverlay=overlay', '-vfsoverlay=overlay', '-Xclang=-ivfsoverlay',
+                     '-Xpreprocessor=-ivfsoverlay', '-Wp,@response'):
+            with self.subTest(flag=flag):
+                self.assertIsNone(compiler_sdk.capture(identity['compiler'] + ' ' + flag))
+
+    def test_sdk_artifact_catalog_retains_original_metadata_bytes(self):
+        import compiler_sdk
+        from release_package_provenance import catalog, validate_catalog
+        _, identity, _, _ = self.sdk_provenance()
+        output = self.root / 'retained output'; output.mkdir()
+        log = output / 'command.log'; log.write_text('controlled compile query')
+        row = dict(argv=['controlled-query'], exit=0, log=str(log),
+                   sha256=bench.artifact(log)['sha256'], bytes=log.stat().st_size)
+        (output / 'commands.json').write_text(json.dumps([row]))
+        extras = compiler_sdk.artifact_paths(identity['darwin_sdk'])
+        receipt = dict(artifact_roots=[str(output)], artifact_extras=extras,
+                       artifacts=catalog([output], extras))
+        artifacts, _ = validate_catalog(receipt, output / 'receipt.json')
+        metadata = identity['darwin_sdk']['metadata']
+        self.assertEqual(artifacts[metadata['path']], metadata)
+        self.assertEqual(bytes.fromhex(identity['darwin_sdk']['metadata_hex']), Path(metadata['path']).read_bytes())
+        bad = copy.deepcopy(receipt); bad['artifacts'] = [r for r in bad['artifacts'] if r['path'] != metadata['path']]
+        with self.assertRaisesRegex(ValueError, 'pruned'):
+            validate_catalog(bad, output / 'receipt.json')
+
+    def test_legacy_sdk_free_identity_revalidates_without_gaining_sdk_permission(self):
+        from unittest.mock import patch
+        _, expected, artifacts, commands = self.sdk_provenance()
+        expected.update(archive=adapter.archive_identity(self.archive, self.digest, self.source), tls='no',
+                        provider={}, configuration={str(self.source / 'unit.cpp'): bench.artifact(self.source / 'unit.cpp')['sha256']},
+                        tools={}, clients={})
+        original = copy.deepcopy(expected); original.pop('darwin_sdk')
+        inventory = adapter.required_inventory(adapter.PUBLIC, 'no')
+        receipt = dict(schema_version=1, status='passed', family=adapter.PUBLIC, run_id='a' * 32,
+            identity=original, inventory=inventory,
+            inventory_sha256=hashlib.sha256(adapter.canonical(inventory).encode()).hexdigest(),
+            artifact_extras=[], artifact_roots=[str(self.root)])
+        path = self.root / 'receipt.json'; path.write_text(json.dumps(receipt))
+        with patch.object(adapter, 'validate_catalog', return_value=(artifacts, commands)):
+            try:
+                result, _, _ = adapter.validate_base(path, expected, 'a' * 32, adapter.PUBLIC)
+            except ValueError as error:
+                self.fail('legacy SDK-free identity must retain strict old validation: ' + str(error))
+        self.assertNotIn('darwin_sdk', result['identity'])
+
+    def test_legacy_benchmark_without_precompile_sdk_identity_cannot_borrow_fresh_context(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        compiled, expected, artifacts, commands = self.sdk_provenance()
+        expected.update(tls='no', workload=dict(bench.DEFAULTS))
+        legacy = copy.deepcopy(expected); legacy.pop('darwin_sdk')
+        child_path = self.root / 'child.json'; child_path.write_text('{}')
+        record = bench.artifact(child_path); artifacts[record['path']] = record
+        receipt = dict(identity=legacy, full_workload=True, children={'benchmark': record},
+                       inputs=dict(archive=str(self.archive), source=str(self.source), build=expected['build'],
+                                   prefix=expected['prefix'], provider_prefix=str(self.root / 'provider'),
+                                   quic_go=str(self.root / 'quic-go')))
+        runner = SimpleNamespace(identity=lambda args: {}, validate=lambda *args:
+                                 dict(consumers={'static': {'compile': compiled}}))
+        with patch.object(adapter, 'validate_base', return_value=(receipt, artifacts, commands)), \
+             patch.object(adapter, 'load_runner', return_value=runner), patch.object(adapter, 'validate_runtime'):
+            with self.assertRaisesRegex(ValueError, 'private or foreign'):
+                adapter.validate_benchmark_receipt(self.root / 'receipt.json', expected, 'a' * 32)
+
+    @unittest.skipIf(os.name == 'nt' or ' ' in sys.executable, 'direct POSIX fixture driver needs a literal shebang interpreter')
+    def test_normal_selected_sdk_driver_preserves_selected_and_foreign_static_archive_gate(self):
+        import compiler_sdk
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        old_prefix = shlex.split(identity['compiler'])
+        wrapper = self.root / 'direct compiler'
+        wrapper.write_text('#!' + sys.executable + '\n' + Path(old_prefix[1]).read_text())
+        wrapper.chmod(0o700)
+        identity['compiler'] = shlex.join([str(wrapper)])
+        identity['darwin_sdk'] = compiler_sdk.capture(identity['compiler'])
+        for row in commands:
+            row['argv'][:len(old_prefix)] = [str(wrapper)]
+        artifacts.update({path: bench.artifact(path) for path in compiler_sdk.artifact_paths(identity['darwin_sdk'])})
+        adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+        foreign = str(self.root / 'foreign/libhttpserver.a')
+        linkmap = Path(compiled['link_map'])
+        linkmap.write_text(('# Object files:\n[  1] ' + foreign + '(public.o)\n# Sections:\n')
+                           if sys.platform == 'darwin' else foreign + '(public.o)\n')
+        artifacts[str(linkmap)] = bench.artifact(linkmap)
+        with self.assertRaisesRegex(ValueError, 'static archive'):
+            adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
+
     def test_real_public_compile_artifacts_are_rechecked(self):
         compiled, identity, artifacts, commands = self.provenance()
         adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
@@ -408,12 +787,18 @@ class AdapterContracts(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker.is_file(), 'archive fixture bypassed the selected compiler')
         commands = [json.loads(line) for line in marker.read_text().splitlines()]
-        self.assertEqual(sum('-c' in argv for argv in commands), 3)
-        self.assertEqual(sum('-c' not in argv for argv in commands), 2)
+        executed = [argv for argv in commands if '-###' not in argv]
+        self.assertEqual(sum('-c' in argv for argv in executed), 3)
+        self.assertEqual(sum('-c' not in argv for argv in executed), 2)
 
     def test_unused_selected_static_archive_cannot_supply_link_identity(self):
+        import compiler_sdk
         import subprocess
         compiled, identity, artifacts, commands = self.provenance()
+        # Bind the actual native compiler's SDK before any fixture compilation.
+        sdk = compiler_sdk.capture(identity['compiler'])
+        if sdk:
+            identity['darwin_sdk'] = sdk
         directory = Path(compiled['link_map']).parent
         header = Path(next(p for p in identity['package'] if '/include/' in p))
         header.write_text('int implementation();\n')
@@ -439,6 +824,8 @@ class AdapterContracts(unittest.TestCase):
         identity['archive']['members']['test/installed/consumer.cpp'] = compiled['sources'][str(unit)]
         identity['package'] = {p: bench.artifact(p)['sha256'] for p in identity['package']}
         artifacts = {str(p): bench.artifact(p) for p in directory.iterdir() if p.is_file()}
+        if sdk:
+            artifacts.update({path: bench.artifact(path) for path in compiler_sdk.artifact_paths(sdk)})
         context = json.dumps(dict(compiled=compiled, identity=identity, artifacts=artifacts,
             commands=commands, libraries=[bench.artifact(path) for path in libraries],
             depfiles={str(path): path.read_text() for path in directory.glob('*.d')}),
@@ -451,6 +838,8 @@ class AdapterContracts(unittest.TestCase):
         self.assertEqual(subprocess.run([str(directory / 'static')]).returncode, 1)
         compiled['artifact_sha256'] = bench.artifact(directory / 'static')['sha256']
         artifacts = {str(p): bench.artifact(p) for p in directory.iterdir() if p.is_file()}
+        if sdk:
+            artifacts.update({path: bench.artifact(path) for path in compiler_sdk.artifact_paths(sdk)})
         adapter.validate_compile(compiled, 'static', identity, artifacts, commands)
 
     def validate_scenario_cell(self, family, cell, tls='yes'):
@@ -472,7 +861,7 @@ class AdapterContracts(unittest.TestCase):
             (self.root / 'tls.json').write_text(json.dumps(dict(run_id=run_id, cells=[cell])))
             children['tls'] = bench.artifact(self.root / 'tls.json'); artifacts[str(self.root / 'tls.json')] = children['tls']
             artifacts[str(log)] = bench.artifact(log); commands = [record]
-        receipt = dict(children=children, inventory=inventory)
+        receipt = dict(children=children, inventory=inventory, identity=dict(tls=tls))
         with patch.object(adapter, 'validate_base', return_value=(receipt, artifacts, commands)), \
              patch.object(adapter, 'validate_child_provenance'), patch.object(adapter, 'validate_h2'), patch.object(adapter, 'validate_h3'):
             adapter.validate_public_receipt(self.root / 'outer.json', dict(tls=tls), run_id)
