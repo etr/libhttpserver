@@ -285,6 +285,15 @@ class AdapterContracts(unittest.TestCase):
             with self.subTest(flags=flags), self.assertRaisesRegex(ValueError, 'SDK compile context'):
                 adapter.validate_compile(compiled, 'static', identity, artifacts, bad)
 
+    def test_sdk_proof_rejects_context_overrides_after_standalone_compile_option(self):
+        compiled, identity, artifacts, commands = self.sdk_provenance()
+        for override in ('--sysroot=/other', '--target=arm64-apple-macosx99.0',
+                         '--config=selection.cfg'):
+            bad = copy.deepcopy(commands)
+            bad[0]['argv'].extend(['-c', override])
+            with self.subTest(override=override), self.assertRaisesRegex(ValueError, 'SDK compile context'):
+                adapter.validate_compile(compiled, 'static', identity, artifacts, bad)
+
     def test_sdk_metadata_driver_and_configured_wrapper_bytes_are_pinned(self):
         compiled, identity, artifacts, commands = self.sdk_provenance()
         paths = [identity['darwin_sdk']['metadata']['path'], identity['darwin_sdk']['driver']['path'],
@@ -420,6 +429,36 @@ class AdapterContracts(unittest.TestCase):
                      '-Xpreprocessor=-ivfsoverlay', '-Wp,@response'):
             with self.subTest(flag=flag):
                 self.assertIsNone(compiler_sdk.capture(identity['compiler'] + ' ' + flag))
+
+    def test_sdk_discovery_rejects_indirect_inputs_exposed_only_in_driver_plan(self):
+        import compiler_sdk
+        _, identity, _, _ = self.sdk_provenance()
+        context = identity['darwin_sdk']
+        wrapper = next(Path(path) for path in context['compiler_inputs'] if path.endswith('.py'))
+        plan = shlex.split(context['query']['stderr'].splitlines()[0])
+        for flags in (['@/unbound/response'], ['--config', '/unbound/selection.cfg'],
+                      ['-config=/unbound/selection.cfg'], ['-ivfsoverlay', '/unbound/selection.yaml'],
+                      ['-vfsoverlay=/unbound/selection.yaml'], ['-Xclang', '-ivfsoverlay'],
+                      ['-Xpreprocessor', '@/unbound/response'], ['-Wp,@/unbound/response']):
+            wrapper.write_text('import sys\nsys.stderr.write(' + repr(shlex.join(plan + flags) + '\n') + ')\n')
+            with self.subTest(flags=flags):
+                self.assertIsNone(compiler_sdk.capture(identity['compiler']))
+
+    def test_sdk_reverification_rejects_indirect_inputs_in_retained_driver_plan(self):
+        import compiler_sdk
+        _, identity, _, _ = self.sdk_provenance()
+        context = identity['darwin_sdk']
+        plan = shlex.split(context['query']['stderr'].splitlines()[0])
+        for flags in (['@/unbound/response'], ['--config=/unbound/selection.cfg'],
+                      ['-config', '/unbound/selection.cfg'], ['-ivfsoverlay', '/unbound/selection.yaml'],
+                      ['-vfsoverlay=/unbound/selection.yaml'], ['-Xclang', '-ivfsoverlay'],
+                      ['-Xpreprocessor', '@/unbound/response'], ['-Wp,@/unbound/response']):
+            retained = copy.deepcopy(context)
+            retained['query']['stderr'] = shlex.join(plan + flags) + '\n'
+            retained['query_sha256'] = hashlib.sha256(json.dumps(retained['query'],
+                sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            with self.subTest(flags=flags), self.assertRaisesRegex(ValueError, 'indirect SDK driver input'):
+                compiler_sdk.verify(retained, identity['compiler'])
 
     def test_sdk_artifact_catalog_retains_original_metadata_bytes(self):
         import compiler_sdk

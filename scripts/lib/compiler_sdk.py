@@ -22,6 +22,10 @@ SELECTION_ENV = ('SDKROOT', 'DEVELOPER_DIR', 'TOOLCHAINS', 'PATH',
                  'C_INCLUDE_PATH', 'OBJC_INCLUDE_PATH', 'COMPILER_PATH',
                  'GCC_EXEC_PREFIX', 'CLANG_NO_DEFAULT_CONFIG')
 
+# Indirect argument/config/VFS files cannot be pinned by this narrow model.
+INDIRECT_OPTIONS = ('@', '--config', '-config', '-ivfsoverlay', '-vfsoverlay',
+                    '-Xclang', '-Xpreprocessor', '-Wp,')
+
 
 def selection_environment(env):
     return {key: env.get(key) for key in SELECTION_ENV}
@@ -39,6 +43,7 @@ def _selected(query):
             jobs.append(argv)
     require(len(jobs) == 1, 'ambiguous SDK driver query')
     job = jobs[0]
+    require(not any(arg.startswith(INDIRECT_OPTIONS) for arg in job), 'indirect SDK driver input')
     require(job.count('-triple') == 1 and job.count('-isysroot') == 1, 'unsupported SDK driver query')
     triple = job[job.index('-triple') + 1]
     require(re.fullmatch(r'[^-]+-apple-macosx[0-9.]+', triple), 'non-macOS SDK driver query')
@@ -61,10 +66,7 @@ def capture(compiler, *, cwd=None):
     if platform.system() != 'Darwin':
         return None
     argv = shlex.split(compiler)
-    # Indirect argument/config/VFS files cannot be pinned by this narrow model.
-    indirect = ('@', '--config', '-config', '-ivfsoverlay', '-vfsoverlay',
-                '-Xclang', '-Xpreprocessor', '-Wp,')
-    if not argv or any(arg.startswith(indirect) for arg in argv):
+    if not argv or any(arg.startswith(INDIRECT_OPTIONS) for arg in argv):
         return None
     cwd = str(Path(cwd or Path.cwd()).resolve())
     query_argv = argv + ['-###', '-x', 'c++', '-c', os.devnull, '-o', os.devnull]
@@ -136,7 +138,10 @@ def validate_command(context, row):
     tail, i = argv[len(prefix):], 0
     while i < len(tail):
         flag = tail[i]
-        if flag in ('-MF', '-c', '-o', '-I', '-isystem'):
+        if flag == '-c':
+            i += 1
+            continue
+        if flag in ('-MF', '-o', '-I', '-isystem'):
             require(i + 1 < len(tail) and not tail[i + 1].startswith('@'), 'unsupported SDK compile operand')
             i += 2
             continue
@@ -146,6 +151,7 @@ def validate_command(context, row):
                    re.fullmatch(r'-W(?:all|extra|error(?:=return-type)?)', flag) or
                    re.fullmatch(r'-fsanitize=(?:address|undefined|thread)(?:,(?:address|undefined|thread))*', flag) or
                    re.fullmatch(r'-D[A-Za-z_][A-Za-z_0-9]*(?:=.*)?', flag) or
-                   flag.startswith('-I') and len(flag) > 2)
+                   flag.startswith('-I') and len(flag) > 2 or
+                   i > 0 and tail[i - 1] == '-c' and not flag.startswith(('-', '@')))
         require(allowed, 'unsupported SDK compile context option: ' + flag)
         i += 1

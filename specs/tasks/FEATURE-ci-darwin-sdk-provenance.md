@@ -1,7 +1,7 @@
 # FEATURE-ci-darwin-sdk-provenance
 
 Base: local v3 `251bfa8d747775e15a726b0b7300368fd72336ab`.
-Status: implemented; scoped local verification passed; awaiting caller validation. Scope: exact selected Darwin SDK metadata in
+Status: Complete (local); Groundwork validation passed; native Darwin proof remains CI-owned. Scope: exact selected Darwin SDK metadata in
 packaged release compile proof; no runtime or other CI investigation.
 
 Decision: identity owns precompile selection and byte pinning of the exact
@@ -93,3 +93,20 @@ full baseline, provider/SDK/client build or native Windows probe was claimed.
 The parent's independently queued Windows temp-parent identity fix and closed
 Mac TLS static/external EOF timeout are outside this task. Existing unrelated
 header/WSAPoll/postsummary/clock/kqueue25/epoll64 decisions remain unchanged.
+
+Caller finalization: session `07f808b2e1d6bc4702483dbded28a8be` sealed
+validated after 3 iterations. All nine profiles approve. One requested indirect
+compiler-plan repair and one caller-authorized duplicate-`-c` context-override
+acceptance repair are verified; mandatory doubt 3 is cleared. The original
+approved verdict was preserved and its major finding resolved by separate
+acceptance evidence. Final scoped gates: **68 adapter tests + selected canonical
+integration 1 PASS**, changed Python syntax and diff checks PASS. Meaningful
+16-subtest indirect-plan and three-form override RED/GREEN evidence is retained
+in the existing validation session. One unworked minor is persisted unread.
+
+- [x] Caller full validation and local task finalization.
+- [ ] Post-fix native Darwin CI/v3 PR verification (not a local merge gate).
+
+The earlier 65-test implementation receipt is historical; final 68-test evidence
+supersedes it for the repaired helper/test inputs. No native executable probe,
+full baseline, provider rebuild, release or deployment was run.
