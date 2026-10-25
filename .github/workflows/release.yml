@@ -1,271 +1,229 @@
-name: "Release"
-
-on:
-  push:
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+*'
+# Temporary diagnostic branch only. NEVER merge this workflow into v3.
+name: Bounded native kqueue trace capture
+'on':
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g., 0.20.0 or 0.20.0-rc1)'
+        description: Diagnostic sentinel only; creates no tag or release
         required: true
-
+        type: string
 permissions:
   contents: read
-  actions: read
-
+concurrency:
+  group: kqueue-focused-once-a9c80052
+  cancel-in-progress: false
 jobs:
-  validate:
-    name: Validate release
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
-      commit: ${{ steps.version.outputs.commit }}
-      native: ${{ steps.version.outputs.native }}
+  focused-kqueue:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      DIAGNOSTIC_SENTINEL: ${{ inputs.tag }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      with:
-        fetch-depth: 0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind the single diagnostic request
+        run: |
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/task/FEATURE-ci-kqueue-focused-diagnostics
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$DIAGNOSTIC_SENTINEL" = kqueue-focused-once-a9c80052
+          EVIDENCE="$RUNNER_TEMP/kqueue-focused-evidence"
+          mkdir "$EVIDENCE"
+          printf 'EVIDENCE=%s\n' "$EVIDENCE" >> "$GITHUB_ENV"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor a9c800522afe6d2abea308e0be9215fda1b2826e HEAD
+          git diff --exit-code a9c800522afe6d2abea308e0be9215fda1b2826e HEAD -- src test/littletest.hpp test/unit/io_backend_contract.hpp scripts/ci-macos-toolchain.sh scripts/prepare-v3-package-ci.py
+          git diff --exit-code 47c6f89a6402e1d4cf71623772c44faa23be2a58 a9c800522afe6d2abea308e0be9215fda1b2826e -- src test/unit/io_kqueue_backend_test.cpp test/littletest.hpp test/unit/io_backend_contract.hpp scripts/ci-macos-toolchain.sh
+          git status --porcelain > "$EVIDENCE/checkout-status.txt"
+          test ! -s "$EVIDENCE/checkout-status.txt"
+          git show --no-patch --format=fuller HEAD > "$EVIDENCE/source-commit.txt"
+          git diff a9c800522afe6d2abea308e0be9215fda1b2826e HEAD > "$EVIDENCE/diagnostic.diff"
+          git archive --prefix=libhttpserver-3.0.0/ --format=tar.gz --output="$EVIDENCE/source.tar.gz" HEAD
+          shasum -a 256 "$EVIDENCE/source.tar.gz" > "$EVIDENCE/source.sha256"
+          printf 'run=%s attempt=%s sha=%s ref=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_SHA" "$GITHUB_REF" > "$EVIDENCE/request.txt"
+      - name: Existing minimal native prerequisites and selected compiler
+        run: |
+          exec > >(tee "$EVIDENCE/setup.log") 2>&1
+          unset DYLD_LIBRARY_PATH LD_LIBRARY_PATH
+          brew install autoconf automake libtool pkg-config python llvm make
+          # Unchanged selector includes its existing cancellation compiler sanity probe;
+          # it never executes the owning kqueue component or validates the batch driver.
+          bash scripts/ci-macos-toolchain.sh
+          sdk_path=${SDKROOT:-$(xcrun --show-sdk-path)}
+          printf 'SDKROOT=%s\n' "$sdk_path" >> "$GITHUB_ENV"
+          sw_vers
+          uname -a
+          xcodebuild -version
+          xcrun --show-sdk-version
+      - name: Existing pinned private provider only
+        run: |
+          exec > >(tee "$EVIDENCE/provider-setup.log") 2>&1
+          unset DYLD_LIBRARY_PATH LD_LIBRARY_PATH
+          CC="$V3_CC" CXX="$V3_CXX" python3 scripts/prepare-v3-package-ci.py --make gmake --jobs 2 --output "$RUNNER_TEMP/prerequisites"
+      - name: Build only TLS-off installed library and original owning translation unit
+        run: |
+          cat > "$EVIDENCE/build.py" <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import platform
+          import signal
+          import subprocess
+          import tarfile
+          import time
 
-    - name: Resolve existing tag and source version
-      id: version
-      env:
-        REQUEST_TAG: ${{ inputs.tag || github.ref_name }}
-      run: |
-        python3 - <<'PYTHON'
-        import os,re,subprocess
-        from pathlib import Path
-        version=os.environ['REQUEST_TAG']
-        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-(?:rc|alpha|beta)[0-9]+)?',version): raise SystemExit('invalid version tag')
-        commit=subprocess.check_output(['git','rev-parse','--verify','refs/tags/'+version+'^{commit}'],text=True).strip()
-        subprocess.run(['git','checkout','--detach',commit],check=True)
-        subprocess.run(['bash','scripts/validate-version.sh',version],check=True)
-        native='true' if 'libhttpserver_v3core_la_SOURCES' in Path('src/Makefile.am').read_text() else 'false'
-        with open(os.environ['GITHUB_OUTPUT'],'a') as out:
-            out.write('version='+version+'\ncommit='+commit+'\nnative='+native+'\nis_prerelease='+str('-' in version).lower()+'\n')
-        PYTHON
+          root = Path(os.environ['EVIDENCE']).resolve()
+          temporary = Path(os.environ['RUNNER_TEMP']).resolve()
+          source_parent = temporary / 'platform/source'
+          source_parent.mkdir(parents=True)
+          with tarfile.open(root / 'source.tar.gz') as archive:
+              archive.extractall(source_parent, filter='data')
+          source = source_parent / 'libhttpserver-3.0.0'
+          lane = temporary / 'platform/matrix/tls-no'
+          build = lane / 'build'
+          prefix = lane / 'prefix'
+          consumer = lane / 'integration-static/io_kqueue_backend'
+          build.mkdir(parents=True)
+          consumer.mkdir(parents=True)
+          provider = temporary / 'prerequisites/provider'
+          env = {key: value for key, value in os.environ.items() if key not in
+                 ('DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH', 'V3_TLS_CFLAGS', 'V3_TLS_LIBS')}
+          env.update(CC=env['V3_CC'], CXX=env['V3_CXX'], CXXFLAGS='-O0 -g', CPPFLAGS='',
+                     LDFLAGS=' -Wl,-rpath,' + str(provider / 'lib'), PKG_CONFIG_PATH='')
+          receipt = dict(status='incomplete', native_comparisons_executed=0, release_acceptance=False,
+                         source_sha=env['GITHUB_SHA'], base_sha='a9c800522afe6d2abea308e0be9215fda1b2826e',
+                         original_source_sha='47c6f89a6402e1d4cf71623772c44faa23be2a58',
+                         original_evidence_artifact_sha256='db2eff68345711d76b10331d43b47da568c6ada77b74f008b4fd5b0cb6bcac33',
+                         original_program_sha256='bacdd6f12d2a566000bececbf159aa5ec63f5502965842006cffabaef00191bd',
+                         original_tu_sha256='c7b97f827b90928390414cf95a171ce32b408c23bfb86090d7c4ef1c641a0c77',
+                         euid=os.geteuid(), platform=platform.platform(), tls='no', linkage='installed-static',
+                         differences=[
+                             'Diagnostic Git archive bootstrapped here, not historical generated release archive; no archive identity equivalence claimed.',
+                             'Current selected macOS runner, SDK, LLVM and provider artifacts are recorded, not assumed byte-identical to failed CI.',
+                             'Only TLS-off library and owning translation unit built; preceding installed suite programs are omitted.',
+                             'One original 48-case component program retains its internal prior-case context; subsequent processes select only original trace case.',
+                             'Post-collection vector emission and process receipt environment can perturb scheduling.',
+                             'Original stage EUID 0, O0/g, source/lane suffixes, installed headers and explicit static archive link are retained.',
+                             'Original runtime directory ordering retained without adding LLVM/lib/c++ to DYLD_LIBRARY_PATH; selected compiler supplies libc++ rpaths.'
+                         ], commands=[], hashes={})
 
-    - name: Extract release notes
-      env:
-        VERSION: ${{ steps.version.outputs.version }}
-      run: |
-        chmod +x scripts/extract-release-notes.sh
-        scripts/extract-release-notes.sh "$VERSION" > release-notes.md
-        echo "--- Release notes ---"
-        cat release-notes.md
+          def save():
+              (root / 'build-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
 
-    - name: Upload release notes
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-      with:
-        name: release-notes
-        path: release-notes.md
+          def command(argv, cwd=source, timeout=1200):
+              row = dict(argv=[str(arg) for arg in argv], cwd=str(cwd), exit=None,
+                         environment=dict(env), timeout_seconds=timeout)
+              index = len(receipt['commands'])
+              stdout = root / ('build-%02d.stdout' % index)
+              stderr = root / ('build-%02d.stderr' % index)
+              row.update(stdout=str(stdout), stderr=str(stderr))
+              receipt['commands'].append(row)
+              save()
+              started = time.monotonic()
+              try:
+                  with stdout.open('wb') as out, stderr.open('wb') as err:
+                      process = subprocess.Popen(row['argv'], cwd=cwd, env=env, stdout=out,
+                                                 stderr=err, start_new_session=True)
+                      try:
+                          row['exit'] = process.wait(timeout=timeout)
+                      except subprocess.TimeoutExpired:
+                          row['timed_out'] = True
+                          os.killpg(process.pid, signal.SIGKILL)
+                          row['exit'] = process.wait()
+              except OSError as error:
+                  row['launch_error'] = str(error)
+                  raise
+              finally:
+                  row['elapsed_seconds'] = time.monotonic() - started
+                  for name, path in (('stdout', stdout), ('stderr', stderr)):
+                      if path.exists(): row[name + '_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+                  save()
+              if row['exit'] or row.get('timed_out'):
+                  raise RuntimeError('setup command failed: ' + str(row['argv']))
 
-  build-dist:
-    name: Build distribution tarball
-    runs-on: ubuntu-latest
-    needs: validate
-    if: needs.validate.outputs.native == 'false'
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      with:
-        ref: ${{ needs.validate.outputs.commit }}
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y autoconf automake libtool libcurl4-openssl-dev
-
-    - name: Build libhttpserver
-      run: |
-        ./bootstrap
-        mkdir build
-        cd build
-        ../configure
-        make
-        make check
-
-    - name: Create distribution tarball
-      run: |
-        cd build
-        make dist
-
-    - name: Upload tarball
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-      with:
-        name: dist-tarball
-        path: build/libhttpserver-*.tar.gz
-
-  verify-dist-linux:
-    name: Verify tarball (Linux)
-    runs-on: ubuntu-latest
-    needs: build-dist
-    steps:
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libcurl4-openssl-dev
-
-    - name: Download tarball
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-      with:
-        name: dist-tarball
-
-    - name: Build and test from tarball
-      run: |
-        tar -xzf libhttpserver-*.tar.gz
-        cd libhttpserver-*/
-        mkdir build
-        cd build
-        ../configure
-        make
-        make check
-
-    - name: Print test results on failure
-      if: failure()
-      run: |
-        cd libhttpserver-*/build
-        cat test/test-suite.log || true
-
-  verify-dist-macos:
-    name: Verify tarball (macOS)
-    runs-on: macos-latest
-    needs: build-dist
-    steps:
-    - name: Install build tools
-      run: brew install autoconf automake libtool
-
-    - name: Fetch curl from cache
-      id: cache-curl
-      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
-      with:
-        path: curl-7.75.0
-        key: macos-latest-CURL-pre-built-v3
-
-    - name: Build curl (if not cached)
-      if: steps.cache-curl.outputs.cache-hit != 'true'
-      run: |
-        curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz
-        tar -xzf curl-7.75.0.tar.gz
-        cd curl-7.75.0
-        ./configure --with-darwinssl --without-ssl --without-nghttp2 --without-libidn2 --without-libssh2 --without-brotli --without-zstd --without-librtmp --without-libpsl --disable-ldap --disable-ldaps
-        make
-
-    - name: Install curl
-      run: |
-        cd curl-7.75.0
-        sudo make install
-
-    - name: Download tarball
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-      with:
-        name: dist-tarball
-
-    - name: Build and test from tarball
-      run: |
-        tar -xzf libhttpserver-*.tar.gz
-        cd libhttpserver-*/
-        mkdir build
-        cd build
-        CFLAGS='-mtune=generic' ../configure --disable-fastopen
-        make
-        make check
-
-    - name: Print test results on failure
-      if: failure()
-      run: |
-        cd libhttpserver-*/build
-        cat test/test-suite.log || true
-
-  verify-dist-windows:
-    name: Verify tarball (Windows)
-    runs-on: windows-latest
-    needs: build-dist
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-    - name: Setup MSYS2
-      uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c
-      with:
-        msystem: MINGW64
-        update: true
-        install: >-
-          autotools
-          base-devel
-
-    - name: Install MinGW64 packages
-      run: |
-        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,doxygen,graphviz,curl,python}
-
-    - name: Download tarball
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-      with:
-        name: dist-tarball
-
-    - name: Build and test from tarball
-      run: |
-        tar -xzf libhttpserver-*.tar.gz
-        cd libhttpserver-*/
-        mkdir build
-        cd build
-        ../configure --disable-fastopen
-        make
-        make check
-
-    - name: Print test results on failure
-      if: failure()
-      run: |
-        cd libhttpserver-*/build
-        cat test/test-suite.log || true
-
-  release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: [validate, verify-dist-linux, verify-dist-macos, verify-dist-windows]
-    if: needs.validate.outputs.native == 'false'
-    permissions:
-      contents: write
-    steps:
-    - name: Download tarball
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-      with:
-        name: dist-tarball
-
-    - name: Download release notes
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-      with:
-        name: release-notes
-
-    - name: Create release
-      env:
-        GH_TOKEN: ${{ github.token }}
-        GH_REPO: ${{ github.repository }}
-        VERSION: ${{ needs.validate.outputs.version }}
-        IS_PRERELEASE: ${{ needs.validate.outputs.is_prerelease }}
-      run: |
-
-        PRERELEASE_FLAG=""
-        if [ "$IS_PRERELEASE" = "true" ]; then
-          PRERELEASE_FLAG="--prerelease"
-        fi
-
-        gh release create "$VERSION" \
-          --title "libhttpserver $VERSION" \
-          --notes-file release-notes.md \
-          $PRERELEASE_FLAG \
-          libhttpserver-*.tar.gz
-
-  v3-acceptance:
-    needs: validate
-    if: needs.validate.outputs.native == 'true'
-    permissions:
-      contents: write
-      actions: read
-    uses: ./.github/workflows/v3-release-acceptance.yml
-    with:
-      source_commit: ${{ needs.validate.outputs.commit }}
-      source_version: ${{ needs.validate.outputs.version }}
-      publication: true
+          try:
+              save()
+              if platform.system() != 'Darwin' or os.geteuid() != 0:
+                  raise RuntimeError('requires native Darwin and original stage EUID 0')
+              for argv in ([env['CXX'], '--version'], [env['CC'], '--version'], ['gmake', '--version'],
+                           ['xcrun', '--show-sdk-path'], ['id'],
+                           [provider / 'bin/openssl', 'version', '-a']):
+                  command(argv, timeout=30)
+              command(['bash', './bootstrap'])
+              command(['bash', source / 'configure', '--enable-v3-tls=no', '--disable-examples',
+                       '--prefix=' + str(prefix)], cwd=build)
+              command(['gmake', '-C', 'src', '-j2'], cwd=build)
+              command(['gmake', '-C', 'src', 'install'], cwd=build)
+              obj = consumer / 'io_kqueue_backend-0.o'
+              binary = consumer / 'io_kqueue_backend'
+              command([env['CXX'], '-std=c++20', '-O0', '-g', '-I' + str(prefix / 'include'),
+                       '-DHTTPSERVER_COMPILATION', '-I' + str(source / 'src'), '-I' + str(source / 'test'),
+                       '-DTLS_TEST_DIR="' + str(source / 'test') + '"',
+                       '-DPARITY_TRANSCRIPT_DIR="' + str(source / 'test/parity/transcripts') + '"',
+                       '-DPARITY_DATA_ROOT="' + str(source / 'test') + '"',
+                       '-DHTTP2_CORPUS_DIR="' + str(source / 'test/conformance/http2') + '"',
+                       '-MMD', '-MF', consumer / 'io_kqueue_backend-0.d', '-c',
+                       source / 'test/unit/io_kqueue_backend_test.cpp', '-o', obj], cwd=consumer)
+              command([env['CXX'], obj, '-L' + str(prefix / 'lib'), prefix / 'lib/libhttpserver.a',
+                       '-lpthread', '-pthread', '-Wl,-rpath,' + str(prefix / 'lib'),
+                       '-Wl,-rpath,' + str(provider / 'lib'), '-Wl,-map,' + str(consumer / 'io_kqueue_backend.map'),
+                       '-o', binary], cwd=consumer)
+              command(['otool', '-L', binary], timeout=30)
+              command(['otool', '-l', binary], timeout=30)
+              paths = [binary, obj, prefix / 'lib/libhttpserver.a', build / 'config.h',
+                       Path(env['CXX']), Path(env['V3_CC']), root / 'source.tar.gz']
+              paths += list((prefix / 'include').rglob('*.hpp'))
+              paths += list((source / 'src').rglob('*.cpp')) + list((source / 'src').rglob('*.hpp'))
+              paths += [source / 'test/unit/io_kqueue_backend_test.cpp', source / 'test/littletest.hpp',
+                        source / 'test/unit/io_backend_contract.hpp']
+              paths += list((Path(env['V3_PACKAGE_TOOLCHAIN']) / 'lib/c++').glob('*.dylib'))
+              paths += list((Path(env['V3_PACKAGE_TOOLCHAIN']) / 'lib/unwind').glob('*.dylib'))
+              paths += list((provider / 'lib').glob('*.dylib')) + [provider / 'bin/openssl']
+              sdk_settings = Path(env['SDKROOT']) / 'SDKSettings.json'
+              if sdk_settings.is_file(): paths.append(sdk_settings)
+              for path in paths:
+                  receipt['hashes'][str(path)] = dict(resolved=str(path.resolve()), bytes=path.stat().st_size,
+                                                     sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+              receipt.update(status='built-not-executed', binary=str(binary), cwd=str(source / 'test'),
+                             selector_sanity='Unchanged ci-macos-toolchain.sh cancellation executable runs once during compiler setup; zero kqueue launches in setup.')
+              with open(os.environ['GITHUB_ENV'], 'a') as output:
+                  output.write('KQUEUE_BINARY=' + str(binary) + '\nKQUEUE_CWD=' + str(source / 'test') + '\n')
+          except Exception as error:
+              receipt.update(status='setup-failed', error=str(error))
+              raise
+          finally:
+              save()
+          PYTHON
+          sudo env "PATH=$PATH" "SDKROOT=$SDKROOT" "V3_CXX=$V3_CXX" "V3_CC=$V3_CC" \
+            "V3_PACKAGE_TOOLCHAIN=$V3_PACKAGE_TOOLCHAIN" "RUNNER_TEMP=$RUNNER_TEMP" "GITHUB_SHA=$GITHUB_SHA" \
+            "GITHUB_ENV=$GITHUB_ENV" "EVIDENCE=$EVIDENCE" python3 "$EVIDENCE/build.py"
+      - name: One nonresumable batch; full component once then original trace case only
+        run: |
+          runtime_path="$RUNNER_TEMP/platform/matrix/tls-no/prefix/lib:$RUNNER_TEMP/platform/matrix/tls-no/prefix/bin:$RUNNER_TEMP/prerequisites/provider/lib:$RUNNER_TEMP/prerequisites/provider/bin"
+          # Set native runtime paths only on the direct test-driver/inferior boundary.
+          # No LLVM/lib/c++ DYLD override; no debugger, smoke launch, or automatic retry.
+          sudo env "PATH=$PATH" "SDKROOT=$SDKROOT" "CXX=$V3_CXX" "CC=$V3_CC" \
+            "V3_PACKAGE_TOOLCHAIN=$V3_PACKAGE_TOOLCHAIN" "CXXFLAGS=-O0 -g" \
+            "V3_TLS_CFLAGS=-I$RUNNER_TEMP/prerequisites/provider/include" \
+            "V3_TLS_LIBS=-L$RUNNER_TEMP/prerequisites/provider/lib -lssl -lcrypto" \
+            "DYLD_LIBRARY_PATH=$runtime_path" "LD_LIBRARY_PATH=$runtime_path" "V3_PACKAGE_DLL_DIRS=$runtime_path" \
+            python3 scripts/diagnostic-kqueue-batch.py --program "$KQUEUE_BINARY" --cwd "$KQUEUE_CWD" --evidence "$EVIDENCE/native-batch"
+      - name: Make privileged evidence readable
+        if: always()
+        run: |
+          if [ -d "$EVIDENCE" ]; then sudo chown -R "$(id -u):$(id -g)" "$EVIDENCE"; fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: kqueue-focused-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/kqueue-focused-evidence
+            ${{ runner.temp }}/platform/matrix/tls-no/integration-static/io_kqueue_backend
+            ${{ runner.temp }}/v3-toolchain
+            ${{ runner.temp }}/prerequisites/preparation.json
+          retention-days: 14
+          if-no-files-found: error

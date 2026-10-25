@@ -9,6 +9,7 @@
 #include <sys/event.h>
 #endif
 #include <atomic>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -600,6 +601,44 @@ std::vector<std::byte> backpressure_trace(littletest::test_runner* __lt_tr__, co
 LT_BEGIN_AUTO_TEST(kqueue_suite, accept_read_write_cancel_release_close_match_poll_trace)
     const auto poll = semantic_trace<hd::io_poll_backend>(__lt_tr__, __lt_name__);
     const auto kqueue = semantic_trace<hd::io_kqueue_backend>(__lt_tr__, __lt_name__);
+    // Temporary diagnostic only: emit after both original collections, before the assertion.
+    const char* token = std::getenv("LHS_KQUEUE_DIAGNOSTIC_TOKEN");
+    if (token) {
+        const auto emit_string = [](std::string_view value) {
+            constexpr char hex[] = "0123456789abcdef";
+            std::cout << '"';
+            for (unsigned char ch : value) {
+                if (ch < 0x20 || ch >= 0x7f) {
+                    std::cout << "\\u00" << hex[ch >> 4] << hex[ch & 15];
+                } else {
+                    if (ch == '"' || ch == '\\') std::cout << '\\';
+                    std::cout << static_cast<char>(ch);
+                }
+            }
+            std::cout << '"';
+        };
+        std::cout << "KQUEUE_DIAGNOSTIC {\"token\":";
+        emit_string(token);
+        const auto emit = [&emit_string](const char* name, const std::vector<std::string>& trace) {
+            std::cout << ",\"" << name << "\":[";
+            for (std::size_t i = 0; i < trace.size(); ++i) {
+                if (i) std::cout << ',';
+                emit_string(trace[i]);
+            }
+            std::cout << ']';
+        };
+        emit("poll", poll);
+        emit("kqueue", kqueue);
+        std::cout << ",\"differences\":[";
+        bool separator = false;
+        for (std::size_t i = 0; i < poll.size() || i < kqueue.size(); ++i) {
+            if (i < poll.size() && i < kqueue.size() && poll[i] == kqueue[i]) continue;
+            if (separator) std::cout << ',';
+            std::cout << i;
+            separator = true;
+        }
+        std::cout << "]}" << std::endl;
+    }
     LT_CHECK(poll == kqueue);
     std::cout << "poll/kqueue normalized semantic trace entries=" << kqueue.size() << "\n";
 LT_END_AUTO_TEST(accept_read_write_cancel_release_close_match_poll_trace)
@@ -1039,6 +1078,12 @@ LT_BEGIN_AUTO_TEST(kqueue_suite, interrupted_control_batch_is_not_blindly_replay
 LT_END_AUTO_TEST(interrupted_control_batch_is_not_blindly_replayed)
 
 LT_BEGIN_AUTO_TEST_ENV()
+    const char* mode = std::getenv("LHS_KQUEUE_DIAGNOSTIC_MODE");
+    if (mode && std::string(mode) == "focused") {
+        littletest::auto_test_runner(&accept_read_write_cancel_release_close_match_poll_trace);
+        return littletest::auto_test_runner();
+    }
+    if (mode && std::string(mode) != "full") return 64;
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
 #else
