@@ -588,6 +588,23 @@ class InstalledInspectionWindowsShellTest(InstalledInspectionFailureTest):
 
 
 class MatrixTest(unittest.TestCase):
+    # Windows run 40170157075/job 121099184812, artifact 12590541497:
+    # matrix/tls-no/consumer/shared-managed-process.json, exit 0.
+    # Literal stderr bytes; SHA256 f6407bb289875ad13aa92722b35f883bf36cf87815533c5b666d0cdbe7d5e17e.
+    native_configuration_stderr = (
+        b'PACKAGE_PROVIDER \r\n'
+        b'PACKAGE_CASE plaintext ok bound\r\n'
+        b'PACKAGE_CASE invalid_listener invalid_argument unbound\r\n'
+        b'PACKAGE_CASE invalid_workers invalid_argument unbound\r\n'
+        b'PACKAGE_CASE invalid_timeout invalid_argument unbound\r\n'
+        b'PACKAGE_CASE invalid_budget invalid_argument unbound\r\n'
+        b'PACKAGE_CASE provider_profile_mismatch invalid_argument unbound\r\n'
+        b'PACKAGE_CASE tls_listener not_supported unbound\r\n'
+        b'PACKAGE_CASE http2 not_supported unbound\r\n'
+        b'PACKAGE_CASE http3 invalid_argument unbound\r\n'
+        b'PACKAGE_CASE mixed_rejection invalid_argument unbound\r\n'
+    )
+
     def setUp(self):
         self.inventory = matrix.load()
         self.temp = tempfile.TemporaryDirectory()
@@ -708,6 +725,103 @@ class MatrixTest(unittest.TestCase):
                                (good.replace('0 failures', '1 failures'), 0)):
             with self.assertRaises(ValueError):
                 matrix.suite_result(output, status)
+
+    def test_native_suite_records_accept_lf_crlf_and_mixed_endings(self):
+        lines = ('Running test (1): first', 'Running test (2): second',
+                 '2 tests executed', '9 checks', '-> 9 successes',
+                 '-> 0 failures', '-> 0 skipped')
+        expected = dict(tests=2, checks=9, failures=0, skipped=0, case_names=['first', 'second'])
+        for endings in (('\n',), ('\r\n',), ('\n', '\r\n')):
+            output = ''.join(line + endings[i % len(endings)] for i, line in enumerate(lines))
+            with self.subTest(endings=endings):
+                self.assertEqual(expected, matrix.suite_result(output, 0))
+
+    def test_native_suite_records_keep_failure_count_and_witness_requirements(self):
+        good = 'Running test (1): first\n1 tests executed\n9 checks\n-> 0 failures\n-> 0 skipped\n'
+        bad = ('', good.replace('Running test (1): first\n', ''),
+               good + 'Running test (2): extra\n', good.replace('1 tests', '2 tests'),
+               good.replace('1 tests', '0 tests'), good.replace('9 checks', '0 checks'),
+               good.replace('-> 0 failures\n', ''), good.replace('-> 0 skipped\n', ''),
+               good.replace('9 checks\n', ''), good.replace('0 failures', '1 failures'),
+               good.replace('0 skipped', '1 skipped'))
+        for ending in ('\n', '\r\n'):
+            for output, status in [(text, 0) for text in bad] + [(good, 1), (good, 77)]:
+                with self.subTest(output=output, status=status, ending=ending), self.assertRaises(ValueError):
+                    matrix.suite_result(output.replace('\n', ending), status)
+        for terminator in ('\r', ' \n', '\t\n', ' junk\n', '\r\r\n'):
+            for line in ('Running test (1): first', '1 tests executed', '9 checks',
+                         '-> 0 failures', '-> 0 skipped'):
+                with self.subTest(terminator=terminator, line=line), self.assertRaises(ValueError):
+                    matrix.suite_result(good.replace(line + '\n', line + terminator), 0)
+
+    def test_captured_windows_configuration_stderr_preserves_all_ten_outcomes(self):
+        raw = self.native_configuration_stderr
+        self.assertEqual('f6407bb289875ad13aa92722b35f883bf36cf87815533c5b666d0cdbe7d5e17e',
+                         hashlib.sha256(raw).hexdigest())
+        output = raw.decode('ascii')
+        expected = matrix.configuration_results(output.replace('\r\n', '\n'), self.inventory, tls='no')
+        self.assertEqual(10, len(expected))
+        self.assertEqual(expected, matrix.configuration_results(output, self.inventory, tls='no'))
+        self.assertEqual(raw, output.encode('ascii'))
+
+    def test_configuration_records_accept_mixed_endings_in_each_lane(self):
+        lf = self.native_configuration_stderr.decode('ascii').replace('\r\n', '\n')
+        for tls in ('no', 'yes'):
+            output = lf if tls == 'no' else lf.replace('not_supported', 'invalid_argument')
+            for loop in ('managed', 'external'):
+                expected = matrix.configuration_results(output, self.inventory, loop, tls=tls)
+                mixed = output.replace(' unbound\n', ' unbound\r\n')
+                for native in (output, output.replace('\n', '\r\n'), mixed):
+                    with self.subTest(tls=tls, loop=loop, output=native):
+                        self.assertEqual(expected, matrix.configuration_results(native, self.inventory, loop, tls=tls))
+
+    def test_configuration_records_keep_inventory_outcome_binding_and_lane_requirements(self):
+        lf = self.native_configuration_stderr.decode('ascii').replace('\r\n', '\n')
+        for tls in ('no', 'yes'):
+            good = lf if tls == 'no' else lf.replace('not_supported', 'invalid_argument')
+            bad = (good.replace('PACKAGE_CASE http3', 'MISSING http3'),
+                   good + 'PACKAGE_CASE plaintext ok bound\n',
+                   good + 'PACKAGE_CASE unexpected invalid_argument unbound\n',
+                   good.replace('plaintext ok bound', 'plaintext invalid_argument unbound'),
+                   good.replace('plaintext ok bound', 'plaintext ok unbound'),
+                   good.replace('plaintext ok bound', 'plaintext ok invalid'))
+            for loop in ('managed', 'external'):
+                for ending in ('\n', '\r\n'):
+                    for output in bad:
+                        with self.subTest(tls=tls, loop=loop, ending=ending, output=output), self.assertRaises(ValueError):
+                            matrix.configuration_results(output.replace('\n', ending), self.inventory, loop, tls=tls)
+            for invalid_tls, invalid_loop in (('invalid', 'managed'), (tls, 'invalid')):
+                with self.subTest(tls=invalid_tls, loop=invalid_loop), self.assertRaises(ValueError):
+                    matrix.configuration_results(good, self.inventory, invalid_loop, tls=invalid_tls)
+        for terminator in ('\r', ' \n', '\t\n', ' junk\n', '\r\r\n'):
+            with self.subTest(terminator=terminator), self.assertRaises(ValueError):
+                matrix.configuration_results(lf.replace('ok bound\n', 'ok bound' + terminator), self.inventory, tls='no')
+
+    def test_supported_configuration_records_accept_lf_crlf_and_mixed_endings(self):
+        for tls, outcome, binding in (('yes', 'ok', 'bound'), ('no', 'not_supported', 'unbound')):
+            expected = {name: dict(outcome=outcome, binding=binding) for name in ('tls', 'h2', 'h3')}
+            for endings in (('\n',), ('\r\n',), ('\n', '\r\n')):
+                output = ''.join(f'PACKAGE_SUPPORTED {name} {outcome} {binding}' + endings[i % len(endings)]
+                                 for i, name in enumerate(('tls', 'h2', 'h3')))
+                with self.subTest(tls=tls, endings=endings):
+                    self.assertEqual(expected, matrix.supported_configuration_results(output, tls))
+
+    def test_supported_configuration_records_keep_strict_inventory_and_outcomes(self):
+        for tls, outcome, binding in (('yes', 'ok', 'bound'), ('no', 'not_supported', 'unbound')):
+            good = ''.join(f'PACKAGE_SUPPORTED {name} {outcome} {binding}\n' for name in ('tls', 'h2', 'h3'))
+            bad = ('', good.replace('PACKAGE_SUPPORTED h3', 'MISSING h3'),
+                   good + good, good.replace('h3 ', 'unexpected '), good.replace('h3 ', 'h2 '),
+                   good.replace(outcome, 'invalid_argument'), good.replace(binding, 'invalid'),
+                   good.replace(' ' + binding + '\n', ' ' + ('unbound' if binding == 'bound' else 'bound') + '\n'))
+            for ending in ('\n', '\r\n'):
+                for output in bad:
+                    with self.subTest(tls=tls, ending=ending, output=output), self.assertRaises(ValueError):
+                        matrix.supported_configuration_results(output.replace('\n', ending), tls)
+            with self.assertRaises(ValueError):
+                matrix.supported_configuration_results(good, 'invalid')
+            for terminator in ('\r', ' \n', '\t\n', ' junk\n', '\r\r\n'):
+                with self.subTest(tls=tls, terminator=terminator), self.assertRaises(ValueError):
+                    matrix.supported_configuration_results(good.replace(binding + '\n', binding + terminator), tls)
 
     def test_shared_suite_requires_installed_library_and_static_forbids_it(self):
         prefix = self.root / 'prefix'
@@ -1297,6 +1411,21 @@ class ProcessTest(unittest.TestCase):
 
     def command(self, code):
         return [sys.executable, '-u', '-c', code]
+
+    def test_crlf_configuration_parser_preserves_captured_process_receipt(self):
+        stderr = MatrixTest.native_configuration_stderr
+        command = self.command(f"import os; os.write(2, {stderr!r}); os.write(1, b'1234\\r\\n'); input()")
+        path = self.root / 'crlf.json'
+        with process.Consumer(command, self.root, None, path, timeout=2) as child:
+            self.assertEqual(1234, child.port())
+            child.stop()
+        raw = path.read_bytes()
+        receipt = json.loads(raw)
+        self.assertEqual(stderr, receipt['stderr'].encode('ascii'))
+        self.assertEqual('1234\r\n', receipt['stdout'])
+        self.assertEqual(0, receipt['exit'])
+        self.assertEqual(10, len(matrix.configuration_results(receipt['stderr'], matrix.load(), tls='no')))
+        self.assertEqual(raw, path.read_bytes())
 
     def test_bounded_startup_and_shutdown_with_concurrent_stderr(self):
         command = self.command("import sys; sys.stderr.write('x'*10000); print('1234', flush=True); input(); print('done')")
