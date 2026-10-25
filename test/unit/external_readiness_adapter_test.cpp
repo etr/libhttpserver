@@ -516,7 +516,7 @@ LT_BEGIN_AUTO_TEST(external_adapter_suite, timer_cancel_expiry_race_is_exactly_o
         LT_CHECK_EQ(observed.delivered.load(), 1);
         LT_CHECK(observed.observed.code == hh::outcome_code::ok
                  || observed.observed.code == hh::outcome_code::cancelled);
-        ++now;
+        now += clock_type::duration{1};
     }
     LT_CHECK_EQ(fx.backend.pending_count(), std::size_t{0});
 LT_END_AUTO_TEST(timer_cancel_expiry_race_is_exactly_once)
