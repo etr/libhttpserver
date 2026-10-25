@@ -38,15 +38,18 @@
 #include <atomic>
 #include <chrono>
 #include <cctype>
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <deque>
+#include <filesystem>  // NOLINT(build/c++17): native v3 requires C++20.
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -376,9 +379,13 @@ task<void> upload_slow_handler(exchange& x) {
 class e2e_scratch_dir {
  public:
     e2e_scratch_dir() {
-        char tmpl[] = "/tmp/lht-e2e-upload-XXXXXX";
-        char* made = mkdtemp(tmpl);
-        if (made != nullptr) path_ = made;
+        std::string pattern = (std::filesystem::temp_directory_path() /
+                               "lht-e2e-upload-XXXXXX").string();
+        if (::mkdtemp(pattern.data()) == nullptr) {
+            throw std::system_error(errno, std::generic_category(),
+                                    "e2e: mkdtemp " + pattern);
+        }
+        path_ = std::move(pattern);
     }
 
     ~e2e_scratch_dir() {
@@ -759,6 +766,63 @@ LT_BEGIN_SUITE(native_http1_e2e_suite)
     void tear_down() {
     }
 LT_END_SUITE(native_http1_e2e_suite)
+
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, temp_file_uses_native_temp_parent)
+    namespace fs = std::filesystem;
+    std::string first_path;
+    std::string second_path;
+    {
+        const std::string payload("fixture\0bytes", 13);
+        httpserver_test::temp_file first(payload);
+        httpserver_test::temp_file second("second fixture");
+        first_path = first.path();
+        second_path = second.path();
+        LT_CHECK(fs::equivalent(fs::path(first_path).parent_path(),
+                                fs::temp_directory_path()));
+        LT_CHECK(fs::equivalent(fs::path(second_path).parent_path(),
+                                fs::temp_directory_path()));
+        LT_CHECK_NEQ(first_path, second_path);
+        LT_CHECK_EQ(read_all(first_path), payload);
+        LT_CHECK_EQ(read_all(second_path), "second fixture");
+        first.rewrite("rewritten fixture");
+        LT_CHECK_EQ(read_all(first_path), "rewritten fixture");
+    }
+    LT_CHECK(!fs::exists(first_path));
+    LT_CHECK(!fs::exists(second_path));
+LT_END_AUTO_TEST(temp_file_uses_native_temp_parent)
+
+LT_BEGIN_AUTO_TEST(native_http1_e2e_suite, scratch_dir_uses_native_temp_parent)
+    namespace fs = std::filesystem;
+    std::string first_path;
+    std::string second_path;
+    fs::path payload_path;
+    {
+        e2e_scratch_dir first;
+        e2e_scratch_dir second;
+        first_path = first.path();
+        second_path = second.path();
+        LT_CHECK(fs::is_directory(first_path));
+        LT_CHECK(fs::is_directory(second_path));
+        LT_CHECK(fs::equivalent(fs::path(first_path).parent_path(),
+                                fs::temp_directory_path()));
+        LT_CHECK(fs::equivalent(fs::path(second_path).parent_path(),
+                                fs::temp_directory_path()));
+        LT_CHECK_NEQ(first_path, second_path);
+        LT_CHECK(first.empty());
+        LT_CHECK(second.empty());
+        payload_path = fs::path(first_path) / "literal ; fixture.bin";
+        std::FILE* file = std::fopen(payload_path.string().c_str(), "wb");
+        LT_ASSERT(file != nullptr);
+        LT_CHECK_EQ(std::fwrite("payload", 1, 7, file), 7U);
+        LT_CHECK_EQ(std::fclose(file), 0);
+        LT_CHECK_EQ(read_all(payload_path.string()), "payload");
+        LT_CHECK_EQ(first.entries().size(), 1U);
+        LT_CHECK(second.empty());
+    }
+    LT_CHECK(!fs::exists(payload_path));
+    LT_CHECK(!fs::exists(first_path));
+    LT_CHECK(!fs::exists(second_path));
+LT_END_AUTO_TEST(scratch_dir_uses_native_temp_parent)
 
 // (1) HTTP/1.1: two GETs on one keep-alive connection; the engine
 // frames the un-framed streaming body as chunked.

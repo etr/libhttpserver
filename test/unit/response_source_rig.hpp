@@ -33,12 +33,15 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <cerrno>
 #include <cstdio>
+#include <filesystem>  // NOLINT(build/c++17): native v3 requires C++20.
 #include <fstream>
 #include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <utility>
 
 #include <httpserver/response_sources.hpp>
@@ -50,11 +53,15 @@ namespace httpserver_test {
 class temp_file {
  public:
     explicit temp_file(const std::string& content) {
-        char pattern[] = "/tmp/libhttpserver_task113_XXXXXX";
-        const int fd = ::mkstemp(pattern);
-        if (fd < 0) throw std::runtime_error("task113: mkstemp failed");
+        std::string pattern = (std::filesystem::temp_directory_path() /
+                               "libhttpserver_task113_XXXXXX").string();
+        const int fd = ::mkstemp(pattern.data());
+        if (fd < 0) {
+            throw std::system_error(errno, std::generic_category(),
+                                    "task113: mkstemp " + pattern);
+        }
         ::close(fd);
-        path_ = pattern;
+        path_ = std::move(pattern);
         rewrite(content);
     }
 
