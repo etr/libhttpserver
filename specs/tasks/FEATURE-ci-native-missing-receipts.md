@@ -1,6 +1,6 @@
 # FEATURE-ci-native-missing-receipts: four native diagnostic receipts
 
-Status: implementation prepared; caller review and the single approved CI dispatch pending.
+Status: Complete bounded diagnostic batch; four invocations closed. Original failed checks remain failed; three causes remain unknown.
 Diagnostic branch only. **Never merge or cherry-pick this branch into v3.**
 
 Base: `v3` at `37095c23751960b6e1adcad95d7b3c4c34c64351`.
@@ -24,7 +24,7 @@ The user's 2026-10-25 approval permits one manual CI batch, exactly once per tar
 Maximum four target invocations and 340 allocated target seconds. A failed target
 must not retry or prevent the other selected target in its job. Setup failures
 stop their own job with zero target invocations. Each job has a 90-minute setup/
-execution ceiling. The executor has run **zero original target invocations**.
+execution ceiling. Local preparation ran **zero original target invocations**; the later approved CI batch ran exactly four.
 The original traffic, Consumer, configuration checks, native 62-test source,
 QUIC 4-test source, PSK assertions/thresholds and root-open security flags retain
 their behavior. Three original PSK connect/exchange assertion arguments are
@@ -87,19 +87,17 @@ stored once in booleans so the diagnostic and assertion share one evaluation.
   against the adjacent stdlib script conventions. No tool was bootstrapped.
 - [x] Byte contracts preserve original traffic/process/configuration modules and
   the 14/4/62 test counts, assertion ordering and single-evaluation operations.
-- [ ] Caller full Groundwork validation and readiness seal.
-- [ ] Caller push and **one** manual dispatch with `approved_sha` equal to its
+- [x] Caller full Groundwork validation and readiness seal.
+- [x] Caller push and **one** manual dispatch with `approved_sha` equal to its
   validated diagnostic commit; collect/close both job ledgers once. No fallback
   workflow, rerun, branch merge or production repair is authorized here.
 
 ## Limits and interpretation
 
-Actual Windows/MSYS2 and Darwin runtime observations remain unexecuted until the
-caller dispatch. Python Windows job/identity APIs and optional CDB are syntax-
-reviewed but cannot be proved by Linux compilation/offline fixtures. Native CI
-will report unavailable APIs/tools explicitly. Local cached OpenSSL/compiler
+The approved CI batch has executed both targets on each native host. Python Windows job/identity APIs and optional CDB are syntax-
+reviewed but cannot be proved by Linux compilation/offline fixtures. CI reported unavailable stack capture explicitly; CDB exit zero with an unsupported-detach message is not stack proof. Local cached OpenSSL/compiler
 receipts do not establish the future CI toolchain identity; CI records that
-identity anew. No original native check is presented as passed.
+identity anew. Original failure and unavailable-check outcomes remain as recorded below.
 
 All stderr output, clocks, memory snapshots and optional stack capture perturb
 observation timing. `ERR_peek_error()` describes the fixture owner's current
@@ -113,3 +111,31 @@ unless the captured values justify a narrower conclusion.
 The separately assessed new Darwin TLS-off/static external fixture failure is
 outside this four-target authorization. It is not instrumented, executed or
 repaired here. Existing bauth work and retained diagnostic refs remain untouched.
+
+## Final bounded capture closure
+
+Groundwork session `f47182300744dff7a113d34621db067d` sealed PASS: nine
+approvals, one iteration, zero fixes and zero unworked findings. Exact source
+`cbceed7316c6addbe95b9d5e18e886c3c776ee5c` was pushed on this diagnostic branch
+and dispatched once as run `40241540719`; both native job ledgers are closed.
+Exactly four targets consumed all 340 allocated seconds, with 221.138676 seconds
+of measured target duration. No unused allowance authorizes another launch.
+
+- Windows consumer: PASS, 0.327s; original configuration/traffic/shutdown pass,
+  valid 23-row trace. Earlier WSAPoll failure did not reproduce; cause UNKNOWN.
+- Windows native62: all 734 assertions pass, but the same primary PID remains
+  alive after the original 180s gate; FAIL, 184.011s including forced retirement.
+  No descendants explain the pipe wait. Stack evidence UNAVAILABLE: raw CDB
+  output reports unsupported detach despite exit zero. Precise hang UNKNOWN.
+- Darwin PSK: 14 tests/313 checks/5 failures, exit5, 28.768s; TLS1.3 held and
+  mixed-certificate paths localized, all owner error peeks zero; cause UNKNOWN.
+- Darwin QUIC: 4 tests/146 checks/1 failure, exit1, 8.033s. Root `/tmp` is a
+  symlink and the unchanged directory/nofollow open returns ENOTDIR. This
+  supports a separate fixture physical-root repair preserving security flags.
+
+Evidence: primary ignored journal sibling `native-receipts/final-assessment.json`
+and per-host assessments/raw members. Selected HTTP ranges, source binding, ZIP
+CRCs and member hashes verified; full archive SHA remains unverified. Diagnostic
+source bytes remain unchanged by this closure-only task-card commit. Retain the
+unmerged branch and remove only its verified clean local worktree. Never merge
+or cherry-pick this diagnostic instrumentation into v3.
