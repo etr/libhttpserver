@@ -151,6 +151,7 @@ def suites(inventory, platform, tls):
 
 
 def suite_result(output, status):
+    output = output.replace('\r\n', '\n')
     tests = re.findall(r'^(\d+) tests executed$', output, re.M)
     checks = re.findall(r'^(\d+) checks$', output, re.M)
     failures = re.findall(r'^-> (\d+) failures$', output, re.M)
@@ -197,6 +198,7 @@ def check_tls_witnesses(output, backend):
 def configuration_results(output, inventory, loop="managed", *, tls):
     if tls not in ('yes', 'no') or loop not in ('managed', 'external'):
         raise ValueError('invalid configuration lane')
+    output = output.replace('\r\n', '\n')
     rows = re.findall(r'^PACKAGE_CASE (\w+) (\w+) (bound|unbound)$', output, re.M)
     results = {}
     for name, outcome, binding in rows:
@@ -229,6 +231,7 @@ def parity_observation_counts(output):
 def supported_configuration_results(output, tls):
     if tls not in ('yes', 'no'):
         raise ValueError('invalid supported configuration lane')
+    output = output.replace('\r\n', '\n')
     rows = re.findall(r'^PACKAGE_SUPPORTED (\w+) (\w+) (bound|unbound)$', output, re.M)
     expected = ('ok', 'bound') if tls == 'yes' else ('not_supported', 'unbound')
     if len(rows) != 3 or {row[0] for row in rows} != {'tls', 'h2', 'h3'} or any(row[1:] != expected for row in rows):
