@@ -1,6 +1,6 @@
 # FEATURE-ci-compiler-fixture-shell-isolation
 
-Status: In Progress (implementation; caller validation/finalization pending).
+Status: Complete (local validation/finalization; native CI pending).
 Base: local v3 `284441346446e61489bea2d3bf2761b3e29a895a`.
 
 Isolate the Windows inspection fixture's controlled shell selection from the
@@ -16,7 +16,7 @@ failed artifact identity, original assertions and competing-shell contracts.
 - [x] Demonstrate RED with a real Bash compiler wrapper delegating the selected host C++ compiler.
 - [x] Isolate selected shell lookup without changing the native child environment.
 - [x] Verify focused inspection/shell contracts, Python syntax and diff whitespace.
-- [ ] Caller validation and finalization.
+- [x] Caller validation and finalization.
 
 Primary evidence: `.debug/ci-284-macos-compiler-shell-cgzzte1a/journal.md` and
 `implementation/` beside it. Local baseline: 14 affected inspection/shell tests
@@ -45,3 +45,12 @@ FAILED/INCOMPLETE with uncertain causality, closed and unretried. Epoll's
 64-case budget is exhausted and adapter evidence remains CLOSED/UNKNOWN.
 No broad baseline, native library build, unrelated repair, CI control or
 publication is authorized by this task.
+
+Groundwork validation `e5fdee786c9737d95d46a501d2dc8c69` sealed PASS for
+`71eb5155482d8521ede839c32292353113e3f297` / tree
+`14d88a6d38461bbed70a5b0615314639a3d4d3d7`: one iteration, nine fresh
+independent approvals, zero fixes and zero unworked findings. Source-bound
+passing evidence reused; no report created. Native FreeBSD package/archive
+also reproduced the same four fixture errors on 284; their gates remain failed
+and post-fix platform checks remain incomplete, CI/v3 PR owned. Original closed
+uncertainties remain preserved. Root owns combined publication and next CI.
