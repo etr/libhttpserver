@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-tls-client-headers
 
-Status: Implemented — local checks complete; caller validation/finalization pending.
+Status: Complete — local validation/finalization complete; native FreeBSD post-fix proof CI-owned/incomplete.
 Base: local v3 `f4983add9dea7db5444a0d3c9e7a1e95f713e601`.
 
 Include `<netinet/in.h>` directly in the independent TLS client's existing
@@ -17,7 +17,7 @@ POSIX include branch so FreeBSD receives the owning declarations for
 - [x] Check the actual owning TU with the existing Linux LLVM 19.1.1 compiler
   and libc++ 20.1.8 headers in C++20 syntax-only mode.
 - [x] Pass changed-file cpplint and `git diff --check`.
-- [ ] Caller Groundwork validation and local finalization/merge into v3.
+- [x] Caller Groundwork validation sealed PASS `13ed179b2f2a0a9fd277699fae4783d6`, all9 approve,1 iteration,0 fixed,0 unworked; local finalization/merge into v3.
 - [ ] Native FreeBSD post-fix compile: CI/v3 PR owned, incomplete locally;
   not a local completion blocker under project policy.
 
