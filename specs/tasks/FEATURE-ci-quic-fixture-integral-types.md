@@ -28,7 +28,7 @@ explicit template types: `std::uint64_t` for the existing CRYPTO offset/end and
 - [x] Execute the user-authorized single native mac compile-only proof: original
   owner RED once, then both repaired owning TUs GREEN, with actual CI
   OpenSSL 3.5.9 headers and native configuration retained from the verified ZIP.
-- [ ] Caller Groundwork validation and local finalization.
+- [x] Caller Groundwork validation and local finalization.
 - [ ] Post-fix exact Darwin/FreeBSD CI proof (CI/v3 PR-owned; incomplete and
   not a local completion or merge gate).
 
@@ -81,3 +81,9 @@ preserved. The new Mac HTTP2 startup deadline remains unassessed and is not
 attributed to preflight EACCES. Delayed Darwin five-plus-header approvals refer
 to the already closed 40055653509 batch, with all six executed once; no new
 native diagnostic budget is inferred.
+
+Full Groundwork session `c653da50d15acba788d357185b3ad9e8` sealed PASS:
+one iteration, nine approvals, zero findings/fixes/unworked. All retained gate
+inputs/log hashes match; no unnecessary reruns. Native Mac original-owner RED
+and both repaired-TU GREEN remain qualified by the recorded host/CI compiler
+and SDK differences. No test program or broad suite ran.
