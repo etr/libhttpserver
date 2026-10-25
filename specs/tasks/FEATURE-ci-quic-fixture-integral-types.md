@@ -1,6 +1,6 @@
 # FEATURE-ci-quic-fixture-integral-types: portable QUIC fixture max operands
 
-Status: Implemented; scoped local checks pass. Caller validation and finalization pending.
+Status: Implemented; scoped local and native Darwin compile checks pass. Caller validation and finalization pending.
 Base: exact local `v3` at `54fa9dd32572d7da7f4921a5735a4035908e96f0`.
 Plan: `.groundwork-plans/FEATURE-ci-quic-fixture-integral-types-plan.md` in the primary checkout.
 
@@ -25,8 +25,11 @@ explicit template types: `std::uint64_t` for the existing CRYPTO offset/end and
   with existing real LLVM/libc++20 and private OpenSSL 3.5.9 provider headers.
 - [x] Run changed-file cpplint and `git diff --check`; retain exact commands,
   raw outputs and source/input hashes in the primary journal's `implementation/`.
+- [x] Execute the user-authorized single native mac compile-only proof: original
+  owner RED once, then both repaired owning TUs GREEN, with actual CI
+  OpenSSL 3.5.9 headers and native configuration retained from the verified ZIP.
 - [ ] Caller Groundwork validation and local finalization.
-- [ ] Post-fix native Darwin/FreeBSD CI proof (CI/v3 PR-owned; incomplete and
+- [ ] Post-fix exact Darwin/FreeBSD CI proof (CI/v3 PR-owned; incomplete and
   not a local completion or merge gate).
 
 ## Verification and limits
@@ -48,6 +51,27 @@ libc++20.1.8 headers syntax-checks both. All four return zero without warnings;
 cpplint and diff checks pass. Existing provider headers/configuration and build
 configuration were reused; no provider, core, SDK or bootstrap rebuild occurred.
 Linux compile results do not establish native Darwin/FreeBSD execution.
+
+The separately authorized native compile-only proof uses `ssh mac`, macOS
+26.3.1 arm64, Homebrew clang/libc++ 22.1.8 and macOS SDK 26.5. The original
+54fa owner TU reproduces the exact line267 `unsigned long` / `unsigned long
+long` deduction failure once. Both repaired actual TUs from `cafb8055` then
+pass `-fsyntax-only` without warnings; no source expression changed further.
+This host differs from failing archive CI clang23/SDK15, so this proves native
+Darwin source compatibility in the recorded environment, not an exact CI pass.
+
+Only 142 provider headers (about 2 MB) and the native TLS-on `config.h` were
+extracted from the verified existing macOS package-evidence ZIP, SHA256
+`471035241523fe7baf88f737385af6d674a94d78a6629a52103f834089a165de`.
+They are the actual CI OpenSSL 3.5.9 headers/configuration; Homebrew OpenSSL
+3.6.3 was not substituted. The source/header snapshot plus original owner
+was 3.8 MB transferred to the exclusively owned remote subdirectory
+`/tmp/libhttpserver-v3-repro.dxubki/compile-fixture-types` (canonical
+`/private/tmp/...`). No Linux-generated configuration was used remotely.
+Exact argv, monotonic durations, native compiler/SDK/header/source hashes,
+raw results and canonical paths are retained in `implementation/native-mac/`.
+No executable was linked or run and no provider/core/SDK rebuild occurred.
+Native FreeBSD postfix proof and the complete CI gates remain incomplete.
 
 No test program or network probe was executed. No unrelated source/expression
 search, repair, broad suite, publication or diagnostic dispatch belongs here.
