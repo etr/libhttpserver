@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -173,6 +174,128 @@ class CompiledOperationsFixture(unittest.TestCase):
     def check(self, selection=None):
         return subprocess.run([sys.executable, str(self.checker), '--nm=' + (self.selection if selection is None else selection),
                                str(self.archive)], env=self.environment, text=True, capture_output=True)
+
+
+class CompiledOperationsWindowsPathTest(CompiledOperationsFixture):
+    """Control only native process lookup; this is not native Windows proof."""
+    def setUp(self):
+        super().setUp()
+        spec = importlib.util.spec_from_file_location('compiled_operations_windows_path', self.checker)
+        self.runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.runner)
+        self.converter = self.root / ('cygpath.exe' if os.name == 'nt' else 'cygpath')
+        self.conversion_calls = self.root / 'conversion.json'
+        self.native_tool = 'D:/a/_temp/msys64/mingw64/bin/nm.exe'
+        self.convert()
+        self.requests = []
+
+    def convert(self, output=None, status=0):
+        output = self.native_tool if output is None else output
+        self.write_tool(self.converter, 'import json,sys; from pathlib import Path; '
+            f'Path({str(self.conversion_calls)!r}).write_text(json.dumps(sys.argv[1:])); '
+            f'print({output!r}); raise SystemExit({status})')
+
+    def native_run(self, argv, **options):
+        self.requests.append(argv)
+        self.assertNotIn('shell', options)
+        if argv[0] == str(self.converter):
+            return subprocess.run([sys.executable, str(self.converter)] + argv[1:], **options)
+        if argv[0] == self.native_tool:
+            return subprocess.run([sys.executable, str(self.selected)] + argv[1:], **options)
+        raise FileNotFoundError('native process cannot launch selected path: ' + argv[0])
+
+    def bound_check(self, selection, host='Windows'):
+        self.stdout, self.stderr = io.StringIO(), io.StringIO()
+        with patch.object(self.runner, 'platform', SimpleNamespace(system=lambda: host)), \
+                patch.object(self.runner, 'subprocess', SimpleNamespace(run=self.native_run)), \
+                patch.object(sys, 'argv', [str(self.checker), '--nm=' + selection, str(self.archive)]), \
+                patch.object(sys, 'stdout', self.stdout), patch.object(sys, 'stderr', self.stderr), \
+                patch.dict(os.environ, self.environment, clear=True):
+            try:
+                self.runner.main()
+            except (OSError, subprocess.CalledProcessError, SystemExit) as error:
+                return error
+        return None
+
+    def test_windows_translates_actual_configured_msys_executable(self):
+        error = self.bound_check('/mingw64/bin/nm -B')
+        self.assertIsNone(error, str(error))
+        self.assertEqual(json.loads(self.conversion_calls.read_text()), ['-m', '--', '/mingw64/bin/nm'])
+        self.assertEqual(self.requests[-1], [self.native_tool, '-B', '-C', str(self.archive)])
+        self.assertEqual(json.loads(self.calls.read_text()), ['-B', '-C', str(self.archive)])
+        self.assertFalse(self.default_calls.exists())
+
+    def test_windows_conversion_preserves_quoted_paths_and_literal_options(self):
+        selected = "/mingw64/tools' directory/nm;$(echo unexpected)"
+        self.native_tool = "D:/MSYS tools' directory/nm;$(echo unexpected).exe"
+        self.convert()
+        options = ['-B', '--plugin=/msys/option operand;$(echo untouched)', '*', '&']
+        error = self.bound_check(shlex.join([selected] + options))
+        self.assertIsNone(error, str(error))
+        self.assertEqual(json.loads(self.conversion_calls.read_text()), ['-m', '--', selected])
+        self.assertEqual(self.requests[-1], [self.native_tool] + options + ['-C', str(self.archive)])
+        self.assertEqual(json.loads(self.calls.read_text()), options + ['-C', str(self.archive)])
+        self.assertFalse(self.default_calls.exists())
+
+    def test_native_bare_and_posix_selections_are_unchanged(self):
+        cases = [('Windows', 'nm'), ('Windows', 'D:/selected tools/nm.exe'),
+                 ('Windows', r'D:\selected tools\nm.exe'), ('Windows', '//server/share/nm.exe'),
+                 ('Windows', r'\\server\share\nm.exe'), ('Linux', '/mingw64/bin/nm'),
+                 ('FreeBSD', '/usr/local/bin/nm')]
+        for host, selected in cases:
+            with self.subTest(host=host, selected=selected):
+                self.native_tool = selected
+                options = ['-B', '--plugin=/msys/operand']
+                error = self.bound_check(shlex.join([selected] + options), host)
+                self.assertIsNone(error, str(error))
+                self.assertEqual(self.requests[-1], [selected] + options + ['-C', str(self.archive)])
+                self.assertFalse(self.conversion_calls.exists())
+                self.assertFalse(self.default_calls.exists())
+
+    def test_windows_conversion_nonzero_is_fatal_even_with_native_output(self):
+        self.convert(status=29)
+        error = self.bound_check('/mingw64/bin/nm -B')
+        self.assertIsInstance(error, subprocess.CalledProcessError)
+        self.assertEqual(error.returncode, 29)
+        self.assertFalse(self.calls.exists())
+        self.assertFalse(self.default_calls.exists())
+
+    def test_windows_empty_converted_path_is_fatal(self):
+        for output in ('', ' \r\n'):
+            with self.subTest(output=output):
+                self.convert(output=output)
+                error = self.bound_check('/mingw64/bin/nm -B')
+                self.assertIsInstance(error, SystemExit)
+                self.assertEqual(error.code, 2)
+                self.assertIn('converted NM executable is empty', self.stderr.getvalue())
+                self.assertFalse(self.calls.exists())
+                self.assertFalse(self.default_calls.exists())
+
+    def test_windows_missing_converter_never_launches_another_nm(self):
+        self.converter.unlink()
+        with patch.object(self.runner, 'shutil', SimpleNamespace(which=lambda tool: None)):
+            error = self.bound_check('/mingw64/bin/nm -B')
+        self.assertIsInstance(error, SystemExit)
+        self.assertIn('cygpath is unavailable', self.stderr.getvalue())
+        self.assertEqual(self.requests, [])
+        self.assertFalse(self.calls.exists())
+        self.assertFalse(self.default_calls.exists())
+
+    def test_windows_missing_converted_executable_never_falls_back(self):
+        self.convert(output='D:/selected/absent-nm.exe')
+        error = self.bound_check('/mingw64/bin/nm -B')
+        self.assertIsInstance(error, FileNotFoundError)
+        self.assertEqual(self.requests[-1], ['D:/selected/absent-nm.exe', '-B', '-C', str(self.archive)])
+        self.assertFalse(self.calls.exists())
+        self.assertFalse(self.default_calls.exists())
+
+    def test_windows_nonzero_converted_inspector_is_fatal_with_complete_definitions(self):
+        self.producer(status=23)
+        error = self.bound_check('/mingw64/bin/nm -B')
+        self.assertIsInstance(error, subprocess.CalledProcessError)
+        self.assertEqual(error.returncode, 23)
+        self.assertEqual(json.loads(self.calls.read_text()), ['-B', '-C', str(self.archive)])
+        self.assertFalse(self.default_calls.exists())
 
 
 class CompiledOperationsToolTest(CompiledOperationsFixture):
