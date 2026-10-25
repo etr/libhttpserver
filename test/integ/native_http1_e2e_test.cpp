@@ -393,7 +393,8 @@ class e2e_scratch_dir {
         for (const std::string& name : entries()) {
             std::remove((path_ + "/" + name).c_str());
         }
-        std::remove(path_.c_str());
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
     }
 
     const std::string& path() const noexcept { return path_; }
