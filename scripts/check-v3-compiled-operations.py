@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Check the installed-library implementation contract for representative operations."""
 import argparse
+import platform
 import shlex
+import shutil
 import subprocess
 
 # These operations must have a library-owned definition even when no consumer
@@ -45,6 +47,17 @@ def main():
         parser.error('invalid NM command: ' + str(error))
     if not command or not command[0]:
         parser.error('NM command is empty')
+    if platform.system() == 'Windows' and command[0].startswith('/') and not command[0].startswith('//'):
+        # Native CreateProcess cannot resolve an MSYS executable spelling.
+        # Convert only that literal path; options and operands retain identity.
+        cygpath = shutil.which('cygpath')
+        if not cygpath:
+            parser.error('cygpath is unavailable on the selected PATH')
+        executable = subprocess.run([cygpath, '-m', '--', command[0]],
+                                    check=True, text=True, capture_output=True).stdout.rstrip('\r\n')
+        if not executable.strip():
+            parser.error('converted NM executable is empty')
+        command[0] = executable
     result = subprocess.run(command + ['-C', args.library],
                             check=True, text=True, capture_output=True)
     definitions = [line for line in result.stdout.splitlines()
