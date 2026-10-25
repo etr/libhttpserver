@@ -1,6 +1,6 @@
 # FEATURE-ci-poll-snapshot-lifetime
 
-Status: In Progress; implementation and focused local checks complete, pending caller validation/finalization.
+Status: Complete — local validation/finalization complete; nonlocal CI proof pending, local LeakSanitizer unavailable/incomplete.
 Base: local v3 `5a8f3e7532fff1b55ab6876096c6c9a76ac07a8b`.
 
 Repair managed poll readiness isolation across release/readopt of a connection ID.
@@ -13,6 +13,7 @@ remain authoritative at direction selection and later hangup teardown.
 - [x] Prove descriptor close deferral and registration identity isolation.
 - [x] Preserve current registration read/write/EOF/cancel/release/close behavior.
 - [x] Clear concurrency doubts with durable evidence; run focused checks and lint.
+- [x] Caller Groundwork validation sealed PASS session `0bb9a4790ebc936d95985e02eeced888`, all9 approve,1 iteration,0 fixed,0 unworked; local finalization/merge into v3.
 
 Decision: retain each original registration's shared lifetime in the managed
 poll projection, compare it under the registry mutex before selecting direction
