@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-chrono-fixture
 
-Status: Implementation complete; caller validation/finalization pending.
+Status: Complete — local validation/finalization complete; native FreeBSD post-fix proof CI-owned/incomplete.
 Base: local v3 `19d80795dfcfae17b10ea542bd3254376bfc2343`.
 
 Repair the FreeBSD C++20 compile failure in the existing external readiness
@@ -16,7 +16,7 @@ steady-clock tick using `now += clock_type::duration{1};`.
 - [x] Run only `timer_cancel_expiry_race_is_exactly_once` through the existing
   littletest selector pattern against the hash-verified retained GNU core.
 - [x] Pass changed-file cpplint and `git diff --check`.
-- [ ] Caller Groundwork validation and local finalization.
+- [x] Caller Groundwork validation sealed PASS `9892e8837fafee1b9baf1b44cbd51979`, all9 approve,1 iteration,0 fixed,0 unworked; local finalization/merge into v3.
 - [ ] Native FreeBSD post-fix compile/runtime proof: owned by CI and the v3 PR;
   incomplete here and not a local completion blocker under project policy.
 
