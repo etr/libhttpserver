@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -71,6 +72,15 @@ struct host_server {
                                     });
                                 if (live == snapshot.sockets.end()) {
                                     replay.push_back({socket.key, socket.generation, true, true, true, true});
+                                    if (!diagnostic_stale_seen) {
+                                        diagnostic_stale_seen = true;
+                                        diagnostic_stale = replay.back();
+                                        diagnostic_live_count = snapshot.sockets.size();
+                                        const auto same_key = std::find_if(snapshot.sockets.begin(), snapshot.sockets.end(),
+                                            [&](const auto& current) { return current.key == socket.key; });
+                                        diagnostic_live_present = !snapshot.sockets.empty();
+                                        if (diagnostic_live_present) diagnostic_live = same_key != snapshot.sockets.end() ? *same_key : snapshot.sockets.front();
+                                    }
                                     ++stale_replays;
                                 }
                             }
@@ -83,6 +93,8 @@ struct host_server {
                     }
                     auto events = v3_host::wait(snapshot, failure_deadline);
                     if (clock_type::now() >= failure_deadline) {
+                        std::snprintf(diagnostic_reason, sizeof(diagnostic_reason), "original host failure deadline expired");
+                        diagnostic_stopping_at_failure = stopping.load(std::memory_order_relaxed);
                         failed.store(true);
                         break;
                     }
@@ -97,11 +109,22 @@ struct host_server {
                     }
                     const auto result = server.readiness()->dispatch(events, clock_type::now());
                     if (!result.ok() && !stopping.load()) {
+                        diagnostic_dispatch_code = static_cast<int>(result.code());
+                        std::snprintf(diagnostic_reason, sizeof(diagnostic_reason), "dispatch failed: %.200s", result.message().c_str());
+                        diagnostic_stopping_at_failure = stopping.load(std::memory_order_relaxed);
                         failed.store(true);
                         break;
                     }
                 }
-            } catch (...) { failed.store(true); }
+            } catch (const std::exception& error) {
+                std::snprintf(diagnostic_reason, sizeof(diagnostic_reason), "exception: %.200s", error.what());
+                diagnostic_stopping_at_failure = stopping.load(std::memory_order_relaxed);
+                failed.store(true);
+            } catch (...) {
+                std::snprintf(diagnostic_reason, sizeof(diagnostic_reason), "non-std exception");
+                diagnostic_stopping_at_failure = stopping.load(std::memory_order_relaxed);
+                failed.store(true);
+            }
         });
         return true;
     }
@@ -114,7 +137,31 @@ struct host_server {
         server.request_stop();
         if (thread.joinable()) thread.join();
         server.stop();
+        if ((failed.load() || diagnostic_receive_failed) && !diagnostic_dumped) {
+            diagnostic_dumped = true;
+            std::fprintf(stderr, "DIAG case=%s failed=%d stopping_at_failure=%d receive_failed=%d empty=%d wake=%d stale=%d dispatch_code=%d reason=%s\n",
+                diagnostic_case, failed.load(), diagnostic_stopping_at_failure, diagnostic_receive_failed, empty_dispatches.load(), wake_dispatches.load(),
+                stale_replays.load(), diagnostic_dispatch_code, diagnostic_reason);
+            // Keys stay opaque: local tokens 1/2 express only this pair's equality.
+            if (diagnostic_stale_seen) std::fprintf(stderr,
+                "DIAG first_replay stale_key=1 gen=%llu read=%d write=%d closed=%d error=%d live_count=%zu live_present=%d live_key=%d live_gen=%llu handle=%llu valid=%d live_read=%d live_write=%d\n",
+                static_cast<unsigned long long>(diagnostic_stale.generation), diagnostic_stale.readable, diagnostic_stale.writable,
+                diagnostic_stale.closed, diagnostic_stale.error, diagnostic_live_count, diagnostic_live_present,
+                diagnostic_live_present ? (diagnostic_live.key == diagnostic_stale.key ? 1 : 2) : 0,
+                static_cast<unsigned long long>(diagnostic_live.generation), static_cast<unsigned long long>(diagnostic_live.handle.value),
+                diagnostic_live.handle.valid, diagnostic_live.readable, diagnostic_live.writable);
+            std::fflush(stderr);
+        }
     }
+    const char* diagnostic_case = "unassigned";
+    srv::readiness_event diagnostic_stale;
+    srv::socket_interest diagnostic_live;
+    std::size_t diagnostic_live_count = 0;
+    int diagnostic_dispatch_code = -1;
+    char diagnostic_reason[256] = "none";
+    bool diagnostic_stopping_at_failure = false;
+    bool diagnostic_stale_seen = false, diagnostic_live_present = false;
+    bool diagnostic_receive_failed = false, diagnostic_dumped = false;
     srv::native_server server;
     std::atomic_bool stopping{false};
     std::atomic_bool failed{false};
@@ -126,6 +173,22 @@ struct host_server {
     std::vector<srv::socket_interest> retained;
     std::vector<srv::readiness_event> replay;
     std::thread thread;
+};
+
+struct receive_failure_observer {
+    host_server& fixture;
+    raw_http::connection& client;
+    const std::deque<raw_http::observed_response>& seen;
+    littletest::test_runner* runner;
+    int before;
+    ~receive_failure_observer() {
+        if (runner->get_failures() != before) {
+            fixture.diagnostic_receive_failed = true;
+            std::fprintf(stderr, "DIAG original fresh.receive(1, seen) failed: seen=%zu peer_closed=%d host_failed=%d stopping=%d\n",
+                seen.size(), client.peer_closed(), fixture.failed.load(), fixture.stopping.load());
+            std::fflush(stderr);
+        }
+    }
 };
 
 srv::sync_response response(std::string_view text) {
@@ -144,6 +207,7 @@ LT_END_SUITE(external_http1_suite)
 
 LT_BEGIN_AUTO_TEST(external_http1_suite, public_host_get_post_keepalive_and_pipeline)
     host_server fx;
+    fx.diagnostic_case = "public_host_get_post_keepalive_and_pipeline";
     LT_CHECK(fx.server.route_sync(http::method::known(http::method_id::get), "/hello",
         [](const http::request_head&, std::span<const std::byte>) { return response("hello"); }, 16).ok());
     LT_CHECK(fx.server.route_sync(http::method::known(http::method_id::post), "/echo",
@@ -173,6 +237,7 @@ LT_END_AUTO_TEST(public_host_get_post_keepalive_and_pipeline)
 
 LT_BEGIN_AUTO_TEST(external_http1_suite, delayed_worker_response_uses_wake_without_periodic_poll)
     host_server fx;
+    fx.diagnostic_case = "delayed_worker_response_uses_wake_without_periodic_poll";
     std::mutex gate_mu;
     std::condition_variable gate_cv;
     bool entered = false, released = false;
@@ -209,6 +274,7 @@ LT_END_AUTO_TEST(delayed_worker_response_uses_wake_without_periodic_poll)
 
 LT_BEGIN_AUTO_TEST(external_http1_suite, published_header_deadline_drives_empty_dispatch)
     host_server fx;
+    fx.diagnostic_case = "published_header_deadline_drives_empty_dispatch";
     LT_ASSERT(fx.start());
     raw_http::connection client;
     LT_ASSERT(client.connect(fx.server.get_bound_port(0)));
@@ -223,6 +289,7 @@ LT_END_AUTO_TEST(published_header_deadline_drives_empty_dispatch)
 
 LT_BEGIN_AUTO_TEST(external_http1_suite, reconnect_replayed_callbacks_and_host_driven_drain)
     host_server fx;
+    fx.diagnostic_case = "reconnect_replayed_callbacks_and_host_driven_drain";
     LT_CHECK(fx.server.route_sync(http::method::known(http::method_id::get), "/hello",
         [](const http::request_head&, std::span<const std::byte>) { return response("fresh"); }, 16).ok());
     LT_ASSERT(fx.start());
@@ -240,7 +307,10 @@ LT_BEGIN_AUTO_TEST(external_http1_suite, reconnect_replayed_callbacks_and_host_d
     LT_ASSERT(fresh.connect(fx.server.get_bound_port(0)));
     LT_CHECK(fresh.send("GET /hello HTTP/1.1\r\nHost: local\r\n\r\n"));
     std::deque<raw_http::observed_response> seen;
-    LT_ASSERT(fresh.receive(1, seen));
+    {
+        receive_failure_observer observer{fx, fresh, seen, __lt_tr__, __lt_tr__->get_failures()};
+        LT_ASSERT(fresh.receive(1, seen));
+    }
     LT_CHECK_EQ(seen.front().body, std::string("fresh"));
     LT_CHECK(fx.stale_replays.load() > 0);
     srv::drain_ticket ticket;

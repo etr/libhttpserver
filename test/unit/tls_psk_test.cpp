@@ -10,6 +10,9 @@
 #include <future>
 #include <thread>
 #include <utility>
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+#include <cstdio>
+#endif
 #include "./tls_psk_fixture.hpp"
 #include "./littletest.hpp"
 namespace hh = httpserver::http;
@@ -139,7 +142,13 @@ LT_BEGIN_AUTO_TEST(psk_suite, blocking_lookup_leaves_owner_responsive_and_cancel
         }
         const auto cancelled = peer.tls->request_cancel(*peer.handshake.state());
         peer.ex.run_pending();
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+        bool observed_applied = false;
+        int observed_returned = -1;
+        const bool completed_while_held = (observed_applied = peer.handshake.state()->applied()) && !(observed_returned = returned.load());
+#else
         const bool completed_while_held = peer.handshake.state()->applied() && !returned;
+#endif
         LT_CHECK(entered);
         LT_CHECK(longest < 100ms);
         LT_CHECK(cancelled == hh::outcome_code::ok);
@@ -153,6 +162,11 @@ LT_BEGIN_AUTO_TEST(psk_suite, blocking_lookup_leaves_owner_responsive_and_cancel
         peer.ex.run_pending();
         LT_CHECK_EQ(peer.raw.pending_count(), std::size_t{0});
         LT_CHECK(peer.handshake.state()->stored_result().code == hh::outcome_code::cancelled);
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+        std::fprintf(stderr, "PSK_HELD_VALUES case=cancel version=%s applied=%d returned=%s completed_while_held=%d\n",
+                     version == TLS1_2_VERSION ? "TLS1.2" : "TLS1.3", observed_applied,
+                     observed_returned == -1 ? "skipped" : observed_returned ? "true" : "false", completed_while_held);
+#endif
     }
 LT_END_AUTO_TEST(blocking_lookup_leaves_owner_responsive_and_cancel_completes_before_retirement)
 LT_BEGIN_AUTO_TEST(psk_suite, held_lookup_timeout_keeps_capacity_and_late_success_cannot_publish_or_rearm)
@@ -164,9 +178,18 @@ LT_BEGIN_AUTO_TEST(psk_suite, held_lookup_timeout_keeps_capacity_and_late_succes
         std::atomic<bool> entered{false};
         std::promise<void> release;
         auto released = release.get_future().share();
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+        auto callback_returned = std::make_shared<std::atomic<bool>>(false);
+        auto config = psk_test::credentials(runtime, [&, callback_returned](auto, const auto&) {
+#else
         auto config = psk_test::credentials(runtime, [&](auto, const auto&) {
+#endif
             entered = true;
             released.wait();
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+            // Instrumentation marks passage of the original wait, before result construction.
+            callback_returned->store(true);
+#endif
             return hd::psk_lookup_result{hd::psk_lookup_status::accepted, hd::secure_bytes(psk_test::bytes("secret"))};
         });
         hd::tls_credentials_registry registry;
@@ -180,6 +203,9 @@ LT_BEGIN_AUTO_TEST(psk_suite, held_lookup_timeout_keeps_capacity_and_late_succes
         second.close();
         runtime->stop();
         const bool early_drain = runtime->drain(std::chrono::steady_clock::now() + 5ms);
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+        const bool callback_returned_before_release = callback_returned->load();
+#endif
         release.set_value();
         const bool drained = runtime->drain(std::chrono::steady_clock::now() + 1s);
         peer.ex.run_pending();
@@ -194,6 +220,10 @@ LT_BEGIN_AUTO_TEST(psk_suite, held_lookup_timeout_keeps_capacity_and_late_succes
         LT_CHECK(!peer.handshake.state()->claim_terminal());
         LT_CHECK_EQ(peer.raw.pending_count(), std::size_t{0});
         LT_CHECK_EQ(peer.ex.pending(), std::size_t{0});
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+        std::fprintf(stderr, "PSK_HELD_VALUES case=timeout version=%s held=%d terminal=%d accepted=%d early_drain=%d drained=%d callback_after_wait_before_release=%d\n",
+                     version == TLS1_2_VERSION ? "TLS1.2" : "TLS1.3", held, terminal, accepted, early_drain, drained, callback_returned_before_release);
+#endif
     }
 LT_END_AUTO_TEST(held_lookup_timeout_keeps_capacity_and_late_success_cannot_publish_or_rearm)
 LT_BEGIN_AUTO_TEST(psk_suite, selected_host_callback_and_held_generation_survive_replacement)
@@ -269,13 +299,32 @@ LT_BEGIN_AUTO_TEST(psk_suite, mixed_certificate_psk_hosts_apply_selected_profile
             psk_test::connection psk(registry.acquire()->select_default(), version, "identity", psk_test::bytes("psk-key"));
             psk_test::connection certificate(registry.acquire()->select_default(), version, "identity", psk_test::bytes("wrong-psk"), "a.example");
             SSL_set_cipher_list(certificate.peer.get(), "DEFAULT:PSK-AES128-GCM-SHA256");
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+            bool psk_connected = false, certificate_connected = false, psk_exchanged = false, certificate_exchanged = false;
+            LT_CHECK((psk_connected = psk.connect()));
+            LT_CHECK((certificate_connected = certificate.connect()));
+            const bool certificate_client_finished = SSL_is_init_finished(certificate.peer.get());
+            const bool certificate_applied = certificate.handshake.state()->applied();
+            const int certificate_result = certificate_applied ? static_cast<int>(certificate.handshake.state()->stored_result().code) : -1;
+#else
             LT_CHECK(psk.connect());
             LT_CHECK(certificate.connect());
+#endif
             LT_CHECK(SSL_get0_peer_certificate(certificate.peer.get()) != nullptr);
             LT_CHECK(SSL_get0_peer_certificate(psk.peer.get()) == nullptr);
             LT_CHECK_EQ(calls.load(), 1u);
+#ifdef HTTPSERVER_PSK_HELD_VALUES_TRACE
+            LT_CHECK((psk_exchanged = psk.exchange()));
+            LT_CHECK((certificate_exchanged = certificate.exchange()));
+            std::fprintf(stderr, "PSK_HELD_VALUES case=mixed version=%s psk_default=%d psk_connect=%d certificate_connect=%d psk_exchange=%d certificate_exchange=%d "
+                         "certificate_after_connect_client_finished=%d certificate_after_connect_applied=%d certificate_after_connect_result_available=%d "
+                         "certificate_after_connect_result_code=%d\n",
+                         version == TLS1_2_VERSION ? "TLS1.2" : "TLS1.3", psk_default, psk_connected, certificate_connected, psk_exchanged, certificate_exchanged,
+                         certificate_client_finished, certificate_applied, certificate_applied, certificate_result);
+#else
             LT_CHECK(psk.exchange());
             LT_CHECK(certificate.exchange());
+#endif
             psk.close();
             certificate.close();
             runtime->stop();

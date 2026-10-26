@@ -1,94 +1,15 @@
-name: v3 installed package validation
+name: v3 current native values (never-merge diagnostic branch)
 on:
-  push:
-    branches: [v3, master]
-  pull_request:
-    branches: [v3, master]
   workflow_dispatch:
+    inputs:
+      approved_sha:
+        description: Exact reviewed diagnostic source commit; one dispatch only (2 targets / 120 seconds)
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
-  linux:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Prerequisites
-        run: sudo apt-get update && sudo apt-get install -y clang autoconf automake libtool pkg-config python3 perl libcurl4-openssl-dev binutils python3-venv
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24.15.0'
-      - name: Selected client environment and executable Git provenance
-        run: |
-          mkdir -p "$RUNNER_TEMP/package-evidence"
-          exec > >(tee "$RUNNER_TEMP/package-evidence/clients.log") 2>&1
-          python3 -c 'import subprocess; subprocess.run(["git", "--version"], check=True)'
-          python3 -m venv "$RUNNER_TEMP/package-evidence/clients"
-          "$RUNNER_TEMP/package-evidence/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
-      - name: Build selected prerequisites
-        run: python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/package-evidence/prerequisites"
-      - name: Bootstrap
-        run: ./bootstrap
-      - name: Installed matrix
-        run: |
-          prefix=()
-          if ! python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",443)); s.close()'; then
-            prefix=(sudo env "PATH=$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD")
-          fi
-          "${prefix[@]}" python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" --pkg-config-dir /usr/lib/x86_64-linux-gnu/pkgconfig --pkg-config-dir /usr/share/pkgconfig --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --compiler clang++ --cc clang --jobs 2
-      - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: v3-package-linux-${{ github.sha }}
-          path: ${{ runner.temp }}/package-evidence
-          retention-days: 14
-          if-no-files-found: error
-  macos:
-    runs-on: macos-15
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Prerequisites
-        run: brew install autoconf automake libtool pkg-config python curl llvm make
-      - name: Select complete C++20 compiler and runtime
-        run: bash scripts/ci-macos-toolchain.sh
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24.15.0'
-      - name: Selected client environment and executable Git provenance
-        run: |
-          mkdir -p "$RUNNER_TEMP/package-evidence"
-          exec > >(tee "$RUNNER_TEMP/package-evidence/clients.log") 2>&1
-          python3 -c 'import subprocess; subprocess.run(["git", "--version"], check=True)'
-          python3 -m venv "$RUNNER_TEMP/package-evidence/clients"
-          "$RUNNER_TEMP/package-evidence/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
-      - name: Build selected prerequisites
-        run: python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/package-evidence/prerequisites"
-      - name: Bootstrap
-        run: ./bootstrap
-      - name: Installed matrix
-        run: |
-          prefix=()
-          if ! python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",443)); s.close()'; then
-            prefix=(sudo env "PATH=$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory "GIT_CONFIG_VALUE_0=$PWD")
-          fi
-          "${prefix[@]}" python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" --pkg-config-dir "$(brew --prefix)/share/pkgconfig" --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --make gmake --jobs 2
-      - name: Make privileged proof readable by artifact upload
-        if: always()
-        run: |
-          if [ -d "$RUNNER_TEMP/package-evidence" ]; then
-            sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/package-evidence"
-          fi
-      - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: v3-package-macos-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/package-evidence
-            ${{ runner.temp }}/v3-toolchain
-          retention-days: 14
-          if-no-files-found: error
-  mingw64:
+  windows:
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -99,6 +20,17 @@ jobs:
         shell: pwsh
         run: git config --global core.autocrlf false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the caller-approved diagnostic source and first attempt
+        shell: pwsh
+        env:
+          APPROVED_SHA: ${{ inputs.approved_sha }}
+        run: |
+          if ($env:GITHUB_SHA -ne $env:APPROVED_SHA -or $env:GITHUB_RUN_ATTEMPT -ne '1' -or $env:GITHUB_REF -ne 'refs/heads/task/FEATURE-ci-native-current-values') {
+            throw 'Only the approved diagnostic branch commit and first workflow attempt are authorized'
+          }
       - uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c
         with:
           msystem: MINGW64
@@ -108,120 +40,78 @@ jobs:
             autotools base-devel perl git
             mingw-w64-x86_64-clang mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils
             mingw-w64-x86_64-python mingw-w64-x86_64-pkgconf mingw-w64-x86_64-libtool mingw-w64-x86_64-curl mingw-w64-x86_64-libsystre
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24.15.0'
-      - name: Selected client environment and executable Git provenance
+      - name: Selected MSYS2 toolchain provenance
         run: |
           mkdir -p "$RUNNER_TEMP/package-evidence"
-          exec > >(tee "$RUNNER_TEMP/package-evidence/clients.log") 2>&1
+          pacman -Q > "$RUNNER_TEMP/package-evidence/msys2-packages.txt"
           export PATH="/c/Program Files/Git/cmd:$PATH"
-          /mingw64/bin/python - <<'GIT_PROBE'
-          import shutil, subprocess
-          print('selected native Git:', shutil.which('git'), flush=True)
-          for arguments in (['--version'], ['rev-parse', '--verify', 'HEAD^{commit}']):
-              result = subprocess.run(['git'] + arguments, capture_output=True, text=True)
-              print('git', *arguments, 'exit=' + str(result.returncode), flush=True)
-              print(result.stdout[-2048:], end='', flush=True)
-              print(result.stderr[-2048:], end='', flush=True)
-              result.check_returncode()
-          GIT_PROBE
-          /mingw64/bin/python -m venv "$RUNNER_TEMP/package-evidence/clients"
-          "$(cygpath -m "$RUNNER_TEMP/package-evidence/clients/bin/python.exe")" -m pip install -r test/integ/http2-client-requirements.txt
-      - name: Build selected prerequisites
-        run: |
-          export PATH="/c/Program Files/Git/cmd:$PATH"
-          /mingw64/bin/python scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/package-evidence/prerequisites"
+          /mingw64/bin/python -c 'import subprocess; subprocess.run(["git", "--version"], check=True)'
       - name: Bootstrap
         run: ./bootstrap
-      - name: Installed matrix (native Python; IOCP and WSAPoll)
+      - name: Build TLS-off library; run original external four-test program once
+        env:
+          CI_DIAGNOSTIC_APPROVED_SHA: ${{ inputs.approved_sha }}
         run: |
           export PATH="/c/Program Files/Git/cmd:$PATH"
-          /mingw64/bin/python scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" \
-            --provider-prefix "$(cygpath -m "$RUNNER_TEMP/package-evidence/prerequisites/provider")" --toolchain-prefix "$(cygpath -m /mingw64)" \
-            --client-python "$(cygpath -m "$RUNNER_TEMP/package-evidence/clients/bin/python.exe")" --node node --compiler clang++ --cc clang --jobs 2
+          /mingw64/bin/python scripts/ci_native_current_values.py \
+            --output "$(cygpath -m "$RUNNER_TEMP/package-evidence/native")" \
+            --toolchain-prefix "$(cygpath -m /mingw64)" --compiler clang++ --cc clang
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: v3-package-mingw64-${{ github.sha }}
-          path: ${{ runner.temp }}/package-evidence
+          name: native-current-values-windows-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/package-evidence/**/*.json
+            ${{ runner.temp }}/package-evidence/**/*.log
+            ${{ runner.temp }}/package-evidence/**/*.bin
+            ${{ runner.temp }}/package-evidence/**/*.diff
+            ${{ runner.temp }}/package-evidence/msys2-packages.txt
           retention-days: 14
           if-no-files-found: error
-  freebsd:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
+  darwin:
+    runs-on: macos-15
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: freebsd_instance
-        uses: vmactions/freebsd-vm@c9f815bc7aa0d34c9fdd0619b034a32d6ca7b57e
         with:
-          copyback: 'false'
-          release: '14.3'
-          mem: 8192
-          cpu: 2
-          prepare: pkg install -y bash autoconf automake libtool pkgconf python3 gmake curl binutils perl5 llvm19 git node24 cmake ninja
-          run: |
-            set -eu
-            export RUNNER_TEMP=/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}
-            mkdir -p "$RUNNER_TEMP/package-evidence"
-            trap 'cp -R "$RUNNER_TEMP/package-evidence" ./package-evidence' EXIT
-            # Guest root must trust only the host checkout, including in Python's Git children.
-            export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD"
-            git_log="$RUNNER_TEMP/package-evidence/git-provenance.log"
-            {
-              printf 'checkout=%s\n' "$PWD" && command -v git && git --version &&
-                git rev-parse --verify 'HEAD^{commit}'
-            } > "$git_log" 2>&1 || { cat "$git_log" >&2; exit 1; }
-            cat "$git_log"
-            if [ "$(node --version)" != v24.15.0 ]; then
-              mkdir -p "$RUNNER_TEMP/node-source"
-              node_logs="$RUNNER_TEMP/package-evidence/node-source"
-              mkdir -p "$node_logs"
-              curl --fail --location https://nodejs.org/dist/v24.15.0/node-v24.15.0.tar.gz -o "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz"
-              test "$(sha256 -q "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz")" = 729de494dd2872e5a3a6c32a1cd156a5413d4aca2772b2d873ee86bb5531bcd9
-              tar -xzf "$RUNNER_TEMP/node-source/node-v24.15.0.tar.gz" -C "$RUNNER_TEMP/node-source"
-              (
-                cd "$RUNNER_TEMP/node-source/node-v24.15.0"
-                {
-                  node_llvm_bin="$(llvm-config19 --bindir)"
-                  export CC="$node_llvm_bin/clang" CXX="$node_llvm_bin/clang++"
-                  printf 'CC=%s\nCXX=%s\n' "$CC" "$CXX"
-                  "$CC" --version
-                  "$CXX" --version
-                } > "$node_logs/compiler.log" 2>&1
-                ./configure --prefix="$RUNNER_TEMP/node" > "$node_logs/configure.log" 2>&1
-                gmake -j2 > "$node_logs/build.log" 2>&1
-                gmake install >> "$node_logs/build.log" 2>&1
-              )
-              export PATH="$RUNNER_TEMP/node/bin:$PATH"
-            fi
-            test "$(node --version)" = v24.15.0
-            python3 -c 'import subprocess; subprocess.run(["git", "--version"], check=True)'
-            python3 scripts/ci-freebsd-toolchain.py --output "$RUNNER_TEMP/package-evidence/toolchain"
-            . "$RUNNER_TEMP/package-evidence/toolchain/toolchain.env"
-            python3 -m venv "$RUNNER_TEMP/package-evidence/clients"
-            "$RUNNER_TEMP/package-evidence/clients/bin/python" -m pip install -r test/integ/http2-client-requirements.txt
-            python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/package-evidence/prerequisites" --make gmake
-            ./bootstrap
-            python3 scripts/check-v3-installed-consumer.py --output "$RUNNER_TEMP/package-evidence/matrix" \
-              --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" \
-              --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --pkg-config-dir /usr/local/share/pkgconfig --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --make gmake --jobs 2
-      - name: Recover FreeBSD evidence
-        id: freebsd-evidence
-        if: always()
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the caller-approved diagnostic source and first attempt
+        env:
+          APPROVED_SHA: ${{ inputs.approved_sha }}
         run: |
-          printf 'path=package-evidence\n' >> "$GITHUB_OUTPUT"
-          # SCP follows existing destination links from automatic rsync copyback.
-          recovery_root="$(mktemp -d "$RUNNER_TEMP/freebsd-evidence.XXXXXX")"
-          if scp -O -r "freebsd:/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}/package-evidence" "$recovery_root/"; then
-            printf 'path=%s/package-evidence\n' "$recovery_root" >> "$GITHUB_OUTPUT"
-          else
-            exit "$?"
-          fi
+          test "$GITHUB_SHA" = "$APPROVED_SHA"
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_REF" = refs/heads/task/FEATURE-ci-native-current-values
+      - name: Prerequisites
+        run: brew install autoconf automake libtool pkg-config python curl llvm make
+      - name: Select complete C++20 compiler and runtime
+        run: bash scripts/ci-macos-toolchain.sh
+      - name: Build selected prerequisites
+        run: python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/native-current-values-prerequisites"
+      - name: Bootstrap
+        run: ./bootstrap
+      - name: Build TLS library; run original PSK fourteen-test program once
+        env:
+          CI_DIAGNOSTIC_APPROVED_SHA: ${{ inputs.approved_sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/package-evidence"
+          python3 scripts/ci_native_current_values.py \
+            --output "$RUNNER_TEMP/package-evidence/native" \
+            --provider-prefix "$RUNNER_TEMP/native-current-values-prerequisites/provider" \
+            --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --compiler "$V3_CXX" --cc "$V3_CC" \
+            --pkg-config-dir "$(brew --prefix)/share/pkgconfig" --make gmake
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: v3-package-freebsd-${{ github.sha }}
-          path: ${{ steps.freebsd-evidence.outputs.path || 'package-evidence' }}
+          name: native-current-values-darwin-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/package-evidence/**/*.json
+            ${{ runner.temp }}/package-evidence/**/*.log
+            ${{ runner.temp }}/package-evidence/**/*.bin
+            ${{ runner.temp }}/package-evidence/**/*.diff
+            ${{ runner.temp }}/v3-toolchain/compiler.log
+            ${{ runner.temp }}/native-current-values-prerequisites/preparation.json
+            ${{ runner.temp }}/native-current-values-prerequisites/prepare-*.log
           retention-days: 14
           if-no-files-found: error
