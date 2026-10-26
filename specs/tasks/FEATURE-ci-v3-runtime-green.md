@@ -36,3 +36,14 @@ Native Windows context is Windows 11 build26200, cross LLVM-MinGW23.1.4/MinGW15 
 Preserved setup failures: sandboxed WSL native launch was unavailable before normal escalation; initial future-based fixture had unresolved libstdc++ TLS symbols, then a corrected TLS build exposed missing runtime once-call exports (native entry-point status C0000139). That setup failure is not RED. Replacing only test readiness synchronization with an already-supported Win32 event corrected the fixture boundary; the corrected native failure above is the behavioral RED. No production workaround was based on the setup error. Raw commands, logs, receipts, hashes and bounded ownership cleanup are retained in stage evidence.
 
 Darwin PSK failures, Windows host WSAPoll consumer failure and incidental Linux/macOS/BSD assessments retain their previous UNKNOWN/closed-budget states. No unrelated source repair, original diagnostic retry, push, CI dispatch, review agent, Groundwork validation, merge or cleanup occurred in stage 1.
+
+## Related WSAPoll error visibility
+
+- [x] Immediately save `WSAGetLastError()` when the existing `WSAPoll` call fails and include its numeric value in the existing exception message.
+- [x] Preserve interrupted-poll handling and all polling, timing and shutdown semantics.
+
+This caller-authorized message change follows proven timer stage commit `70d0fba7`. It supplies useful error evidence in the next already-required CI run; it does not diagnose or repair the prior consumer exit 6, whose cause remains UNKNOWN and captures remain closed. There are no per-poll traces, socket queries, clocks, locks or error suppression changes.
+
+A bounded Windows test substitutes only the external WSAPoll boundary to return WSAEINVAL through the actual Winsock last-error API. Before the change it returns 2 because the exception omits numeric 10022 (0.310s); after it exits 0 (0.303s), also checking that WSAEINTR still produces no exception. This controlled message regression is not a reproduction of the original consumer failure. Actual Windows compilation, GNU syntax checking of `examples/external_event_loop.cpp`, changed-header cpplint and diff checks pass. Commands, sources and receipts are under stage evidence `host-poll-message/`.
+
+Additional ordinary cleanup proof: a static-linked Windows default service releases its pending callback during normal executable CRT teardown before a later registered atexit observer checks the capture; exit 0 in 0.391s (`ordinary-default-native-test.json`). The default service is therefore not unconditionally immortal.
