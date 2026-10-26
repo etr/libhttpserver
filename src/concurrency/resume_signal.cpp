@@ -4,6 +4,13 @@
 #include <utility>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace httpserver::detail {
 
 auto resume_node::claim() noexcept -> bool {
@@ -121,8 +128,27 @@ auto timer_queue::run() -> void {
 }
 
 timer_queue& default_timer_queue() {
+#ifdef _WIN32
+    struct service {
+        using shutdown_query = BOOLEAN (NTAPI*)();
+        // Resolve before starting the timer thread. Late loader lookups can
+        // themselves acquire locks orphaned by Windows process termination.
+        shutdown_query terminating = reinterpret_cast<shutdown_query>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlDllShutdownInProgress"));
+        std::unique_ptr<timer_queue> queue = std::make_unique<timer_queue>();
+
+        ~service() {
+            // ExitProcess has already killed other threads before DLL detach.
+            // Leave this process-lifetime queue to the OS; even destroying its
+            // mutex/condition_variable can deadlock on a killed waiter.
+            if (terminating && terminating()) static_cast<void>(queue.release());
+        }
+    };
+    static service owner;
+    return *owner.queue;
+#else
     static timer_queue queue;
     return queue;
+#endif
 }
 
 }  // namespace httpserver::detail

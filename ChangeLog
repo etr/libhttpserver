@@ -1,4 +1,9 @@
 Version 3.0.0 - 2026-10-10
+	Avoid Windows DLL shutdown hangs by retaining the default timer service
+		during process termination while preserving ordinary timer cleanup.
+	Report the saved Winsock error code when host WSAPoll fails.
+	Use explicit SCP evidence transport for FreeBSD CI, disabling redundant
+		whole-workspace copyback without changing native test gates.
 	Connect native TLS-off/on builds, replay and complete installed matrices to CI.
 	Add bounded sanitizer fuzz smoke, persistent trusted corpora and scheduled
 		campaign code that activates after default-branch cutover.

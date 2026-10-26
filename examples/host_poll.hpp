@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <httpserver/server/readiness.hpp>
@@ -99,7 +100,10 @@ inline std::vector<srv::readiness_event> wait(
     for (const auto& interest : interests) fds.push_back(registration(interest));
 #if defined(_WIN32)
     const auto ready = ::WSAPoll(fds.data(), static_cast<ULONG>(fds.size()), timeout(deadline));
-    if (ready < 0 && ::WSAGetLastError() != WSAEINTR) throw std::runtime_error("WSAPoll failed");
+    if (ready < 0) {
+        const int error = ::WSAGetLastError();
+        if (error != WSAEINTR) throw std::runtime_error("WSAPoll failed (WSA error " + std::to_string(error) + ")");
+    }
 #else
     const auto ready = ::poll(fds.data(), static_cast<nfds_t>(fds.size()), timeout(deadline));
     if (ready < 0 && errno != EINTR) throw std::runtime_error("poll failed");
