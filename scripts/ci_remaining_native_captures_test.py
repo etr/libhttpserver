@@ -1,6 +1,7 @@
 """Offline preparation contracts; never run an original native target."""
 import ast
 import importlib.util
+import inspect
 import json
 import os
 from pathlib import Path
@@ -8,6 +9,8 @@ import subprocess
 import sys
 import struct
 import tempfile
+import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -29,6 +32,123 @@ class DriverTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.directory = Path(self.temp.name)
+
+    def prepared_context(self, host):
+        """Exercise prepare and real package compilation through an offline OS boundary."""
+        calls = []
+        directory = self.directory / host
+        directory.mkdir()
+        provider = directory / 'provider'
+        for name in ('include/openssl/opensslv.h', 'lib/libssl.a', 'bin/openssl'):
+            path = provider / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('offline provider')
+        args = SimpleNamespace(compiler='offline-c++', cc='offline-cc', make='gmake',
+                               provider_prefix=provider, pkg_config_dir=[], toolchain_prefix=None)
+        def command(argv, cwd, env, **kwargs):
+            argv, cwd = list(map(str, argv)), Path(cwd)
+            calls.append((argv, cwd, dict(env)))
+            if 'cygpath' in ' '.join(argv):
+                return str(ROOT / 'configure')
+            if len(argv) > 1 and argv[1].endswith('/configure'):
+                for name in ('config.h', 'config.log', 'Makefile', 'test/Makefile'):
+                    path = cwd / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text('offline configure ' + env['CXXFLAGS'])
+            if argv[0] == 'gmake' and 'src' in argv:
+                libs = cwd / 'src/.libs'
+                libs.mkdir(parents=True, exist_ok=True)
+                (libs / 'libhttpserver_v3core.a').write_bytes(b'internal core')
+                if 'install' in argv:
+                    # Use the configured prefix, including the separate static lane.
+                    configured = next(row for row in reversed(calls) if row[1] == cwd and
+                                      len(row[0]) > 1 and row[0][1].endswith('/configure'))
+                    prefix = Path(next(item.split('=', 1)[1] for item in configured[0] if item.startswith('--prefix=')))
+                    for name in ('include/httpserver.hpp', 'lib/libhttpserver.a', 'lib/libhttpserver.dll.a', 'bin/libhttpserver.dll'):
+                        path = prefix / name
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(b'installed artifact')
+            if argv[0] == 'gmake' and 'test' in argv:
+                for name in ('tls_psk', 'native_websocket_fixture', 'external_http1_e2e'):
+                    if name in argv:
+                        path = cwd / 'test' / name
+                        path.write_bytes(b'offline selected target')
+            if argv[0] == 'pkg-config':
+                prefix = Path(env['PKG_CONFIG_LIBDIR'].split(os.pathsep)[0]).parents[1]
+                if '--cflags' in argv:
+                    return '-I' + str(prefix / 'include')
+                if '--static' in argv:
+                    return '-L' + str(prefix / 'lib') + ' -lhttpserver -pthread'
+                return '-L' + str(prefix / 'lib') + ' -lhttpserver'
+            if argv[0] == 'offline-c++' and '-o' in argv:
+                output = Path(argv[argv.index('-o') + 1])
+                output.write_bytes(b'offline compiler artifact')
+                if '-MF' in argv:
+                    header = next(item[2:] for item in argv if item.startswith('-I') and item.endswith('/include'))
+                    Path(argv[argv.index('-MF') + 1]).write_text(str(output) + ': ' + str(Path(header) / 'httpserver.hpp'))
+                else:
+                    Path(str(output) + '.map').write_text(' '.join(argv))
+            if argv[0] == str(provider / 'bin/openssl'):
+                return 'OpenSSL 3.5.9 offline test'
+            return 'offline command receipt'
+        with patch.object(self.driver.platform, 'system', return_value=host), \
+                patch.object(self.driver, 'Commands', return_value=command), \
+                patch.object(self.driver.shutil, 'which', return_value='/usr/bin/true'), \
+                patch.object(self.driver.compiler_sdk, 'capture', return_value={'offline_sdk': True}):
+            programs, runtime = self.driver.prepare(args, ROOT, directory, {'PATH': '/usr/bin'})
+        return calls, programs, runtime, json.loads((directory / 'context.json').read_text())
+
+    def test_prepare_linux_keeps_effective_O3_and_native_internal_static_fixture(self):
+        calls, programs, runtime, context = self.prepared_context('Linux')
+        build_calls = [row for row in calls if row[0][0] == 'gmake']
+        self.assertTrue(build_calls)
+        for argv, cwd, env in build_calls:
+            optimization = [flag for flag in env['CXXFLAGS'].split() if flag.startswith('-O')]
+            self.assertEqual(optimization[-1], '-O3')
+        self.assertIn((['gmake', '-j2', '-C', 'test', 'native_websocket_fixture'], self.directory / 'Linux/build'),
+                      [(argv, cwd) for argv, cwd, _ in calls])
+        self.assertFalse(context['compiles'])
+        self.assertEqual(programs['wire_cleanup'], self.directory / 'Linux/build/test/native_websocket_fixture')
+        makefile = (ROOT / 'test/Makefile.am').read_text()
+        self.assertIn('native_websocket_fixture_LDADD = $(top_builddir)/src/libhttpserver_v3core.la', makefile)
+        self.assertIn(str(self.directory / 'Linux/build/src/.libs/libhttpserver_v3core.a'), context['artifact_sha256'])
+
+    def test_prepare_windows_uses_installed_shared_DLL_and_original_O0_sources(self):
+        calls, programs, runtime, context = self.prepared_context('Windows')
+        self.assertEqual(set(programs), {'consumer', 'native_http1_e2e'})
+        self.assertTrue(any(argv == ['gmake', '-C', 'src', 'install'] for argv, _, _ in calls))
+        self.assertTrue(any(argv == ['pkg-config', '--libs', 'libhttpserver'] for argv, _, _ in calls))
+        links = [argv for argv, _, _ in calls if argv[0] == 'offline-c++' and '-c' not in argv and '-o' in argv]
+        self.assertEqual(len(links), 2)
+        self.assertTrue(all('-lhttpserver' in argv and '-lws2_32' in argv for argv in links))
+        for row in context['compiles'].values():
+            self.assertEqual(row['compile_options'], ['-O0', '-g'])
+            self.assertTrue(all('/prefix/include/' in name for name in row['dependencies']))
+        units = context['compiles']['native_http1_e2e']['sources']
+        self.assertEqual(set(units), {str(ROOT / 'test' / unit) for unit in
+                         self.driver.package_matrix.load()['suites']['native_http1_e2e']['sources']})
+        self.assertTrue(any(name.endswith('libhttpserver.dll') for name in context['artifact_sha256']))
+
+    def test_prepare_darwin_separates_native_PSK_and_installed_static_external_suite(self):
+        calls, programs, runtime, context = self.prepared_context('Darwin')
+        self.assertTrue(any(argv == ['gmake', '-j2', '-C', 'test', 'tls_psk'] and
+                            cwd == self.directory / 'Darwin/build' for argv, cwd, _ in calls))
+        self.assertTrue(all('-O0' in env['CXXFLAGS'] for argv, _, env in calls if argv[0] == 'gmake'))
+        self.assertFalse(any(argv[0] == 'gmake' and 'external_http1_e2e' in argv for argv, _, _ in calls),
+                         'external package suite must not link the internal core target')
+        row = context['compiles']['external_http1_e2e']
+        self.assertEqual(row['compile_options'], ['-O0', '-g'])
+        self.assertEqual(set(row['sources']), {str(ROOT / 'test' / unit) for unit in
+                         self.driver.package_matrix.load()['suites']['external_http1_e2e']['sources']})
+        self.assertTrue(all('/plain-prefix/include/' in name for name in row['dependencies']))
+        self.assertTrue(any(argv == ['pkg-config', '--libs', '--static', 'libhttpserver'] for argv, _, _ in calls))
+        link = next(argv for argv, _, _ in calls if argv[0] == 'offline-c++' and '-c' not in argv and '-o' in argv)
+        self.assertIn(str(self.directory / 'Darwin/plain-prefix/lib/libhttpserver.a'), link)
+        self.assertNotIn('-lhttpserver', link)
+        self.assertTrue(any(name.endswith('/plain-prefix/lib/libhttpserver.a') for name in context['artifact_sha256']))
+        config = next(argv for argv, cwd, _ in calls if cwd == self.directory / 'Darwin/plain-build' and
+                      len(argv) > 1 and argv[1].endswith('/configure'))
+        self.assertTrue({'--disable-v3-tls', '--disable-shared', '--enable-static'}.issubset(config))
 
     def test_fixed_partitions_maximum_launches_and_actual_seconds(self):
         self.assertEqual(self.driver.PLATFORMS, {
@@ -271,6 +391,73 @@ class DriverTests(unittest.TestCase):
 
 
 
+class FixtureStdoutTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.directory = Path(self.temp.name)
+        spec = importlib.util.spec_from_file_location('wire_capture', ROOT / 'test/integ/native_websocket_client.py')
+        self.client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.client)
+        self.stub = self.directory / 'fixture-stub'
+        self.stub.write_text('#!' + sys.executable + '\nimport time\nprint("READY 1234", flush=True)\n'
+                             'print("STATS observed-before-stop", flush=True)\ntime.sleep(30)\n')
+        self.stub.chmod(0o700)
+        self.receipt = self.directory / 'fixture-stdout.bin'
+
+    def start(self):
+        self.assertIn('stdout_receipt', inspect.signature(self.client.start).parameters, 'no incremental receipt boundary')
+        process, events, _ = self.client.start(str(self.stub), stdout_receipt=self.receipt)
+        self.addCleanup(lambda: self.retire(process))
+        self.assertEqual(events.get(timeout=2), 'STATS observed-before-stop')
+        self.assertIn(b'STATS observed-before-stop', self.receipt.read_bytes())
+        return process
+
+    @staticmethod
+    def retire(process):
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=2)
+        process.task_remaining_output_reader.join(timeout=1)
+        process.task122_error_reader.join(timeout=1)
+        for pipe in (process.stdin, process.stdout, process.stderr):
+            if not pipe.closed:
+                pipe.close()
+
+    def test_already_observed_stdout_survives_original_stop_wait_exception(self):
+        process = self.start()
+        original_wait = process.wait
+        calls = []
+        def wait(timeout):
+            calls.append(timeout)
+            if timeout == 10:
+                raise subprocess.TimeoutExpired(str(self.stub), timeout)
+            return original_wait(timeout=timeout)
+        with patch.object(process, 'wait', side_effect=wait):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                self.client.stop(process)
+        self.assertEqual(calls, [10, 5])
+        self.assertIsNotNone(process.poll())
+        self.assertEqual(self.receipt.read_bytes(), b'READY 1234\nSTATS observed-before-stop\n')
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX owned wrapper retirement contract')
+    def test_already_observed_stdout_survives_outer_wrapper_retirement(self):
+        spec = importlib.util.spec_from_file_location('capture_driver', DRIVER)
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        wrapper = ('import importlib.util, time; '
+                   's=importlib.util.spec_from_file_location("wire", ' + repr(str(ROOT / 'test/integ/native_websocket_client.py')) + '); '
+                   'm=importlib.util.module_from_spec(s); s.loader.exec_module(m); '
+                   'p,e,port=m.start(' + repr(str(self.stub)) + ', stdout_receipt=' + repr(str(self.receipt)) + '); '
+                   'assert e.get(timeout=2)=="STATS observed-before-stop"; '
+                   'print("observed", flush=True); time.sleep(30)')
+        result = driver.run_program([sys.executable, '-c', wrapper], self.directory, {'PATH': os.environ['PATH']},
+                                    cap=1.5, gate=1.5, cleanup=.3)
+        self.assertFalse(result['passed'])
+        self.assertIn(b'observed', (self.directory / 'stdout.bin').read_bytes())
+        self.assertEqual(self.receipt.read_bytes(), b'READY 1234\nSTATS observed-before-stop\n')
+
+
 class SourceContracts(unittest.TestCase):
     def test_original_traffic_and_configuration_modules_are_byte_identical(self):
         for path in ('scripts/lib/package_traffic.py', 'scripts/lib/package_process.py',
@@ -287,7 +474,8 @@ class SourceContracts(unittest.TestCase):
         self.assertNotIn('mutex', wait)
         self.assertNotIn('capture_event', wait)
         self.assertIn('WSA_WAIT_ERROR', source)
-        self.assertIn('SO_ERROR', source)
+        self.assertNotRegex(source, r'getsockopt\s*\([^;]*\bSO_ERROR\b')
+        self.assertIn('socket_error=unavailable', source)
         self.assertIn('SO_TYPE', source)
 
     def test_consumer_original_control_flow_and_stop_order_are_retained(self):
@@ -332,6 +520,22 @@ class SourceContracts(unittest.TestCase):
         raw = (ROOT / 'test/integ/raw_http_client.hpp').read_bytes()
         self.assertEqual(raw, original('test/integ/raw_http_client.hpp'))
         self.assertIn(b'kExchangeBudget{5000}', raw)
+
+    def test_close_snapshot_releases_mutex_before_formatting_or_IO(self):
+        source = (ROOT / 'test/integ/external_http1_e2e_test.cpp').read_text()
+        capture = source[source.index('    void capture_close('):source.index('    std::atomic<std::size_t> capture_sockets')]
+        # Parse lexical scopes so a future rename cannot make a held try-lock look released.
+        depth, lock_depth, unlocked = 0, None, False
+        for line in capture.splitlines():
+            depth += line.count('{')
+            if 'std::unique_lock' in line:
+                lock_depth = depth
+            if 'std::to_string' in line or 'std::fprintf' in line:
+                self.assertTrue(unlocked, 'diagnostic formatting/IO still holds the queue mutex')
+            depth -= line.count('}')
+            if lock_depth is not None and depth < lock_depth:
+                unlocked = True
+        self.assertTrue(unlocked)
 
     def test_wire_original_helper_ast_and_selected_six_checks_cleanup_only(self):
         path = 'test/integ/native_websocket_client.py'

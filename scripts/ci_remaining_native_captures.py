@@ -557,7 +557,9 @@ def prepare(args, source, directory, env):
     build.mkdir()
     prefix.mkdir()
     provider = args.provider_prefix or directory / 'no-provider'
-    build_env = dict(env, CXX=args.compiler, CC=args.cc, MAKE=args.make, CXXFLAGS='-O0 -g -DLIBHTTPSERVER_REMAINING_CAPTURE',
+    optimization = '-O3' if host == 'Linux' else '-O0'
+    build_env = dict(env, CXX=args.compiler, CC=args.cc, MAKE=args.make,
+                     CXXFLAGS=optimization + ' -g -DLIBHTTPSERVER_REMAINING_CAPTURE',
                      CPPFLAGS='', LDFLAGS='', PKG_CONFIG_PATH='',
                      PKG_CONFIG_LIBDIR=os.pathsep.join(args.pkg_config_dir))
     if mode == 'yes':
@@ -606,14 +608,35 @@ def prepare(args, source, directory, env):
         command([args.make, '-j2', '-C', 'test'] + selected, build, build_env)
         if host == 'Darwin':
             # A separate TLS-off static lane preserves the original external-H1 linkage.
-            plain = directory / 'plain-build'
+            plain, plain_prefix = directory / 'plain-build', directory / 'plain-prefix'
             plain.mkdir()
+            plain_prefix.mkdir()
             plain_env = dict(build_env, V3_TLS_CFLAGS='', V3_TLS_LIBS='', LDFLAGS='')
             command([bash, configure, '--disable-v3-tls', '--disable-shared', '--enable-static',
-                     '--disable-examples'], plain, plain_env)
+                     '--disable-examples', '--prefix=' + plain_prefix.as_posix()], plain, plain_env)
             command([args.make, '-j2', '-C', 'src'], plain, plain_env)
-            command([args.make, '-j2', '-C', 'test', 'external_http1_e2e'], plain, plain_env)
-            programs = dict(tls_psk=build / 'test/tls_psk', external_http1_e2e=plain / 'test/external_http1_e2e')
+            command([args.make, '-C', 'src', 'install'], plain, plain_env)
+            command([args.make, 'install-pkgconfigDATA'], plain, plain_env)
+            plain_runtime = dict(runtime, PKG_CONFIG_PATH='', PKG_CONFIG_LIBDIR=os.pathsep.join(
+                [str(plain_prefix / 'lib/pkgconfig')] + args.pkg_config_dir))
+            cflags = shlex.split(command(['pkg-config', '--cflags', 'libhttpserver'], plain, plain_runtime).strip())
+            libraries = shlex.split(command(['pkg-config', '--libs', '--static', 'libhttpserver'], plain, plain_runtime).strip())
+            # Select the installed archive explicitly, even if another shared package is on the host.
+            libraries = [str(plain_prefix / 'lib/libhttpserver.a') if item == '-lhttpserver' else item
+                         for item in libraries]
+            consumer = directory / 'external-build'
+            consumer.mkdir()
+            executable = consumer / 'external_http1_e2e'
+            flags = cflags + ['-DHTTPSERVER_COMPILATION', '-I' + str(source / 'src'), '-I' + str(source / 'test')]
+            for macro, value in (('TLS_TEST_DIR', source / 'test'),
+                                 ('PARITY_TRANSCRIPT_DIR', source / 'test/parity/transcripts'),
+                                 ('PARITY_DATA_ROOT', source / 'test'), ('HTTP2_CORPUS_DIR', source / 'test/conformance/http2')):
+                flags += ['-D' + macro + '="' + value.as_posix() + '"']
+            units = [source / 'test' / unit for unit in
+                     package_matrix.load()['suites']['external_http1_e2e']['sources']]
+            compiles['external_http1_e2e'] = compile_probe(args.compiler, units, flags, libraries, executable,
+                command, plain_runtime, source, plain, plain_prefix, True)
+            programs = dict(tls_psk=build / 'test/tls_psk', external_http1_e2e=executable)
             for name in ('config.h', 'config.log', 'Makefile', 'test/Makefile'):
                 shutil.copyfile(plain / name, setup / ('plain-' + name.replace('/', '-')))
         else:
@@ -637,6 +660,9 @@ def prepare(args, source, directory, env):
     artifacts = [build / 'config.h', build / 'config.log', build / 'Makefile', build / 'test/Makefile']
     artifacts += [path for path in (prefix.rglob('*') if host == 'Windows' else (build / 'src/.libs').glob('*'))
                   if path.is_file() and path.suffix.lower() in ('.dll', '.so', '.dylib', '.a')]
+    if host == 'Darwin':
+        artifacts += [path for path in plain_prefix.rglob('*') if path.is_file()]
+        artifacts += [Path(str(programs['external_http1_e2e']) + '.map')]
     if args.toolchain_prefix:
         artifacts += [path for path in (args.toolchain_prefix / ('bin' if host == 'Windows' else 'lib/c++')).glob('*')
                       if path.is_file() and (path.suffix.lower() in ('.dll', '.dylib') and
@@ -726,9 +752,10 @@ def execute(args):
             argv = [str(programs[name])]
             if name == 'wire_cleanup':
                 argv = [sys.executable, str(source / 'test/integ/native_websocket_client.py'),
-                        str(programs[name]), '--first-wire-cycle-only']
-        cwd = (source / 'test' if host == 'Windows' and name != 'consumer' else
-               directory / ('plain-build/test' if name == 'external_http1_e2e' else 'build/test') if host != 'Windows' else case)
+                        str(programs[name]), '--first-wire-cycle-only',
+                        '--fixture-stdout-receipt', str(case / 'fixture-stdout.bin')]
+        cwd = (source / 'test' if name == 'external_http1_e2e' or (host == 'Windows' and name != 'consumer') else
+               directory / 'build/test' if host != 'Windows' else case)
         # Singles with a 60s original budget keep retirement inside that allowance.
         cleanup = min(6, cap / 5)
         result = run_program(argv, case, runtime, cap=cap, gate=min(target['gate'], cap),

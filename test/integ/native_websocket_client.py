@@ -12,21 +12,38 @@ import threading
 import time
 
 
-def start(binary):
-    process = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, text=True, bufsize=1)
+def start(binary, *, stdout_receipt=None):
+    # The selected diagnostic wrapper owns this exclusive task-local raw receipt.
+    # Write before publishing each observed event so retirement cannot lose it.
+    output = open(stdout_receipt, 'xb', buffering=0) if stdout_receipt is not None else None
+    try:
+        process = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, bufsize=1)
+    except BaseException:
+        if output is not None:
+            output.close()
+        raise
     events = queue.Queue()
     process.task_remaining_stdout = []
     process.task_remaining_output_overflow = False
     def drain_stdout():
         remaining = 1024 * 1024
-        for line in process.stdout:
-            if len(line) > remaining:
-                process.task_remaining_output_overflow = True
-            if remaining > 0:
-                process.task_remaining_stdout.append(line[:remaining])
-            remaining = max(0, remaining - len(line))
-            events.put(line.strip())
+        try:
+            for line in process.stdout:
+                raw = line.encode('utf-8', errors='replace')
+                if len(raw) > remaining:
+                    process.task_remaining_output_overflow = True
+                captured = raw[:remaining]
+                if captured:
+                    if output is not None:
+                        output.write(captured)
+                        os.fsync(output.fileno())
+                    process.task_remaining_stdout.append(captured.decode('utf-8', errors='replace'))
+                remaining = max(0, remaining - len(raw))
+                events.put(line.strip())
+        finally:
+            if output is not None:
+                output.close()
     process.task_remaining_output_reader = threading.Thread(target=drain_stdout, daemon=True)
     process.task_remaining_output_reader.start()
     process.task122_errors = []
@@ -388,11 +405,12 @@ def main():
     parser.add_argument('--smoke', action='store_true')
     parser.add_argument('--drain-only', action='store_true')
     parser.add_argument('--first-wire-cycle-only', action='store_true')
+    parser.add_argument('--fixture-stdout-receipt')
     args = parser.parse_args()
     if args.first_wire_cycle_only:
         if args.independent or args.smoke or args.drain_only:
             parser.error('first cycle cannot be combined with another selection')
-        process, events, port = start(args.fixture)
+        process, events, port = start(args.fixture, stdout_receipt=args.fixture_stdout_receipt)
         try:
             raw_cases(port, events, process)
             backpressure(port, events)

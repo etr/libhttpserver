@@ -1,6 +1,6 @@
 # FEATURE-ci-remaining-native-captures — approved diagnostic preparation
 
-Status: source prepared; caller readiness validation and one CI dispatch pending.
+Status: readiness validated; one authorized CI dispatch and native receipt closure pending.
 This branch must never merge into v3. Base is exact v3
 `b2ee4a2bd2a779921c9200a6afa8bc222fcc64d2`.
 
@@ -24,10 +24,11 @@ native targets and does not push, dispatch, merge, or remove this worktree.
   Persist an exclusive category/case permit and charge each attempt before
   launch. Debit measured monotonic elapsed time, stop the repeated category on
   its first failure, and attempt other independent categories once.
-- [x] Add error-only Windows poll/socket state with immediate last-error saving,
+- [x] Add error-only Windows poll/socket metadata with immediate last-error saving,
   and seven scalar stop-phase witness writes; no successful-poll trace, clock,
   ring, or mutex. Preserve the original traffic/configuration helper bytes and
-  consumer statements/stop order.
+  consumer statements/stop order. Never read consuming `SO_ERROR`; mark pending
+  socket error unavailable and retain only nonconsuming type/address metadata.
 - [x] Integrate the separately proven bounded MiniDumpWriteDump implementation
   byte for byte, with a bounded owned subprocess and creation/image identity
   checks. Independently validate header/stream bounds, thread contexts/stacks,
@@ -40,11 +41,18 @@ native targets and does not push, dispatch, merge, or remove this worktree.
   byte identical and retain all original calls, locks, waits and deadlines.
 - [x] Capture client close state and the fixture host's readiness/owner phase,
   last dispatch batch and protected retained/replay queues using try-lock after the original
-  failed close assertion (busy queues are explicitly unavailable). Preserve all four tests/assertions and the original
-  5000ms client close helper bytes. Build this lane TLS off and static.
+  failed close assertion (busy queues are explicitly unavailable). Copy scalar
+  queue state and release the mutex before formatting or diagnostic I/O. Preserve
+  all four tests/assertions and the original 5000ms client close helper bytes.
+  Install the TLS-off static package, compile the unchanged suite source set
+  against its installed headers/archive at O0/g, and run from the original test cwd.
+  Keep native PSK/private-provider preparation separate.
 - [x] Select only the original first Linux wire fixture cycle: six original wire
   checks and original cleanup. Preserve helper ASTs and cleanup try/finally;
-  retain fixture stdout/STATS. Lazy terminal operands save the exact values
+  retain bounded fixture stdout/STATS incrementally in an exclusive task-local
+  receipt before publishing each observed event, including timeout/retirement paths.
+  Build the fixture and its internal static core at effective O3. Lazy terminal
+  operands save the exact values
   returned by the original atomic loads in `failed || accepted != closed`,
   evaluated once with its original short circuit. Emit after fixing the result;
   skipped counter operands remain `skipped`. Failure-reason bits name existing
@@ -52,7 +60,10 @@ native targets and does not push, dispatch, merge, or remove this worktree.
 - [x] Run bounded offline contracts, compile the actual modified C++ translation
   units using cached GNU/LLVM/private OpenSSL headers, compile the actual
   Windows consumer to a genuine x64 COFF object, and check syntax/lint/diffs.
-- [ ] Caller full Groundwork readiness review and exact source seal.
+- [x] Caller full Groundwork readiness review and exact source seal.
+  Session `e88ca9742808af851fc266b447523e2a`: PASS, two iterations,
+  fifteen requested findings repaired, nine closure approvals; one approved
+  minor persisted without reopening repair scope. Native targets remain zero.
 - [ ] Caller single authorized manual CI dispatch and receipt closure.
 
 ## Fixed execution partition
@@ -75,18 +86,28 @@ execution authority.
 ## Verification receipts and limits
 
 Evidence: `.debug/ci-remaining-native-captures-_5l31jeh/implementation/` in the
-main repository, outside this disposable diagnostic worktree.
+main repository, outside this disposable diagnostic worktree. Scoped repair
+RED/GREEN, 45-contract output, affected compile commands/logs and lint receipts
+are retained in `.git/groundwork/validation/cdb4ee2aea69cc6a/b79924ab24cbb306/`
+`groundwork-validation-e88ca9742808af851fc266b447523e2a/`.
 
-- 39 offline contracts pass, including durable prelaunch charges/actual budgets,
+- 45 offline contracts pass, including durable prelaunch charges/actual budgets,
   stop-first/independence/no-resume, source/attempt gates, primary exit versus raw
   pipe EOF and owned descendant retirement, secret filtering, simultaneous
   traffic/shutdown errors, suite counts, native source preservation and invalid
-  dump payload/API receipts. RED and GREEN logs are retained.
+  dump payload/API receipts. Actual `prepare()`/package compiler command-boundary
+  fakes cover Windows installed shared DLL/O0, Darwin native PSK/O0 and installed
+  static external HTTP/1/O0, and Linux internal static fixture/O3. Controlled Python
+  stubs prove observed fixture stdout survives the original stop wait exception
+  and owned outer wrapper retirement. No original native program is used by these
+  checks. RED and GREEN logs are retained.
 - Actual C++ object compilation: cached GNU and real LLVM/libc++ for the three
   TLS implementation files, original PSK TU, external-H1 TU and wire fixture TU;
   cached LLVM-MinGW compiles the actual Windows consumer/host helper to x64
   COFF. Private OpenSSL headers/configuration identify 3.5.9. These compile-only
-  checks do not establish native Windows/Darwin runtime behavior.
+  checks do not establish native Windows/Darwin runtime behavior. After the scoped
+  repair, GNU and LLVM external-H1 objects and the LLVM-MinGW Windows consumer
+  object were rebuilt; unchanged TLS/wire compile receipts are reused.
 - The initial wire fixture compile omitted its documented examples include path;
   corrected setup uses `-Iexamples`. The initial failure and corrected receipts
   are retained. No production repair or native target invocation resulted.
@@ -109,8 +130,11 @@ main repository, outside this disposable diagnostic worktree.
 Instrumentation can affect scheduling. Windows successful polls retain their
 original operations; stop witness writes occur only around original stop calls.
 PSK rows are bounded and emitted after decisive worker operations, with queue
-state copied under existing locks. Added EOF/receipt work occurs after the
-original fixture stop. Terminal predicate logging occurs only after the result
+state copied under existing locks. External close snapshots release the queue
+mutex before diagnostic formatting and I/O. Bounded fixture stdout is written
+and fsynced during draining, before each event is published; this additional
+I/O may perturb scheduling. Existing stop/wait/kill order and exceptions remain
+unchanged, and post-stop EOF assertions retain their original role. Terminal predicate logging occurs only after the result
 is fixed; scalar operand recording adds no waits, clocks or logging to it.
 No native failure threshold, worker policy, traffic, shutdown order or assertion
 was relaxed. No other subsystem repair is included.

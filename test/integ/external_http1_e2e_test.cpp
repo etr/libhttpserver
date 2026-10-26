@@ -127,10 +127,20 @@ struct host_server {
     }
     void capture_close(const raw_http::connection& client, std::size_t responses) {
         // This is after the original failed check: it never pumps or waits.
-        std::unique_lock lock(mu, std::try_to_lock);
-        const auto kept = lock ? std::to_string(retained.size()) : "unavailable";
-        const auto queued = lock ? std::to_string(replay.size()) : "unavailable";
-        const auto requested = lock ? std::to_string(replay_requested) : "unavailable";
+        bool available = false, requested_snapshot = false;
+        std::size_t retained_snapshot = 0, replay_snapshot = 0;
+        {
+            std::unique_lock lock(mu, std::try_to_lock);
+            if (lock) {
+                retained_snapshot = retained.size();
+                replay_snapshot = replay.size();
+                requested_snapshot = replay_requested;
+                available = true;
+            }
+        }
+        const auto kept = available ? std::to_string(retained_snapshot) : "unavailable";
+        const auto queued = available ? std::to_string(replay_snapshot) : "unavailable";
+        const auto requested = available ? std::to_string(requested_snapshot) : "unavailable";
         std::fprintf(stderr, "EXTERNAL_CLOSE_CAPTURE peer_closed=%d valid=%d responses=%zu stopping=%d failed=%d "
             "sockets=%zu wake=%d deadline=%d owner_phase=%u dispatched=%u last_events=%zu retained=%s replay=%s "
             "replay_requested=%s stale=%d empty=%d wakes=%d\n", client.peer_closed(), client.valid(), responses,

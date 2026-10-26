@@ -72,12 +72,9 @@ inline void capture_wait_error(const std::vector<slot>& fds, int saved_error) {
     std::fprintf(stderr, "WSA_WAIT_ERROR code=%d stop_bits=%u ticks=%lld count=%zu\n",
         saved_error, stop_bits.load(), ticks.QuadPart, fds.size());
     for (const auto& fd : fds) {
-        int type = 0, error = 0, length = sizeof(type);
+        int type = 0, length = sizeof(type);
         const int type_rc = ::getsockopt(fd.fd, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&type), &length);
         const int type_error = type_rc < 0 ? ::WSAGetLastError() : 0;
-        length = sizeof(error);
-        const int error_rc = ::getsockopt(fd.fd, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &length);
-        const int error_error = error_rc < 0 ? ::WSAGetLastError() : 0;
         sockaddr_storage local{}, peer{};
         length = sizeof(local);
         const int local_rc = ::getsockname(fd.fd, reinterpret_cast<sockaddr*>(&local), &length);
@@ -86,9 +83,9 @@ inline void capture_wait_error(const std::vector<slot>& fds, int saved_error) {
         const int peer_rc = ::getpeername(fd.fd, reinterpret_cast<sockaddr*>(&peer), &length);
         const int peer_error = peer_rc < 0 ? ::WSAGetLastError() : 0;
         std::fprintf(stderr, "WSA_WAIT_SOCKET fd=%zu events=%d revents=%d type=%d type_rc=%d type_error=%d "
-            "socket_error=%d error_rc=%d error_error=%d local_rc=%d local_error=%d local_family=%d "
+            "socket_error=unavailable local_rc=%d local_error=%d local_family=%d "
             "peer_rc=%d peer_error=%d peer_family=%d\n", static_cast<std::size_t>(fd.fd), fd.events,
-            fd.revents, type, type_rc, type_error, error, error_rc, error_error, local_rc, local_error,
+            fd.revents, type, type_rc, type_error, local_rc, local_error,
             local.ss_family, peer_rc, peer_error, peer.ss_family);
     }
 }
