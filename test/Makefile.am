@@ -584,6 +584,11 @@ EXTRA_DIST += integ/native_websocket_e2e.sh
 
 task_resume_signal_lifetime_SOURCES = unit/task_resume_signal_lifetime_test.cpp
 task_resume_signal_lifetime_LDADD = $(top_builddir)/src/libhttpserver.la
+
+# Windows children bound DLL process-detach retirement; POSIX checks ordinary
+# explicit timer ownership without changing its process lifetime semantics.
+check_PROGRAMS += task_timer_shutdown
+task_timer_shutdown_SOURCES = unit/task_timer_shutdown_test.cpp
 websocket_drain_SOURCES = unit/websocket_drain_test.cpp
 websocket_drain_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 websocket_drain_race_SOURCES = unit/websocket_drain_race_test.cpp
