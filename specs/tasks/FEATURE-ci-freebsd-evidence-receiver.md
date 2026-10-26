@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-evidence-receiver: recover FreeBSD package evidence into a fresh receiver
 
-Status: Implementation complete; caller validation and finalization pending.
+Status: Complete locally; final validation passed; native FreeBSD post-fix evidence remains pending CI.
 Base: `v3` at `b2ee4a2bd2a779921c9200a6afa8bc222fcc64d2`.
 Plan: `.groundwork-plans/FEATURE-ci-freebsd-evidence-receiver-plan.md` in the primary checkout.
 Journal: `.debug/ci-freebsd-scp-overlay-w5cb2jxm/journal.md` in the primary checkout.
@@ -62,3 +62,7 @@ provider/SDK rebuild, CI dispatch, push or Groundwork validation. The guest nati
 commands, checks, archive workflow and artifact identity remain unchanged. Native
 post-fix recovery and overall CI-green status remain incomplete and CI-owned;
 repository policy permits local completion without nonlocal platform receipts.
+
+Final validation: session `f70e978d6da79e0457ccf41136d35548` passed
+one iteration, zero fixes and zero unworked findings. Existing focused checks
+were reused. Native post-fix recovery stays pending the next v3 package run.
