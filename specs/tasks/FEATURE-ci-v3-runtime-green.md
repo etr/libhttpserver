@@ -1,6 +1,6 @@
 # FEATURE-ci-v3-runtime-green
 
-Status: Stage 1 implemented with focused proof; complete CI and remaining supported runtime repairs are pending. Groundwork validation is explicitly prohibited until FULL CI IS GREEN.
+Status: Stages 1 and 3 implemented with focused proof; complete CI and remaining supported runtime repairs are pending. Groundwork validation is explicitly prohibited until FULL CI IS GREEN.
 Base: `v3` at `8f3083977f49706e66cefbb3ee8b6f6685469719`.
 Working branch: `task/FEATURE-ci-v3-runtime-green` (retain this one worktree through CI).
 Plan: primary checkout `.groundwork-plans/FEATURE-ci-v3-runtime-green-plan.md`.
@@ -47,3 +47,18 @@ This caller-authorized message change follows proven timer stage commit `70d0fba
 A bounded Windows test substitutes only the external WSAPoll boundary to return WSAEINVAL through the actual Winsock last-error API. Before the change it returns 2 because the exception omits numeric 10022 (0.310s); after it exits 0 (0.303s), also checking that WSAEINTR still produces no exception. This controlled message regression is not a reproduction of the original consumer failure. Actual Windows compilation, GNU syntax checking of `examples/external_event_loop.cpp`, changed-header cpplint and diff checks pass. Commands, sources and receipts are under stage evidence `host-poll-message/`.
 
 Additional ordinary cleanup proof: a static-linked Windows default service releases its pending callback during normal executable CRT teardown before a later registered atexit observer checks the capture; exit 0 in 0.391s (`ordinary-default-native-test.json`). The default service is therefore not unconditionally immortal.
+
+## Stage 3: FreeBSD evidence transport setup
+
+- [x] Preserve actual current8f native package PASS, redundant automatic-copyback FAIL, and explicit fresh SCP recovery/upload PASS as separate receipts.
+- [x] Set `copyback: 'false'` on the pinned FreeBSD VM action in package validation and release acceptance.
+- [x] Pass the existing 13 focused workflow tests, actionlint and exact source-preservation proof.
+- [ ] Full working-branch CI with the corrected VM setup (not dispatched here).
+
+Current8f package job `121358499066` passed installed native TLS=no at 03:49UTC, TLS=yes and identical installed headers at 04:03UTC. Its later automatic whole-workspace rsync copyback failed with protocol error 12 after receiving 4,049,536,821 bytes. Explicit fresh SCP recovery then succeeded and uploaded artifact `12626459963`, 776,035,888 bytes, producer-reported digest `597ded253263153a8ae4bb617df42defaaceb55c930978e013e4063253532894`. This is retained raw-log/metadata evidence; the artifact was not downloaded for stage3. It does not prove the separate cookie archive translation-unit gate, which remains pending.
+
+The exact pinned action implementation SHA256 is `7f9e5e36ceae15937ec0aabbf7e4ce4ab2855b36aa3dfa0ce8e79e7c0fb9569e`; its post-run step 7 runs only when the lowercased copyback input is not `'false'`. Initial synchronization and guest execution are distinct earlier operations. The input is declared in the [pinned action metadata](https://raw.githubusercontent.com/vmactions/freebsd-vm/c9f815bc7aa0d34c9fdd0619b034a32d6ca7b57e/action.yml). Disabling only this redundant post-run copyback leaves the explicit required SCP transport responsible for retrieving evidence. The underlying rsync connection-loss mechanism is not claimed diagnosed.
+
+Whole-file byte comparison proves that removing the single added scalar from each workflow restores the original file exactly. Guest prepare/run/trap/native commands, initial sync settings, pinned actions/toolchains, source checks, every gate, SCP error propagation, artifact paths and existing fallback handling are therefore unchanged. An existing fallback is preserved if present; automatic copyback is no longer a promised source for it. Failed SCP and missing evidence remain failures.
+
+Focused checks: `python3 scripts/test-v3-ci-workflows.py FreeBSDNodePrerequisites -v` (9 tests), `python3 scripts/test-v3-package-workflow.py -v` (4 tests), cached actionlint on both workflows, and `git diff --check` all pass. No new mirror test, VM, timeout increase, retry, transport framework, baseline suite, CI dispatch, push, merge or Groundwork validation was performed. Stage3 commands, outputs, source hashes and preservation proof are retained at `.debug/v3-ci-green-VSvXxx/runtime-green-stage3/` in the primary checkout. PSK source remains untouched while its fresh native authorization is pending.

@@ -289,6 +289,7 @@ jobs:
         cp -R "$RUNNER_TEMP/selected" build/ci-selected-input
     - uses: vmactions/freebsd-vm@c9f815bc7aa0d34c9fdd0619b034a32d6ca7b57e
       with:
+        copyback: 'false'
         release: '14.3'
         mem: 8192
         cpu: 2
