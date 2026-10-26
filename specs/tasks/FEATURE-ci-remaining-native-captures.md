@@ -1,6 +1,6 @@
 # FEATURE-ci-remaining-native-captures — approved diagnostic preparation
 
-Status: readiness validated; one authorized CI dispatch and native receipt closure pending.
+Status: bounded capture CLOSED; failure evidence retained, native stack evidence unavailable. This is not a green CI result.
 This branch must never merge into v3. Base is exact v3
 `b2ee4a2bd2a779921c9200a6afa8bc222fcc64d2`.
 
@@ -64,7 +64,17 @@ native targets and does not push, dispatch, merge, or remove this worktree.
   Session `e88ca9742808af851fc266b447523e2a`: PASS, two iterations,
   fifteen requested findings repaired, nine closure approvals; one approved
   minor persisted without reopening repair scope. Native targets remain zero.
-- [ ] Caller single authorized manual CI dispatch and receipt closure.
+- [x] Caller single authorized manual CI dispatch and receipt closure.
+  Run `40252675312`, source `cc65df888622e129f8314e1cfb769f3b4e4e45ef`;
+  all category ledgers closed: 83 target launches, 285.248798116 actual seconds.
+  Windows consumer 64/64 and Linux first wire cycles 16/16 passed; Darwin
+  external suite 4 tests/52 checks passed. These are nonreproductions, not fixes.
+  Windows native suite passed 734 checks but failed the 180-second process-exit
+  gate; its dump was unavailable. Darwin PSK failed 3 of 313 checks across
+  14 tests. All production causes remain uncertain; no retry is authorized.
+  Full artifact ZIP hashes and 2,071 source-file hashes per host verified.
+  Final assessment remains outside this disposable worktree in
+  `.debug/ci-remaining-native-captures-_5l31jeh/native-receipts/final-assessment.json`.
 
 ## Fixed execution partition
 
@@ -142,3 +152,18 @@ was relaxed. No other subsystem repair is included.
 The separately assessed FreeBSD SCP destination-namespace collision is outside
 these five categories and remains assigned to the caller's later task. Its
 failed recovery gate has not been relabeled as passed here.
+
+## Closure limits
+
+The Windows dump worker reopened the primary with access 0x0410, omitting
+SYNCHRONIZE required by the unchanged helper wait. This integration defect is
+corroborated by native capture failure and documented API requirements; the
+actual wait return/error was not retained. No stack or MDMP is claimed. The
+separate sanitized preflight used a retained Popen handle and did not exercise
+this worker boundary. PSK worker/provider observations reached their row bounds
+and lack decisive failed-test attribution. Remaining seconds grant no further
+launch authority. Retain this branch unmerged; no diagnostic code belongs in v3.
+
+User workflow correction: iterate and prove the actual changed execution path
+on the isolated branch before final Groundwork validation. Diagnostic iterations
+do not require a new full validation cycle.
