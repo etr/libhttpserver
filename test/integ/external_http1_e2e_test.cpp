@@ -24,6 +24,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <cstdio>
 #include <mutex>
 #include <span>
 #include <string>
@@ -60,7 +61,11 @@ struct host_server {
             try {
                 const auto failure_deadline = clock_type::now() + 10s;
                 while (!stopping.load()) {
+                    capture_owner_phase.store(1);
                     auto snapshot = server.readiness()->interests();
+                    capture_sockets.store(snapshot.sockets.size());
+                    capture_wake.store(snapshot.wake.has_value());
+                    capture_deadline.store(snapshot.next_deadline.has_value());
                     {
                         std::lock_guard lock(mu);
                         if (replay_requested) {
@@ -81,6 +86,7 @@ struct host_server {
                         }
                         for (const auto& socket : snapshot.sockets) retained.push_back(socket);
                     }
+                    capture_owner_phase.store(2);
                     auto events = v3_host::wait(snapshot, failure_deadline);
                     if (clock_type::now() >= failure_deadline) {
                         failed.store(true);
@@ -94,14 +100,18 @@ struct host_server {
                         std::lock_guard lock(mu);
                         events.insert(events.end(), replay.begin(), replay.end());
                         replay.clear();
+                        capture_queued.store(events.size());
                     }
+                    capture_owner_phase.store(3);
                     const auto result = server.readiness()->dispatch(events, clock_type::now());
+                    capture_dispatches.fetch_add(1);
                     if (!result.ok() && !stopping.load()) {
                         failed.store(true);
                         break;
                     }
                 }
             } catch (...) { failed.store(true); }
+            capture_owner_phase.store(4);
         });
         return true;
     }
@@ -115,6 +125,22 @@ struct host_server {
         if (thread.joinable()) thread.join();
         server.stop();
     }
+    void capture_close(const raw_http::connection& client, std::size_t responses) {
+        // This is after the original failed check: it never pumps or waits.
+        std::unique_lock lock(mu, std::try_to_lock);
+        const auto kept = lock ? std::to_string(retained.size()) : "unavailable";
+        const auto queued = lock ? std::to_string(replay.size()) : "unavailable";
+        const auto requested = lock ? std::to_string(replay_requested) : "unavailable";
+        std::fprintf(stderr, "EXTERNAL_CLOSE_CAPTURE peer_closed=%d valid=%d responses=%zu stopping=%d failed=%d "
+            "sockets=%zu wake=%d deadline=%d owner_phase=%u dispatched=%u last_events=%zu retained=%s replay=%s "
+            "replay_requested=%s stale=%d empty=%d wakes=%d\n", client.peer_closed(), client.valid(), responses,
+            stopping.load(), failed.load(), capture_sockets.load(), capture_wake.load(), capture_deadline.load(), capture_owner_phase.load(),
+            capture_dispatches.load(), capture_queued.load(), kept.c_str(), queued.c_str(), requested.c_str(),
+            stale_replays.load(), empty_dispatches.load(), wake_dispatches.load());
+    }
+    std::atomic<std::size_t> capture_sockets{0}, capture_queued{0};
+    std::atomic<bool> capture_wake{false}, capture_deadline{false};
+    std::atomic<unsigned> capture_dispatches{0}, capture_owner_phase{0};
     srv::native_server server;
     std::atomic_bool stopping{false};
     std::atomic_bool failed{false};
@@ -232,6 +258,7 @@ LT_BEGIN_AUTO_TEST(external_http1_suite, reconnect_replayed_callbacks_and_host_d
         LT_CHECK(old.send("GET /hello HTTP/1.1\r\nHost: local\r\nConnection: close\r\n\r\n"));
         std::deque<raw_http::observed_response> seen;
         LT_CHECK(old.receive_close(seen));
+        if (!old.peer_closed()) fx.capture_close(old, seen.size());
         LT_ASSERT(seen.size() == 1);
         LT_CHECK_EQ(seen.front().body, std::string("fresh"));
     }

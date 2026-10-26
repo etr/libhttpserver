@@ -16,7 +16,19 @@ def start(binary):
     process = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, text=True, bufsize=1)
     events = queue.Queue()
-    threading.Thread(target=lambda: [events.put(line.strip()) for line in process.stdout], daemon=True).start()
+    process.task_remaining_stdout = []
+    process.task_remaining_output_overflow = False
+    def drain_stdout():
+        remaining = 1024 * 1024
+        for line in process.stdout:
+            if len(line) > remaining:
+                process.task_remaining_output_overflow = True
+            if remaining > 0:
+                process.task_remaining_stdout.append(line[:remaining])
+            remaining = max(0, remaining - len(line))
+            events.put(line.strip())
+    process.task_remaining_output_reader = threading.Thread(target=drain_stdout, daemon=True)
+    process.task_remaining_output_reader.start()
     process.task122_errors = []
 
     def drain_errors():
@@ -62,7 +74,13 @@ def stop(process):
             process.kill()
             process.wait(timeout=5)
         process.task122_error_reader.join(timeout=1)
-    assert process.returncode == 0, (process.returncode, ''.join(process.task122_errors))
+    process.task_remaining_output_reader.join(timeout=1)
+    print('WIRE_FIXTURE_STDOUT_BEGIN', flush=True)
+    print(''.join(process.task_remaining_stdout), end='', flush=True)
+    print('WIRE_FIXTURE_STDOUT_END', flush=True)
+    assert process.returncode == 0, (process.returncode, ''.join(process.task122_errors), ''.join(process.task_remaining_stdout))
+    assert not process.task_remaining_output_overflow, 'fixture stdout capture exceeded bound'
+    assert not process.task_remaining_output_reader.is_alive(), 'fixture stdout EOF unavailable'
 
 
 def external(port):
@@ -369,7 +387,19 @@ def main():
     parser.add_argument('--independent', action='store_true')
     parser.add_argument('--smoke', action='store_true')
     parser.add_argument('--drain-only', action='store_true')
+    parser.add_argument('--first-wire-cycle-only', action='store_true')
     args = parser.parse_args()
+    if args.first_wire_cycle_only:
+        if args.independent or args.smoke or args.drain_only:
+            parser.error('first cycle cannot be combined with another selection')
+        process, events, port = start(args.fixture)
+        try:
+            raw_cases(port, events, process)
+            backpressure(port, events)
+            isolation_case(port)
+        finally:
+            stop(process)
+        return
     if args.drain_only:
         drain_case(args.fixture)
         return

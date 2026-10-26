@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 #include <atomic>
+#include <optional>
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
@@ -40,6 +41,14 @@ namespace {
 std::mutex log_mu;
 std::atomic<int> accepted{0}, closed{0};
 std::atomic<bool> failed{false};
+std::atomic<unsigned> failure_reasons{0};
+// Shadow only the terminal operands, retaining each original atomic load and
+// the original short circuit. A skipped comparison has no invented values.
+template<class T> struct decision_load {
+    const std::atomic<T>& source;
+    std::optional<T>& observed;
+    operator T() const { const T value = source.load(); observed = value; return value; }
+};
 h::resume_signal send_gate;
 h::server::native_server* fixture_server = nullptr;
 void event(const std::string& text) { std::lock_guard lock(log_mu); std::cout << text << std::endl; }
@@ -66,7 +75,10 @@ h::task<void> route(h::exchange& x) {
     h::resume_signal close_gate;
     auto notified = std::make_shared<std::atomic<bool>>(false);
     session.on_close([close_gate, notified](auto info) mutable {
-        if (notified->exchange(true)) failed = true;
+        if (notified->exchange(true)) {
+            failed = true;
+            failure_reasons.fetch_or(1);
+        }
         ++closed;
         close_gate.signal();
         event("CLOSE " + std::to_string(info.clean) + " " + std::to_string(static_cast<int>(info.status.code())));
@@ -104,6 +116,7 @@ h::task<void> route(h::exchange& x) {
                     event("SEND REJECTED " + sent.status.message());
                     if (x.head().route_path != "/reject-send") {
                         failed = true;
+                        failure_reasons.fetch_or(2);
                         co_return;
                     }
                     session.close(1000, "rejected");
@@ -198,11 +211,12 @@ int main() {
                     auto events = v3_host::wait(snapshot);
                     if (!driver->dispatch(events, v3_host::clock_type::now()).ok()) {
                         failed = true;
+                        failure_reasons.fetch_or(4);
                         break;
                     }
                     snapshot = driver->interests();
                 }
-            } catch (...) { failed = true; }
+            } catch (...) { failed = true; failure_reasons.fetch_or(8); }
         });
     }
     event("READY " + std::to_string(server.get_bound_port(0)));
@@ -214,6 +228,7 @@ int main() {
             auto begun = server.begin_drain(std::chrono::milliseconds(250), ticket);
             if (!begun.ok()) {
                 failed = true;
+                failure_reasons.fetch_or(16);
                 break;
             }
             event("DRAIN START");
@@ -225,6 +240,7 @@ int main() {
             h::server::drain_result result;
             if (!ticket.wait(result).ok()) {
                 failed = true;
+                failure_reasons.fetch_or(32);
                 break;
             }
             event(std::string("DRAIN RESULT ") +
@@ -239,5 +255,20 @@ int main() {
     server.stop();
     event("STATS " + std::to_string(accepted.load()) + " " + std::to_string(closed.load()));
     event("STOPPED");
-    return failed || accepted != closed ? 1 : 0;
+    std::optional<bool> decision_failed;
+    std::optional<int> decision_accepted, decision_closed;
+    const auto& source_failed = failed;
+    const auto& source_accepted = accepted;
+    const auto& source_closed = closed;
+    int result = 0;
+    {
+        const decision_load<bool> failed{source_failed, decision_failed};
+        const decision_load<int> accepted{source_accepted, decision_accepted}, closed{source_closed, decision_closed};
+        if (failed || accepted != closed) result = 1;
+    }
+    event("WIRE_DECISION exit=" + std::to_string(result) + " failed=" + std::to_string(*decision_failed) +
+        " accepted=" + (decision_accepted ? std::to_string(*decision_accepted) : "skipped") +
+        " closed=" + (decision_closed ? std::to_string(*decision_closed) : "skipped") +
+        " failure_reasons=" + std::to_string(failure_reasons.load()));
+    return result;
 }

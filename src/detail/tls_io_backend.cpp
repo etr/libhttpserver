@@ -9,6 +9,9 @@
 #include <array>
 #include <atomic>
 #include <deque>
+#include <cstdio>
+#include <functional>
+#include <thread>
 #include <memory>
 #include <mutex>
 #include <unordered_set>
@@ -365,6 +368,9 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
         const auto delivery = gate;
         handshake_outstanding = true;
         const auto admitted = handshake_runtime->submit_handshake([step, request, stop] {
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+            std::size_t capture_output = 0;
+#endif
             if (stop.stop_requested()) {
                 step->result.failure = outcome_code::cancelled;
             } else if (std::chrono::steady_clock::now() >= request->deadline) {
@@ -373,8 +379,23 @@ struct tls_io_backend::core : std::enable_shared_from_this<core> {
                 try {
                     step->result = step->session->handshake();
                     step->output->resize(step->session->drain(*step->output));
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+                    capture_output = step->output->size();
+#endif
                 } catch (...) { step->result = {tls_session::progress::failed}; }
             }
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+            static std::atomic<unsigned> capture_rows{0};
+            const auto row = capture_rows.fetch_add(1);
+            if (row < 1024) {
+                std::fprintf(stderr, "PSK_WORKER session=%p request=%p thread=%zu input=%zu output=%zu result=%d failure=%d stop=%d\n",
+                    static_cast<void*>(step->session.get()), static_cast<void*>(request.get()),
+                    std::hash<std::thread::id>{}(std::this_thread::get_id()), step->input ? step->input->size() : 0,
+                    capture_output, static_cast<int>(step->result.state), static_cast<int>(step->result.failure), stop.stop_requested());
+            } else if (row == 1024) {
+                std::fprintf(stderr, "PSK_WORKER truncated=1\n");
+            }
+#endif
         }, [step, request, weak, delivery] {
             std::lock_guard lock(delivery->mutex);
             if (!delivery->open) return;

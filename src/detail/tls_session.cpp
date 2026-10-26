@@ -16,6 +16,10 @@
 #include <cstdlib>
 #endif
 #include <algorithm>
+#include <atomic>
+#include <cstdio>
+#include <functional>
+#include <thread>
 #include <chrono>
 #include <cstdint>
 #include <ctime>
@@ -180,6 +184,11 @@ struct tls_session::impl {
             selection.snapshot ? metadata().host : std::string{}, deadline, cancellation, std::min(capacity, config->maximum_key_bytes)};
         if (!attempt) attempt = std::make_unique<tls_psk_attempt>(*config, std::move(context));
         auto result = attempt->lookup(version, identity, capacity);
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+        std::fprintf(stderr, "PSK_CALLBACK impl=%p attempt=%p thread=%zu version=%d status=%d\n",
+            static_cast<void*>(this), static_cast<void*>(attempt.get()), std::hash<std::thread::id>{}(std::this_thread::get_id()),
+            static_cast<int>(version), static_cast<int>(result.status));
+#endif
         switch (result.status) {
             case psk_lookup_status::timeout: psk_failure = http::outcome_code::timeout; break;
             case psk_lookup_status::cancelled: psk_failure = http::outcome_code::cancelled; break;
@@ -429,12 +438,23 @@ struct tls_session::impl {
         SSL_free(ssl);
         BIO_free(wire);
     }
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+    int capture_rc = 0, capture_ssl_error = 0;
+    decltype(ERR_peek_error()) capture_first = 0, capture_last = 0;
+#endif
     result classify(int rc, std::size_t bytes = 0) {
         // Must follow the SSL call immediately on this same thread.
+        const int ssl_error = rc > 0 ? SSL_ERROR_NONE : SSL_get_error(ssl, rc);
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+        capture_rc = rc;
+        capture_ssl_error = ssl_error;
+        capture_first = ERR_peek_error();
+        capture_last = ERR_peek_last_error();
+#endif
         if (rc > 0) {
             return {progress::complete, bytes};
         }
-        switch (SSL_get_error(ssl, rc)) {
+        switch (ssl_error) {
             case SSL_ERROR_WANT_READ:
                 return {progress::input};
             case SSL_ERROR_WANT_WRITE:
@@ -521,6 +541,25 @@ tls_session::result tls_session::handshake() {
     ERR_clear_error();
     if (impl_->metadata_failed) return {progress::failed};
     const auto result = impl_->classify(SSL_do_handshake(impl_->ssl));
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+    // The session is exclusively owned by this provider worker. classify saved
+    // its error queue before the original clear; no error is consumed here.
+    static std::atomic<unsigned> capture_rows{0};
+    const auto row = capture_rows.fetch_add(1);
+    if (row < 1024) {
+        std::fprintf(stderr, "PSK_PROVIDER session=%p impl=%p thread=%zu rc=%d ssl_error=%d first=%lu last=%lu "
+            "state=%d version=%d input_pending=%zu output_pending=%zu capacity=%zu result=%d failure=%d\n",
+            static_cast<void*>(this), static_cast<void*>(impl_.get()), std::hash<std::thread::id>{}(std::this_thread::get_id()),
+            impl_->capture_rc, impl_->capture_ssl_error, impl_->capture_first, impl_->capture_last,
+            static_cast<int>(SSL_get_state(impl_->ssl)), SSL_version(impl_->ssl),
+            static_cast<std::size_t>(BIO_ctrl_pending(SSL_get_rbio(impl_->ssl))),
+            static_cast<std::size_t>(BIO_ctrl_pending(impl_->wire)),
+            static_cast<std::size_t>(BIO_ctrl_get_write_guarantee(impl_->wire)),
+            static_cast<int>(result.state), static_cast<int>(result.failure));
+    } else if (row == 1024) {
+        std::fprintf(stderr, "PSK_PROVIDER truncated=1\n");
+    }
+#endif
     if (impl_->metadata_failed) return {progress::failed};
     if (result.state == progress::complete && !impl_->peer) {
         try {

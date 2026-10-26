@@ -35,6 +35,8 @@
 #endif
 
 #include <algorithm>
+#include <atomic>
+#include <cstdio>
 #include <cerrno>
 #include <chrono>
 #include <climits>
@@ -56,6 +58,43 @@ constexpr std::int16_t writable = POLLWRNORM;
 using slot = pollfd;
 constexpr std::int16_t readable = POLLIN;
 constexpr std::int16_t writable = POLLOUT;
+#endif
+
+#if defined(_WIN32) && defined(LIBHTTPSERVER_REMAINING_WAIT_CAPTURE)
+inline std::atomic<unsigned> stop_bits{0};
+inline void capture_stop_phase(unsigned bit) { stop_bits.fetch_or(bit); }
+inline void capture_stop_receipt(bool failed, bool running) {
+    std::fprintf(stderr, "STOP_CAPTURE bits=%u failed=%d running=%d\n", stop_bits.load(), failed, running);
+}
+inline void capture_wait_error(const std::vector<slot>& fds, int saved_error) {
+    LARGE_INTEGER ticks{};
+    ::QueryPerformanceCounter(&ticks);
+    std::fprintf(stderr, "WSA_WAIT_ERROR code=%d stop_bits=%u ticks=%lld count=%zu\n",
+        saved_error, stop_bits.load(), ticks.QuadPart, fds.size());
+    for (const auto& fd : fds) {
+        int type = 0, error = 0, length = sizeof(type);
+        const int type_rc = ::getsockopt(fd.fd, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&type), &length);
+        const int type_error = type_rc < 0 ? ::WSAGetLastError() : 0;
+        length = sizeof(error);
+        const int error_rc = ::getsockopt(fd.fd, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &length);
+        const int error_error = error_rc < 0 ? ::WSAGetLastError() : 0;
+        sockaddr_storage local{}, peer{};
+        length = sizeof(local);
+        const int local_rc = ::getsockname(fd.fd, reinterpret_cast<sockaddr*>(&local), &length);
+        const int local_error = local_rc < 0 ? ::WSAGetLastError() : 0;
+        length = sizeof(peer);
+        const int peer_rc = ::getpeername(fd.fd, reinterpret_cast<sockaddr*>(&peer), &length);
+        const int peer_error = peer_rc < 0 ? ::WSAGetLastError() : 0;
+        std::fprintf(stderr, "WSA_WAIT_SOCKET fd=%zu events=%d revents=%d type=%d type_rc=%d type_error=%d "
+            "socket_error=%d error_rc=%d error_error=%d local_rc=%d local_error=%d local_family=%d "
+            "peer_rc=%d peer_error=%d peer_family=%d\n", static_cast<std::size_t>(fd.fd), fd.events,
+            fd.revents, type, type_rc, type_error, error, error_rc, error_error, local_rc, local_error,
+            local.ss_family, peer_rc, peer_error, peer.ss_family);
+    }
+}
+#else
+inline void capture_stop_phase(unsigned) { }
+inline void capture_stop_receipt(bool, bool) { }
 #endif
 
 inline slot registration(const srv::socket_interest& interest) {
@@ -99,7 +138,15 @@ inline std::vector<srv::readiness_event> wait(
     for (const auto& interest : interests) fds.push_back(registration(interest));
 #if defined(_WIN32)
     const auto ready = ::WSAPoll(fds.data(), static_cast<ULONG>(fds.size()), timeout(deadline));
-    if (ready < 0 && ::WSAGetLastError() != WSAEINTR) throw std::runtime_error("WSAPoll failed");
+    if (ready < 0) {
+        const int saved_error = ::WSAGetLastError();
+        if (saved_error != WSAEINTR) {
+#if defined(LIBHTTPSERVER_REMAINING_WAIT_CAPTURE)
+            capture_wait_error(fds, saved_error);
+#endif
+            throw std::runtime_error("WSAPoll failed");
+        }
+    }
 #else
     const auto ready = ::poll(fds.data(), static_cast<nfds_t>(fds.size()), timeout(deadline));
     if (ready < 0 && errno != EINTR) throw std::runtime_error("poll failed");

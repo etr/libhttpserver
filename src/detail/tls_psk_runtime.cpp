@@ -5,6 +5,10 @@
 */
 #include <httpserver/detail/tls_psk_runtime.hpp>
 #include <condition_variable>
+#include <atomic>
+#include <cstdio>
+#include <cinttypes>
+#include <functional>
 #include <deque>
 #include <mutex>
 #include <memory>
@@ -17,6 +21,30 @@
 namespace httpserver::detail {
 namespace {
 using clock = std::chrono::steady_clock;
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+void capture_runtime(const char* label, const char* phase, const void* identity, std::size_t admitted,
+                     std::size_t queued, std::size_t live, int status = 0) {
+    static std::atomic<unsigned> rows{0};
+    const auto row = rows.fetch_add(1);
+    if (row < 2048) {
+        std::fprintf(stderr, "%s phase=%s id=%p thread=%zu admitted=%zu queued=%zu live=%zu status=%d\n",
+            label, phase, identity, std::hash<std::thread::id>{}(std::this_thread::get_id()), admitted, queued, live, status);
+    } else if (row == 2048) {
+        std::fprintf(stderr, "PSK_RUNTIME truncated=1\n");
+    }
+}
+void capture_lookup(const char* phase, const void* identity, const psk_handshake_context& context, int status) {
+    static std::atomic<unsigned> rows{0};
+    const auto row = rows.fetch_add(1);
+    if (row < 512) {
+        std::fprintf(stderr, "PSK_LOOKUP phase=%s id=%p thread=%zu generation=%" PRIu64 " version=%d status=%d\n",
+            phase, identity, std::hash<std::thread::id>{}(std::this_thread::get_id()),
+            static_cast<std::uint64_t>(context.credential_generation), static_cast<int>(context.version), status);
+    } else if (row == 512) {
+        std::fprintf(stderr, "PSK_LOOKUP truncated=1\n");
+    }
+}
+#endif
 std::thread start_thread(const tls_psk_runtime::thread_start& start, executor::handler work) {
     return start ? start(std::move(work)) : std::thread(std::move(work));
 }
@@ -137,11 +165,20 @@ struct lane : std::enable_shared_from_this<lane> {
                 current.work();
             } catch (...) { /* Never propagate into the worker. */ }
             current.work = nullptr;
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+            std::size_t capture_admitted, capture_queued, capture_live;
+#endif
             {
                 std::lock_guard lock(mutex);
                 --admitted;
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+                capture_admitted = admitted; capture_queued = queue.size(); capture_live = live;
+#endif
             }
             changed.notify_all();
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+            capture_runtime("PSK_LANE", "retired", this, capture_admitted, capture_queued, capture_live);
+#endif
             // The completed provider step no longer owns admission. Its owner
             // may execute inline and immediately submit the next step.
             try {
@@ -150,14 +187,23 @@ struct lane : std::enable_shared_from_this<lane> {
         }
     }
     http::outcome_code submit(executor::handler work, executor::handler completed = {}) {
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+        std::size_t capture_admitted, capture_queued, capture_live;
+#endif
         {
             std::lock_guard lock(mutex);
             if (cancellation.stop_requested()) return http::outcome_code::cancelled;
             if (admitted >= capacity) return http::outcome_code::limit_exceeded;
             queue.push_back({std::move(work), std::move(completed)});
             ++admitted;
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+            capture_admitted = admitted; capture_queued = queue.size(); capture_live = live;
+#endif
         }
         changed.notify_one();
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+        capture_runtime("PSK_LANE", "admitted", this, capture_admitted, capture_queued, capture_live);
+#endif
         return http::outcome_code::ok;
     }
     void stop() {
@@ -191,12 +237,18 @@ void execute_lookup(const std::shared_ptr<completion>& completed, const psk_look
     result.status = unavailable(context, stop);
     if (result.status == psk_lookup_status::accepted) {
         try {
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+            capture_lookup("callback-enter", completed.get(), context, static_cast<int>(result.status));
+#endif
             result = callback(owned, context);
             if (result.status == psk_lookup_status::accepted && (result.key.bytes().empty() || result.key.bytes().size() > context.maximum_key_bytes)) {
                 result.status = psk_lookup_status::rejected;
             }
         } catch (...) { result.status = psk_lookup_status::provider_failure; }
     }
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+    capture_lookup("callback-return", completed.get(), context, static_cast<int>(result.status));
+#endif
     if (result.status != psk_lookup_status::accepted) result.key.clear();
     {
         std::lock_guard lock(completed->mutex);
@@ -271,7 +323,14 @@ psk_lookup_result tls_psk_runtime::lookup(psk_lookup callback, std::span<const s
         execute_lookup(completed, callback, owned, context, stop);
     });
     if (admitted != http::outcome_code::ok) return {admitted == http::outcome_code::cancelled ? psk_lookup_status::cancelled : psk_lookup_status::limit_exceeded, {}};
-    return wait_lookup(completed, context, external_stop, stop);
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+    capture_lookup("submitted", completed.get(), context, static_cast<int>(admitted));
+#endif
+    auto result = wait_lookup(completed, context, external_stop, stop);
+#if defined(LIBHTTPSERVER_REMAINING_CAPTURE)
+    capture_lookup("wait-return", completed.get(), context, static_cast<int>(result.status));
+#endif
+    return result;
 }
 void tls_psk_runtime::stop() { impl_->handshake->stop(); impl_->lookup->stop(); }
 bool tls_psk_runtime::drain(clock::time_point deadline) {

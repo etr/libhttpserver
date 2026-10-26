@@ -19,6 +19,7 @@
 #include <httpserver/features.hpp>
 #include <httpserver/server/server.hpp>
 #include <httpserver/server/tls_credentials.hpp>
+#define LIBHTTPSERVER_REMAINING_WAIT_CAPTURE
 #include "./host_poll.hpp"
 
 namespace srv = httpserver::server;
@@ -148,16 +149,24 @@ int main(int argc, char** argv) {
                     std::cerr << error.what() << '\n';
                     failed.store(true);
                 }
+                v3_host::capture_stop_phase(16);
                 server.stop();
+                v3_host::capture_stop_phase(32);
             });
         }
         std::cout << server.get_bound_port(0) << std::endl;
         std::string stop;
         const bool requested = std::getline(std::cin, stop) && stop == "stop";
+        v3_host::capture_stop_phase(1);
         stopping.store(true);
+        v3_host::capture_stop_phase(2);
+        v3_host::capture_stop_phase(4);
         server.request_stop();
+        v3_host::capture_stop_phase(8);
         if (host.joinable()) host.join();
         else server.stop();
+        v3_host::capture_stop_phase(64);
+        v3_host::capture_stop_receipt(failed.load(), server.is_running());
         return !requested || failed.load() || server.is_running() ? 6 : 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
