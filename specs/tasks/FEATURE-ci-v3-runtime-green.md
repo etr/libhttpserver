@@ -2,7 +2,7 @@
 
 Status: Stages 1 and 3 implemented with focused proof; complete CI and remaining supported runtime repairs are pending. Groundwork validation is explicitly prohibited until FULL CI IS GREEN.
 Base: `v3` at `8f3083977f49706e66cefbb3ee8b6f6685469719`.
-Working branch: `task/FEATURE-ci-v3-runtime-green` (retain this one worktree through CI).
+Working branch: `task/FEATURE-ci-v3-runtime-green`. User requested integration into `v3` before full CI completion; retain incomplete verification explicitly.
 Plan: primary checkout `.groundwork-plans/FEATURE-ci-v3-runtime-green-plan.md`.
 Journal: primary checkout `.debug/v3-ci-green-VSvXxx/journal.md`.
 Stage evidence: `.debug/v3-ci-green-VSvXxx/runtime-green-stage1/`.
@@ -62,3 +62,11 @@ The exact pinned action implementation SHA256 is `7f9e5e36ceae15937ec0aabbf7e4ce
 Whole-file byte comparison proves that removing the single added scalar from each workflow restores the original file exactly. Guest prepare/run/trap/native commands, initial sync settings, pinned actions/toolchains, source checks, every gate, SCP error propagation, artifact paths and existing fallback handling are therefore unchanged. An existing fallback is preserved if present; automatic copyback is no longer a promised source for it. Failed SCP and missing evidence remain failures.
 
 Focused checks: `python3 scripts/test-v3-ci-workflows.py FreeBSDNodePrerequisites -v` (9 tests), `python3 scripts/test-v3-package-workflow.py -v` (4 tests), cached actionlint on both workflows, and `git diff --check` all pass. No new mirror test, VM, timeout increase, retry, transport framework, baseline suite, CI dispatch, push, merge or Groundwork validation was performed. Stage3 commands, outputs, source hashes and preservation proof are retained at `.debug/v3-ci-green-VSvXxx/runtime-green-stage3/` in the primary checkout. PSK source remains untouched while its fresh native authorization is pending.
+
+## User-directed integration before CI completion
+
+The user requested “merge back to v3, then keep fixing the remaining CI issues.”
+Integrate the focused repairs and ChangeLog update now. Full CI remains incomplete;
+Groundwork validation has not run and stays deferred until full CI is green.
+This integration does not mark the overall CI repair complete or reopen closed
+diagnostic batches. Draft PR #382 carries the original working-branch runs.
