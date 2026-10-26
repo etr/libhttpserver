@@ -1,6 +1,6 @@
 # FEATURE-ci-freebsd-cookie-wire-header: declare the POSIX cookie fixture's IPv4 socket type
 
-Status: Implemented; focused local checks pass. Caller Groundwork validation and
+Status: Complete locally; final validation passed; native FreeBSD post-fix remains pending CI.
 finalization pending; native FreeBSD post-fix proof remains incomplete.
 Base: exact local `v3` at `16da2678cce4f1b333c85b178514789f168078db`.
 Plan: `.groundwork-plans/FEATURE-ci-freebsd-cookie-wire-header-plan.md` in the primary checkout.
@@ -53,3 +53,7 @@ suite, baseline retry, new native replay, VM, CI action or push was performed.
 Local Linux compiler checks do not establish native FreeBSD post-fix success.
 Prior closed diagnostic budgets and unrelated UNKNOWN assessments remain
 unchanged. Caller owns validation, merge, cleanup and publication.
+
+Final validation session `6369480a0430c8c6cec5c58cfa2454ef` passed after
+the implementation was proven: one iteration, zero fixes, zero unworked findings.
+Existing passing focused checks were reused. Native FreeBSD proof stays pending CI.
