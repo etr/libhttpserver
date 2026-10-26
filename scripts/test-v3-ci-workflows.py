@@ -100,6 +100,11 @@ if args[:2] == ['-m', 'venv']:
         return run, steps
 
     def recover(self, root, steps, runner, env):
+        result, evidence = self.execute_recovery(root, steps, runner, env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return evidence
+
+    def execute_recovery(self, root, steps, runner, env):
         recovery = next(step for step in steps if step.get('name') == 'Recover FreeBSD evidence')
         self.assertEqual(recovery['if'], 'always()')
         tools = root / 'transport'
@@ -125,14 +130,85 @@ os.execv(os.environ['REAL_SCP'], ['scp', '-r', '-f', source])
         scp.chmod(0o755)
         host = root / 'host'
         host.mkdir(exist_ok=True)
+        temporary = root / 'runner temp'
+        temporary.mkdir(exist_ok=True)
+        output = root / 'recovery-output'
         run = recovery['run'].replace('${{ github.run_id }}', '123').replace('${{ github.run_attempt }}', '1')
         transport_env = dict(env, PATH=str(tools) + os.pathsep + env['PATH'],
-                             REAL_SCP=shutil.which('scp'), FIXTURE_SSH=str(ssh), FIXTURE_RUNNER=str(runner))
+                             REAL_SCP=shutil.which('scp'), FIXTURE_SSH=str(ssh), FIXTURE_RUNNER=str(runner),
+                             RUNNER_TEMP=str(temporary), GITHUB_OUTPUT=str(output))
         result = subprocess.run(['bash', '-eu', '-c', run], cwd=host, env=transport_env,
                                 capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         upload = next(step for step in steps if step.get('if') == 'always()' and '/upload-artifact@' in step.get('uses', ''))
-        return host / upload['with']['path']
+        path = upload['with']['path']
+        if path.startswith('${{'):
+            expression = re.fullmatch(r"\$\{\{ steps\.([\w-]+)\.outputs\.(\w+) \|\| '([^']+)' \}\}", path)
+            self.assertIsNotNone(expression, 'unsupported artifact path expression: ' + path)
+            self.assertEqual(expression[1], recovery['id'])
+            outputs = dict(line.split('=', 1) for line in output.read_text().splitlines()) if output.exists() else {}
+            path = outputs.get(expression[2]) or expression[3]
+        return result, host / path
+
+    @unittest.skipIf(getattr(os, 'geteuid', lambda: -1)() == 0,
+                     'readonly destination proof requires an unprivileged receiver')
+    def test_package_recovery_avoids_existing_readonly_python_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runner = root / 'guest'
+            source = runner / 'package-evidence'
+            (source / 'clients/bin').mkdir(parents=True)
+            payload = b'owned Python executable payload\x00\xff\n'
+            (source / 'clients/bin/python').write_bytes(payload)
+            (source / 'clients/bin/python').chmod(0o444)
+            (source / 'matrix').mkdir()
+            (source / 'matrix/receipt.json').write_bytes(b'{"native":"retained"}\n')
+            protected = root / 'protected target'
+            protected.write_bytes(b'owned readonly sentinel\n')
+            protected.chmod(0o444)
+            fallback = root / 'host/package-evidence'
+            (fallback / 'clients/bin').mkdir(parents=True)
+            link = fallback / 'clients/bin/python'
+            link.symlink_to(protected)
+            (fallback / 'rsync.log').write_bytes(b'automatic copyback\n')
+            steps = workflow(self.workflows[0])['jobs']['freebsd']['steps']
+
+            result, evidence = self.execute_recovery(root, steps, runner, dict(os.environ))
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(evidence.is_relative_to(root / 'runner temp'))
+            self.assertEqual(evidence.name, 'package-evidence')
+            self.assertEqual((evidence / 'clients/bin/python').read_bytes(), payload)
+            self.assertFalse((evidence / 'clients/bin/python').is_symlink())
+            self.assertEqual((evidence / 'clients/bin/python').stat().st_mode & 0o777, 0o444)
+            self.assertEqual((evidence / 'matrix/receipt.json').read_bytes(), b'{"native":"retained"}\n')
+            self.assertEqual(protected.read_bytes(), b'owned readonly sentinel\n')
+            self.assertEqual(protected.stat().st_mode & 0o777, 0o444)
+            self.assertEqual(link.readlink(), protected)
+            self.assertEqual((fallback / 'rsync.log').read_bytes(), b'automatic copyback\n')
+
+    def test_package_copy_failure_uploads_rsync_fallback_and_retains_scp_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runner = root / 'guest'
+            source = runner / 'package-evidence'
+            source.mkdir(parents=True)
+            (source / 'partial.log').write_bytes(b'partial legacy copy\n')
+            (source / 'missing-python').symlink_to(root / 'absent-owned-file')
+            fallback = root / 'host/package-evidence'
+            fallback.mkdir(parents=True)
+            (fallback / 'rsync.log').write_bytes(b'complete automatic copyback\n')
+            steps = workflow(self.workflows[0])['jobs']['freebsd']['steps']
+
+            result, evidence = self.execute_recovery(root, steps, runner, dict(os.environ))
+
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn('No such file or directory', result.stderr)
+            self.assertEqual(evidence, fallback)
+            self.assertEqual((evidence / 'rsync.log').read_bytes(), b'complete automatic copyback\n')
+            self.assertFalse((evidence / 'partial.log').exists())
+            partial = list((root / 'runner temp').glob('*/package-evidence/partial.log'))
+            self.assertEqual(len(partial), 1)
+            self.assertEqual(partial[0].read_bytes(), b'partial legacy copy\n')
 
     def execute_prerequisite(self, root, name, fail_stage):
         env = self.checkout(root)
@@ -257,7 +333,7 @@ configure.chmod(0o755)
                 self.assertIn('Needed a single revision', (evidence / 'git-provenance.log').read_text())
                 self.assertFalse((evidence / 'node-source').exists())
 
-    def test_successful_evidence_recovery_merges_named_directory_in_place(self):
+    def test_successful_evidence_recovery_retains_payload_layout_and_copyback(self):
         for name in self.workflows:
             with self.subTest(workflow=name), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -272,7 +348,7 @@ configure.chmod(0o755)
                 existing.mkdir(parents=True)
                 (existing / 'kept.log').write_text('action copyback diagnostic')
                 evidence = self.recover(root, steps, runner, dict(os.environ))
-                self.assertEqual((evidence / 'kept.log').read_text(), 'action copyback diagnostic')
+                self.assertEqual((existing / 'kept.log').read_text(), 'action copyback diagnostic')
                 self.assertEqual((evidence / '.diagnostic').read_text(), 'hidden diagnostic')
                 self.assertEqual((evidence / 'platform/FreeBSD.tar.gz').read_bytes(), b'platform proof')
                 self.assertFalse((evidence / folder).exists())

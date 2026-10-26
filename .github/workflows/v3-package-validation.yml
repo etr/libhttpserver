@@ -206,14 +206,21 @@ jobs:
               --provider-prefix "$RUNNER_TEMP/package-evidence/prerequisites/provider" \
               --client-python "$RUNNER_TEMP/package-evidence/clients/bin/python" --node node --pkg-config-dir /usr/local/share/pkgconfig --compiler "$V3_CXX" --cc "$V3_CC" --toolchain-prefix "$V3_PACKAGE_TOOLCHAIN" --make gmake --jobs 2
       - name: Recover FreeBSD evidence
+        id: freebsd-evidence
         if: always()
         run: |
-          mkdir -p package-evidence
-          scp -O -r "freebsd:/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}/package-evidence" ./
+          printf 'path=package-evidence\n' >> "$GITHUB_OUTPUT"
+          # SCP follows existing destination links from automatic rsync copyback.
+          recovery_root="$(mktemp -d "$RUNNER_TEMP/freebsd-evidence.XXXXXX")"
+          if scp -O -r "freebsd:/tmp/v3-package-${{ github.run_id }}-${{ github.run_attempt }}/package-evidence" "$recovery_root/"; then
+            printf 'path=%s/package-evidence\n' "$recovery_root" >> "$GITHUB_OUTPUT"
+          else
+            exit "$?"
+          fi
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: v3-package-freebsd-${{ github.sha }}
-          path: package-evidence
+          path: ${{ steps.freebsd-evidence.outputs.path || 'package-evidence' }}
           retention-days: 14
           if-no-files-found: error
