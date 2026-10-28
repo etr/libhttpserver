@@ -1,6 +1,6 @@
 # FEATURE-ci-v3-runtime-green
 
-Status: Stages 1, 3, 4 and 5 implemented with focused proof; complete CI and remaining supported runtime repairs are pending. Groundwork validation is explicitly prohibited until FULL CI IS GREEN.
+Status: Stages 1, 3, 4, 5 and 6 implemented with focused proof; complete CI and remaining supported runtime repairs are pending. Groundwork validation is explicitly prohibited until FULL CI IS GREEN.
 Base: `v3` at `8f3083977f49706e66cefbb3ee8b6f6685469719`.
 Working branch: `task/FEATURE-ci-v3-runtime-green`. User requested integration into `v3` before full CI completion; retain incomplete verification explicitly.
 Plan: primary checkout `.groundwork-plans/FEATURE-ci-v3-runtime-green-plan.md`.
@@ -114,3 +114,17 @@ Fresh current-source focused Windows backend DLL (16 owning translation units) p
 User approved exact430fa17e publication and ONE1/60 Windows original external-loop capture. Run40635371672 completed once:4tests/52checks/zero skips, exit0 in0.4701966s, retirement confirmed, stderr empty. Budget is CLOSED; no retry or remaining-time authority. This establishes nonreproduction in that context, not a fix or independence of the earlier WSAPoll10038 failure. The diagnostic branch remains NEVER MERGE. Only a proven repair may change production behavior.
 
 Stage5 receipt-import closure: source review found the selected-archive importer independently required all cases in each linkage. A new real receipt-bundle regression was RED with `valid DLL/static split rejected: pruned platform suite`. Reusing the same coverage validator fixes this producer/consumer mismatch while still rejecting missing static fault cases. All14 platform-bundle tests and changed Python syntax/diff checks pass. This is part of the same proven setup repair; native binaries are unchanged, so their focused evidence is carried without repetition. Current-source CI remains pending.
+
+## Stage 6: unique native Automake inventory
+
+- [x] Preserve Darwin archive failure `duplicate/empty native suite inventory` after its native commands completed.
+- [x] Reproduce the exact producer inventory command against a real configured Makefile: TLSyes271 entries/266 unique, five duplicated executables.
+- [x] Remove only four redundant TESTS additions; keep each executable in check_PROGRAMS, which already feeds TESTS recursively.
+- [x] Regenerate actual Automake/configured Makefiles and verify unique inventories in both TLS modes: yes266/266, no235/235. All five affected executables remain registered exactly once.
+- [ ] Full current-source archive evidence with this registration correction.
+
+The duplicated names are http_cookie, consumer_v3_cookie, consumer_v3_cookie_wire, protocol_limits and protocol_compression. TESTS already equals $(check_PROGRAMS); the extra TESTS += lines counted them twice. The strict receipt duplicate rejection is unchanged. No executable, assertion, script test, protocol setting or failure deadline was removed. This four-line configuration repair is proved by the actual producer command, not a source-text mirror test or a broad baseline rerun.
+
+Evidence: primary `.debug/v3-ci-native-repairs-PJFEkn/native-inventory/`. Autoreconf succeeded with existing AC_OUTPUT/.PHONY warnings. Initial config.status invocation used the source directory instead of its configured build directory and failed before any native execution; rechecking/regenerating in the correct build directory fixed setup. No unrelated source or generated tracked file changed.
+
+Current9c92 Windows package job122646921257 fails earlier at the public shared external consumer: exit6, captured stderr WSAPoll error10038. The selected820-byte process receipt was verified within a closed2,581,790-byte range assessment; no full artifact or original program ran. It contains no failed-call slot/state values. The earlier approved external4 capture remains CLOSED/PASS4/52/nonreproduction, and does not authorize running the distinct public consumer. No guessed polling or shutdown suppression was applied. A fresh consumer-specific bounded capture proposal is needed if further native diagnosis is required.

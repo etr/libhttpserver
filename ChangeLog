@@ -1,4 +1,5 @@
 Version 3.0.0 - 2026-10-10
+	Register each native executable once in Automake test evidence inventories.
 	Run Windows allocation-failure injection against the installed static
 		library and require ordinary readiness cases in both linkage lanes.
 	Keep PSK cancellation lookup held until owner release and avoid artificial
