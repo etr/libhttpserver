@@ -1,4 +1,6 @@
 Version 3.0.0 - 2026-10-10
+	Keep PSK cancellation lookup held until owner release and avoid artificial
+		per-fragment scheduling delays in the TLS test transport.
 	Avoid Windows DLL shutdown hangs by retaining the default timer service
 		during process termination while preserving ordinary timer cleanup.
 	Report the saved Winsock error code when host WSAPoll fails.

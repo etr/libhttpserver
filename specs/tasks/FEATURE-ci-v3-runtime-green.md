@@ -70,3 +70,24 @@ Integrate the focused repairs and ChangeLog update now. Full CI remains incomple
 Groundwork validation has not run and stays deferred until full CI is green.
 This integration does not mark the overall CI repair complete or reopen closed
 diagnostic batches. Draft PR #382 carries the original working-branch runs.
+
+## Stage 4: PSK test fixture scheduling (2026-10-27)
+
+- [x] Read the completed, previously authorized diagnostic receipts; keep their budgets closed.
+- [x] Preserve the native Darwin RED: 14 tests/313 checks, three failures; held TLS1.3 cancellation callback already returned, and certificate-default TLS1.3 handshake timed out.
+- [x] Release the held cancellation lookup explicitly after assertions and close; bound the callback wait to five seconds for failure cleanup.
+- [x] Drain ready fragmented transport work and yield while waiting for provider work, preserving the original fragments and every deadline/assertion.
+- [x] Reproduce the real certificate fixture timeout under coarse scheduling, then pass the same regression and all 14 PSK tests/313 checks.
+- [x] Pass changed-file cpplint and diff checks.
+- [ ] Native current-source CI, including Darwin selected archive acceptance.
+- [ ] Resolve the remaining Windows external-loop failure from supported evidence.
+- [ ] Close the FreeBSD selected-archive timeout gate with actual evidence.
+
+Evidence and commands: primary checkout `.debug/v3-ci-native-repairs-PJFEkn/journal.md`.
+Current c1 installed matrix passed Linux, Darwin, FreeBSD; Windows failed. Native/fuzz, CodeQL and Verify Build passed. Source-equivalent selected archive remains failed; no current-source green claim.
+
+The diagnostic Windows four-test program failed one of 52 checks in 0.741 seconds with WSAPoll error10038 before stop was requested. Two bounded new socket-only probes on local Windows11 returned POLLNVAL successfully; they do not establish the Server2022 failure cause. No poll error suppression or guessed production fix was applied. Previous capture budgets remain closed.
+
+Fixture root cause: the cancellation rescue unconditionally released after250ms, before the owner could assert cancellation under slower scheduling. The transport also slept after every41/73-byte fragment, charging scheduler delays to real handshake deadlines. A minimal real TLS1.3 certificate fixture with1ms sleeps delayed to15ms failed at2089ms/outcome8(timeout); draining progress first passed at625ms. An intermediate full coarse-scheduling check still failed two held/capacity assertions because idle sleeps could expire the400ms pre-lookup deadline. Yielding while idle preserved that deadline and passed all313 checks in1.029seconds, with zero skips. The100ms owner-responsiveness assertion, cancellation/timeout/capacity/late-result assertions, bounded drains and all protocol settings remain unchanged. Only test source changed; production TLS is unchanged.
+
+Setup evidence is retained honestly: system OpenSSL was rejected before selecting the existing3.5.9 provider; the first suite launch used build-root cwd instead of test cwd and failed fixture path lookup. Correcting cwd, as required by the generated relative TLS_TEST_DIR, produced the meaningful behavioral check. Neither setup failure justifies a source workaround. No broad baseline or Groundwork validation was run.
