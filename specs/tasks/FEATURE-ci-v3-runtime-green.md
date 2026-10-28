@@ -1,6 +1,6 @@
 # FEATURE-ci-v3-runtime-green
 
-Status: Stages 1 and 3 implemented with focused proof; complete CI and remaining supported runtime repairs are pending. Groundwork validation is explicitly prohibited until FULL CI IS GREEN.
+Status: Stages 1, 3, 4 and 5 implemented with focused proof; complete CI and remaining supported runtime repairs are pending. Groundwork validation is explicitly prohibited until FULL CI IS GREEN.
 Base: `v3` at `8f3083977f49706e66cefbb3ee8b6f6685469719`.
 Working branch: `task/FEATURE-ci-v3-runtime-green`. User requested integration into `v3` before full CI completion; retain incomplete verification explicitly.
 Plan: primary checkout `.groundwork-plans/FEATURE-ci-v3-runtime-green-plan.md`.
@@ -91,3 +91,24 @@ The diagnostic Windows four-test program failed one of 52 checks in 0.741 second
 Fixture root cause: the cancellation rescue unconditionally released after250ms, before the owner could assert cancellation under slower scheduling. The transport also slept after every41/73-byte fragment, charging scheduler delays to real handshake deadlines. A minimal real TLS1.3 certificate fixture with1ms sleeps delayed to15ms failed at2089ms/outcome8(timeout); draining progress first passed at625ms. An intermediate full coarse-scheduling check still failed two held/capacity assertions because idle sleeps could expire the400ms pre-lookup deadline. Yielding while idle preserved that deadline and passed all313 checks in1.029seconds, with zero skips. The100ms owner-responsiveness assertion, cancellation/timeout/capacity/late-result assertions, bounded drains and all protocol settings remain unchanged. Only test source changed; production TLS is unchanged.
 
 Setup evidence is retained honestly: system OpenSSL was rejected before selecting the existing3.5.9 provider; the first suite launch used build-root cwd instead of test cwd and failed fixture path lookup. Correcting cwd, as required by the generated relative TLS_TEST_DIR, produced the meaningful behavioral check. Neither setup failure justifies a source workaround. No broad baseline or Groundwork validation was run.
+
+## Stage 5: Windows allocator fault-injection fixture linkage
+
+- [x] Identify the current PR383 failed program from one bounded selected artifact assessment (3,891,726 range bytes; no full ZIP or original execution).
+- [x] Prove that executable operator-new replacement does not affect Windows DLL allocation, and that static linkage delivers the intended fault.
+- [x] Keep all 22 ordinary readiness cases against the installed Windows DLL; require all 27 cases, including the five unchanged allocation-failure cases, against the installed static archive.
+- [x] Make the required case names explicit in the inventory and reject every missing static fault case. Other platforms retain their original fault coverage.
+- [x] Pass native Windows focused DLL22/438 and static27/486 gates, Linux28/497, 28 package coverage/matrix checks, changed-file lint and diff checks.
+- [ ] Full exact-source CI with the corrected installed linkage profiles.
+
+Current PR383 package job122630892885 passed native62 in4.812276s and external4 in0.572681s, then failed external_readiness_adapter27/486 with13 failures, all inside five allocation-failure cases. The assertion expecting bad_alloc was false and regular work completed. The PSK change cannot affect these allocation boundaries; this repair is within the accepted overall CI goal. Member CRC/SHA are verified; the full212MB ZIP digest is metadata-only. Assessment is closed.
+
+A tiny native PE fixture reproduces the cause: executable allocation throws under its replacement operator new, DLL-owned allocation does not (exit1/0.362s). Linking the same owner object into the executable makes both throw (exit0/0.309s). Microsoft documents per-module DLL import binding: https://learn.microsoft.com/en-us/cpp/build/linking-an-executable-to-a-dll?view=msvc-170 . The chosen correction scopes allocation injection to linkage where it can actually reach the owner. Artificially throwing in the caller would not exercise the backend; a new production allocator hook or loader patch is unnecessary.
+
+Only Windows shared compilation selects LHS_TEST_DLL_LINKAGE; this omits allocator replacement and the five fault registrations from that executable. All five original assertion bodies remain unchanged and mandatory in the installed static lane. The inventory names all27 ordinary/static cases, and the receipt validator requires the22 DLL cases or all27 static cases. No test skip or failed/empty receipt is accepted. Every original C++ assertion line is preserved. The other platforms keep all five fault cases in both linkage lanes.
+
+Fresh current-source focused Windows backend DLL (16 owning translation units) passed22/438 in0.899s; matching static executable passed27/486 in1.237s, both zero skips and retired. Linux passes28/497 including its descriptor-zero case. Removing any one of the five fault names from the static receipt is rejected. Python coverage/matrix tests pass28 cases. Native setup initially missed net_address.cpp at link; adding that existing owning translation unit corrected the test build without a production workaround. Context is qualified local Windows11/cached LLVM23.1.4/GCC15.2 headers and retained runtime DLLs, not Server2022/MSYS2 CI. Evidence: primary `.debug/v3-ci-native-repairs-PJFEkn/allocator-linkage/`.
+
+## Approved Windows capture closure
+
+User approved exact430fa17e publication and ONE1/60 Windows original external-loop capture. Run40635371672 completed once:4tests/52checks/zero skips, exit0 in0.4701966s, retirement confirmed, stderr empty. Budget is CLOSED; no retry or remaining-time authority. This establishes nonreproduction in that context, not a fix or independence of the earlier WSAPoll10038 failure. The diagnostic branch remains NEVER MERGE. Only a proven repair may change production behavior.

@@ -39,6 +39,7 @@
 #include "./io_backend_contract.hpp"
 #include "./littletest.hpp"
 
+#ifndef LHS_TEST_DLL_LINKAGE
 // Fault injection is confined to this test executable and the dispatching
 // thread. Restore allocation before asserting or shutting down the backend.
 namespace {
@@ -79,6 +80,7 @@ void* operator new(std::size_t size) {
 void operator delete(void* memory) noexcept { std::free(memory); }
 void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 #endif
+#endif  // LHS_TEST_DLL_LINKAGE
 
 namespace srv = httpserver::server;
 namespace {
@@ -203,6 +205,7 @@ void detached_reopen(littletest::test_runner* __lt_tr__, const char* __lt_name__
     LT_CHECK_EQ(fx.backend.pending_count(), std::size_t{0});
 }
 
+#ifndef LHS_TEST_DLL_LINKAGE
 void failed_direction_collection(littletest::test_runner* __lt_tr__,
                                  const char* __lt_name__, hd::io_op_kind kind) {
     fixture fx;
@@ -252,6 +255,8 @@ void failed_direction_collection(littletest::test_runner* __lt_tr__,
     LT_CHECK_EQ(first.delivered.load(), 1);
     LT_CHECK_EQ(second.delivered.load(), 1);
 }
+
+#endif  // LHS_TEST_DLL_LINKAGE
 
 void accepted_after_teardown(littletest::test_runner* __lt_tr__,
                              const char* __lt_name__, bool shutdown) {
@@ -855,6 +860,9 @@ LT_BEGIN_AUTO_TEST(external_adapter_suite, complete_snapshots_prune_retired_conn
     }
 LT_END_AUTO_TEST(complete_snapshots_prune_retired_connection_records)
 
+#ifndef LHS_TEST_DLL_LINKAGE
+// PE DLL allocations bind their own allocator imports. These cases run against
+// the installed static library, where this executable's override reaches them.
 LT_BEGIN_AUTO_TEST(external_adapter_suite, allocation_failure_read_batch_remains_owned_until_close)
     failed_direction_collection(__lt_tr__, __lt_name__, hd::io_op_kind::read);
 LT_END_AUTO_TEST(allocation_failure_read_batch_remains_owned_until_close)
@@ -923,6 +931,7 @@ LT_BEGIN_AUTO_TEST(external_adapter_suite, allocation_failure_due_timers_remain_
     LT_CHECK_EQ(first.delivered.load(), 1);
     LT_CHECK_EQ(second.delivered.load(), 1);
 LT_END_AUTO_TEST(allocation_failure_due_timers_remain_owned_until_close)
+#endif  // LHS_TEST_DLL_LINKAGE
 
 LT_BEGIN_AUTO_TEST(external_adapter_suite, exhausted_generation_fails_snapshot_and_shutdown_completes_once)
     fixture fx;

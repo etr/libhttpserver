@@ -1580,5 +1580,32 @@ class ProcessTest(unittest.TestCase):
         self.assertEqual(8, json.loads(receipt.read_text())['exit'])
 
 
+class SuiteCaseCoverageTest(unittest.TestCase):
+    def setUp(self):
+        self.definition = dict(required_cases=['ordinary', 'allocation_failure'],
+                               windows_static_cases=['allocation_failure'])
+
+    def test_windows_dll_requires_all_ordinary_cases(self):
+        matrix.check_suite_cases(self.definition, 'Windows', 'shared', ['ordinary'])
+        with self.assertRaisesRegex(ValueError, 'ordinary'):
+            matrix.check_suite_cases(self.definition, 'Windows', 'shared', [])
+
+    def test_static_proof_requires_all_allocation_failure_cases(self):
+        for host in ('Windows', 'Linux', 'Darwin', 'FreeBSD'):
+            with self.subTest(host=host), self.assertRaisesRegex(ValueError, 'allocation_failure'):
+                matrix.check_suite_cases(self.definition, host, 'static', ['ordinary'])
+            matrix.check_suite_cases(self.definition, host, 'static', ['ordinary', 'allocation_failure'])
+
+    def test_other_shared_platforms_retain_allocation_failure_coverage(self):
+        for host in ('Linux', 'Darwin', 'FreeBSD'):
+            with self.subTest(host=host), self.assertRaisesRegex(ValueError, 'allocation_failure'):
+                matrix.check_suite_cases(self.definition, host, 'shared', ['ordinary'])
+
+    def test_windows_static_cases_must_also_be_required(self):
+        self.definition['required_cases'] = ['ordinary']
+        with self.assertRaisesRegex(ValueError, 'static.*required'):
+            matrix.check_suite_cases(self.definition, 'Windows', 'static', ['ordinary'])
+
+
 if __name__ == '__main__':
     unittest.main()
