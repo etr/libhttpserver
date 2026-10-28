@@ -153,7 +153,7 @@ def package_origin(root, origin, read_json, read_text, expected, platform, read_
                 receipt = suites[name]
                 observed = matrix.suite_result(read_text(receipt['log']), 0)
                 require(all(receipt.get(k) == v for k, v in observed.items()), 'stale platform suite summary')
-                require(set(definition.get('required_cases', [])) <= set(observed['case_names']), 'pruned platform suite')
+                matrix.check_suite_cases(definition, platform, linkage, observed['case_names'])
     return result
 
 
