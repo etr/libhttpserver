@@ -35,6 +35,7 @@
 #endif
 
 #include <algorithm>
+#include <cstdio>
 #include <cerrno>
 #include <chrono>
 #include <climits>
@@ -102,6 +103,14 @@ inline std::vector<srv::readiness_event> wait(
     const auto ready = ::WSAPoll(fds.data(), static_cast<ULONG>(fds.size()), timeout(deadline));
     if (ready < 0) {
         const int error = ::WSAGetLastError();
+        std::fprintf(stderr, "POLL_FAILURE error=%d slots=%zu sockets=%zu wake=%d\n", error, fds.size(), snapshot.sockets.size(), snapshot.wake.has_value());
+        for (std::size_t i = 0; i < std::min(fds.size(), std::size_t{8}); ++i) {
+            int type = 0;
+            int length = sizeof(type);
+            const int queried = ::getsockopt(fds[i].fd, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&type), &length);
+            const int query_error = queried ? ::WSAGetLastError() : 0;
+            std::fprintf(stderr, "POLL_SLOT i=%zu wake=%d mask=%d seen=%d query=%d query_error=%d type=%d\n", i, snapshot.wake && i == snapshot.sockets.size(), fds[i].events, fds[i].revents, queried, query_error, type);
+        }
         if (error != WSAEINTR) throw std::runtime_error("WSAPoll failed (WSA error " + std::to_string(error) + ")");
     }
 #else

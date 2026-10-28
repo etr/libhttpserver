@@ -145,6 +145,7 @@ int main(int argc, char** argv) {
                     if (!dispatched || !registered || !wakes) throw std::runtime_error("external host did no work");
                     std::cerr << "PACKAGE_EXTERNAL " << dispatched << ' ' << registered << ' ' << wakes << '\n';
                 } catch (const std::exception& error) {
+                    std::cerr << "CONSUMER_FAILURE_STOPPING " << stopping.load() << '\n';
                     std::cerr << error.what() << '\n';
                     failed.store(true);
                 }
