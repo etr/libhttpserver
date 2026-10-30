@@ -1,4 +1,6 @@
 Version 3.0.0 - 2026-10-10
+	Link the installed public TLS and HTTP/2 audit clients to Winsock on
+		Windows and name their executables with the platform suffix.
 	Resolve the Windows version-information system import in installed
 		package dependency audits.
 	Keep the HTTP/1 connection watchdog armed at a pending server drain

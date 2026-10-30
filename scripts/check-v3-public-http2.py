@@ -146,8 +146,15 @@ def run(args):
             flags = ['--libs'] + (['--static'] if linkage == 'static' else [])
             libraries = shlex.split(command(['pkg-config'] + flags + ['libhttpserver'], consumer, env))
             if linkage == 'static': libraries = [str(prefix / 'lib/libhttpserver.a') if f == '-lhttpserver' else f for f in libraries]
-            libraries += ['-pthread', '-Wl,-rpath,' + str(prefix / 'lib'), '-Wl,-rpath,' + str(provider / 'lib')] + shlex.split(args.sanitize)
-            executable = consumer / linkage
+            # Winsock is a system library on Windows and lives in libc on the
+            # POSIX targets, whose runtime search needs the explicit rpath.
+            if os.name == 'nt':
+                libraries += ['-lws2_32', '-lmswsock', '-lbcrypt']
+            else:
+                libraries += ['-pthread', '-Wl,-rpath,' + str(prefix / 'lib'), '-Wl,-rpath,' + str(provider / 'lib')]
+            libraries += shlex.split(args.sanitize)
+            suffix = '.exe' if os.name == 'nt' else ''
+            executable = consumer / (linkage + suffix)
             provenance = compile_probe(args.compiler, [consumer / 'http2_consumer.cpp'], cflags + shlex.split(args.sanitize),
                                        libraries, executable, command, env, source, build, prefix, False)
             validate_public(True, provenance['dependencies'], prefix, source, build)
@@ -155,7 +162,7 @@ def run(args):
             violations = audit.graph_violations(graph, 'strict', args.tls, 'aggregate', audit.load_policy(), provider)
             require(not violations, 'dependency audit: ' + repr(violations))
             if args.tls == 'yes':
-                example = consumer / (linkage + '-example')
+                example = consumer / (linkage + '-example' + suffix)
                 example_compile = compile_probe(args.compiler, [consumer / 'http2.cpp'], cflags + shlex.split(args.sanitize),
                                                 libraries, example, command, env, source, build, prefix, False)
                 example_graph = audit.dependency_graph([str(example)]); check_linkage(example_graph, linkage, prefix)
