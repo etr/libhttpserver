@@ -1,4 +1,6 @@
 Version 3.0.0 - 2026-10-10
+	Poll the QUIC interop endpoint and UDP fixture through the shared
+		cross-platform host helper on Windows.
 	Open the QUIC interop test keylog with Windows-compatible flags
 		instead of O_NOFOLLOW/O_CLOEXEC/fchmod.
 	Complete the first FreeBSD native make-check exposure: portable
