@@ -269,7 +269,7 @@ jobs:
   freebsd:
     runs-on: ubuntu-24.04
     needs: prepare
-    timeout-minutes: 240
+    timeout-minutes: 300
     outputs:
       artifact_id: ${{ steps.proof.outputs.artifact-id }}
       artifact_digest: ${{ steps.proof.outputs.artifact-digest }}
@@ -332,6 +332,12 @@ jobs:
           fi
           test "$(node --version)" = v24.15.0
           python3 -c 'import subprocess; subprocess.run(["git","--version"],check=True)'
+          # The native peer-policy runtime test binds 127.0.0.2 as its
+          # admin source address; FreeBSD only configures 127.0.0.1 on
+          # lo0 by default, so the alias must exist before make check.
+          if ifconfig lo0 >/dev/null 2>&1; then
+            ifconfig lo0 alias 127.0.0.2 2>/dev/null || ifconfig lo0 | grep -q '127\.0\.0\.2'
+          fi
           python3 scripts/ci-freebsd-toolchain.py --output "$RUNNER_TEMP/platform-evidence/toolchain"
           . "$RUNNER_TEMP/platform-evidence/toolchain/toolchain.env"
           python3 scripts/prepare-v3-package-ci.py --output "$RUNNER_TEMP/prerequisites" --make gmake

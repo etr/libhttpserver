@@ -1,4 +1,7 @@
 Version 3.0.0 - 2026-10-10
+	Complete the first FreeBSD native make-check exposure: portable
+		process-memory measurement, GNU-make gate selection, the
+		loopback admin alias, per-test hang bounds and job budget.
 	Link the installed public TLS and HTTP/2 audit clients to Winsock on
 		Windows and name their executables with the platform suffix.
 	Resolve the Windows version-information system import in installed

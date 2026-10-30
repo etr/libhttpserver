@@ -727,6 +727,12 @@ consumer_v3_features_CPPFLAGS = -I$(top_srcdir)/src
 consumer_v3_features_LDADD = $(top_builddir)/src/libhttpserver_v3core.la
 AM_TESTS_ENVIRONMENT = V3_TLS_MODE="$(enable_v3_tls)"; export V3_TLS_MODE;
 
+# Bound every native test program so one hung binary cannot consume a
+# whole CI make-check command budget; the wrapper degrades to a plain
+# exec where timeout(1) is unavailable (macOS by default).
+LOG_COMPILER = $(top_srcdir)/test/timeout-wrapper.sh
+EXTRA_DIST += timeout-wrapper.sh
+
 basic_auth_corpus_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)
 
 body_reader_LDFLAGS = $(V3_TLS_LDFLAGS) $(AM_LDFLAGS)

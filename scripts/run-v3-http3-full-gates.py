@@ -20,6 +20,9 @@ import release_artifact as release_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 INVENTORY = ROOT / 'test/conformance/http3/full-gates.json'
+# Generated Makefiles need GNU make; FreeBSD's default `make` is BSD
+# make, so prefer gmake where it exists and fall back to `make`.
+MAKE = shutil.which('gmake') or 'make'
 OFF_SUITES = '''http3_frame http3_settings http3_connection http3_headers http3_exchange
 http3_streaming http3_cancellation http3_qpack http3_qpack_scheduling http3_drain
 http3_fuzz_replay qpack_primitives qpack_field_section qpack_dynamic_table
@@ -374,10 +377,10 @@ def build_configuration(build, tls, sanitized):
 
 def native_stage(build, suites, directory, fixtures=False):
     directory.mkdir(mode=0o700)
-    commands = [checked(['make', '-j4', '-C', build / 'src'], ROOT, directory / 'build')]
+    commands = [checked([MAKE, '-j4', '-C', build / 'src'], ROOT, directory / 'build')]
     targets = suites + (['http3_udp_fixture', 'http3_semantic_parity_fixture', 'quic_interop_endpoint'] if fixtures else [])
     selection = [name + '=' + ' '.join(targets) for name in ('TESTS', 'check_PROGRAMS', 'noinst_PROGRAMS')]
-    commands.append(checked(['make', '-j4', '-C', build / 'test', *selection, *targets], ROOT, directory / 'test-build'))
+    commands.append(checked([MAKE, '-j4', '-C', build / 'test', *selection, *targets], ROOT, directory / 'test-build'))
     results = run_native_suites(build, suites, directory / 'tests')
     results['commands'] = commands
     tls = '#define NATIVE_V3_TLS' in (build / 'config.h').read_text()
