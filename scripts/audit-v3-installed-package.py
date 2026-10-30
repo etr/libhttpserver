@@ -139,7 +139,8 @@ DYLD_LEAVES = {'/usr/lib/libSystem.B.dylib', '/usr/lib/libc++.1.dylib', '/usr/li
 WINDOWS_SYSTEM = {'kernel32.dll', 'kernelbase.dll', 'ntdll.dll', 'msvcrt.dll', 'ucrtbase.dll',
                   'ws2_32.dll', 'advapi32.dll', 'bcrypt.dll', 'bcryptprimitives.dll', 'crypt32.dll',
                   'secur32.dll', 'user32.dll', 'iphlpapi.dll', 'winmm.dll', 'ole32.dll', 'shell32.dll',
-                  'userenv.dll', 'ncrypt.dll', 'gdi32.dll', 'shlwapi.dll', 'comdlg32.dll'}
+                  'userenv.dll', 'ncrypt.dll', 'gdi32.dll', 'shlwapi.dll', 'comdlg32.dll',
+                  'version.dll'}
 
 
 def windows_system(name):
