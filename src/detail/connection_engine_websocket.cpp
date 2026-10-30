@@ -227,7 +227,13 @@ connection_engine::io_posture connection_engine::writer_posture(
     return io_posture::park;
 }
 bool connection_engine::watchdog_terminal_locked() const {
-    return shutdown_ || phase_ == stream_phase::terminal || (close_after_drain_ && !websocket_);
+    // The close mark alone must not retire the watchdog while a server
+    // drain deadline is pending: HTTP/1 enforces that deadline's hard
+    // stop only here (enforce_timeout's scope expiry), so a stalled
+    // close handoff may not outlive the drain budget. The transport's
+    // release still ends this loop with connection_closed.
+    return shutdown_ || phase_ == stream_phase::terminal
+        || (close_after_drain_ && !websocket_ && !server_drain_deadline_);
 }
 bool connection_engine::transport_output_pending_locked() const {
     if (outbox_.queued_bytes() > 0) return true;

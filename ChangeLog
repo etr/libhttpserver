@@ -1,4 +1,8 @@
 Version 3.0.0 - 2026-10-10
+	Keep the HTTP/1 connection watchdog armed at a pending server drain
+		deadline so a stalled close handoff cannot outlive the drain budget.
+	Tolerate a concurrently closed borrowed registration in the Windows
+		reference host poll helper instead of failing the whole WSAPoll set.
 	Register each native executable once in Automake test evidence inventories.
 	Run Windows allocation-failure injection against the installed static
 		library and require ordinary readiness cases in both linkage lanes.

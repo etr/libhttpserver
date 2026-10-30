@@ -121,6 +121,15 @@ the resulting protocol/transport outcome. Duplicate or spurious notifications,
 including events with all flags false, are permitted and do not imply additional
 completions. Empty batches are permitted for timers and pending library work.
 
+A registration borrowed by a snapshot can be closed by library work at any
+moment, because retaining a snapshot never extends a handle lifetime. A POSIX
+host observes this as a per-entry `POLLNVAL` readiness (translated to `error`
+and ignored as stale). Windows `WSAPoll` instead rejects the entire call with
+`WSAENOTSOCK`; a host must treat that failure like an empty batch — dispatch,
+acquire a fresh snapshot, and wait again — rather than stopping, because the
+closed registration is absent from every later snapshot. The reference
+`examples/host_poll.hpp` helper implements this tolerance.
+
 Obtain an initial snapshot before waiting. After **every successful dispatch**,
 obtain and reconcile a fresh snapshot before waiting again. A failed dispatch
 may have consumed part of a batch unless the documented rejection rule says
