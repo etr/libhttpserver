@@ -173,3 +173,9 @@ Full local `make check -j1` (TLS=no, g++ 15.2, WSL2): 232/235 pass, 2 platform s
 - [x] Local gates: fresh worktree configure/build; `native_protocol_memory` passes under the new LOG_COMPILER wrapper; `test-v3-ci-workflows.py` 31/31, `test-v3-platform-ci.py` 20/20, `test-v3-http3-full-gates.py` 1/1; changed-file cpplint and YAML parse pass.
 - [ ] Open flakes (no repair without a recurrence, per the standing http2-stale precedent): `response_sources` test 24 hang (one occurrence; the claim/close guard is a single atomic CAS and `pull_handle`'s fread cannot block on a pipe whose write end is closed — mechanism unexplained) and `response_definition` checks 846/847 (coroutine did not complete after the mid-send truncation). Both pass on Linux/macOS; the next FreeBSD run with bounded hangs decides.
 - [ ] Full FreeBSD acceptance CI evidence.
+
+## Stage 12: Windows TLS-on interop keylog portability (2026-10-30)
+
+- [x] Evidence (mingw64 job 124232738670, Windows acceptance job 124233097485, both at b080f744): with stage 10 in place the mingw64 package lane printed `PASS installed consumer native TLS=no` — the entire installed tls-no matrix including public-tls and public-http2 passed on Windows for the first time. The tls-yes lane then failed building `libquic_interop_provider_a`: `src/detail/tls_session.cpp:127/129` use `O_NOFOLLOW`, `O_CLOEXEC` and `fchmod`, none of which exist on Windows.
+- [x] Repair: `open_keylog()` gains a `_WIN32` branch using `_O_NOINHERIT` (the close-on-exec analog) and dropping `fchmod` (the creating open already owns the file); the POSIX branch is unchanged. This is the only site in `src/` using those identifiers (`quic_tls_session.cpp` is clean). POSIX-branch syntax check with the interop define passes locally; cpplint clean.
+- [ ] Full Windows tls-yes CI evidence past the interop provider build (SNI/rotation scenarios and the tls-yes public audits remain first-exposure).

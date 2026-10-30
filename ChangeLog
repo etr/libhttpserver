@@ -1,4 +1,6 @@
 Version 3.0.0 - 2026-10-10
+	Open the QUIC interop test keylog with Windows-compatible flags
+		instead of O_NOFOLLOW/O_CLOEXEC/fchmod.
 	Complete the first FreeBSD native make-check exposure: portable
 		process-memory measurement, GNU-make gate selection, the
 		loopback admin alias, per-test hang bounds and job budget.
