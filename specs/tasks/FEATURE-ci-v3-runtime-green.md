@@ -147,3 +147,5 @@ Current9c92 Windows package job122646921257 fails earlier at the public shared e
 - [ ] Full FreeBSD CI evidence with the corrected budget.
 
 The 2026-10-26 FreeBSD tls-yes `check-v3-public-http2.py` shared-external failure ("no retired connection generation captured", one occurrence) is retained as an open flake: the consumer's `stale` check depends on the single-point `snapshot` having captured the soon-to-retire H2 connection's published registration, and the saved pair in that run was still live at `stale` time. No consumer change is made without a recurrence; the 2026-10-30 runs will decide.
+
+Full local `make check -j1` (TLS=no, g++ 15.2, WSL2): 232/235 pass, 2 platform skips (iocp/kqueue), 1 FAIL `quic_flow_control` (12 checks expecting ceiling-rejection throws). Byte-identical failures with stage 7 reverted and at b71192c9, so pre-existing and unrelated to this repair; CI builds this test with clang where it passes. Recorded as a local g++ environment observation, not a regression.
