@@ -135,17 +135,20 @@ struct connection : mtls_test::adapter_connection {
         if (host) SSL_set_tlsext_host_name(peer.get(), host);
         handshake = hd::tls_handshake_operation(owner, 1, std::chrono::steady_clock::now() + timeout);
     }
-    void tick() {
-        ex.run_pending();
-        for (const auto& op : raw.pending_ops()) transfer(op);
+    bool tick() {
+        bool progressed = ex.run_pending() != 0;
+        for (const auto& op : raw.pending_ops()) progressed = transfer(op) || progressed;
         advance_peer();
+        return progressed || ex.pending() != 0;
     }
     template<class Predicate> bool until(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds(3)) {
         const auto deadline = std::chrono::steady_clock::now() + timeout;
         while (std::chrono::steady_clock::now() < deadline) {
-            tick();
+            const bool progressed = tick();
             if (predicate()) return true;
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            // Fragmentation is deliberate; adding a scheduling delay to every
+            // ready fragment can consume the real handshake deadline.
+            if (!progressed) std::this_thread::yield();
         }
         return false;
     }

@@ -124,11 +124,21 @@ struct tls_session::impl {
     void open_keylog() {
         const char* path = std::getenv("SSLKEYLOGFILE");
         if (!quic || !interop_mode() || !path || !*path) return;
+#if defined(_WIN32)
+        // Windows has no O_NOFOLLOW/O_CLOEXEC/fchmod; _O_NOINHERIT is the
+        // close-on-exec analog and the creating open already owns the file.
+        keylog_fd = ::open(path, O_WRONLY | O_CREAT | O_APPEND | _O_NOINHERIT, 0600);
+        struct stat info{};
+        if (keylog_fd < 0 || fstat(keylog_fd, &info) != 0 || !S_ISREG(info.st_mode)) {
+            throw std::runtime_error("test keylog unavailable");
+        }
+#else
         keylog_fd = ::open(path, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC, 0600);
         struct stat info{};
         if (keylog_fd < 0 || fstat(keylog_fd, &info) != 0 || !S_ISREG(info.st_mode) || fchmod(keylog_fd, 0600) != 0) {
             throw std::runtime_error("test keylog unavailable");
         }
+#endif
     }
     static void keylog(const SSL* ssl, const char* line) noexcept {
         auto* self = state(const_cast<SSL*>(ssl));

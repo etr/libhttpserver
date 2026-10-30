@@ -38,6 +38,11 @@ def run_suites(inventory, host, mode, linkage, directory, prefix, source, build,
         receipt = dict(name=name, tls=mode, linkage=linkage, execution=definition.get('execution', 'installed-library'))
         try:
             flags = cflags + ['-DHTTPSERVER_COMPILATION', '-I' + str(source / 'src'), '-I' + str(source / 'test')]
+            if host == 'Windows' and linkage == 'shared' and definition.get('windows_static_cases'):
+                # An executable's operator new cannot interpose PE DLL imports.
+                # The installed static lane retains every fault-injection case.
+                flags += ['-DLHS_TEST_DLL_LINKAGE']
+                receipt['windows_static_cases'] = definition['windows_static_cases']
             for macro, value in (('TLS_TEST_DIR', source / 'test'), ('PARITY_TRANSCRIPT_DIR', source / 'test/parity/transcripts'),
                                  ('PARITY_DATA_ROOT', source / 'test'), ('HTTP2_CORPUS_DIR', source / 'test/conformance/http2')):
                 flags += ['-D' + macro + '="' + value.as_posix() + '"']
@@ -61,9 +66,7 @@ def run_suites(inventory, host, mode, linkage, directory, prefix, source, build,
             started = time.monotonic()
             output = command([str(executable)], source / 'test', env, timeout=180, allow_failure=True)
             receipt.update(matrix.suite_result(output, command.records[-1]['exit']))
-            missing = set(definition.get('required_cases', [])) - set(receipt['case_names'])
-            if missing:
-                raise ValueError('required suite cases absent: ' + ', '.join(sorted(missing)))
+            matrix.check_suite_cases(definition, host, linkage, receipt['case_names'])
             receipt.update(duration=time.monotonic() - started, log=command.records[-1]['log'])
             if name in ('tls_io_loopback', 'native_http1_tls_parity'):
                 matrix.check_tls_witnesses(output, inventory['platforms'][host])

@@ -132,7 +132,7 @@ class PlatformBundles(unittest.TestCase):
                 stream.add(root/'Darwin/catalog.json',arcname='Darwin/catalog.json')
             with self.assertRaises(ValueError): module.unpack(duplicate,root/'duplicate')
 
-    def platform_origin_fixture(self):
+    def platform_origin_fixture(self, platform='Darwin'):
         module = self.module()
         import package_matrix as matrix
         import release_artifact as identity
@@ -147,7 +147,7 @@ class PlatformBundles(unittest.TestCase):
             path.write_text(json.dumps(value))
         header = root / 'provider.h'; header.write_bytes(b'selected OpenSSL\r\n')
         selected = dict(archive_sha256='a'*64, snapshot_sha256='b'*64, extracted_sha256=hashlib.sha256(json.dumps({},sort_keys=True).encode()).hexdigest(), tls='both', sanitizer='none')
-        write(package/'summary.json', dict(status='passed', host='Darwin', lanes={'no':{},'yes':{}},
+        write(package/'summary.json', dict(status='passed', host=platform, lanes={'no':{},'yes':{}},
             revision='d'*40, provider_header_sha256=identity.sha256(header),
             release_artifact={'archive':{'sha256':'a'*64}, 'source':{'snapshot_sha256':'b'*64,'head':'d'*40}}))
         for mode in ('no','yes'):
@@ -160,7 +160,7 @@ class PlatformBundles(unittest.TestCase):
                 public[linkage]=dict(dependencies=graph, compile={'dependencies':[]},
                     cells=[{'configurations':inventory['cases']},{'configurations':inventory['cases']}])
                 suites={}
-                for name, definition in matrix.suites(inventory, 'Darwin', mode).items():
+                for name, definition in matrix.suites(inventory, platform, mode).items():
                     cases=definition.get('required_cases',[]) or ['fixture_case']
                     log=lane/('integration-'+linkage)/(name+'.log')
                     log.parent.mkdir(parents=True, exist_ok=True)
@@ -171,27 +171,55 @@ class PlatformBundles(unittest.TestCase):
             write(lane/'audit.json',dict(violations=[],tls_mode=mode,public=public))
         origin=dict(package=str(package), source_root=str(root/'source'), source_commit='d'*40, provider_header=str(header), native={})
         # This test checks installed matrix origin independently; native origin is mandatory in complete bundles.
-        counts=module.package_origin(ROOT, origin, lambda p: json.loads(Path(p).read_text()), lambda p: Path(p).read_text(), selected, 'Darwin')
+        counts=module.package_origin(ROOT, origin, lambda p: json.loads(Path(p).read_text()), lambda p: Path(p).read_text(), selected, platform)
         self.assertGreater(counts['tests'],0)
         wrong_origin=dict(origin,source_commit='e'*40)
         with self.assertRaises(ValueError):
-            module.package_origin(ROOT,wrong_origin,lambda p:json.loads(Path(p).read_text()),lambda p:Path(p).read_text(),selected,'Darwin')
+            module.package_origin(ROOT,wrong_origin,lambda p:json.loads(Path(p).read_text()),lambda p:Path(p).read_text(),selected,platform)
         for mode in ('no','yes'):
             build=root/('native-'+mode); (build/'test').mkdir(parents=True)
             names=['protocol_fuzz_replay','hpack_corpus','http2_fuzz_replay','quic_fuzz_replay',
-                   'quic_recovery_fuzz_replay','http3_fuzz_replay','qpack_fuzz_replay','io_kqueue_backend']
+                   'quic_recovery_fuzz_replay','http3_fuzz_replay','qpack_fuzz_replay','io_' + inventory['platforms'][platform] + '_backend']
             if mode=='yes': names.append('quic_tls_callbacks_fuzz_replay')
             for name in names: (build/'test'/(name+'.trs')).write_text(':test-result: PASS\n')
             (build/'test/test-suite.log').write_text('# TOTAL: %d\n# PASS: %d\n# SKIP: 0\n# XFAIL: 0\n# FAIL: 0\n# XPASS: 0\n# ERROR: 0\n'%(len(names),len(names)))
             origin['native'][mode]=dict(build=str(build), tests=names)
             counts=checks.counts(counts['tests']+len(names),counts['checks']+len(names))
         artifacts=[dict(path=str(header),sha256=identity.sha256(header),bytes=header.stat().st_size)]
-        row=dict(id='Darwin',identity=selected,archive_sha256='a'*64,origin=origin,status='passed',artifacts=artifacts,
-                 receipt=dict(status='passed',gate='Darwin',identity=selected,counts=counts,artifacts=artifacts))
+        row=dict(id=platform,identity=selected,archive_sha256='a'*64,origin=origin,status='passed',artifacts=artifacts,
+                 receipt=dict(status='passed',gate=platform,identity=selected,counts=counts,artifacts=artifacts))
         retained=root/'retained'
-        catalog=module.retain(retained,'Darwin',row,[p for p in root.rglob('*') if p.is_file()])
+        catalog=module.retain(retained,platform,row,[p for p in root.rglob('*') if p.is_file()])
         module.validate_origin(ROOT,row,catalog)
         return module, root, package, header, selected, origin, row, catalog
+
+    def test_windows_origin_retains_static_fault_proof_and_accepts_dll_profile(self):
+        import package_matrix as matrix
+        module, _, package, _, selected, origin, _, _ = self.platform_origin_fixture('Windows')
+        definition = matrix.load()['suites']['external_readiness_adapter']
+
+        def rewrite(linkage, cases):
+            directory = package / 'tls-no' / ('integration-' + linkage)
+            suites_path = directory / 'suites.json'
+            suites = json.loads(suites_path.read_text())
+            receipt = suites['external_readiness_adapter']
+            log = Path(receipt['log'])
+            log.write_text(''.join('Running test (%d): %s\n' % (i, case) for i, case in enumerate(cases)) +
+                '%d tests executed\n%d checks\n-> 0 failures\n-> 0 skipped\n' % (len(cases), len(cases)))
+            receipt.update(matrix.suite_result(log.read_text(), 0))
+            suites_path.write_text(json.dumps(suites))
+
+        ordinary = [name for name in definition['required_cases'] if name not in definition['windows_static_cases']]
+        rewrite('shared', ordinary)
+        try:
+            module.package_origin(ROOT, origin, lambda p: json.loads(Path(p).read_text()),
+                                  lambda p: Path(p).read_text(), selected, 'Windows')
+        except ValueError as error:
+            self.fail('valid DLL/static split rejected: ' + str(error))
+        rewrite('static', ordinary)
+        with self.assertRaisesRegex(ValueError, 'required suite cases absent'):
+            module.package_origin(ROOT, origin, lambda p: json.loads(Path(p).read_text()),
+                                  lambda p: Path(p).read_text(), selected, 'Windows')
 
     def test_platform_origin_rejects_pruned_mandatory_native_suite(self):
         import release_checks as checks

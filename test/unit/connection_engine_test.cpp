@@ -68,6 +68,7 @@
 #include <parity/response_frame.hpp>
 
 #include "./io_loopback.hpp"
+#include "./websocket_engine_helpers.hpp"
 #include "./littletest.hpp"
 
 namespace {
@@ -301,7 +302,7 @@ struct scenario {
     explicit scenario(srv::timeout_options timeouts_in)
         : scenario(srv::budget_limits(), timeouts_in) { }
 
-    bool start_engine() {
+    bool create_engine() {
         if (!pair.ok()) return false;
         backend.adopt_connection(kConnId, pair.detach_local());
         engine = std::make_shared<connection_engine>(backend, pool, registry,
@@ -310,6 +311,11 @@ struct scenario {
                                                     [this] {
                                                         stopped.store(true);
                                                     });
+        return true;
+    }
+
+    bool start_engine() {
+        if (!create_engine()) return false;
         engine->start();
         return true;
     }
@@ -1214,6 +1220,45 @@ LT_BEGIN_AUTO_TEST(connection_engine_suite, quiesce_idle_connection_closes_promp
     LT_CHECK(elapsed < std::chrono::milliseconds(5000));
     LT_CHECK(reaches_eof(s.pair.peer()));
 LT_END_AUTO_TEST(quiesce_idle_connection_closes_promptly)
+
+// TASK-110 pin: a quiesce that carries a server drain deadline keeps the
+// watchdog armed at that deadline. HTTP/1 enforces the drain budget's
+// hard stop only through the watchdog (enforce_timeout's scope expiry),
+// so the close mark alone must not retire it while the deadline is
+// pending -- a stalled close handoff may not outlive the drain budget.
+// Loops stay unstarted so the plan is sampled before any close path can
+// complete; a deadline-less quiesce stays terminal exactly as before.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, quiesce_with_drain_deadline_keeps_watchdog_armed)
+    srv::timeout_options timeouts;
+    timeouts.header = std::chrono::milliseconds(10000);
+    scenario s(timeouts);
+    LT_CHECK(s.create_engine());
+    const auto drain_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    s.engine->quiesce(drain_deadline);
+    const auto armed = httpserver::detail::connection_engine_test_access::deadline(*s.engine);
+    LT_CHECK(armed.has_value());
+    if (armed) LT_CHECK(*armed <= drain_deadline);
+    scenario plain;
+    LT_CHECK(plain.create_engine());
+    plain.engine->quiesce();
+    LT_CHECK(!httpserver::detail::connection_engine_test_access::deadline(*plain.engine).has_value());
+LT_END_AUTO_TEST(quiesce_with_drain_deadline_keeps_watchdog_armed)
+
+// The armed drain deadline must not delay the ordinary close chain: a
+// started engine quiesced with a far drain budget still ends (and the
+// transport closes) promptly, as in the deadline-less case above.
+LT_BEGIN_AUTO_TEST(connection_engine_suite, quiesce_with_drain_deadline_still_closes_promptly)
+    srv::timeout_options timeouts;
+    timeouts.header = std::chrono::milliseconds(10000);
+    scenario s(timeouts);
+    LT_CHECK(s.start_engine());
+    const auto began = std::chrono::steady_clock::now();
+    s.engine->quiesce(std::chrono::steady_clock::now() + std::chrono::seconds(10));
+    LT_CHECK(wait_until([&s] { return s.stopped.load(); }));
+    const auto elapsed = std::chrono::steady_clock::now() - began;
+    LT_CHECK(elapsed < std::chrono::milliseconds(5000));
+    LT_CHECK(reaches_eof(s.pair.peer()));
+LT_END_AUTO_TEST(quiesce_with_drain_deadline_still_closes_promptly)
 
 // TASK-110: the counted units bracket the exchange -- the handler runs
 // between the connection unit and its own exchange unit (2 live), and

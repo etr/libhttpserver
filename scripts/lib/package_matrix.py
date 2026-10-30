@@ -150,6 +150,18 @@ def suites(inventory, platform, tls):
     return {name: inventory['suites'][name] for name in names}
 
 
+def check_suite_cases(definition, host, linkage, observed):
+    required = set(definition.get('required_cases', []))
+    windows_static = set(definition.get('windows_static_cases', []))
+    if not windows_static <= required:
+        raise ValueError('Windows static cases must also be required suite cases')
+    if host == 'Windows' and linkage == 'shared':
+        required -= windows_static
+    missing = required - set(observed)
+    if missing:
+        raise ValueError('required suite cases absent: ' + ', '.join(sorted(missing)))
+
+
 def suite_result(output, status):
     output = output.replace('\r\n', '\n')
     tests = re.findall(r'^(\d+) tests executed$', output, re.M)

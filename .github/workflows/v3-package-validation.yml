@@ -149,7 +149,7 @@ jobs:
           if-no-files-found: error
   freebsd:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: freebsd_instance

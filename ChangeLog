@@ -1,4 +1,24 @@
 Version 3.0.0 - 2026-10-10
+	Poll the QUIC interop endpoint and UDP fixture through the shared
+		cross-platform host helper on Windows.
+	Open the QUIC interop test keylog with Windows-compatible flags
+		instead of O_NOFOLLOW/O_CLOEXEC/fchmod.
+	Complete the first FreeBSD native make-check exposure: portable
+		process-memory measurement, GNU-make gate selection, the
+		loopback admin alias, per-test hang bounds and job budget.
+	Link the installed public TLS and HTTP/2 audit clients to Winsock on
+		Windows and name their executables with the platform suffix.
+	Resolve the Windows version-information system import in installed
+		package dependency audits.
+	Keep the HTTP/1 connection watchdog armed at a pending server drain
+		deadline so a stalled close handoff cannot outlive the drain budget.
+	Tolerate a concurrently closed borrowed registration in the Windows
+		reference host poll helper instead of failing the whole WSAPoll set.
+	Register each native executable once in Automake test evidence inventories.
+	Run Windows allocation-failure injection against the installed static
+		library and require ordinary readiness cases in both linkage lanes.
+	Keep PSK cancellation lookup held until owner release and avoid artificial
+		per-fragment scheduling delays in the TLS test transport.
 	Avoid Windows DLL shutdown hangs by retaining the default timer service
 		during process termination while preserving ordinary timer cleanup.
 	Report the saved Winsock error code when host WSAPoll fails.

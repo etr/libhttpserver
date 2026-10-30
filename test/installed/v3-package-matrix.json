@@ -73,6 +73,42 @@
     "external_readiness_adapter": {
       "sources": [
         "unit/external_readiness_adapter_test.cpp"
+      ],
+      "required_cases": [
+        "host_drives_read_write_and_snapshot_is_owned",
+        "spurious_unknown_and_wrong_generation_do_not_consume",
+        "omitted_then_republished_registration_rejects_old_callbacks",
+        "reopen_same_id_and_descriptor_rejects_every_old_flag_combination",
+        "detached_read_cannot_rearm_into_reopened_id",
+        "detached_accept_cannot_rearm_into_reopened_id",
+        "exclusive_retirement_expires_real_timer_without_host_dispatch",
+        "timers_use_host_clock_order_and_reject_decreasing_samples",
+        "timer_cancel_expiry_race_is_exactly_once",
+        "wake_is_doorbell_and_post_snapshot_work_survives_acknowledgement",
+        "overlapping_dispatch_rejects_without_consuming_valid_read",
+        "host_accept_and_close_deliver_once",
+        "wake_published_during_dispatch_survives_and_recursive_overlap_reject",
+        "release_during_completion_defers_close_and_cannot_step_replacement",
+        "hard_wake_failure_stops_and_unwinds_pending_work",
+        "decreasing_clock_rejects_a_valid_socket_event_before_io",
+        "exhausted_identity_never_wraps_and_closes_unregistered_socket",
+        "buffered_read_precedes_combined_close_error_and_duplicate_callback",
+        "complete_snapshots_prune_retired_connection_records",
+        "allocation_failure_read_batch_remains_owned_until_close",
+        "allocation_failure_write_batch_remains_owned_until_close",
+        "allocation_failure_accept_batch_remains_owned_until_close",
+        "allocation_failure_second_direction_keeps_first_direction_owned",
+        "allocation_failure_due_timers_remain_owned_until_close",
+        "exhausted_generation_fails_snapshot_and_shutdown_completes_once",
+        "successful_accept_after_listener_retirement_closes_fresh_handle",
+        "successful_accept_after_backend_close_closes_fresh_handle"
+      ],
+      "windows_static_cases": [
+        "allocation_failure_read_batch_remains_owned_until_close",
+        "allocation_failure_write_batch_remains_owned_until_close",
+        "allocation_failure_accept_batch_remains_owned_until_close",
+        "allocation_failure_second_direction_keeps_first_direction_owned",
+        "allocation_failure_due_timers_remain_owned_until_close"
       ]
     },
     "readiness_contract": {

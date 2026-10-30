@@ -1,6 +1,5 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
 #include <openssl/pem.h>
-#include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <csignal>
@@ -20,6 +19,7 @@
 #include <httpserver/concurrency/resume_signal.hpp>
 #include <httpserver/detail/io_poll_backend.hpp>
 #include "../support/http3_network_owner.hpp"
+#include "../../examples/host_poll.hpp"
 #include "../unit/io_udp_backend_contract.hpp"
 namespace {
 volatile std::sig_atomic_t stopping = 0;
@@ -294,30 +294,16 @@ struct fixture {
         if (executor.pending() || (send && send->state()->applied()) || receive->state()->applied())
             return true;
         auto snapshot = backend.interests();
-        if (snapshot.wake)
-            snapshot.sockets.push_back(*snapshot.wake);
-        std::vector<pollfd> descriptors;
-        for (auto& interest : snapshot.sockets)
-            descriptors.push_back(
-                {static_cast<int>(interest.handle.value), static_cast<std::int16_t>((interest.readable ? POLLIN : 0) | (interest.writable ? POLLOUT : 0)), 0});
         auto due = lifetime;
         for (auto& [id, connection] : connections)
             if (auto deadline = connection->deadline())
                 due = std::min(due, *deadline);
         if (snapshot.next_deadline)
             due = std::min(due, *snapshot.next_deadline);
-        int timeout = std::min<std::int64_t>(1000, std::max<std::int64_t>(std::int64_t{0}, std::chrono::ceil<std::chrono::milliseconds>(due - clock_type::now()).count()));
-        if (poll(descriptors.data(), descriptors.size(), timeout) < 0 && !stopping)
-            throw std::runtime_error("poll failed");
-        std::vector<h::server::readiness_event> events;
-        for (unsigned i = 0; i < snapshot.sockets.size(); ++i)
-            if (descriptors[i].revents) {
-                auto& interest = snapshot.sockets[i];
-                auto revents = descriptors[i].revents;
-                events.push_back({interest.key, interest.generation, static_cast<bool>(revents & POLLIN), static_cast<bool>(revents & POLLOUT),
-                                  static_cast<bool>(revents & POLLHUP), static_cast<bool>(revents & (POLLERR | POLLNVAL))});
-            }
-        if (!backend.dispatch(events, clock_type::now()).ok())
+        // Park at most one second past the earliest due work; the shared
+        // host helper owns the platform poll (WSAPoll on Windows).
+        const auto park = std::min(due, clock_type::now() + std::chrono::milliseconds(1000));
+        if (!backend.dispatch(v3_host::wait(snapshot, park), clock_type::now()).ok())
             throw std::runtime_error("backend dispatch failed");
         return true;
     }
@@ -333,7 +319,9 @@ int main() {
         hqnet::files root_check(env("LIBHTTPSERVER_INTEROP_WWW", "/www"));
         const auto logs = env("LIBHTTPSERVER_INTEROP_LOGS", "/logs");
         std::filesystem::create_directories(logs);
+#if !defined(_WIN32)
         if (chmod(logs.c_str(), 0700) != 0) throw std::runtime_error("log permissions failed");
+#endif
         const auto pcap = logs + "/packets.pcap";
         std::signal(SIGTERM, stop);
         std::signal(SIGINT, stop);

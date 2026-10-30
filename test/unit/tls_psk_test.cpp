@@ -119,23 +119,23 @@ LT_BEGIN_AUTO_TEST(psk_suite, blocking_lookup_leaves_owner_responsive_and_cancel
         auto released = release.get_future().share();
         auto config = psk_test::credentials(runtime, [&](auto, const auto&) {
             entered = true;
-            released.wait();
+            // The owner releases lookup only after checking cancellation.
+            // A broken blocking implementation must still unwind the fixture.
+            released.wait_for(5s);
             returned = true;
             return hd::psk_lookup_result{hd::psk_lookup_status::accepted, hd::secure_bytes(psk_test::bytes("secret"))};
         });
         hd::tls_credentials_registry registry;
         LT_ASSERT(registry.replace(config).ok());
         psk_test::connection peer(registry.acquire()->select_default(), version, "identity", psk_test::bytes("secret"));
-        // Bounded rescue ensures RED cannot leave a fixture hanging in lookup.
-        auto rescue = std::async(std::launch::async, [&] { std::this_thread::sleep_for(250ms); release.set_value(); });
         peer.handshake.submit(*peer.tls);
         std::chrono::steady_clock::duration longest{};
         const auto until = std::chrono::steady_clock::now() + 1s;
         while (!entered && std::chrono::steady_clock::now() < until) {
             const auto before = std::chrono::steady_clock::now();
-            peer.tick();
+            const bool progressed = peer.tick();
             longest = std::max(longest, std::chrono::steady_clock::now() - before);
-            std::this_thread::sleep_for(1ms);
+            if (!progressed) std::this_thread::yield();
         }
         const auto cancelled = peer.tls->request_cancel(*peer.handshake.state());
         peer.ex.run_pending();
@@ -147,7 +147,7 @@ LT_BEGIN_AUTO_TEST(psk_suite, blocking_lookup_leaves_owner_responsive_and_cancel
         LT_CHECK(peer.handshake.state()->stored_result().code == hh::outcome_code::cancelled);
         LT_CHECK(!peer.tls->peer_metadata());
         peer.close();
-        rescue.get();
+        release.set_value();
         runtime->stop();
         LT_CHECK(runtime->drain(std::chrono::steady_clock::now() + 1s));
         peer.ex.run_pending();

@@ -21,6 +21,14 @@
 
 #if defined(__APPLE__)
 #include <mach/mach.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <sys/user.h>
+#include <unistd.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>
 #else
 #include <unistd.h>
 #include <fstream>
@@ -46,6 +54,22 @@ std::size_t resident_bytes() {
     check(task_info(mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS,
           "process memory measurement unavailable");
     return info.resident_size;
+#elif defined(__FreeBSD__)
+    // FreeBSD ships no procfs by default; the native source is the
+    // per-process sysctl MIB (kinfo_proc's resident page count).
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, static_cast<int>(::getpid())};
+    kinfo_proc info{};
+    size_t size = sizeof info;
+    check(::sysctl(mib, 4, &info, &size, nullptr, 0) == 0
+              && size >= offsetof(kinfo_proc, ki_rssize) + sizeof info.ki_rssize,
+          "process memory measurement unavailable");
+    return static_cast<std::size_t>(info.ki_rssize)
+           * static_cast<std::size_t>(::sysconf(_SC_PAGESIZE));
+#elif defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS counters{};
+    check(::GetProcessMemoryInfo(::GetCurrentProcess(), &counters, sizeof counters) != 0,
+          "process memory measurement unavailable");
+    return counters.WorkingSetSize;
 #else
     std::ifstream stat("/proc/self/statm");
     std::size_t total = 0, resident = 0;

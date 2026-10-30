@@ -330,17 +330,21 @@ def run(args):
             if identity == 'client-valid':
                 chain += (fixtures / 'client-intermediate.pem').read_bytes()
             (fixtures / (identity + '-chain.pem')).write_bytes(chain)
-        independent = consumer / 'independent-client'
+        independent = consumer / ('independent-client' + ('.exe' if os.name == 'nt' else ''))
+        # tls_client.cpp dials raw sockets: Winsock is a system library on
+        # Windows and lives in libc on the POSIX targets.
+        independent_system = ['-lws2_32'] if os.name == 'nt' else []
         command_log([args.compiler, '-std=c++20', '-I' + str(args.provider_prefix / 'include'),
                      consumer / 'tls_client.cpp', '-L' + str(args.provider_prefix / 'lib'),
-                     '-Wl,-rpath,' + str(args.provider_prefix / 'lib'), '-lssl', '-lcrypto', '-o', independent], consumer, env)
+                     '-Wl,-rpath,' + str(args.provider_prefix / 'lib'), '-lssl', '-lcrypto']
+                    + independent_system + ['-o', independent], consumer, env)
         receipt['independent_client'] = dict(executable=str(independent),
             sha256=hashlib.sha256(independent.read_bytes()).hexdigest(), dependencies=audit.dependency_graph([str(independent)]))
         check('libhttpserver' not in json.dumps(receipt['independent_client']['dependencies']), 'client links server library')
         command_log([independent, 'fixtures', fixtures], consumer, env, timeout=10)
         (fixtures / 'malformed.pem').write_text('malformed certificate')
         (fixtures / 'malformed-key.pem').write_text('malformed private key')
-        command_log([args.provider_prefix / 'bin/openssl', 'pkey', '-in', fixtures / 'acme-key.pem', '-aes-256-cbc', '-passout', 'pass:task194-test-only', '-out', fixtures / 'encrypted-key.pem'], consumer, env)
+        command_log([args.provider_prefix / 'bin' / ('openssl.exe' if os.name == 'nt' else 'openssl'), 'pkey', '-in', fixtures / 'acme-key.pem', '-aes-256-cbc', '-passout', 'pass:task194-test-only', '-out', fixtures / 'encrypted-key.pem'], consumer, env)
         (fixtures / 'extra.pem').write_bytes((fixtures / 'acme.pem').read_bytes() * 2)
         for name in ('mismatch-key', 'past-expiry', 'late-expiry'):
             shutil.copyfile(fixtures / 'acme.pem', fixtures / (name + '.pem'))

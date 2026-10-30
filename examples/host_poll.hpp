@@ -102,6 +102,13 @@ inline std::vector<srv::readiness_event> wait(
     const auto ready = ::WSAPoll(fds.data(), static_cast<ULONG>(fds.size()), timeout(deadline));
     if (ready < 0) {
         const int error = ::WSAGetLastError();
+        // Snapshot handles are borrowed: the library may close one between
+        // snapshot acquisition and this call. POSIX poll reports that
+        // per entry as POLLNVAL; WSAPoll rejects the whole set with
+        // WSAENOTSOCK. An empty batch keeps the contract's spurious-
+        // notification allowance: the caller dispatches, re-acquires
+        // interests, and the closed registration is already gone.
+        if (error == WSAENOTSOCK) return {};
         if (error != WSAEINTR) throw std::runtime_error("WSAPoll failed (WSA error " + std::to_string(error) + ")");
     }
 #else

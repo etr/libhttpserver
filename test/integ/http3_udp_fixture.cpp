@@ -1,5 +1,9 @@
 /* Copyright (C) 2026 Sebastiano Merlino; SPDX-License-Identifier: LGPL-2.1-or-later */
+#if defined(_WIN32)
+#include "../../examples/host_poll.hpp"
+#else
 #include <poll.h>
+#endif
 #include <unistd.h>
 
 #include <algorithm>
@@ -376,14 +380,22 @@ struct fixture {
         // its successful completion is committed in the next owner turn.
         if (executor.pending() || (send && send->state()->applied()) || receive->state()->applied()) return true;
         auto snapshot = backend.interests();
-        if (snapshot.wake) snapshot.sockets.push_back(*snapshot.wake);
-        std::vector<pollfd> descriptors{{STDIN_FILENO, POLLIN, 0}};
-        for (auto& interest : snapshot.sockets)
-            descriptors.push_back({static_cast<int>(interest.handle.value), static_cast<std::int16_t>((interest.readable ? POLLIN : 0) | (interest.writable ? POLLOUT : 0)), 0});
         auto due = lifetime;
         for (auto& [id, connection] : connections)
             if (auto deadline = connection->deadline()) due = std::min(due, *deadline);
         if (snapshot.next_deadline) due = std::min(due, *snapshot.next_deadline);
+#if defined(_WIN32)
+        // The stdin command channel is driven only by the POSIX parity
+        // lanes; on Windows the fixture builds but never serves commands.
+        const auto park = std::min(due, clock_type::now() + std::chrono::milliseconds(1000));
+        if (!backend.dispatch(v3_host::wait(snapshot, park), clock_type::now()).ok())
+            throw std::runtime_error("backend dispatch failed");
+        return true;
+#else
+        if (snapshot.wake) snapshot.sockets.push_back(*snapshot.wake);
+        std::vector<pollfd> descriptors{{STDIN_FILENO, POLLIN, 0}};
+        for (auto& interest : snapshot.sockets)
+            descriptors.push_back({static_cast<int>(interest.handle.value), static_cast<std::int16_t>((interest.readable ? POLLIN : 0) | (interest.writable ? POLLOUT : 0)), 0});
         int timeout = std::max<std::int64_t>(std::int64_t{0}, std::chrono::ceil<std::chrono::milliseconds>(due - clock_type::now()).count());
         if (poll(descriptors.data(), descriptors.size(), timeout) < 0) throw std::runtime_error("poll failed");
         if (descriptors[0].revents & (POLLIN | POLLHUP)) {
@@ -401,6 +413,7 @@ struct fixture {
             }
         if (!backend.dispatch(events, clock_type::now()).ok()) throw std::runtime_error("backend dispatch failed");
         return true;
+#endif
     }
 };
 }  // namespace
