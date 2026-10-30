@@ -269,7 +269,7 @@ jobs:
   freebsd:
     runs-on: ubuntu-24.04
     needs: prepare
-    timeout-minutes: 180
+    timeout-minutes: 240
     outputs:
       artifact_id: ${{ steps.proof.outputs.artifact-id }}
       artifact_digest: ${{ steps.proof.outputs.artifact-digest }}

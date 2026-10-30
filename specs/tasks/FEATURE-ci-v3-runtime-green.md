@@ -139,3 +139,11 @@ Current9c92 Windows package job122646921257 fails earlier at the public shared e
 - [x] RED/GREEN regression `quiesce_with_drain_deadline_keeps_watchdog_armed` (unstarted engine, deterministic plan sample; deadline-less case pins unchanged terminal behavior) plus behavioral `quiesce_with_drain_deadline_still_closes_promptly`. RED verified against unfixed source, GREEN against the repair, five consecutive clean runs.
 - [x] Linux focused gates: connection_engine 42/0 (x5), external_http1_e2e 4/0, websocket_drain 3/0, http1_websocket_upgrade 17/0, native_http1_e2e 62/0, external_readiness_adapter 28/0, examples/external_event_loop builds and serves; changed-file cpplint and `git diff --check` pass.
 - [ ] Full exact-source CI on the working branch (mingw64/macOS/FreeBSD lanes remain nonlocal and deferred to CI).
+
+## Stage 8: FreeBSD job timeout (2026-10-30)
+
+- [x] Evidence: the 2026-10-26 acceptance FreeBSD job completed its native proof at 2h59m45s (57 seconds under the 180-minute job timeout); the 2026-10-28 package-validation FreeBSD job was cancelled by the 180-minute timeout at 3h3m mid-run. The workload (libc++ 20.1.8 runtime build + provider + both TLS lanes on a 2-CPU VM) legitimately straddles the limit.
+- [x] Raise only the freebsd job `timeout-minutes` from 180 to 240 in both `v3-package-validation.yml` and `v3-release-acceptance.yml`; every other job keeps its existing timeout. `test-v3-package-workflow.py` (4/4) and `test-v3-ci-workflows.py` (31/31) pass.
+- [ ] Full FreeBSD CI evidence with the corrected budget.
+
+The 2026-10-26 FreeBSD tls-yes `check-v3-public-http2.py` shared-external failure ("no retired connection generation captured", one occurrence) is retained as an open flake: the consumer's `stale` check depends on the single-point `snapshot` having captured the soon-to-retire H2 connection's published registration, and the saved pair in that run was still live at `stale` time. No consumer change is made without a recurrence; the 2026-10-30 runs will decide.
